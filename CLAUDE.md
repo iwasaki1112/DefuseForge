@@ -1,41 +1,64 @@
-# Claude Code Rules (Unity開発)
+# Claude Code Rules (Godot開発)
 
 ## Goal
-UnityMCPを優先的に使用してUnityを操作する。UnityMCPで対応できない場合のみAutomation MCPを使用する。
+Godot MCPを優先的に使用してGodotを操作する。Godot MCPで対応できない場合のみファイル操作ツールを使用する。
+
+## プロジェクト情報
+- **エンジン**: Godot 4.5.1
+- **プロジェクトパス**: `SupportRateGame/`
+- **言語**: GDScript
+
+## ゲーム概要
+「支持率アップゲーム」- 60秒間でコインを集めて支持率を上げるゲーム
+- TPSスタイルのキャラクター操作
+- コイン1個につき支持率3%アップ（基本30%から開始）
+- 制限時間60秒
+
+## プロジェクト構造
+```
+SupportRateGame/
+├── project.godot          # プロジェクト設定
+├── scenes/
+│   ├── title.tscn         # タイトルシーン
+│   ├── game.tscn          # ゲームシーン
+│   ├── player.tscn        # プレイヤーシーン
+│   └── coin.tscn          # コインシーン
+├── scripts/
+│   ├── game_manager.gd    # ゲーム管理（Autoload）
+│   ├── game_scene.gd      # ゲームシーン管理
+│   ├── game_ui.gd         # UI管理
+│   ├── player.gd          # プレイヤー操作
+│   ├── coin.gd            # コイン挙動
+│   ├── coin_spawner.gd    # コイン配置
+│   └── title_screen.gd    # タイトル画面
+└── resources/             # リソースファイル
+```
 
 ## Tool Priority
-1. **UnityMCP** (優先) - Unity Editor APIを直接呼び出せる操作
-   - GameObjectの作成・編集・削除
-   - コンポーネントの追加・設定
-   - シーンの保存・読み込み
-   - アセットの操作
-   - メニュー実行（execute_menu_item）
+1. **Godot MCP** (優先) - Godot操作
+   - シーン作成・編集
+   - ノード追加
+   - プロジェクト実行
 
-2. **Automation MCP** (フォールバック) - UnityMCPで対応できない場合
-   - ダイアログのOKボタンをクリック
-   - UIの視覚的確認（スクリーンショット）
+2. **ファイル操作** (フォールバック) - Godot MCPで対応できない場合
+   - スクリプト編集
+   - シーンファイル直接編集
 
-## ビルドコマンド
-「iOSビルド」「ビルドして」「iPhoneで試したい」などと言われたら:
+## よく使うコマンド
+```bash
+# Godotエディタを開く
+"/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot" --path SupportRateGame --editor
+
+# プロジェクトを実行
+"/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot" --path SupportRateGame
 ```
-UnityMCPで execute_menu_item "Tools/高市総理ゲーム/6. iOS自動ビルド（Unity + Xcode）" を実行
-```
-
-その他のゲームセットアップコマンド:
-- 「タイトルシーン作成」→ `Tools/高市総理ゲーム/1. タイトルシーン作成`
-- 「ゲームシーン作成」→ `Tools/高市総理ゲーム/2. ゲームシーン作成`
-- 「コインプレファブ作成」→ `Tools/高市総理ゲーム/3. コインプレファブ作成`
-- 「TMPフォント修正」→ `Tools/高市総理ゲーム/4. TMPフォント修正（ビルド前に実行）`
-- 「ビルド設定追加」→ `Tools/高市総理ゲーム/5. ビルド設定にシーン追加`
-- 「Xcodeを開く」→ `Tools/高市総理ゲーム/7. Xcodeプロジェクトを開く`
 
 ## 開発フロー
-1. スクリプトファイルの作成・編集はファイル操作ツールで行う
-2. UnityMCPでシーンのセットアップ・メニュー実行を行う
-3. ダイアログが表示されたらAutomation MCPでOKボタンをクリック
-4. 必要に応じてAutomation MCPでスクリーンショット確認
+1. スクリプトファイルはファイル操作ツールで編集
+2. シーンファイルはGodot MCPまたはファイル操作ツールで編集
+3. テスト実行はGodot MCPの`run_project`を使用
 
 ## Error handling
-- UnityMCPでエラー → 原因を確認し、可能なら修正して再試行
-- ダイアログが表示された → Automation MCPでクリック
-- それでも失敗 → ユーザーに報告
+- シーンが読み込めない → UIDを確認
+- スクリプトエラー → Godotコンソールを確認
+- ノードが見つからない → シーンツリーを確認

@@ -1,0 +1,44 @@
+[gd_scene load_steps=2 format=3 uid="uid://cjoystick"]
+
+[ext_resource type="Script" path="res://scripts/virtual_joystick.gd" id="1_joystick"]
+
+[node name="VirtualJoystick" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 40.0
+offset_top = 400.0
+offset_right = 200.0
+offset_bottom = 560.0
+script = ExtResource("1_joystick")
+
+[node name="Base" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_right = 120.0
+offset_bottom = 120.0
+
+[node name="BaseCircle" type="ColorRect" parent="Base"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.3, 0.3, 0.3, 0.5)
+
+[node name="Handle" type="Control" parent="Base"]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 35.0
+offset_top = 35.0
+offset_right = 85.0
+offset_bottom = 85.0
+
+[node name="HandleCircle" type="ColorRect" parent="Base/Handle"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.8, 0.8, 0.8, 0.8)

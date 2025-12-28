@@ -1,37 +1,23 @@
-# Unity generated folders
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
-[Uu]ser[Ss]ettings/
+# Godot 4+ specific ignores
+.godot/
 
-# Memory captures
-[Mm]emoryCaptures/
+# Godot-specific ignores
+*.translation
 
-# Recordings
-[Rr]ecordings/
+# Imported textures and samples
+.import/
 
-# Asset meta data
-*.pidb.meta
-*.pdb.meta
-*.mdb.meta
-
-# Unity3D generated file on crash reports
-sysinfo.txt
-
-# Builds
+# Build exports
+*.x86_64
+*.exe
 *.apk
 *.aab
-*.unitypackage
-*.app
+*.ipa
 
-# Crashlytics
-crashlytics-build.properties
-
-# Packed Addressables
-[Aa]ddressables[Bb]uild[Rr]eports/
+# Mono-specific ignores
+.mono/
+data_*/
+mono_crash.*.json
 
 # OS generated files
 .DS_Store
@@ -45,29 +31,14 @@ Thumbs.db
 # IDE
 .idea/
 .vs/
-*.csproj
 *.sln
 *.suo
 *.tmp
 *.user
 *.userprefs
-*.pidb
-*.booproj
-*.svd
-*.pdb
-*.mdb
-*.opendb
-*.VC.db
 
 # Visual Studio Code
 .vscode/
-
-# Rider
-.idea/
-*.sln.iml
-
-# Gradle
-.gradle/
 
 # Claude Code
 .claude/
