@@ -48,9 +48,8 @@ var current_move_state: int = 0  # 0: idle, 1: walk, 2: run
 const ANIM_BLEND_TIME: float = 0.3
 
 @onready var camera: Camera3D = $Camera3D
+@onready var fake_shadow: MeshInstance3D = $FakeShadow
 
-
-var debug_timer: float = 0.0
 
 func _ready() -> void:
 	if camera == null:
@@ -61,11 +60,12 @@ func _ready() -> void:
 	if terrain_follow_enabled:
 		floor_snap_length = 1.0
 
-	print("[Player] 初期位置: ", global_position)
-
 	# アニメーションプレイヤーを取得
 	var model = get_node_or_null("CharacterModel")
 	if model:
+		# マテリアルを光対応に設定
+		_setup_lit_materials(model)
+
 		anim_player = model.get_node_or_null("AnimationPlayer")
 		if anim_player:
 			_load_animations()
@@ -80,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	_handle_path_movement(delta)
 	_handle_camera(delta)
 	_update_animation()
+	_update_fake_shadow()
 
 
 ## パス追従移動
@@ -121,12 +122,6 @@ func _handle_path_movement(delta: float) -> void:
 
 ## 地形追従処理（重力ベース）
 func _handle_terrain_follow(delta: float) -> void:
-	# デバッグログ（1秒ごと）
-	debug_timer += delta
-	if debug_timer >= 1.0:
-		debug_timer = 0.0
-		print("[Player] pos=", global_position, " on_floor=", is_on_floor(), " velocity.y=", velocity.y)
-
 	# 重力を適用
 	if is_on_floor():
 		vertical_velocity = -0.1  # 床に接地するための小さな下向き力
@@ -135,6 +130,56 @@ func _handle_terrain_follow(delta: float) -> void:
 		vertical_velocity = max(vertical_velocity, -50.0)  # 最大落下速度を制限
 
 	velocity.y = vertical_velocity
+
+
+## フェイクシャドウを地面に追従させる
+func _update_fake_shadow() -> void:
+	if fake_shadow == null:
+		return
+
+	# レイキャストで地面を検出
+	var space_state = get_world_3d().direct_space_state
+	var ray_origin = global_position + Vector3(0, 1, 0)
+	var ray_end = global_position + Vector3(0, -10, 0)
+
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	query.exclude = [self]
+	query.collision_mask = 2  # マップのコリジョンレイヤー
+
+	var result = space_state.intersect_ray(query)
+
+	if result:
+		# 地面の位置にシャドウを配置（法線方向に少し浮かせてZ-fighting防止）
+		var ground_normal: Vector3 = result.normal
+		fake_shadow.global_position = result.position + ground_normal * 0.05
+
+		# 地面の法線に合わせてシャドウを傾ける
+		_align_shadow_to_normal(ground_normal)
+	else:
+		# 地面が見つからない場合はプレイヤーの足元に配置
+		fake_shadow.global_position = global_position + Vector3(0, 0.05, 0)
+		fake_shadow.global_rotation = Vector3.ZERO
+
+
+## シャドウを地面の法線に合わせて回転
+func _align_shadow_to_normal(normal: Vector3) -> void:
+	# 法線がほぼ真上の場合は回転不要
+	if normal.is_equal_approx(Vector3.UP):
+		fake_shadow.global_rotation = Vector3.ZERO
+		return
+
+	# 法線方向を上向きにするためのBasisを作成
+	var up = normal.normalized()
+	var forward = Vector3.FORWARD
+
+	# 法線が前方向に近い場合は別の軸を使用
+	if abs(up.dot(forward)) > 0.9:
+		forward = Vector3.RIGHT
+
+	var right = up.cross(forward).normalized()
+	forward = right.cross(up).normalized()
+
+	fake_shadow.global_basis = Basis(right, up, forward)
 
 
 ## 重力を適用
@@ -254,3 +299,32 @@ func _update_animation() -> void:
 				elif anim_player.has_animation("walking"):
 					anim_player.play("walking", ANIM_BLEND_TIME)
 					anim_player.speed_scale = 1.5
+
+
+## キャラクターモデルのマテリアルを光対応に設定
+func _setup_lit_materials(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		# 影をキャストするように設定
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+		if mesh_instance.mesh:
+			var surface_count = mesh_instance.mesh.get_surface_count()
+			for i in range(surface_count):
+				var mat = mesh_instance.get_active_material(i)
+
+				# 新しいマテリアルを作成（元のテクスチャを保持）
+				var new_mat = StandardMaterial3D.new()
+				new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+
+				# 元のマテリアルからテクスチャをコピー
+				if mat and mat is BaseMaterial3D:
+					if mat.albedo_texture:
+						new_mat.albedo_texture = mat.albedo_texture
+					new_mat.albedo_color = mat.albedo_color
+
+				mesh_instance.set_surface_override_material(i, new_mat)
+
+	# 子ノードを再帰的に処理
+	for child in node.get_children():
+		_setup_lit_materials(child)
