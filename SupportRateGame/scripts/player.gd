@@ -28,6 +28,11 @@ var is_camera_dragging: bool = false
 var last_touch_position: Vector2 = Vector2.ZERO
 var camera_touch_id: int = -1
 
+# アニメーション
+var anim_player: AnimationPlayer = null
+var is_walking: bool = false
+const ANIM_BLEND_TIME: float = 0.3  # アニメーションブレンド時間
+
 @onready var camera: Camera3D = $Camera3D
 
 
@@ -35,6 +40,18 @@ func _ready() -> void:
 	# カメラが無ければメインカメラを取得
 	if camera == null:
 		camera = get_viewport().get_camera_3d()
+
+	# アニメーションプレイヤーを取得
+	var model = get_node_or_null("CharacterModel")
+	if model:
+		anim_player = model.get_node_or_null("AnimationPlayer")
+		if anim_player:
+			# アニメーションを読み込んで追加
+			_load_walking_animation()
+			print("AnimationPlayer found, animations: ", anim_player.get_animation_list())
+			# 初期状態でIdleを再生
+			if anim_player.has_animation("idle"):
+				anim_player.play("idle")
 
 
 func _physics_process(delta: float) -> void:
@@ -45,6 +62,7 @@ func _physics_process(delta: float) -> void:
 	_handle_camera_input()
 	_handle_movement(delta)
 	_handle_camera_follow(delta)
+	_update_animation()
 
 
 func _handle_input() -> void:
@@ -152,3 +170,60 @@ func set_joystick_input(input: Vector2) -> void:
 func on_coin_collected() -> void:
 	# エフェクトを追加可能
 	pass
+
+
+## アニメーションを読み込む
+func _load_walking_animation() -> void:
+	var lib = anim_player.get_animation_library("")
+	if lib == null:
+		return
+
+	# Walkingアニメーション
+	var walking_scene = load("res://assets/characters/animations/walking.fbx")
+	if walking_scene:
+		var walking_instance = walking_scene.instantiate()
+		var walking_anim_player = walking_instance.get_node_or_null("AnimationPlayer")
+		if walking_anim_player:
+			for anim_name in walking_anim_player.get_animation_list():
+				var anim = walking_anim_player.get_animation(anim_name)
+				if anim:
+					var anim_copy = anim.duplicate()
+					anim_copy.loop_mode = Animation.LOOP_LINEAR  # ループ設定
+					lib.add_animation("walking", anim_copy)
+					print("Walking animation added!")
+					break
+		walking_instance.queue_free()
+
+	# Idleアニメーション
+	var idle_scene = load("res://assets/characters/animations/idle.fbx")
+	if idle_scene:
+		var idle_instance = idle_scene.instantiate()
+		var idle_anim_player = idle_instance.get_node_or_null("AnimationPlayer")
+		if idle_anim_player:
+			for anim_name in idle_anim_player.get_animation_list():
+				var anim = idle_anim_player.get_animation(anim_name)
+				if anim:
+					var anim_copy = anim.duplicate()
+					anim_copy.loop_mode = Animation.LOOP_LINEAR  # ループ設定
+					lib.add_animation("idle", anim_copy)
+					print("Idle animation added!")
+					break
+		idle_instance.queue_free()
+
+
+## アニメーションを更新
+func _update_animation() -> void:
+	if anim_player == null:
+		return
+
+	var horizontal_velocity := Vector3(velocity.x, 0, velocity.z)
+	var should_walk := horizontal_velocity.length() > 0.1
+
+	if should_walk and not is_walking:
+		is_walking = true
+		if anim_player.has_animation("walking"):
+			anim_player.play("walking", ANIM_BLEND_TIME)
+	elif not should_walk and is_walking:
+		is_walking = false
+		if anim_player.has_animation("idle"):
+			anim_player.play("idle", ANIM_BLEND_TIME)
