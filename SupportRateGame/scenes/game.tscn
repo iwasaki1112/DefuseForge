@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=3 uid="uid://cgame"]
+[gd_scene load_steps=8 format=3 uid="uid://cgame"]
 
 [ext_resource type="PackedScene" uid="uid://cplayer" path="res://scenes/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/game_ui.gd" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/game_scene.gd" id="5_game"]
-[ext_resource type="Texture2D" path="res://assets/maps/10450_Rectangular_Grass_Patch_v1_Diffuse.jpg" id="8_grass_texture"]
+[ext_resource type="PackedScene" path="res://resources/maps/dust2.glb" id="6_dust2"]
+[ext_resource type="Script" path="res://scripts/map_collision_generator.gd" id="7_mapcol"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.4, 0.6, 0.9, 1)
@@ -21,16 +22,6 @@ ambient_light_source = 2
 ambient_light_color = Color(0.7, 0.7, 0.8, 1)
 ambient_light_energy = 0.5
 
-[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-size = Vector2(100, 100)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
-albedo_texture = ExtResource("8_grass_texture")
-uv1_scale = Vector3(10, 10, 10)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_terrain"]
-size = Vector3(100, 0.1, 100)
-
 [node name="Game" type="Node3D"]
 script = ExtResource("5_game")
 
@@ -42,20 +33,12 @@ transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="Ground" type="MeshInstance3D" parent="."]
-mesh = SubResource("PlaneMesh_ground")
-surface_material_override/0 = SubResource("StandardMaterial3D_ground")
-
-[node name="GroundCollision" type="StaticBody3D" parent="."]
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
-shape = SubResource("BoxShape3D_terrain")
+[node name="Dust2Map" parent="." instance=ExtResource("6_dust2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("7_mapcol")
 
 [node name="Player" parent="." instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.5, 2, 12)
 
 [node name="GameUI" type="CanvasLayer" parent="."]
 script = ExtResource("4_ui")
