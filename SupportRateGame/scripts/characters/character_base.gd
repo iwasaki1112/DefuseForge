@@ -300,7 +300,9 @@ func set_weapon_type(weapon_type: int) -> void:
 	if model:
 		var prev_offset = CharacterSetup.WEAPON_Y_OFFSET.get(prev_weapon_type, 0.0)
 		var new_offset = CharacterSetup.WEAPON_Y_OFFSET.get(weapon_type, 0.0)
+		print("[%s] CharacterModel Y before: %.3f" % [name, model.position.y])
 		model.position.y += (new_offset - prev_offset)
+		print("[%s] CharacterModel Y after: %.3f (offset change: %.3f)" % [name, model.position.y, new_offset - prev_offset])
 
 	# アニメーションを即座に更新
 	_play_current_animation()
