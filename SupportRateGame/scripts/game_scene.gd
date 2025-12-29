@@ -5,6 +5,7 @@ extends Node3D
 
 const PathManager = preload("res://scripts/systems/path/path_manager.gd")
 const CameraController = preload("res://scripts/systems/camera_controller.gd")
+const FogOfWarRendererScript = preload("res://scripts/systems/vision/fog_of_war_renderer.gd")
 
 @onready var player: CharacterBody3D = $Player
 @onready var enemy: CharacterBody3D = $Enemy
@@ -12,6 +13,7 @@ const CameraController = preload("res://scripts/systems/camera_controller.gd")
 
 var path_manager: Node3D = null
 var camera_controller: Node3D = null
+var fog_renderer: Node3D = null
 
 
 func _ready() -> void:
@@ -25,6 +27,7 @@ func _ready() -> void:
 	# システムを初期化
 	_setup_path_system()
 	_setup_camera_system()
+	_setup_fog_of_war()
 
 	# ゲームを開始
 	GameManager.start_game()
@@ -71,6 +74,35 @@ func _setup_camera_system() -> void:
 
 		# 即座にカメラを配置
 		camera_controller.snap_to_target()
+
+
+## Fog of Warシステムをセットアップ
+func _setup_fog_of_war() -> void:
+	fog_renderer = Node3D.new()
+	fog_renderer.name = "FogOfWarRenderer"
+	fog_renderer.set_script(FogOfWarRendererScript)
+	add_child(fog_renderer)
+
+	# マップ範囲を設定（dust3マップ用）
+	# 必要に応じて調整
+	fog_renderer.set_map_bounds(Vector3(0, 0, 0), Vector2(80, 80))
+
+	# 敵の初期可視性を設定（非表示から開始）
+	_initialize_enemy_fog_of_war.call_deferred()
+
+	print("[GameScene] Fog of War system initialized")
+
+
+## 敵のFog of War初期化
+func _initialize_enemy_fog_of_war() -> void:
+	await get_tree().process_frame
+
+	if FogOfWarManager:
+		for e in GameManager.enemies:
+			if e and is_instance_valid(e):
+				FogOfWarManager._set_character_visible(e, false)
+				FogOfWarManager.enemy_visibility[e] = false
+				print("[GameScene] Enemy '%s' hidden by Fog of War" % e.name)
 
 
 ## パス確定時のコールバック

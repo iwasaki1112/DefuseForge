@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3 uid="uid://cplayer"]
+[gd_scene load_steps=5 format=3 uid="uid://cplayer"]
 
 [ext_resource type="Script" path="res://scripts/characters/player.gd" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://dtsmyimekx8ye" path="res://assets/characters/leet/leet.fbx" id="2_character"]
+[ext_resource type="Script" path="res://scripts/systems/vision/vision_component.gd" id="3_vision"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.3
@@ -21,3 +22,9 @@ transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, -1.1, 0)
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 8, 0)
+
+[node name="VisionComponent" type="Node" parent="."]
+script = ExtResource("3_vision")
+fov_angle = 120.0
+view_distance = 15.0
+ray_count = 60
