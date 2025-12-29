@@ -121,6 +121,9 @@ func clear_path() -> void:
 
 ## プレイヤー参照を設定
 func set_player(p: Node3D) -> void:
+	if player != p:
+		# プレイヤーが変わったらパスをクリア
+		clear_path()
 	player = p
 
 
