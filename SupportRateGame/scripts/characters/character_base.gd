@@ -31,7 +31,7 @@ var is_running: bool = false
 
 # アニメーション
 var anim_player: AnimationPlayer = null
-var current_move_state: int = 0  # 0: idle, 1: walk, 2: run
+var current_move_state: int = -1  # -1: uninitialized, 0: idle, 1: walk, 2: run
 var current_weapon_type: int = CharacterSetup.WeaponType.NONE
 var current_weapon_id: int = CharacterSetup.WeaponId.NONE
 const ANIM_BLEND_TIME: float = 0.3
@@ -94,13 +94,15 @@ func _physics_process(delta: float) -> void:
 	if not is_alive:
 		return
 
+	# アニメーションは常に更新（PLAYING以外でもidleを再生）
+	_update_animation()
+
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
 
 	_handle_path_movement(delta)
 	_handle_terrain_follow(delta)
 	move_and_slide()
-	_update_animation()
 
 
 ## パス追従移動
