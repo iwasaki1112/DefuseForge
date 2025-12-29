@@ -20,11 +20,41 @@ const TEXTURE_MAP := {
 	}
 }
 
-## アニメーションファイルパス
+## 武器タイプ
+enum WeaponType { NONE, RIFLE, PISTOL }
+
+## アニメーションファイルパス（武器タイプ別）
+## 構造: { WeaponType: { "idle": path, "walking": path, "running": path } }
 const ANIMATION_FILES := {
-	"idle": "res://assets/characters/animations/idle.fbx",
-	"walking": "res://assets/characters/animations/walking.fbx",
-	"running": "res://assets/characters/animations/running.fbx"
+	WeaponType.NONE: {
+		"idle": "res://assets/characters/animations/idle.fbx",
+		"walking": "res://assets/characters/animations/walking.fbx",
+		"running": "res://assets/characters/animations/running.fbx"
+	},
+	WeaponType.RIFLE: {
+		"idle": "res://assets/characters/animations/rifle/idle.fbx",
+		"walking": "res://assets/characters/animations/rifle/walking.fbx",
+		"running": "res://assets/characters/animations/rifle/running.fbx"
+	},
+	WeaponType.PISTOL: {
+		"idle": "res://assets/characters/animations/pistol/idle.fbx",
+		"walking": "res://assets/characters/animations/pistol/walking.fbx",
+		"running": "res://assets/characters/animations/pistol/running.fbx"
+	}
+}
+
+## 武器タイプ名称
+const WEAPON_TYPE_NAMES := {
+	WeaponType.NONE: "none",
+	WeaponType.RIFLE: "rifle",
+	WeaponType.PISTOL: "pistol"
+}
+
+## 武器タイプ別のY位置調整（アニメーションのHips位置の差を補正）
+const WEAPON_Y_OFFSET := {
+	WeaponType.NONE: 0.0,
+	WeaponType.RIFLE: 0.0,
+	WeaponType.PISTOL: 0.0
 }
 
 ## キャラクター別のY位置オフセット（足の位置を地面に合わせるため）
@@ -112,7 +142,7 @@ static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: S
 		print("[CharacterSetup] %s: Applied texture to mesh '%s'" % [debug_name, mesh_instance.name])
 
 
-## AnimationPlayerにアニメーションを読み込む
+## AnimationPlayerにアニメーションを読み込む（全武器タイプ）
 static func load_animations(anim_player: AnimationPlayer, model: Node, debug_name: String = "") -> void:
 	var lib = anim_player.get_animation_library("")
 	if lib == null:
@@ -123,20 +153,46 @@ static func load_animations(anim_player: AnimationPlayer, model: Node, debug_nam
 	if debug_name:
 		print("[CharacterSetup] %s: Loading animations..." % debug_name)
 
-	for anim_name in ANIMATION_FILES.keys():
-		_load_animation_from_fbx(lib, ANIMATION_FILES[anim_name], anim_name, model, debug_name)
+	# 全武器タイプのアニメーションを読み込み
+	for weapon_type in ANIMATION_FILES.keys():
+		var weapon_name = WEAPON_TYPE_NAMES[weapon_type]
+		var anims = ANIMATION_FILES[weapon_type]
+		for anim_name in anims.keys():
+			var full_anim_name = "%s_%s" % [anim_name, weapon_name]  # 例: idle_none, walking_rifle
+			_load_animation_from_fbx(lib, anims[anim_name], full_anim_name, model, debug_name)
 
 	if debug_name:
 		print("[CharacterSetup] %s: Available animations: %s" % [debug_name, anim_player.get_animation_list()])
 
 
+## 指定した武器タイプのアニメーション名を取得
+static func get_animation_name(base_name: String, weapon_type: int) -> String:
+	var weapon_name = WEAPON_TYPE_NAMES.get(weapon_type, "none")
+	return "%s_%s" % [base_name, weapon_name]
+
+
+## 指定した武器タイプのアニメーションが存在するか確認
+static func has_weapon_animations(anim_player: AnimationPlayer, weapon_type: int) -> bool:
+	var weapon_name = WEAPON_TYPE_NAMES.get(weapon_type, "none")
+	return anim_player.has_animation("idle_%s" % weapon_name)
+
+
 ## FBXファイルからアニメーションを読み込む
 static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_name: String, model: Node, debug_name: String) -> void:
+	# ファイルが存在するか確認（エラー抑制のため）
+	if not ResourceLoader.exists(path):
+		return
+
 	var scene = load(path)
 	if scene == null:
 		if debug_name:
 			print("[CharacterSetup] %s: Failed to load %s" % [debug_name, path])
 		return
+
+	# rifle/pistolアニメーションはHips位置トラックを削除（埋まり防止）
+	var remove_hips_position = anim_name.ends_with("_rifle") or anim_name.ends_with("_pistol")
+	if remove_hips_position and debug_name:
+		print("[CharacterSetup] %s: Will remove Hips position track for %s" % [debug_name, anim_name])
 
 	var instance = scene.instantiate()
 	var scene_anim_player = instance.get_node_or_null("AnimationPlayer")
@@ -146,7 +202,7 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 			if anim:
 				var anim_copy = anim.duplicate()
 				anim_copy.loop_mode = Animation.LOOP_LINEAR
-				_adjust_animation_paths(anim_copy, model)
+				_adjust_animation_paths(anim_copy, model, remove_hips_position)
 				lib.add_animation(anim_name, anim_copy)
 				break
 	else:
@@ -156,26 +212,52 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 
 
 ## アニメーションのトラックパスをモデル階層に合わせて調整
-static func _adjust_animation_paths(anim: Animation, model: Node) -> void:
+static func _adjust_animation_paths(anim: Animation, model: Node, remove_hips_position: bool = false) -> void:
 	if model == null:
 		return
 
 	# Armatureノードが存在するかチェック
 	var has_armature = model.get_node_or_null("Armature") != null
 
+	# Hips位置トラックを削除するためのリスト
+	var tracks_to_remove: Array[int] = []
+
+	# デバッグ: 全トラックを確認
+	if remove_hips_position:
+		print("[CharacterSetup] Checking %d tracks for Hips removal" % anim.get_track_count())
+
 	# トラックパスを調整
 	for i in range(anim.get_track_count()):
 		var track_path = anim.track_get_path(i)
 		var path_str = str(track_path)
+		var track_type = anim.track_get_type(i)
+
+		# デバッグ: トラック情報
+		if remove_hips_position and "Hips" in path_str:
+			print("[CharacterSetup] Track %d: %s (type=%d)" % [i, path_str, track_type])
 
 		# ボーン名の違いを修正（アニメーションは"mixamorig1_"、キャラクターは"mixamorig_"）
 		path_str = path_str.replace("mixamorig1_", "mixamorig_")
+
+		# rifle/pistolの場合、Hipsの位置・回転トラックを削除対象としてマーク
+		if remove_hips_position and "Hips" in path_str:
+			if track_type == Animation.TYPE_POSITION_3D or track_type == Animation.TYPE_ROTATION_3D:
+				print("[CharacterSetup] Marking track %d for removal: %s (type=%d)" % [i, path_str, track_type])
+				tracks_to_remove.append(i)
+				continue
 
 		# Armatureノードがある場合のみプレフィックスを追加
 		if has_armature and path_str.begins_with("Skeleton3D:"):
 			path_str = "Armature/" + path_str
 
 		anim.track_set_path(i, NodePath(path_str))
+
+	# Hips位置トラックを削除（逆順で削除）
+	if tracks_to_remove.size() > 0:
+		print("[CharacterSetup] Removing %d Hips position tracks" % tracks_to_remove.size())
+	tracks_to_remove.reverse()
+	for track_idx in tracks_to_remove:
+		anim.remove_track(track_idx)
 
 
 ## モデルからSkeletonを探す

@@ -4,11 +4,12 @@ extends CharacterBody3D
 ## キャラクター基底クラス
 ## 移動、アニメーション、地形追従の共通機能を提供
 
-const CharacterSetup = preload("res://scripts/utils/character_setup.gd")
+# CharacterSetup はグローバルクラス名として登録されているため、直接参照可能
 
 signal path_completed
 signal waypoint_reached(index: int)
 signal died
+signal weapon_type_changed(weapon_type: int)
 
 @export_group("移動設定")
 @export var walk_speed: float = 3.0
@@ -30,6 +31,7 @@ var is_running: bool = false
 # アニメーション
 var anim_player: AnimationPlayer = null
 var current_move_state: int = 0  # 0: idle, 1: walk, 2: run
+var current_weapon_type: int = CharacterSetup.WeaponType.NONE
 const ANIM_BLEND_TIME: float = 0.3
 
 # ステータス
@@ -67,8 +69,10 @@ func _setup_character() -> void:
 		if anim_player:
 			print("[%s] AnimationPlayer found" % name)
 			CharacterSetup.load_animations(anim_player, model, name)
-			if anim_player.has_animation("idle"):
-				anim_player.play("idle")
+			# 初期アニメーションを再生
+			var idle_anim = CharacterSetup.get_animation_name("idle", current_weapon_type)
+			if anim_player.has_animation(idle_anim):
+				anim_player.play(idle_anim)
 		else:
 			print("[%s] NO AnimationPlayer!" % name)
 	else:
@@ -200,20 +204,42 @@ func _update_animation() -> void:
 
 	if new_state != current_move_state:
 		current_move_state = new_state
-		anim_player.speed_scale = 1.0
+		_play_current_animation()
+
+
+## 現在の状態に応じたアニメーションを再生
+func _play_current_animation() -> void:
+	if anim_player == null:
+		return
+
+	anim_player.speed_scale = 1.0
+	var anim_name: String = ""
+
+	match current_move_state:
+		0:  # idle
+			anim_name = CharacterSetup.get_animation_name("idle", current_weapon_type)
+		1:  # walk
+			anim_name = CharacterSetup.get_animation_name("walking", current_weapon_type)
+		2:  # run
+			anim_name = CharacterSetup.get_animation_name("running", current_weapon_type)
+
+	# 武器タイプ別アニメーションがない場合はnoneにフォールバック
+	if not anim_player.has_animation(anim_name):
+		var fallback_type = CharacterSetup.WeaponType.NONE
 		match current_move_state:
 			0:
-				if anim_player.has_animation("idle"):
-					anim_player.play("idle", ANIM_BLEND_TIME)
+				anim_name = CharacterSetup.get_animation_name("idle", fallback_type)
 			1:
-				if anim_player.has_animation("walking"):
-					anim_player.play("walking", ANIM_BLEND_TIME)
+				anim_name = CharacterSetup.get_animation_name("walking", fallback_type)
 			2:
-				if anim_player.has_animation("running"):
-					anim_player.play("running", ANIM_BLEND_TIME)
-				elif anim_player.has_animation("walking"):
-					anim_player.play("walking", ANIM_BLEND_TIME)
+				anim_name = CharacterSetup.get_animation_name("running", fallback_type)
+				if not anim_player.has_animation(anim_name):
+					# runがない場合はwalkを速く再生
+					anim_name = CharacterSetup.get_animation_name("walking", fallback_type)
 					anim_player.speed_scale = 1.5
+
+	if anim_player.has_animation(anim_name):
+		anim_player.play(anim_name, ANIM_BLEND_TIME)
 
 
 ## ダメージを受ける
@@ -258,3 +284,36 @@ func add_armor(amount: float) -> void:
 ## 生存確認
 func is_character_alive() -> bool:
 	return is_alive
+
+
+## 武器タイプを設定
+func set_weapon_type(weapon_type: int) -> void:
+	if current_weapon_type == weapon_type:
+		return
+
+	var prev_weapon_type = current_weapon_type
+	current_weapon_type = weapon_type
+	weapon_type_changed.emit(weapon_type)
+
+	# CharacterModelのY位置を調整（武器タイプによるアニメーション位置の差を補正）
+	var model = get_node_or_null("CharacterModel")
+	if model:
+		var prev_offset = CharacterSetup.WEAPON_Y_OFFSET.get(prev_weapon_type, 0.0)
+		var new_offset = CharacterSetup.WEAPON_Y_OFFSET.get(weapon_type, 0.0)
+		model.position.y += (new_offset - prev_offset)
+
+	# アニメーションを即座に更新
+	_play_current_animation()
+
+	var weapon_name = CharacterSetup.WEAPON_TYPE_NAMES.get(weapon_type, "unknown")
+	print("[%s] Weapon type changed to: %s" % [name, weapon_name])
+
+
+## 現在の武器タイプを取得
+func get_weapon_type() -> int:
+	return current_weapon_type
+
+
+## 武器タイプ名を取得
+func get_weapon_type_name() -> String:
+	return CharacterSetup.WEAPON_TYPE_NAMES.get(current_weapon_type, "unknown")
