@@ -1,0 +1,14 @@
+[gd_resource type="StandardMaterial3D" load_steps=3 format=3 uid="uid://b0tnt7bbnj8re"]
+
+[ext_resource type="Texture2D" uid="uid://cotdc0hsllnsc" path="res://assets/characters/Ch36_nonPBR_0.png" id="1_tk36v"]
+[ext_resource type="Texture2D" uid="uid://cnyv2p88eqa25" path="res://assets/characters/Ch36_nonPBR_3.png" id="2_fljce"]
+
+[resource]
+resource_name = "Ch36_Body"
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.9063318, 0.9063318, 0.9063318, 0.8)
+albedo_texture = ExtResource("1_tk36v")
+emission_enabled = true
+normal_enabled = true
+normal_scale = 0.0
+normal_texture = ExtResource("2_fljce")

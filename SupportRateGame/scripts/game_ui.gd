@@ -10,8 +10,26 @@ extends CanvasLayer
 @onready var final_score_label: Label = $GameOverPanel/VBoxContainer/FinalScoreLabel
 @onready var restart_button: Button = $GameOverPanel/VBoxContainer/RestartButton
 
+# デバッグ用
+var debug_label: Label = null
+
 
 func _ready() -> void:
+	# デバッグラベルを作成（右下）
+	debug_label = Label.new()
+	debug_label.add_theme_font_size_override("font_size", 16)
+	debug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	debug_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	debug_label.anchors_preset = Control.PRESET_BOTTOM_RIGHT
+	debug_label.anchor_left = 1.0
+	debug_label.anchor_top = 1.0
+	debug_label.anchor_right = 1.0
+	debug_label.anchor_bottom = 1.0
+	debug_label.offset_left = -250
+	debug_label.offset_top = -80
+	debug_label.offset_right = -10
+	debug_label.offset_bottom = -10
+	add_child(debug_label)
 	game_over_panel.visible = false
 	restart_button.pressed.connect(_on_restart_button_pressed)
 
@@ -31,6 +49,7 @@ func _process(_delta: float) -> void:
 	if GameManager.is_game_running:
 		_update_timer()
 		_update_health(GameManager.player_health)
+		_update_debug_info()
 
 
 func _update_timer() -> void:
@@ -101,3 +120,21 @@ func _show_game_over() -> void:
 
 func _on_restart_button_pressed() -> void:
 	get_tree().reload_current_scene()
+
+
+func _update_debug_info() -> void:
+	if debug_label == null:
+		return
+
+	var player_pos := Vector3.ZERO
+	var on_floor := false
+
+	# プレイヤー情報を取得
+	if GameManager.player:
+		player_pos = GameManager.player.global_position
+		on_floor = GameManager.player.is_on_floor()
+
+	debug_label.text = "Player: (%.1f, %.1f, %.1f)\nOn Floor: %s" % [
+		player_pos.x, player_pos.y, player_pos.z,
+		"Yes" if on_floor else "No"
+	]

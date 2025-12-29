@@ -18,7 +18,7 @@ enum GameMode { DEFUSE, HOSTAGE }
 
 # ゲーム設定
 const ROUND_TIME: float = 105.0  # 1分45秒
-const BUY_TIME: float = 15.0
+const BUY_TIME: float = 1.0  # デバッグ用（本番は15.0）
 const BOMB_TIME: float = 40.0
 const MAX_ROUNDS: int = 15  # 勝利に必要なラウンド数（MR15）
 const STARTING_MONEY: int = 800
@@ -129,7 +129,7 @@ func _end_round(winner: Team) -> void:
 		_add_money(WIN_REWARD)
 		loss_streak = 0
 	else:
-		var loss_reward := min(LOSS_REWARD_BASE + (loss_streak * LOSS_REWARD_INCREMENT), MAX_LOSS_BONUS)
+		var loss_reward: int = mini(LOSS_REWARD_BASE + (loss_streak * LOSS_REWARD_INCREMENT), MAX_LOSS_BONUS)
 		_add_money(loss_reward)
 		loss_streak += 1
 

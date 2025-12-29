@@ -22,8 +22,6 @@ func _ready() -> void:
 	GameManager.start_game()
 
 
-
-
 func _exit_tree() -> void:
 	# シーン終了時にゲームを停止
 	GameManager.stop_game()
