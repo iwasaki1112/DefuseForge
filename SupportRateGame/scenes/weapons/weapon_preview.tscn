@@ -1,0 +1,14 @@
+[gd_scene load_steps=4 format=3 uid="uid://o7usubpcfh5g"]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_preview.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://dtsmyimekx8ye" path="res://assets/characters/leet/leet.fbx" id="2_character"]
+[ext_resource type="PackedScene" uid="uid://dak47weapon" path="res://scenes/weapons/ak47.tscn" id="3_ak47"]
+
+[node name="WeaponPreview" type="Node3D"]
+script = ExtResource("1_script")
+weapon_scene = ExtResource("3_ak47")
+character_model = ExtResource("2_character")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 2, 3, 2)
+shadow_enabled = true

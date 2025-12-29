@@ -390,9 +390,9 @@ static func attach_weapon_to_character(character: Node, skeleton: Skeleton3D, we
 		return null
 	
 	var data = WEAPON_DATA.get(weapon_id, null)
-	if data == null or data.model_path.is_empty():
+	if data == null or data.scene_path.is_empty():
 		if debug_name:
-			print("[CharacterSetup] %s: No weapon model for weapon_id %d" % [debug_name, weapon_id])
+			print("[CharacterSetup] %s: No weapon scene for weapon_id %d" % [debug_name, weapon_id])
 		return null
 	
 	# 右手のボーンインデックスを取得
