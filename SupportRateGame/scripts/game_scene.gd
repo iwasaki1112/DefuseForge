@@ -7,9 +7,13 @@ const PathManager = preload("res://scripts/systems/path/path_manager.gd")
 const CameraController = preload("res://scripts/systems/camera_controller.gd")
 const FogOfWarRendererScript = preload("res://scripts/systems/vision/fog_of_war_renderer.gd")
 
-@onready var player: CharacterBody3D = $Player
-@onready var enemy: CharacterBody3D = $Enemy
+@onready var players_node: Node3D = $Players
+@onready var enemies_node: Node3D = $Enemies
 @onready var game_ui: CanvasLayer = $GameUI
+
+var players: Array[CharacterBody3D] = []
+var enemies: Array[CharacterBody3D] = []
+var selected_player: CharacterBody3D = null
 
 var path_manager: Node3D = null
 var camera_controller: Node3D = null
@@ -17,12 +21,26 @@ var fog_renderer: Node3D = null
 
 
 func _ready() -> void:
-	# プレイヤー参照をGameManagerに設定
-	GameManager.player = player
+	# プレイヤーを収集
+	for child in players_node.get_children():
+		if child is CharacterBody3D:
+			players.append(child)
+
+	# 敵を収集
+	for child in enemies_node.get_children():
+		if child is CharacterBody3D:
+			enemies.append(child)
+
+	# 最初のプレイヤーを選択
+	if players.size() > 0:
+		selected_player = players[0]
+		GameManager.player = selected_player
 
 	# 敵を敵リストに追加
-	if enemy:
+	for enemy in enemies:
 		GameManager.enemies.append(enemy)
+
+	print("[GameScene] Players: %d, Enemies: %d" % [players.size(), enemies.size()])
 
 	# システムを初期化
 	_setup_path_system()
@@ -47,7 +65,8 @@ func _setup_path_system() -> void:
 	add_child(path_manager)
 
 	# プレイヤー参照を設定
-	path_manager.set_player(player)
+	if selected_player:
+		path_manager.set_player(selected_player)
 
 	# シグナル接続
 	path_manager.path_confirmed.connect(_on_path_confirmed)
@@ -56,8 +75,11 @@ func _setup_path_system() -> void:
 
 ## カメラシステムをセットアップ
 func _setup_camera_system() -> void:
+	if not selected_player:
+		return
+
 	# プレイヤーのカメラを取得してCameraControllerに移動
-	var player_camera: Camera3D = player.get_node_or_null("Camera3D")
+	var player_camera: Camera3D = selected_player.get_node_or_null("Camera3D")
 	if player_camera:
 		# カメラをプレイヤーから切り離してシーンルートに配置
 		player_camera.get_parent().remove_child(player_camera)
@@ -70,7 +92,7 @@ func _setup_camera_system() -> void:
 		# カメラをコントローラーに追加
 		camera_controller.add_child(player_camera)
 		camera_controller.camera = player_camera
-		camera_controller.follow_target = player
+		camera_controller.follow_target = selected_player
 
 		# カメラをアクティブに設定
 		player_camera.current = true
@@ -109,8 +131,8 @@ func _initialize_enemy_fog_of_war() -> void:
 
 ## パス確定時のコールバック
 func _on_path_confirmed(waypoints: Array) -> void:
-	if player and player.has_method("set_path"):
-		player.set_path(waypoints)
+	if selected_player and selected_player.has_method("set_path"):
+		selected_player.set_path(waypoints)
 
 
 ## パスクリア時のコールバック

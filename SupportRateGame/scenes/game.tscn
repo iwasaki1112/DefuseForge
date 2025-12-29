@@ -48,11 +48,39 @@ directional_shadow_blend_splits = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("7_mapcol")
 
-[node name="Player" parent="." instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+[node name="Players" type="Node3D" parent="."]
 
-[node name="Enemy" parent="." instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, 0)
+[node name="Player1" parent="Players" instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1, -5)
+
+[node name="Player2" parent="Players" instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 1, -5)
+
+[node name="Player3" parent="Players" instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
+
+[node name="Player4" parent="Players" instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, -5)
+
+[node name="Player5" parent="Players" instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1, -5)
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Enemy1" parent="Enemies" instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1, 5)
+
+[node name="Enemy2" parent="Enemies" instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 1, 5)
+
+[node name="Enemy3" parent="Enemies" instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 5)
+
+[node name="Enemy4" parent="Enemies" instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, 5)
+
+[node name="Enemy5" parent="Enemies" instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1, 5)
 
 [node name="GameUI" type="CanvasLayer" parent="."]
 script = ExtResource("4_ui")
