@@ -13,7 +13,7 @@ signal waypoint_reached(index: int)
 
 @export_group("カメラ設定")
 @export var camera_distance: float = 5.0
-@export var camera_angle: float = -80.0  # 斜めアングル（度）
+@export var camera_angle: float = -60.0  # 斜めアングル（度）
 @export var min_zoom: float = 4.0
 @export var max_zoom: float = 25.0
 @export var zoom_speed: float = 2.0
@@ -308,9 +308,33 @@ func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_name: St
 			if anim:
 				var anim_copy = anim.duplicate()
 				anim_copy.loop_mode = Animation.LOOP_LINEAR
+				# モデルの階層に合わせてトラックパスを調整
+				_adjust_animation_paths(anim_copy)
 				lib.add_animation(anim_name, anim_copy)
 				break
 	instance.queue_free()
+
+
+## アニメーションのトラックパスをモデル階層に合わせて調整
+func _adjust_animation_paths(anim: Animation) -> void:
+	var model = get_node_or_null("CharacterModel")
+	if model == null:
+		return
+	
+	# Armatureノードが存在するかチェック（leetモデルなど）
+	var has_armature = model.get_node_or_null("Armature") != null
+	if not has_armature:
+		return  # Ch36のような直接構造はそのまま
+	
+	# トラックパスを調整
+	for i in range(anim.get_track_count()):
+		var track_path = anim.track_get_path(i)
+		var path_str = str(track_path)
+		
+		# "Skeleton3D:" で始まるパスに "Armature/" プレフィックスを追加
+		if path_str.begins_with("Skeleton3D:"):
+			var new_path = NodePath("Armature/" + path_str)
+			anim.track_set_path(i, new_path)
 
 
 ## アニメーション更新
@@ -349,22 +373,15 @@ func _setup_lit_materials(node: Node) -> void:
 		# 影をキャストするように設定
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
+		# マテリアルのシェーディングモードを確認・修正
 		if mesh_instance.mesh:
 			var surface_count = mesh_instance.mesh.get_surface_count()
 			for i in range(surface_count):
 				var mat = mesh_instance.get_active_material(i)
-
-				# 新しいマテリアルを作成（元のテクスチャを保持）
-				var new_mat = StandardMaterial3D.new()
-				new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-
-				# 元のマテリアルからテクスチャをコピー
 				if mat and mat is BaseMaterial3D:
-					if mat.albedo_texture:
-						new_mat.albedo_texture = mat.albedo_texture
-					new_mat.albedo_color = mat.albedo_color
-
-				mesh_instance.set_surface_override_material(i, new_mat)
+					# シェーディングモードがUnlitの場合のみ修正
+					if mat.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+						mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 
 	# 子ノードを再帰的に処理
 	for child in node.get_children():

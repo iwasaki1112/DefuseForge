@@ -18,6 +18,7 @@ signal path_cleared
 @export_group("直線判定設定")
 @export var straight_angle_threshold: float = 15.0  # この角度（度）以下なら直線とみなす
 @export var min_straight_distance: float = 2.0  # この距離以上の直線で走り判定
+@export var end_walk_distance: float = 2.0  # 終点からこの距離内は必ず歩き
 
 @export_group("入力設定")
 @export var draw_button: MouseButton = MOUSE_BUTTON_LEFT
@@ -437,6 +438,28 @@ func _analyze_path_segments() -> void:
 					segment_run_flags[j] = true
 		else:
 			i += 1
+
+	# 終点付近は必ず歩きに設定
+	_force_walk_near_end()
+
+
+## 終点付近のセグメントを歩きに強制
+func _force_walk_near_end() -> void:
+	if current_path.size() < 2 or segment_run_flags.size() == 0:
+		return
+
+	# 終点から逆順に距離を累積し、end_walk_distance以内のセグメントを歩きに
+	var cumulative_distance := 0.0
+
+	for i in range(current_path.size() - 2, -1, -1):
+		var p1 := current_path[i]
+		var p2 := current_path[i + 1]
+		cumulative_distance += p1.distance_to(p2)
+
+		if cumulative_distance <= end_walk_distance:
+			segment_run_flags[i] = false
+		else:
+			break  # これ以上離れたセグメントは変更しない
 
 
 ## 指定インデックスでの角度変化を取得（度）
