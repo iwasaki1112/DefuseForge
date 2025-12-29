@@ -7,17 +7,31 @@ const CharacterSetup = preload("res://scripts/utils/character_setup.gd")
 @onready var label_leet = $Label_Leet
 @onready var label_gsg9 = $Label_Gsg9
 
+# 重力シミュレーション
+var gravity: float = -20.0
+var leet_velocity: float = 0.0
+var gsg9_velocity: float = 0.0
+var leet_grounded: bool = false
+var gsg9_grounded: bool = false
+
+# キャラクターの足のオフセット（地面からの高さ）
+var leet_foot_offset: float = 0.0
+var gsg9_foot_offset: float = 0.0
+
 func _ready():
 	# CharacterSetupを使用してテクスチャとアニメーションを設定
 	CharacterSetup.setup_materials(leet_model, "LEET")
 	CharacterSetup.setup_materials(gsg9_model, "GSG9")
 
-	# Yオフセットを適用（足の位置を揃える）
-	var leet_offset = CharacterSetup.get_y_offset("LEET")
-	var gsg9_offset = CharacterSetup.get_y_offset("GSG9")
-	leet_model.position.y += leet_offset
-	gsg9_model.position.y += gsg9_offset
-	print("[TestPivot] Applied Y offsets - LEET: %.6f, GSG9: %.6f" % [leet_offset, gsg9_offset])
+	# Yオフセットを取得（足の高さ調整用）
+	leet_foot_offset = CharacterSetup.get_y_offset("LEET")
+	gsg9_foot_offset = CharacterSetup.get_y_offset("GSG9")
+
+	# 初期位置を空中に設定（重力で落下させる）
+	leet_model.position.y = 3.0
+	gsg9_model.position.y = 3.0
+
+	print("[TestPivot] Starting with gravity - models at Y=3.0")
 
 	# アニメーション設定
 	var leet_anim = CharacterSetup.find_animation_player(leet_model)
@@ -32,8 +46,49 @@ func _ready():
 		if gsg9_anim.has_animation("idle"):
 			gsg9_anim.play("idle")
 
-	# モデルの情報を取得
-	call_deferred("analyze_models")
+	# モデルの情報を取得（落下後に実行）
+	# call_deferred("analyze_models")
+
+
+func _physics_process(delta: float) -> void:
+	# LEET の重力処理
+	if not leet_grounded:
+		leet_velocity += gravity * delta
+		leet_model.position.y += leet_velocity * delta
+
+		# 地面チェック（足のオフセットを考慮）
+		# オフセットは負の値（例: -0.75）なので、モデルがその位置まで落下したら着地
+		if leet_model.position.y <= leet_foot_offset:
+			leet_model.position.y = leet_foot_offset
+			leet_velocity = 0.0
+			leet_grounded = true
+			print("[TestPivot] LEET landed at Y=%.3f" % leet_model.position.y)
+			_update_label(label_leet, "LEET", leet_model)
+
+	# GSG9 の重力処理
+	if not gsg9_grounded:
+		gsg9_velocity += gravity * delta
+		gsg9_model.position.y += gsg9_velocity * delta
+
+		# 地面チェック（足のオフセットを考慮）
+		if gsg9_model.position.y <= gsg9_foot_offset:
+			gsg9_model.position.y = gsg9_foot_offset
+			gsg9_velocity = 0.0
+			gsg9_grounded = true
+			print("[TestPivot] GSG9 landed at Y=%.3f" % gsg9_model.position.y)
+			_update_label(label_gsg9, "GSG9", gsg9_model)
+
+	# 両方着地したら解析を実行
+	if leet_grounded and gsg9_grounded:
+		set_physics_process(false)
+		call_deferred("analyze_models")
+
+
+func _update_label(label: Label3D, char_name: String, model: Node3D) -> void:
+	var aabb = get_model_aabb(model)
+	var foot_y = aabb.position.y if aabb else 0.0
+	label.text = "%s\nFoot Y: %.3f" % [char_name, foot_y]
+
 
 func analyze_models():
 	print("=== Character Pivot Analysis ===")
