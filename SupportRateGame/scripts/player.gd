@@ -130,8 +130,8 @@ func _handle_camera(delta: float) -> void:
 	if camera == null:
 		return
 
-	# ズームをスムーズに適用
-	camera_distance = lerp(camera_distance, target_zoom, zoom_speed * delta)
+	# ズームを即座に適用（イージングなし）
+	camera_distance = target_zoom
 
 	# 真上からのトップダウンビュー（キャラクターの回転に影響されない）
 	# camera_offsetでパン位置を調整

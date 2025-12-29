@@ -18,13 +18,20 @@ signal path_cleared
 @export var draw_button: MouseButton = MOUSE_BUTTON_LEFT
 @export var run_modifier_button: MouseButton = MOUSE_BUTTON_RIGHT
 
-# 内部状態
-var is_drawing: bool = false
+# ジェスチャー状態
+enum GestureState { NONE, PENDING, DRAWING, CAMERA }
+var gesture_state: GestureState = GestureState.NONE
+
+# タッチ管理
+var touch_points: Dictionary = {}  # index -> position
+var gesture_start_time: float = 0.0
+var pending_position: Vector2 = Vector2.ZERO
+var drawing_finger_index: int = -1  # 描画用の指を追跡
+const GESTURE_CONFIRM_DELAY: float = 0.1  # 100ms
+
+# パス状態
 var current_path: Array[Vector3] = []
 var is_run_mode: bool = false
-
-# タッチ追跡（2本指以上はカメラ操作なので無視）
-var touch_count: int = 0
 
 # 3D表示用
 var path_mesh_instance: MeshInstance3D = null
@@ -44,10 +51,10 @@ func _ready() -> void:
 	# マテリアル設定（深度テスト有効）
 	var material := StandardMaterial3D.new()
 	material.albedo_color = path_color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED  # ライティング無効
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.no_depth_test = false  # 深度テスト有効（キャラの後ろに隠れる）
+	material.no_depth_test = false
 	material.disable_receive_shadows = true
 	path_mesh_instance.material_override = material
 
@@ -58,30 +65,44 @@ func _process(_delta: float) -> void:
 	if camera == null:
 		camera = get_viewport().get_camera_3d()
 
+	# ペンディング状態：遅延後にジェスチャーを確定
+	if gesture_state == GestureState.PENDING:
+		var elapsed := (Time.get_ticks_msec() / 1000.0) - gesture_start_time
+		if elapsed >= GESTURE_CONFIRM_DELAY:
+			if touch_points.size() == 1:
+				# 1本指のまま → パス描画開始
+				gesture_state = GestureState.DRAWING
+				_start_drawing(pending_position)
+			else:
+				# 2本指以上 → カメラ操作
+				gesture_state = GestureState.CAMERA
+
 
 func _input(event: InputEvent) -> void:
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
 
+	# マウス入力（PC用）
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
-
-	if event is InputEventMouseMotion and is_drawing:
+	if event is InputEventMouseMotion and gesture_state == GestureState.DRAWING:
 		_handle_mouse_motion(event)
 
+	# タッチ入力
 	if event is InputEventScreenTouch:
 		_handle_touch(event)
-
-	if event is InputEventScreenDrag and is_drawing:
+	if event is InputEventScreenDrag:
 		_handle_touch_drag(event)
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if event.button_index == draw_button:
 		if event.pressed:
+			gesture_state = GestureState.DRAWING
 			_start_drawing(event.position)
 		else:
 			_finish_drawing()
+			gesture_state = GestureState.NONE
 
 	if event.button_index == run_modifier_button and event.pressed:
 		is_run_mode = true
@@ -93,28 +114,56 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 
 func _handle_touch(event: InputEventScreenTouch) -> void:
 	if event.pressed:
-		touch_count += 1
-		# 2本指以上になったら描画をキャンセル
-		if touch_count >= 2:
-			if is_drawing:
-				is_drawing = false
-				clear_path()
-			return
-		# 1本指のみでパス描画
-		if touch_count == 1:
-			_start_drawing(event.position)
+		# タッチ開始
+		touch_points[event.index] = event.position
+
+		match gesture_state:
+			GestureState.NONE:
+				if touch_points.size() == 1:
+					# 最初のタッチ → ペンディング状態
+					gesture_state = GestureState.PENDING
+					gesture_start_time = Time.get_ticks_msec() / 1000.0
+					pending_position = event.position
+					drawing_finger_index = event.index  # この指を追跡
+				elif touch_points.size() >= 2:
+					# いきなり2本指 → カメラ操作
+					gesture_state = GestureState.CAMERA
+					drawing_finger_index = -1
+
+			GestureState.PENDING:
+				if touch_points.size() >= 2:
+					# ペンディング中に2本目 → カメラ操作に切り替え
+					gesture_state = GestureState.CAMERA
+					drawing_finger_index = -1
+
+			GestureState.DRAWING:
+				if touch_points.size() >= 2:
+					# 描画中に2本目 → カメラ操作に切り替え（パスは保持）
+					gesture_state = GestureState.CAMERA
+
+			GestureState.CAMERA:
+				# カメラ操作中 → 継続
+				pass
 	else:
-		touch_count = max(0, touch_count - 1)
-		# 1本指のみで描画終了
-		if touch_count == 0 and is_drawing:
-			_finish_drawing()
+		# タッチ終了
+		touch_points.erase(event.index)
+
+		if touch_points.size() == 0:
+			# 全ての指が離れた → リセット
+			if gesture_state == GestureState.DRAWING:
+				_finish_drawing()
+			gesture_state = GestureState.NONE
+			drawing_finger_index = -1
 
 
 func _handle_touch_drag(event: InputEventScreenDrag) -> void:
-	# 2本指以上はカメラ操作なので無視
-	if touch_count >= 2:
-		return
-	_add_point_from_screen(event.position)
+	# タッチ位置を更新
+	if touch_points.has(event.index):
+		touch_points[event.index] = event.position
+
+	# 描画状態で、かつ描画用の指のみパスに追加
+	if gesture_state == GestureState.DRAWING and event.index == drawing_finger_index:
+		_add_point_from_screen(event.position)
 
 
 ## 描画を開始
@@ -123,7 +172,6 @@ func _start_drawing(screen_pos: Vector2) -> void:
 	if world_pos == Vector3.INF:
 		return
 
-	is_drawing = true
 	current_path.clear()
 
 	# プレイヤーを停止してから描画開始
@@ -133,7 +181,7 @@ func _start_drawing(screen_pos: Vector2) -> void:
 	# プレイヤーの足元からパスを開始
 	if GameManager.player:
 		var player_pos := GameManager.player.global_position
-		player_pos.y = world_pos.y  # 地面の高さに合わせる
+		player_pos.y = world_pos.y
 		current_path.append(player_pos)
 
 	current_path.append(world_pos)
@@ -158,11 +206,6 @@ func _add_point_from_screen(screen_pos: Vector2) -> void:
 
 ## 描画を終了してパスを確定
 func _finish_drawing() -> void:
-	if not is_drawing:
-		return
-
-	is_drawing = false
-
 	if current_path.size() >= 2:
 		path_confirmed.emit(current_path.duplicate())
 
@@ -201,10 +244,8 @@ func _update_path_visual() -> void:
 	if current_path.size() < 2:
 		return
 
-	# スムーズなパスを生成
 	var smooth_path := _generate_smooth_path(current_path)
 
-	# ライン描画
 	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 
 	for i in range(smooth_path.size()):
@@ -247,7 +288,6 @@ func _generate_smooth_path(points: Array[Vector3]) -> Array[Vector3]:
 			var interpolated := _catmull_rom(p0, p1, p2, p3, t)
 			smooth.append(interpolated)
 
-	# 最後のポイントを追加
 	smooth.append(points[points.size() - 1])
 
 	return smooth
@@ -269,3 +309,13 @@ func _catmull_rom(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) 
 ## 走りモードかどうか
 func is_running() -> bool:
 	return is_run_mode
+
+
+## 現在描画中かどうか（外部参照用）
+func is_gesture_drawing() -> bool:
+	return gesture_state == GestureState.DRAWING
+
+
+## カメラ操作中かどうか（外部参照用）
+func is_gesture_camera() -> bool:
+	return gesture_state == GestureState.CAMERA or gesture_state == GestureState.PENDING
