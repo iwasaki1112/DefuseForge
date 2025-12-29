@@ -65,6 +65,16 @@ func _ready() -> void:
 		# CharacterSetupを使用してマテリアルとテクスチャを設定
 		CharacterSetup.setup_materials(model, name)
 
+		# キャラクター別のYオフセットを適用（足を地面に合わせる）
+		# モデル内のメッシュ名からキャラクタータイプを判定
+		var meshes = CharacterSetup.find_meshes(model)
+		for mesh in meshes:
+			var y_offset = CharacterSetup.get_y_offset(mesh.name)
+			if y_offset != 0.0:
+				model.position.y = y_offset
+				print("[Player] %s: Applied Y offset %.3f (from mesh '%s')" % [name, y_offset, mesh.name])
+				break
+
 		anim_player = CharacterSetup.find_animation_player(model)
 		if anim_player:
 			print("[Player] %s: AnimationPlayer found" % name)
