@@ -87,16 +87,34 @@ directional_shadow_blend_splits = true
 
 # プロジェクトを実行
 "/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot" --path SupportRateGame
-
-# iOSエクスポート
-"/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot" --headless --path SupportRateGame --export-debug "iOS" builds/ios/SupportRateGame.xcodeproj
 ```
+
+## iOS実機ビルド（重要）
+**必ず専用スクリプトを使用すること！** 手動でGodotエクスポートやXcode操作をしない。
+
+```bash
+# iOS実機ビルド＆インストール（推奨）
+./scripts/ios_build.sh
+
+# Godotエクスポートも含める場合
+./scripts/ios_build.sh --export
+```
+
+### スクリプトが行うこと
+1. 署名設定を自動修正（Automatic signing, Team ID設定）
+2. 実機の接続確認
+3. Xcodeビルド
+4. 実機へのインストール
+
+### 注意
+- Godotの`--export-debug`を直接実行すると署名設定が壊れる
+- 必ず`ios_build.sh`経由でビルドすること
 
 ## 開発フロー
 1. スクリプトファイルはファイル操作ツールで編集
 2. シーンファイルはGodot MCPまたはファイル操作ツールで編集
 3. テスト実行はGodot MCPの`run_project`を使用
-4. iOSビルドはXcodeで署名設定後にビルド
+4. **iOS実機ビルドは`./scripts/ios_build.sh`を使用**
 
 ## Error handling
 - シーンが読み込めない → UIDを確認

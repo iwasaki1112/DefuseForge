@@ -9,9 +9,9 @@ signal path_cleared
 
 @export_group("描画設定")
 @export var min_point_distance: float = 0.5  # ウェイポイント間の最小距離
-@export var path_color: Color = Color(0.0, 1.0, 0.0, 0.8)  # パスの色
+@export var path_color: Color = Color(0.0, 1.0, 0.0, 0.5)  # パスの色（半透明で影が透ける）
 @export var path_width: float = 0.15  # パスの太さ
-@export var path_height_offset: float = 0.02  # 地面からのオフセット
+@export var path_height_offset: float = 0.001  # 地面からのオフセット（影を受けるため最小限に）
 @export var smoothing_segments: int = 5  # 各ポイント間の補間セグメント数
 
 @export_group("入力設定")
@@ -48,14 +48,17 @@ func _ready() -> void:
 	path_mesh_instance.mesh = immediate_mesh
 	path_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	# マテリアル設定（深度テスト有効）
+	# マテリアル設定（深度テスト有効、影を受ける）
 	var material := StandardMaterial3D.new()
 	material.albedo_color = path_color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL  # 影を受けるために必要
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.no_depth_test = false
-	material.disable_receive_shadows = true
+	material.disable_receive_shadows = false  # 影を受ける
+	material.emission_enabled = true  # 発光で視認性を維持
+	material.emission = Color(0.0, 1.0, 0.0, 1.0)
+	material.emission_energy_multiplier = 0.5  # 影が透けて見えるよう控えめに
 	path_mesh_instance.material_override = material
 
 	add_child(path_mesh_instance)
@@ -246,6 +249,7 @@ func _update_path_visual() -> void:
 
 	var smooth_path := _generate_smooth_path(current_path)
 
+	# メインのパス（TRIANGLE_STRIP）
 	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 
 	for i in range(smooth_path.size()):
@@ -266,6 +270,47 @@ func _update_path_visual() -> void:
 
 		immediate_mesh.surface_add_vertex(point - right)
 		immediate_mesh.surface_add_vertex(point + right)
+
+	immediate_mesh.surface_end()
+
+	# 角丸キャップを追加（先端のみ）
+	if smooth_path.size() >= 2:
+		# 終点のキャップ
+		var end_point: Vector3 = smooth_path[smooth_path.size() - 1]
+		end_point.y += path_height_offset
+		var end_dir := (smooth_path[smooth_path.size() - 1] - smooth_path[smooth_path.size() - 2]).normalized()
+		_draw_round_cap(end_point, end_dir, false)
+
+
+## 角丸キャップを描画
+func _draw_round_cap(center: Vector3, direction: Vector3, is_start: bool) -> void:
+	var up := Vector3.UP
+	var right := direction.cross(up).normalized()
+	if right.length() < 0.01:
+		right = Vector3.RIGHT
+
+	var segments := 8  # キャップの滑らかさ
+	var radius := path_width * 0.5
+
+	# 半円を描画（TRIANGLE_FAN風にTRIANGLESで）
+	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var start_angle := PI * 0.5 if is_start else -PI * 0.5
+	var end_angle := PI * 1.5 if is_start else PI * 0.5
+
+	for i in range(segments):
+		var angle1 := start_angle + (end_angle - start_angle) * float(i) / float(segments)
+		var angle2 := start_angle + (end_angle - start_angle) * float(i + 1) / float(segments)
+
+		# 中心点
+		immediate_mesh.surface_add_vertex(center)
+
+		# 外周の2点
+		var offset1 := right * cos(angle1) * radius + direction * sin(angle1) * radius
+		var offset2 := right * cos(angle2) * radius + direction * sin(angle2) * radius
+
+		immediate_mesh.surface_add_vertex(center + offset1)
+		immediate_mesh.surface_add_vertex(center + offset2)
 
 	immediate_mesh.surface_end()
 

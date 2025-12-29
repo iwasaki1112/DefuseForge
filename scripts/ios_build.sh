@@ -24,11 +24,13 @@ fi
 # 署名設定を自動的に修正
 echo "2. 署名設定を自動修正中..."
 if [ -f "$PBXPROJ" ]; then
-    # CODE_SIGN_STYLE を Automatic に変更
+    # CODE_SIGN_STYLE を Automatic に変更（クォート有無両方に対応）
+    sed -i '' 's/CODE_SIGN_STYLE = "Manual";/CODE_SIGN_STYLE = Automatic;/g' "$PBXPROJ"
     sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Automatic;/g' "$PBXPROJ"
 
-    # DEVELOPMENT_TEAM が空の場合、Team IDを設定
-    sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
+    # DEVELOPMENT_TEAM を正しいTeam IDに置換（既存値も含む）
+    sed -i '' "s/DEVELOPMENT_TEAM = \"[^\"]*\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
+    sed -i '' "s/DEVELOPMENT_TEAM = [A-Z0-9]*;/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
 
     echo "   署名設定を修正しました (Automatic signing有効化, Team ID: $TEAM_ID)"
 else

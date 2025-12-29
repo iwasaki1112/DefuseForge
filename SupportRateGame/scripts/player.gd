@@ -12,8 +12,9 @@ signal waypoint_reached(index: int)
 @export var rotation_speed: float = 10.0
 
 @export_group("カメラ設定")
-@export var camera_distance: float = 8.0
-@export var min_zoom: float = 5.0
+@export var camera_distance: float = 6.0
+@export var camera_angle: float = -80.0  # 斜めアングル（度）
+@export var min_zoom: float = 4.0
 @export var max_zoom: float = 25.0
 @export var zoom_speed: float = 2.0
 
@@ -21,7 +22,7 @@ var gravity: float = -20.0
 var vertical_velocity: float = 0.0
 
 # カメラ
-var target_zoom: float = 8.0
+var target_zoom: float = 6.0
 var camera_offset: Vector3 = Vector3.ZERO
 
 # タッチ入力管理
@@ -133,11 +134,16 @@ func _handle_camera(delta: float) -> void:
 	# ズームを即座に適用（イージングなし）
 	camera_distance = target_zoom
 
-	# 真上からのトップダウンビュー（キャラクターの回転に影響されない）
+	# 斜めからのトップダウンビュー（キャラクターの回転に影響されない）
 	# camera_offsetでパン位置を調整
-	var target_pos = global_position + camera_offset + Vector3(0, camera_distance, 0)
+	# -90度 = 真上、-60度 = 斜め
+	var elevation_rad = deg_to_rad(-camera_angle)  # -80 → 80度
+	var cam_y = camera_distance * sin(elevation_rad)  # 高さ
+	var cam_z = camera_distance * cos(elevation_rad)  # 後方オフセット
+	var target_pos = global_position + camera_offset + Vector3(0, cam_y, cam_z)
 	camera.global_position = target_pos
-	camera.global_rotation_degrees = Vector3(-90, 0, 0)  # 常に固定向き
+	# キャラクターを常に画面中央に
+	camera.look_at(global_position + camera_offset + Vector3(0, 1, 0), Vector3.UP)
 
 
 ## パスを設定して移動開始
@@ -170,10 +176,13 @@ func _initial_placement() -> void:
 	await get_tree().physics_frame
 	_snap_to_ground()
 
-	# カメラも即座に配置
+	# カメラも即座に配置（斜めアングル）
 	if camera:
-		camera.global_position = global_position + camera_offset + Vector3(0, camera_distance, 0)
-		camera.global_rotation_degrees = Vector3(-90, 0, 0)
+		var elevation_rad = deg_to_rad(-camera_angle)
+		var cam_y = camera_distance * sin(elevation_rad)
+		var cam_z = camera_distance * cos(elevation_rad)
+		camera.global_position = global_position + camera_offset + Vector3(0, cam_y, cam_z)
+		camera.look_at(global_position + camera_offset + Vector3(0, 1, 0), Vector3.UP)
 
 	# スナップ完了後に表示
 	visible = true
