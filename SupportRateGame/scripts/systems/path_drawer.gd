@@ -4,15 +4,20 @@ extends Node3D
 ## Door Kickers 2スタイルのパス描画を実現
 ## 3D描画（深度テスト有効）でキャラクターの後ろに隠れる
 
-signal path_confirmed(waypoints: Array[Vector3])
+signal path_confirmed(waypoints: Array)  # Array of {position: Vector3, run: bool}
 signal path_cleared
 
 @export_group("描画設定")
 @export var min_point_distance: float = 0.5  # ウェイポイント間の最小距離
-@export var path_color: Color = Color(0.0, 1.0, 0.0, 0.5)  # パスの色（半透明で影が透ける）
+@export var path_color_walk: Color = Color(0.0, 1.0, 0.0, 0.5)  # 歩きパスの色
+@export var path_color_run: Color = Color(1.0, 0.5, 0.0, 0.5)  # 走りパスの色（オレンジ）
 @export var path_width: float = 0.15  # パスの太さ
 @export var path_height_offset: float = 0.001  # 地面からのオフセット（影を受けるため最小限に）
 @export var smoothing_segments: int = 5  # 各ポイント間の補間セグメント数
+
+@export_group("直線判定設定")
+@export var straight_angle_threshold: float = 15.0  # この角度（度）以下なら直線とみなす
+@export var min_straight_distance: float = 2.0  # この距離以上の直線で走り判定
 
 @export_group("入力設定")
 @export var draw_button: MouseButton = MOUSE_BUTTON_LEFT
@@ -31,37 +36,49 @@ const GESTURE_CONFIRM_DELAY: float = 0.1  # 100ms
 
 # パス状態
 var current_path: Array[Vector3] = []
-var is_run_mode: bool = false
+var segment_run_flags: Array[bool] = []  # 各セグメントが走りかどうか
 
 # 3D表示用
-var path_mesh_instance: MeshInstance3D = null
-var immediate_mesh: ImmediateMesh = null
+var path_mesh_instance_walk: MeshInstance3D = null
+var path_mesh_instance_run: MeshInstance3D = null
+var immediate_mesh_walk: ImmediateMesh = null
+var immediate_mesh_run: ImmediateMesh = null
 
 # カメラ参照
 var camera: Camera3D = null
 
 
 func _ready() -> void:
-	# ImmediateMeshを作成
-	immediate_mesh = ImmediateMesh.new()
-	path_mesh_instance = MeshInstance3D.new()
-	path_mesh_instance.mesh = immediate_mesh
-	path_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# 歩き用メッシュを作成
+	immediate_mesh_walk = ImmediateMesh.new()
+	path_mesh_instance_walk = MeshInstance3D.new()
+	path_mesh_instance_walk.mesh = immediate_mesh_walk
+	path_mesh_instance_walk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	path_mesh_instance_walk.material_override = _create_path_material(path_color_walk, Color(0.0, 1.0, 0.0, 1.0))
+	add_child(path_mesh_instance_walk)
 
-	# マテリアル設定（深度テスト有効、影を受ける）
+	# 走り用メッシュを作成
+	immediate_mesh_run = ImmediateMesh.new()
+	path_mesh_instance_run = MeshInstance3D.new()
+	path_mesh_instance_run.mesh = immediate_mesh_run
+	path_mesh_instance_run.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	path_mesh_instance_run.material_override = _create_path_material(path_color_run, Color(1.0, 0.5, 0.0, 1.0))
+	add_child(path_mesh_instance_run)
+
+
+## パス用マテリアルを作成
+func _create_path_material(albedo: Color, emission: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-	material.albedo_color = path_color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL  # 影を受けるために必要
+	material.albedo_color = albedo
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.no_depth_test = false
-	material.disable_receive_shadows = false  # 影を受ける
-	material.emission_enabled = true  # 発光で視認性を維持
-	material.emission = Color(0.0, 1.0, 0.0, 1.0)
-	material.emission_energy_multiplier = 0.5  # 影が透けて見えるよう控えめに
-	path_mesh_instance.material_override = material
-
-	add_child(path_mesh_instance)
+	material.disable_receive_shadows = false
+	material.emission_enabled = true
+	material.emission = emission
+	material.emission_energy_multiplier = 0.5
+	return material
 
 
 func _process(_delta: float) -> void:
@@ -107,8 +124,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			_finish_drawing()
 			gesture_state = GestureState.NONE
 
-	if event.button_index == run_modifier_button and event.pressed:
-		is_run_mode = true
+	# 右クリックは現在未使用（直線判定で自動的に走り/歩きが決まるため）
 
 
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
@@ -210,13 +226,27 @@ func _add_point_from_screen(screen_pos: Vector2) -> void:
 ## 描画を終了してパスを確定
 func _finish_drawing() -> void:
 	if current_path.size() >= 2:
-		path_confirmed.emit(current_path.duplicate())
+		# 直線判定を実行してフラグを更新
+		_analyze_path_segments()
+
+		# waypoints配列を作成（位置と走り情報を含む）
+		var waypoints: Array = []
+		for i in range(current_path.size()):
+			var run := false
+			if i > 0 and i - 1 < segment_run_flags.size():
+				run = segment_run_flags[i - 1]
+			waypoints.append({
+				"position": current_path[i],
+				"run": run
+			})
+
+		path_confirmed.emit(waypoints)
 
 
 ## パスをクリア
 func clear_path() -> void:
 	current_path.clear()
-	is_run_mode = false
+	segment_run_flags.clear()
 	_update_path_visual()
 	path_cleared.emit()
 
@@ -242,25 +272,56 @@ func _get_world_position(screen_pos: Vector2) -> Vector3:
 
 ## パスの視覚表示を更新
 func _update_path_visual() -> void:
-	immediate_mesh.clear_surfaces()
+	immediate_mesh_walk.clear_surfaces()
+	immediate_mesh_run.clear_surfaces()
 
 	if current_path.size() < 2:
 		return
 
-	var smooth_path := _generate_smooth_path(current_path)
+	# 描画中は直線判定を実行してフラグを更新
+	_analyze_path_segments()
 
-	# メインのパス（TRIANGLE_STRIP）
-	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	# セグメントごとに歩き/走りを分けて描画
+	for seg_idx in range(current_path.size() - 1):
+		var p1 := current_path[seg_idx]
+		var p2 := current_path[seg_idx + 1]
 
-	for i in range(smooth_path.size()):
-		var point: Vector3 = smooth_path[i]
+		var is_run := false
+		if seg_idx < segment_run_flags.size():
+			is_run = segment_run_flags[seg_idx]
+
+		var mesh: ImmediateMesh = immediate_mesh_run if is_run else immediate_mesh_walk
+		_draw_segment(mesh, p1, p2)
+
+	# 終点キャップ（最後のセグメントの色で）
+	if current_path.size() >= 2:
+		var last_run := false
+		if segment_run_flags.size() > 0:
+			last_run = segment_run_flags[segment_run_flags.size() - 1]
+		var mesh: ImmediateMesh = immediate_mesh_run if last_run else immediate_mesh_walk
+		var end_point: Vector3 = current_path[current_path.size() - 1]
+		end_point.y += path_height_offset
+		var end_dir := (current_path[current_path.size() - 1] - current_path[current_path.size() - 2]).normalized()
+		_draw_round_cap(mesh, end_point, end_dir)
+
+
+## 1セグメントを描画
+func _draw_segment(mesh: ImmediateMesh, p1: Vector3, p2: Vector3) -> void:
+	# セグメント用のスムースパスを生成
+	var segment_points: Array[Vector3] = [p1, p2]
+	var smooth := _generate_smooth_path(segment_points)
+
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+
+	for i in range(smooth.size()):
+		var point: Vector3 = smooth[i]
 		point.y += path_height_offset
 
 		var direction := Vector3.ZERO
-		if i < smooth_path.size() - 1:
-			direction = (smooth_path[i + 1] - smooth_path[i]).normalized()
+		if i < smooth.size() - 1:
+			direction = (smooth[i + 1] - smooth[i]).normalized()
 		elif i > 0:
-			direction = (smooth_path[i] - smooth_path[i - 1]).normalized()
+			direction = (smooth[i] - smooth[i - 1]).normalized()
 
 		var up := Vector3.UP
 		var right := direction.cross(up).normalized() * path_width * 0.5
@@ -268,51 +329,38 @@ func _update_path_visual() -> void:
 		if right.length() < 0.01:
 			right = Vector3.RIGHT * path_width * 0.5
 
-		immediate_mesh.surface_add_vertex(point - right)
-		immediate_mesh.surface_add_vertex(point + right)
+		mesh.surface_add_vertex(point - right)
+		mesh.surface_add_vertex(point + right)
 
-	immediate_mesh.surface_end()
-
-	# 角丸キャップを追加（先端のみ）
-	if smooth_path.size() >= 2:
-		# 終点のキャップ
-		var end_point: Vector3 = smooth_path[smooth_path.size() - 1]
-		end_point.y += path_height_offset
-		var end_dir := (smooth_path[smooth_path.size() - 1] - smooth_path[smooth_path.size() - 2]).normalized()
-		_draw_round_cap(end_point, end_dir, false)
+	mesh.surface_end()
 
 
 ## 角丸キャップを描画
-func _draw_round_cap(center: Vector3, direction: Vector3, is_start: bool) -> void:
+func _draw_round_cap(mesh: ImmediateMesh, center: Vector3, direction: Vector3) -> void:
 	var up := Vector3.UP
 	var right := direction.cross(up).normalized()
 	if right.length() < 0.01:
 		right = Vector3.RIGHT
 
-	var segments := 8  # キャップの滑らかさ
+	var segments := 8
 	var radius := path_width * 0.5
 
-	# 半円を描画（TRIANGLE_FAN風にTRIANGLESで）
-	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var start_angle := PI * 0.5 if is_start else -PI * 0.5
-	var end_angle := PI * 1.5 if is_start else PI * 0.5
+	var start_angle := -PI * 0.5
+	var end_angle := PI * 0.5
 
 	for i in range(segments):
 		var angle1 := start_angle + (end_angle - start_angle) * float(i) / float(segments)
 		var angle2 := start_angle + (end_angle - start_angle) * float(i + 1) / float(segments)
 
-		# 中心点
-		immediate_mesh.surface_add_vertex(center)
-
-		# 外周の2点
+		mesh.surface_add_vertex(center)
 		var offset1 := right * cos(angle1) * radius + direction * sin(angle1) * radius
 		var offset2 := right * cos(angle2) * radius + direction * sin(angle2) * radius
+		mesh.surface_add_vertex(center + offset1)
+		mesh.surface_add_vertex(center + offset2)
 
-		immediate_mesh.surface_add_vertex(center + offset1)
-		immediate_mesh.surface_add_vertex(center + offset2)
-
-	immediate_mesh.surface_end()
+	mesh.surface_end()
 
 
 ## Catmull-Romスプライン補間で滑らかなパスを生成
@@ -351,9 +399,87 @@ func _catmull_rom(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) 
 	)
 
 
-## 走りモードかどうか
-func is_running() -> bool:
-	return is_run_mode
+## パスセグメントを解析して直線判定を行う
+func _analyze_path_segments() -> void:
+	segment_run_flags.clear()
+
+	if current_path.size() < 2:
+		return
+
+	# 初期化：すべて歩き
+	for i in range(current_path.size() - 1):
+		segment_run_flags.append(false)
+
+	# 各セグメントの角度変化を計算
+	var angle_changes: Array[float] = []
+	for i in range(current_path.size() - 1):
+		var angle := _get_angle_change_at(i)
+		angle_changes.append(angle)
+
+	# 連続した直線区間を検出してグループ化
+	var i := 0
+	while i < angle_changes.size():
+		# 直線的なセグメントの開始を探す
+		if angle_changes[i] <= straight_angle_threshold:
+			var start_idx := i
+			var cumulative_distance := 0.0
+
+			# 連続した直線セグメントをまとめる
+			while i < angle_changes.size() and angle_changes[i] <= straight_angle_threshold:
+				var p1 := current_path[i]
+				var p2 := current_path[i + 1]
+				cumulative_distance += p1.distance_to(p2)
+				i += 1
+
+			# 累積距離が閾値以上なら走りに設定
+			if cumulative_distance >= min_straight_distance:
+				for j in range(start_idx, i):
+					segment_run_flags[j] = true
+		else:
+			i += 1
+
+
+## 指定インデックスでの角度変化を取得（度）
+func _get_angle_change_at(segment_index: int) -> float:
+	if current_path.size() < 3:
+		return 0.0
+
+	# 最初のセグメント：次のセグメントとの角度
+	if segment_index == 0:
+		if current_path.size() < 3:
+			return 0.0
+		var dir_curr := (current_path[1] - current_path[0])
+		var dir_next := (current_path[2] - current_path[1])
+		dir_curr.y = 0
+		dir_next.y = 0
+		if dir_curr.length() < 0.01 or dir_next.length() < 0.01:
+			return 0.0
+		return rad_to_deg(acos(clamp(dir_curr.normalized().dot(dir_next.normalized()), -1.0, 1.0)))
+
+	# 最後のセグメント：前のセグメントとの角度
+	if segment_index == current_path.size() - 2:
+		var dir_prev := (current_path[segment_index] - current_path[segment_index - 1])
+		var dir_curr := (current_path[segment_index + 1] - current_path[segment_index])
+		dir_prev.y = 0
+		dir_curr.y = 0
+		if dir_prev.length() < 0.01 or dir_curr.length() < 0.01:
+			return 0.0
+		return rad_to_deg(acos(clamp(dir_prev.normalized().dot(dir_curr.normalized()), -1.0, 1.0)))
+
+	# 中間セグメント：前後の角度の大きい方
+	var p0 := current_path[segment_index - 1]
+	var p1 := current_path[segment_index]
+	var p2 := current_path[segment_index + 1]
+
+	var dir_prev := (p1 - p0)
+	var dir_curr := (p2 - p1)
+	dir_prev.y = 0
+	dir_curr.y = 0
+
+	if dir_prev.length() < 0.01 or dir_curr.length() < 0.01:
+		return 0.0
+
+	return rad_to_deg(acos(clamp(dir_prev.normalized().dot(dir_curr.normalized()), -1.0, 1.0)))
 
 
 ## 現在描画中かどうか（外部参照用）

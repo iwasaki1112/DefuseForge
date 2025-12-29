@@ -32,10 +32,10 @@ var last_touch_distance: float = 0.0
 var last_touch_center: Vector2 = Vector2.ZERO
 
 # パス追従用
-var waypoints: Array[Vector3] = []
+var waypoints: Array = []  # Array of {position: Vector3, run: bool}
 var current_waypoint_index: int = 0
 var is_moving: bool = false
-var is_running: bool = false
+var is_running: bool = false  # 現在のウェイポイントへの移動が走りかどうか
 
 # アニメーション
 var anim_player: AnimationPlayer = null
@@ -80,7 +80,10 @@ func _physics_process(delta: float) -> void:
 ## パス追従移動
 func _handle_path_movement(delta: float) -> void:
 	if is_moving and waypoints.size() > 0 and current_waypoint_index < waypoints.size():
-		var target := waypoints[current_waypoint_index]
+		var waypoint: Dictionary = waypoints[current_waypoint_index]
+		var target: Vector3 = waypoint.position
+		is_running = waypoint.run  # このウェイポイントへの移動は走りか
+
 		var direction := (target - global_position)
 		direction.y = 0  # 水平方向のみ
 		var distance := direction.length()
@@ -147,10 +150,11 @@ func _handle_camera(delta: float) -> void:
 
 
 ## パスを設定して移動開始
-func set_path(new_waypoints: Array[Vector3], run: bool = false) -> void:
+## new_waypoints: Array of {position: Vector3, run: bool}
+func set_path(new_waypoints: Array) -> void:
 	waypoints = new_waypoints
 	current_waypoint_index = 0
-	is_running = run
+	is_running = false
 	is_moving = waypoints.size() > 0
 
 
@@ -205,7 +209,7 @@ func _snap_to_ground() -> void:
 
 ## 単一地点への移動
 func move_to(target: Vector3, run: bool = false) -> void:
-	set_path([target], run)
+	set_path([{"position": target, "run": run}])
 
 
 ## 入力処理（ズーム・パン）

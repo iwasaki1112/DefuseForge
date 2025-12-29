@@ -40,10 +40,10 @@ func _setup_path_system() -> void:
 
 
 ## パス描画完了時のコールバック
-func _on_path_confirmed(waypoints: Array[Vector3]) -> void:
+## waypoints: Array of {position: Vector3, run: bool}
+func _on_path_confirmed(waypoints: Array) -> void:
 	if player and player.has_method("set_path"):
-		var is_running: bool = path_drawer.is_running() if path_drawer else false
-		player.set_path(waypoints, is_running)
+		player.set_path(waypoints)
 
 
 ## パスクリア時のコールバック
