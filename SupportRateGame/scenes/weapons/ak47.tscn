@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://dak47weapon"]
+
+[ext_resource type="PackedScene" uid="uid://cqsb7nf6hqnpd" path="res://resources/weapons/ak47/ak47.glb" id="1_ak47"]
+
+[node name="AK47" type="Node3D"]
+
+[node name="Model" parent="." instance=ExtResource("1_ak47")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, 0, 0)

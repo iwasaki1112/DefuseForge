@@ -34,7 +34,7 @@ const WEAPON_DATA := {
 		"price": 0,
 		"damage": 0,
 		"fire_rate": 0.0,
-		"model_path": "",
+		"scene_path": "",
 		"kill_reward": 300
 	},
 	WeaponId.AK47: {
@@ -43,7 +43,7 @@ const WEAPON_DATA := {
 		"price": 2700,
 		"damage": 36,
 		"fire_rate": 0.1,
-		"model_path": "res://resources/weapons/ak47/ak47.glb",
+		"scene_path": "res://scenes/weapons/ak47.tscn",  # シーンファイルを使用
 		"kill_reward": 300
 	},
 	WeaponId.USP: {
@@ -52,7 +52,7 @@ const WEAPON_DATA := {
 		"price": 500,
 		"damage": 25,
 		"fire_rate": 0.15,
-		"model_path": "",
+		"scene_path": "",  # TODO: USPシーンを追加
 		"kill_reward": 300
 	}
 }
@@ -358,15 +358,15 @@ static func get_weapon_data(weapon_id: int) -> Dictionary:
 	return WEAPON_DATA.get(weapon_id, WEAPON_DATA[WeaponId.NONE])
 
 
-## 武器モデルをロードしてBoneAttachment3Dを作成
+## 武器シーンをロード
 static func create_weapon_attachment(weapon_id: int) -> Node3D:
 	var data = WEAPON_DATA.get(weapon_id, null)
-	if data == null or data.model_path.is_empty():
+	if data == null or data.scene_path.is_empty():
 		return null
 	
-	var scene = load(data.model_path)
+	var scene = load(data.scene_path)
 	if scene == null:
-		print("[CharacterSetup] Failed to load weapon model: %s" % data.model_path)
+		print("[CharacterSetup] Failed to load weapon scene: %s" % data.scene_path)
 		return null
 	
 	var weapon_instance = scene.instantiate()
@@ -414,13 +414,10 @@ static func attach_weapon_to_character(character: Node, skeleton: Skeleton3D, we
 	bone_attachment.bone_name = bone_name
 	skeleton.add_child(bone_attachment)
 	
-	# 武器モデルをロード
+	# 武器シーンをロード（位置・回転はシーンファイル内で設定済み）
 	var weapon_model = create_weapon_attachment(weapon_id)
 	if weapon_model:
 		bone_attachment.add_child(weapon_model)
-		# 武器の位置・回転を調整（手に合わせる）
-		weapon_model.position = Vector3(0.05, 0.0, 0.0)  # 手のひら位置に調整
-		weapon_model.rotation_degrees = Vector3(0, 90, 0)  # 銃口を前に向ける
 		
 		if debug_name:
 			print("[CharacterSetup] %s: Attached weapon %s to %s" % [debug_name, data.name, bone_name])
