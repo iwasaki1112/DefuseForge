@@ -12,7 +12,6 @@ signal path_cleared
 @export var path_color: Color = Color(0.0, 1.0, 0.0, 0.8)  # パスの色
 @export var path_width: float = 0.15  # パスの太さ
 @export var path_height_offset: float = 0.02  # 地面からのオフセット
-@export var waypoint_marker_size: float = 0.2  # ウェイポイントマーカーのサイズ
 @export var smoothing_segments: int = 5  # 各ポイント間の補間セグメント数
 
 @export_group("入力設定")
@@ -24,10 +23,12 @@ var is_drawing: bool = false
 var current_path: Array[Vector3] = []
 var is_run_mode: bool = false
 
+# タッチ追跡（2本指以上はカメラ操作なので無視）
+var touch_count: int = 0
+
 # 3D表示用
 var path_mesh_instance: MeshInstance3D = null
 var immediate_mesh: ImmediateMesh = null
-var waypoint_markers: Array[MeshInstance3D] = []
 
 # カメラ参照
 var camera: Camera3D = null
@@ -92,12 +93,27 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 
 func _handle_touch(event: InputEventScreenTouch) -> void:
 	if event.pressed:
-		_start_drawing(event.position)
+		touch_count += 1
+		# 2本指以上になったら描画をキャンセル
+		if touch_count >= 2:
+			if is_drawing:
+				is_drawing = false
+				clear_path()
+			return
+		# 1本指のみでパス描画
+		if touch_count == 1:
+			_start_drawing(event.position)
 	else:
-		_finish_drawing()
+		touch_count = max(0, touch_count - 1)
+		# 1本指のみで描画終了
+		if touch_count == 0 and is_drawing:
+			_finish_drawing()
 
 
 func _handle_touch_drag(event: InputEventScreenDrag) -> void:
+	# 2本指以上はカメラ操作なので無視
+	if touch_count >= 2:
+		return
 	_add_point_from_screen(event.position)
 
 
@@ -109,9 +125,18 @@ func _start_drawing(screen_pos: Vector2) -> void:
 
 	is_drawing = true
 	current_path.clear()
-	_clear_waypoint_markers()
+
+	# プレイヤーを停止してから描画開始
+	if GameManager.player:
+		GameManager.player.stop()
+
+	# プレイヤーの足元からパスを開始
+	if GameManager.player:
+		var player_pos := GameManager.player.global_position
+		player_pos.y = world_pos.y  # 地面の高さに合わせる
+		current_path.append(player_pos)
+
 	current_path.append(world_pos)
-	_add_waypoint_marker(world_pos)
 	_update_path_visual()
 
 
@@ -128,7 +153,6 @@ func _add_point_from_screen(screen_pos: Vector2) -> void:
 			return
 
 	current_path.append(world_pos)
-	_add_waypoint_marker(world_pos)
 	_update_path_visual()
 
 
@@ -147,7 +171,6 @@ func _finish_drawing() -> void:
 func clear_path() -> void:
 	current_path.clear()
 	is_run_mode = false
-	_clear_waypoint_markers()
 	_update_path_visual()
 	path_cleared.emit()
 
@@ -241,35 +264,6 @@ func _catmull_rom(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) 
 		(2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
 		(-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
 	)
-
-
-## ウェイポイントマーカーを追加
-func _add_waypoint_marker(pos: Vector3) -> void:
-	var marker := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = waypoint_marker_size * 0.5
-	sphere.height = waypoint_marker_size
-	marker.mesh = sphere
-	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 1.0, 0.0, 0.8)  # 黄色
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.disable_receive_shadows = true
-	mat.no_depth_test = false  # 深度テスト有効
-	marker.material_override = mat
-
-	add_child(marker)
-	marker.global_position = pos + Vector3(0, waypoint_marker_size * 0.5 + path_height_offset, 0)
-	waypoint_markers.append(marker)
-
-
-## ウェイポイントマーカーをクリア
-func _clear_waypoint_markers() -> void:
-	for marker in waypoint_markers:
-		if is_instance_valid(marker):
-			marker.queue_free()
-	waypoint_markers.clear()
 
 
 ## 走りモードかどうか

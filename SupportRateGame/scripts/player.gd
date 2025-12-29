@@ -13,28 +13,22 @@ signal waypoint_reached(index: int)
 
 @export_group("カメラ設定")
 @export var camera_distance: float = 8.0
-@export var camera_height: float = 0.0
-@export var camera_smooth_speed: float = 5.0
 @export var min_zoom: float = 5.0
 @export var max_zoom: float = 25.0
 @export var zoom_speed: float = 2.0
 
-@export_group("地形追従設定")
-@export var terrain_follow_enabled: bool = true
-@export var terrain_ray_length: float = 20.0
-@export var terrain_smooth_speed: float = 10.0
-@export var ground_offset: float = 0.0  # 地面からのオフセット（通常は0）
-
-var gravity: float = -20.0  # 重力（より強めに設定）
+var gravity: float = -20.0
 var vertical_velocity: float = 0.0
 
-# 地形追従用
-var target_ground_y: float = 0.0
-
 # カメラ
-var camera_yaw: float = 0.0
-var camera_pitch: float = 90.0  # 真上からの視点
 var target_zoom: float = 8.0
+var camera_offset: Vector3 = Vector3.ZERO
+
+# タッチ入力管理
+var active_touches: Dictionary = {}  # {touch_index: position}
+var is_panning: bool = false
+var last_touch_distance: float = 0.0
+var last_touch_center: Vector2 = Vector2.ZERO
 
 # パス追従用
 var waypoints: Array[Vector3] = []
@@ -48,7 +42,6 @@ var current_move_state: int = 0  # 0: idle, 1: walk, 2: run
 const ANIM_BLEND_TIME: float = 0.3
 
 @onready var camera: Camera3D = $Camera3D
-@onready var fake_shadow: MeshInstance3D = $FakeShadow
 
 
 func _ready() -> void:
@@ -56,9 +49,10 @@ func _ready() -> void:
 		camera = get_viewport().get_camera_3d()
 
 	target_zoom = camera_distance
+	floor_snap_length = 1.0
 
-	if terrain_follow_enabled:
-		floor_snap_length = 1.0
+	# 開始時に地面に配置（物理ワールド初期化を待つ）
+	_initial_placement.call_deferred()
 
 	# アニメーションプレイヤーを取得
 	var model = get_node_or_null("CharacterModel")
@@ -80,7 +74,6 @@ func _physics_process(delta: float) -> void:
 	_handle_path_movement(delta)
 	_handle_camera(delta)
 	_update_animation()
-	_update_fake_shadow()
 
 
 ## パス追従移動
@@ -132,65 +125,6 @@ func _handle_terrain_follow(delta: float) -> void:
 	velocity.y = vertical_velocity
 
 
-## フェイクシャドウを地面に追従させる
-func _update_fake_shadow() -> void:
-	if fake_shadow == null:
-		return
-
-	# レイキャストで地面を検出
-	var space_state = get_world_3d().direct_space_state
-	var ray_origin = global_position + Vector3(0, 1, 0)
-	var ray_end = global_position + Vector3(0, -10, 0)
-
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-	query.exclude = [self]
-	query.collision_mask = 2  # マップのコリジョンレイヤー
-
-	var result = space_state.intersect_ray(query)
-
-	if result:
-		# 地面の位置にシャドウを配置（法線方向に少し浮かせてZ-fighting防止）
-		var ground_normal: Vector3 = result.normal
-		fake_shadow.global_position = result.position + ground_normal * 0.05
-
-		# 地面の法線に合わせてシャドウを傾ける
-		_align_shadow_to_normal(ground_normal)
-	else:
-		# 地面が見つからない場合はプレイヤーの足元に配置
-		fake_shadow.global_position = global_position + Vector3(0, 0.05, 0)
-		fake_shadow.global_rotation = Vector3.ZERO
-
-
-## シャドウを地面の法線に合わせて回転
-func _align_shadow_to_normal(normal: Vector3) -> void:
-	# 法線がほぼ真上の場合は回転不要
-	if normal.is_equal_approx(Vector3.UP):
-		fake_shadow.global_rotation = Vector3.ZERO
-		return
-
-	# 法線方向を上向きにするためのBasisを作成
-	var up = normal.normalized()
-	var forward = Vector3.FORWARD
-
-	# 法線が前方向に近い場合は別の軸を使用
-	if abs(up.dot(forward)) > 0.9:
-		forward = Vector3.RIGHT
-
-	var right = up.cross(forward).normalized()
-	forward = right.cross(up).normalized()
-
-	fake_shadow.global_basis = Basis(right, up, forward)
-
-
-## 重力を適用
-func _apply_gravity(delta: float) -> void:
-	if is_on_floor():
-		vertical_velocity = -2.0
-	else:
-		vertical_velocity += gravity * delta
-	velocity.y = vertical_velocity
-
-
 ## カメラ処理
 func _handle_camera(delta: float) -> void:
 	if camera == null:
@@ -200,7 +134,9 @@ func _handle_camera(delta: float) -> void:
 	camera_distance = lerp(camera_distance, target_zoom, zoom_speed * delta)
 
 	# 真上からのトップダウンビュー（キャラクターの回転に影響されない）
-	camera.global_position = global_position + Vector3(0, camera_distance, 0)
+	# camera_offsetでパン位置を調整
+	var target_pos = global_position + camera_offset + Vector3(0, camera_distance, 0)
+	camera.global_position = target_pos
 	camera.global_rotation_degrees = Vector3(-90, 0, 0)  # 常に固定向き
 
 
@@ -224,12 +160,46 @@ func stop() -> void:
 	_stop_moving()
 
 
+## 初期配置（物理ワールド初期化後に実行）
+func _initial_placement() -> void:
+	# 最初は非表示
+	visible = false
+
+	# 物理ワールドが完全に初期化されるまで待つ
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_snap_to_ground()
+
+	# カメラも即座に配置
+	if camera:
+		camera.global_position = global_position + camera_offset + Vector3(0, camera_distance, 0)
+		camera.global_rotation_degrees = Vector3(-90, 0, 0)
+
+	# スナップ完了後に表示
+	visible = true
+
+
+## 地面にスナップ
+func _snap_to_ground() -> void:
+	var space_state := get_world_3d().direct_space_state
+	var from := global_position + Vector3(0, 10, 0)
+	var to := global_position + Vector3(0, -100, 0)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = 2  # 地形レイヤー
+	query.exclude = [self]
+
+	var result := space_state.intersect_ray(query)
+	if result:
+		global_position = result.position
+		vertical_velocity = 0
+
+
 ## 単一地点への移動
 func move_to(target: Vector3, run: bool = false) -> void:
 	set_path([target], run)
 
 
-## 入力処理（ズームのみ）
+## 入力処理（ズーム・パン）
 func _input(event: InputEvent) -> void:
 	# マウスホイールでズーム
 	if event is InputEventMouseButton:
@@ -238,9 +208,67 @@ func _input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			target_zoom = min(max_zoom, target_zoom + 1.0)
 
-	# ピンチズーム（モバイル）
-	if event is InputEventMagnifyGesture:
-		target_zoom = clamp(target_zoom / event.factor, min_zoom, max_zoom)
+	# タッチ入力（2本指操作）
+	if event is InputEventScreenTouch:
+		_handle_screen_touch(event)
+
+	if event is InputEventScreenDrag:
+		_handle_screen_drag(event)
+
+
+## タッチ開始/終了の処理
+func _handle_screen_touch(event: InputEventScreenTouch) -> void:
+	if event.pressed:
+		# タッチ開始
+		active_touches[event.index] = event.position
+	else:
+		# タッチ終了
+		active_touches.erase(event.index)
+		if active_touches.size() < 2:
+			is_panning = false
+
+	# 2本指になったら初期状態を記録
+	if active_touches.size() == 2:
+		_init_two_finger_gesture()
+
+
+## 2本指ジェスチャーの初期化
+func _init_two_finger_gesture() -> void:
+	var positions = active_touches.values()
+	last_touch_distance = positions[0].distance_to(positions[1])
+	last_touch_center = (positions[0] + positions[1]) / 2.0
+	is_panning = true
+
+
+## タッチドラッグ処理
+func _handle_screen_drag(event: InputEventScreenDrag) -> void:
+	# タッチ位置を更新
+	if active_touches.has(event.index):
+		active_touches[event.index] = event.position
+
+	# 2本指でない場合は処理しない
+	if active_touches.size() != 2:
+		return
+
+	var positions = active_touches.values()
+	var current_distance: float = positions[0].distance_to(positions[1])
+	var current_center: Vector2 = (positions[0] + positions[1]) / 2.0
+
+	# ピンチズーム（2本指の距離変化）
+	if last_touch_distance > 0:
+		var zoom_factor = last_touch_distance / current_distance
+		target_zoom = clamp(target_zoom * zoom_factor, min_zoom, max_zoom)
+
+	# パン（2本指の中心移動）
+	var delta_center = current_center - last_touch_center
+	# スクリーン座標からワールド座標への変換（カメラ距離に応じてスケール）
+	var pan_scale = camera_distance * 0.002  # 調整可能
+	camera_offset.x -= delta_center.x * pan_scale
+	camera_offset.z -= delta_center.y * pan_scale
+
+	# 状態を更新
+	last_touch_distance = current_distance
+	last_touch_center = current_center
 
 
 ## アニメーション読み込み
