@@ -22,16 +22,28 @@ SupportRateGame/
 ├── scenes/
 │   ├── title.tscn         # タイトルシーン
 │   ├── game.tscn          # ゲームシーン（dust3マップ使用）
-│   └── player.tscn        # プレイヤーシーン
+│   ├── player.tscn        # プレイヤーシーン
+│   └── enemy.tscn         # 敵シーン
 ├── scripts/
-│   ├── game_manager.gd    # ゲーム管理（Autoload）- ラウンド・経済システム
+│   ├── autoload/
+│   │   ├── game_manager.gd    # ゲーム管理（Autoload）- ラウンド・経済システム
+│   │   └── input_manager.gd   # 入力管理（Autoload）- タッチ/マウス入力統合
+│   ├── characters/
+│   │   ├── character_base.gd  # キャラクター基底クラス（移動・アニメーション）
+│   │   ├── player.gd          # プレイヤークラス
+│   │   └── enemy.gd           # 敵クラス（AI）
+│   ├── systems/
+│   │   ├── camera_controller.gd  # カメラ制御（ズーム・パン・追従）
+│   │   └── path/
+│   │       ├── path_manager.gd   # パス管理
+│   │       ├── path_renderer.gd  # パス描画（3Dメッシュ）
+│   │       └── path_analyzer.gd  # パス解析（直線判定・走り/歩き）
+│   ├── utils/
+│   │   └── character_setup.gd # キャラクター設定ユーティリティ
 │   ├── game_scene.gd      # ゲームシーン管理
 │   ├── game_ui.gd         # UI管理（タイマー・スコア・デバッグ情報）
-│   ├── player.gd          # プレイヤー操作（パス追従・アニメーション）
 │   ├── title_screen.gd    # タイトル画面
-│   ├── map_collision_generator.gd  # マップメッシュからコリジョン自動生成
-│   └── systems/
-│       └── path_drawer.gd # パス描画システム（Catmull-Rom補間）
+│   └── map_collision_generator.gd  # マップメッシュからコリジョン自動生成
 ├── resources/
 │   ├── maps/
 │   │   └── dust3/         # PBRマップ（動的シャドウ対応）
@@ -41,6 +53,25 @@ SupportRateGame/
 └── builds/
     └── ios/               # iOSビルド出力
 ```
+
+## アーキテクチャ
+
+### Autoload（シングルトン）
+- **GameManager**: ゲーム状態、ラウンド、経済システム管理
+- **InputManager**: 全入力を一元管理、シグナルで各システムに通知
+
+### クラス階層
+```
+CharacterBase (character_base.gd)
+├── Player (player.gd) - プレイヤー固有機能
+└── Enemy (enemy.gd) - AI敵キャラクター
+```
+
+### システム
+- **CameraController**: カメラ制御（InputManagerからズーム/パン信号を受信）
+- **PathManager**: パス描画管理（InputManagerから描画信号を受信）
+  - PathRenderer: 3Dメッシュ描画
+  - PathAnalyzer: 直線判定、走り/歩き判定
 
 ## 技術詳細
 
@@ -59,10 +90,11 @@ directional_shadow_mode = 2 (PSSM 4 splits)
 directional_shadow_blend_splits = true
 ```
 
-### プレイヤー
+### プレイヤー/敵
 - CharacterBody3D + 重力ベースの地形追従
 - パス追従移動（waypoints配列）
 - アニメーション: idle, walking, running（FBXから読み込み）
+- 敵はAIStateによる状態管理（IDLE, PATROL, CHASE, ATTACK, COVER）
 
 ### 入力操作
 - **1本指ドラッグ**: パス描画（移動指示）

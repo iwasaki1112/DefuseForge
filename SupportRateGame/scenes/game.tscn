@@ -1,7 +1,7 @@
 [gd_scene load_steps=10 format=3 uid="uid://cgame"]
 
 [ext_resource type="PackedScene" uid="uid://cplayer" path="res://scenes/player.tscn" id="1_player"]
-[ext_resource type="PackedScene" uid="uid://cplayer2" path="res://scenes/player2.tscn" id="2_player2"]
+[ext_resource type="PackedScene" uid="uid://cenemy" path="res://scenes/enemy.tscn" id="2_enemy"]
 [ext_resource type="Script" path="res://scripts/game_ui.gd" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/game_scene.gd" id="5_game"]
 [ext_resource type="PackedScene" path="res://resources/maps/dust3/dust3.glb" id="6_dust2"]
@@ -51,8 +51,8 @@ script = ExtResource("7_mapcol")
 [node name="Player" parent="." instance=ExtResource("1_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
-[node name="Player2" parent="." instance=ExtResource("2_player2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0)
+[node name="Enemy" parent="." instance=ExtResource("2_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, 0)
 
 [node name="GameUI" type="CanvasLayer" parent="."]
 script = ExtResource("4_ui")
