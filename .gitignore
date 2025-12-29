@@ -52,4 +52,5 @@ Thumbs.db
 # iOS/Android builds (large files)
 builds/
 SupportRateGame/builds/
-*.uid
+
+# Note: *.uid files are tracked for consistency (Godot 4.4+ uses UIDs for resource references)

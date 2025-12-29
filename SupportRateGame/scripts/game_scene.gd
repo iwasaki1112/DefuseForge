@@ -72,6 +72,9 @@ func _setup_camera_system() -> void:
 		camera_controller.camera = player_camera
 		camera_controller.follow_target = player
 
+		# カメラをアクティブに設定
+		player_camera.current = true
+
 		# 即座にカメラを配置
 		camera_controller.snap_to_target()
 

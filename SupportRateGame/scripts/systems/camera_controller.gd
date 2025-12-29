@@ -12,7 +12,6 @@ extends Node3D
 
 @export_group("追従設定")
 @export var follow_target: Node3D = null
-@export var follow_smoothing: float = 0.0  # 0 = 即座追従、1に近いほど滑らか
 
 # カメラ参照
 var camera: Camera3D = null

@@ -71,7 +71,7 @@ func _calculate_visibility() -> void:
 
 	var space_state := character.get_world_3d().direct_space_state
 	var origin := character.global_position + Vector3(0, height_offset, 0)
-	var forward := character.global_transform.basis.z  # キャラクターの前方向（+Z方向）
+	var forward := -character.global_transform.basis.z  # キャラクターの前方向（-Z方向、Godot標準）
 
 	# 視野の開始角度と終了角度
 	var half_fov := deg_to_rad(fov_angle / 2.0)
@@ -121,7 +121,7 @@ func is_position_visible(target_pos: Vector3) -> bool:
 		return false
 
 	# 角度チェック
-	var forward := character.global_transform.basis.z
+	var forward := -character.global_transform.basis.z  # -Z方向がGodot標準の前方
 	forward.y = 0
 	forward = forward.normalized()
 	to_target = to_target.normalized()
