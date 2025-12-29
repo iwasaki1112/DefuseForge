@@ -12,7 +12,7 @@ signal waypoint_reached(index: int)
 @export var rotation_speed: float = 10.0
 
 @export_group("カメラ設定")
-@export var camera_distance: float = 6.0
+@export var camera_distance: float = 5.0
 @export var camera_angle: float = -80.0  # 斜めアングル（度）
 @export var min_zoom: float = 4.0
 @export var max_zoom: float = 25.0
@@ -22,7 +22,7 @@ var gravity: float = -20.0
 var vertical_velocity: float = 0.0
 
 # カメラ
-var target_zoom: float = 6.0
+var target_zoom: float = 5.0
 var camera_offset: Vector3 = Vector3.ZERO
 
 # タッチ入力管理
