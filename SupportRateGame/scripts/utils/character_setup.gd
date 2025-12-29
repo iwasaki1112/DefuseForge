@@ -28,10 +28,10 @@ const ANIMATION_FILES := {
 }
 
 ## キャラクター別のY位置オフセット（足の位置を地面に合わせるため）
-## スケール2の場合の値。視覚的な位置調整。
+## スケール2の場合の値。toe base bone Y=0になるよう計算。
 const CHARACTER_Y_OFFSET := {
-	"leet": -0.75,  # 視覚的に調整
-	"gsg9": -0.72,  # 視覚的に調整
+	"leet": -1.14,  # toe base local Y(0.57) * scale(2) = 1.14
+	"gsg9": -1.23,  # toe base local Y(0.616) * scale(2) = 1.23
 }
 
 
