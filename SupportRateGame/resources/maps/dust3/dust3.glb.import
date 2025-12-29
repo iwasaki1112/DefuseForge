@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dve2uxq5qlb0q"
+uid="uid://dust3glb"
 path="res://.godot/imported/dust3.glb-cb4b21d8648c98dc0ca2b135caeca595.scn"
 
 [deps]
@@ -38,5 +38,5 @@ materials/extract=0
 materials/extract_format=0
 materials/extract_path=""
 _subresources={}
-gltf/naming_version=2
+gltf/naming_version=1
 gltf/embedded_image_handling=1
