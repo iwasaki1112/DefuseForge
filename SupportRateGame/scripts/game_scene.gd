@@ -93,7 +93,7 @@ func _setup_fog_of_war() -> void:
 	print("[GameScene] Fog of War system initialized")
 
 
-## 敵のFog of War初期化
+## 敵の視界初期化
 func _initialize_enemy_fog_of_war() -> void:
 	await get_tree().process_frame
 
@@ -102,7 +102,6 @@ func _initialize_enemy_fog_of_war() -> void:
 			if e and is_instance_valid(e):
 				FogOfWarManager._set_character_visible(e, false)
 				FogOfWarManager.enemy_visibility[e] = false
-				print("[GameScene] Enemy '%s' hidden by Fog of War" % e.name)
 
 
 ## パス確定時のコールバック

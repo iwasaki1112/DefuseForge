@@ -13,7 +13,7 @@ signal visibility_changed(visible_points: Array)
 @export var height_offset: float = 1.5  # レイキャストの高さオフセット
 
 @export_group("更新設定")
-@export var update_interval: float = 0.1  # 視野更新間隔（秒）
+@export var update_interval: float = 0.0  # 視野更新間隔（秒）- 0で毎フレーム更新
 
 # 親キャラクター参照
 var character: CharacterBody3D = null
