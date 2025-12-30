@@ -68,9 +68,9 @@ const WEAPON_ID_NAMES := {
 ## 構造: { WeaponType: { "idle": path, "walking": path, "running": path } }
 const ANIMATION_FILES := {
 	WeaponType.NONE: {
-		"idle": "res://assets/characters/animations/idle.fbx",
-		"walking": "res://assets/characters/animations/walking.fbx",
-		"running": "res://assets/characters/animations/running.fbx"
+		"idle": "res://assets/characters/animations/none/idle.fbx",
+		"walking": "res://assets/characters/animations/none/walking.fbx",
+		"running": "res://assets/characters/animations/none/running.fbx"
 	},
 	WeaponType.RIFLE: {
 		"idle": "res://assets/characters/animations/rifle/idle.fbx",

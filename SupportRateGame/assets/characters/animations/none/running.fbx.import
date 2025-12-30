@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://dekg5vtqkmpgl"
-path="res://.godot/imported/running.fbx-a501308be8e5134c363ab998ea7c38a9.scn"
+path="res://.godot/imported/running.fbx-bebfec0b2bfd9ac8d29cb27e321de184.scn"
 
 [deps]
 
-source_file="res://assets/characters/animations/running.fbx"
-dest_files=["res://.godot/imported/running.fbx-a501308be8e5134c363ab998ea7c38a9.scn"]
+source_file="res://assets/characters/animations/none/running.fbx"
+dest_files=["res://.godot/imported/running.fbx-bebfec0b2bfd9ac8d29cb27e321de184.scn"]
 
 [params]
 
