@@ -170,9 +170,19 @@ func start_playing() -> void:
 		match_manager.start_playing()
 
 
-## 武器購入（後方互換性、SquadManagerに委譲）
-## 非推奨: SquadManager.buy_weapon_by_price()を直接使用してください
+## 武器購入（武器IDベース、推奨）
+## SquadManager経由でPlayerDataの武器情報も更新
+func buy_weapon_for_selected(weapon_id: int, is_primary: bool = true) -> bool:
+	if squad_manager:
+		return squad_manager.buy_weapon_for_selected(weapon_id, is_primary)
+	return false
+
+
+## 武器購入（価格ベース、非推奨 - 後方互換性のためのみ維持）
+## 警告: この関数はPlayerDataの武器情報を更新しません
+## 代わりにbuy_weapon_for_selected()を使用してください
 func buy_weapon(price: int) -> bool:
+	push_warning("[GameManager] buy_weapon(price) is deprecated. Use buy_weapon_for_selected(weapon_id) instead.")
 	if squad_manager:
 		return squad_manager.buy_weapon_by_price(price)
 	return false

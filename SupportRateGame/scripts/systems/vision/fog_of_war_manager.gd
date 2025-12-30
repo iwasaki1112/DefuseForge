@@ -125,6 +125,23 @@ func is_enemy_visible(enemy: CharacterBody3D) -> bool:
 	return enemy_visibility.get(enemy, false)
 
 
+## 敵の可視性を設定（公開API）
+## 外部から敵の可視性状態を設定する場合はこのメソッドを使用
+func set_enemy_visibility(enemy: CharacterBody3D, is_visible: bool) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+
+	var was_visible: bool = enemy_visibility.get(enemy, false)
+	enemy_visibility[enemy] = is_visible
+
+	# 表示状態が変わった場合のみシグナルを発火
+	if was_visible != is_visible:
+		character_visibility_changed.emit(enemy, is_visible)
+
+	# キャラクターの表示/非表示を設定
+	set_character_visible(enemy, is_visible)
+
+
 ## 視界をリセット（ラウンド開始時など）
 func reset_visibility() -> void:
 	enemy_visibility.clear()

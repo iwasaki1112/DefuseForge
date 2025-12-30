@@ -22,7 +22,6 @@ var enemies: Array[CharacterBody3D] = []
 # 選択インジケーター
 var selection_indicator: MeshInstance3D = null
 var selection_indicator_material: StandardMaterial3D = null
-const SELECTION_RADIUS: float = 1.5  # プレイヤー選択の判定半径
 
 var path_manager: Node3D = null
 var camera_controller: Node3D = null
@@ -156,24 +155,7 @@ func _update_selection_indicator_color() -> void:
 func _find_and_select_player_at_position(world_pos: Vector3) -> bool:
 	if not squad_manager:
 		return false
-
-	var closest_index: int = -1
-	var closest_distance: float = SELECTION_RADIUS
-
-	for i in range(squad_manager.squad.size()):
-		var data = squad_manager.squad[i]
-		if not data.is_alive or not data.player_node:
-			continue
-		var dist := world_pos.distance_to(data.player_node.global_position)
-		if dist < closest_distance:
-			closest_distance = dist
-			closest_index = i
-
-	if closest_index >= 0 and closest_index != squad_manager.selected_index:
-		squad_manager.select_player(closest_index)
-		return true
-
-	return false
+	return squad_manager.find_and_select_player_at_position(world_pos)
 
 
 ## SquadManagerをセットアップ
@@ -285,12 +267,11 @@ func _initialize_enemy_fog_of_war() -> void:
 	await get_tree().process_frame
 
 	if fog_of_war_manager:
-		# グループから敵を取得
+		# グループから敵を取得し、公開APIで可視性を設定
 		var enemy_nodes := get_tree().get_nodes_in_group("enemies")
 		for e in enemy_nodes:
 			if e and is_instance_valid(e):
-				fog_of_war_manager.set_character_visible(e, false)
-				fog_of_war_manager.enemy_visibility[e] = false
+				fog_of_war_manager.set_enemy_visibility(e, false)
 
 
 ## 描画開始時のプレイヤー選択処理

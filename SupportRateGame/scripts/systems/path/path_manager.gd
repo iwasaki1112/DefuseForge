@@ -311,35 +311,20 @@ func _can_draw() -> bool:
 
 ## タップ位置に別のプレイヤーがいるかチェックし、いれば選択を切り替える
 ## 切り替え後もパス描画を続行する（タップ&ドラッグで即座にパスを描けるように）
-const PLAYER_TAP_RADIUS: float = 1.5
-
 func _check_and_switch_player(world_pos: Vector3) -> void:
 	if not GameManager or not GameManager.squad_manager:
 		return
 
 	var sm = GameManager.squad_manager
-	var closest_player: Node3D = null
-	var closest_distance: float = PLAYER_TAP_RADIUS
 
-	for data in sm.squad:
-		if not data.is_alive or not data.player_node:
-			continue
-		var dist := world_pos.distance_to(data.player_node.global_position)
-		if dist < closest_distance:
-			closest_distance = dist
-			closest_player = data.player_node
+	# SquadManagerの共通APIを使用
+	var closest_player := sm.get_player_at_position(world_pos)
 
 	# 別のプレイヤーをタップした場合、そのプレイヤーを選択してパス描画を続行
 	if closest_player and closest_player != player:
-		var new_index := -1
-		for i in range(sm.squad.size()):
-			if sm.squad[i].player_node == closest_player:
-				new_index = i
-				break
-		if new_index >= 0:
-			sm.select_player(new_index)
-			# playerを直接更新（シグナル経由の更新を待たずにパス描画を開始）
-			player = closest_player
+		sm.find_and_select_player_at_position(world_pos)
+		# playerを直接更新（シグナル経由の更新を待たずにパス描画を開始）
+		player = closest_player
 
 
 ## プレイヤーのパスデータを取得

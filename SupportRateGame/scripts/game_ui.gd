@@ -208,15 +208,12 @@ func _on_pistol_button_pressed() -> void:
 
 func _buy_weapon(weapon_id: int) -> void:
 	var weapon_data = CharacterSetup.get_weapon_data(weapon_id)
-	var price = weapon_data.price
-	
-	# 購入処理
-	if GameManager.buy_weapon(price):
-		if GameManager.player:
-			GameManager.player.set_weapon(weapon_id)
-			print("[GameUI] Bought weapon: %s for $%d" % [weapon_data.name, price])
+
+	# 購入処理（SquadManager経由で武器IDベースで購入）
+	if GameManager.buy_weapon_for_selected(weapon_id):
+		print("[GameUI] Bought weapon: %s for $%d" % [weapon_data.name, weapon_data.price])
 	else:
-		print("[GameUI] Cannot buy weapon: %s (need $%d, have $%d)" % [weapon_data.name, price, GameManager.player_money])
+		print("[GameUI] Cannot buy weapon: %s (need $%d, have $%d)" % [weapon_data.name, weapon_data.price, GameManager.player_money])
 
 
 func _update_weapon_button_texts() -> void:

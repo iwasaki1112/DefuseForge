@@ -21,8 +21,9 @@ const CHARACTER_COLORS: Array[Color] = [
 	Color(0.7, 0.3, 0.9),   # 4: 紫
 ]
 
-# 経済
-var money: int = 800
+# 経済（初期値はEconomyRules.starting_moneyと同期すること）
+# 注意: 実際の初期化はSquadManager.initialize_squad()でEconomyRulesから取得した値で上書きされる
+var money: int = 800  # デフォルト値（EconomyRules.starting_money）
 
 # ステータス
 var health: float = 100.0
@@ -83,7 +84,11 @@ func reset_for_round() -> void:
 
 ## ゲーム開始時のフルリセット
 func reset_for_game() -> void:
-	money = 800
+	# EconomyRulesからstarting_moneyを取得
+	var starting_money := 800  # デフォルト値
+	if GameManager and GameManager.match_manager and GameManager.match_manager.economy_rules:
+		starting_money = GameManager.match_manager.economy_rules.starting_money
+	money = starting_money
 	primary_weapon = CharacterSetup.WeaponId.NONE
 	secondary_weapon = CharacterSetup.WeaponId.NONE
 	equipment.clear()
@@ -94,6 +99,8 @@ func reset_for_game() -> void:
 
 
 ## ダメージを受ける
+## 注意: 通常はPlayer.take_damage()を使用してください（CharacterBaseとPlayerDataの両方を更新）
+## この関数はPlayerData単体でのダメージ処理用（フォールバック/テスト用）
 func take_damage(amount: float) -> void:
 	# アーマー計算（アーマーは50%のダメージを吸収）
 	var actual_damage := amount
@@ -138,7 +145,11 @@ func record_damage(amount: float) -> void:
 
 ## お金を追加
 func add_money(amount: int) -> void:
-	money = min(money + amount, 16000)
+	var max_money := 16000  # デフォルト値（EconomyRules.max_money）
+	# MatchManager経由でEconomyRulesからmax_moneyを取得
+	if GameManager and GameManager.match_manager and GameManager.match_manager.economy_rules:
+		max_money = GameManager.match_manager.economy_rules.max_money
+	money = min(money + amount, max_money)
 
 
 ## 武器購入

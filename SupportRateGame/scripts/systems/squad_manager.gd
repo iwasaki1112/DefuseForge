@@ -20,6 +20,9 @@ var selected_index: int = 0
 # 分隊サイズ
 const SQUAD_SIZE: int = 5
 
+# プレイヤー選択の判定半径（タップ/クリック時）
+const PLAYER_SELECTION_RADIUS: float = 1.5
+
 
 func _ready() -> void:
 	pass
@@ -242,6 +245,44 @@ func _find_previous_alive_player(from_index: int) -> int:
 	return -1
 
 
+## 位置からプレイヤーを検索して選択（成功時true）
+## 既に選択中のプレイヤーがその位置にいる場合はfalseを返す（選択変更なし）
+func find_and_select_player_at_position(world_pos: Vector3) -> bool:
+	var closest_index: int = -1
+	var closest_distance: float = PLAYER_SELECTION_RADIUS
+
+	for i in range(squad.size()):
+		var data = squad[i]
+		if not data.is_alive or not data.player_node:
+			continue
+		var dist := world_pos.distance_to(data.player_node.global_position)
+		if dist < closest_distance:
+			closest_distance = dist
+			closest_index = i
+
+	if closest_index >= 0 and closest_index != selected_index:
+		select_player(closest_index)
+		return true
+
+	return false
+
+
+## 位置にプレイヤーがいるか確認（選択せずに確認のみ）
+func get_player_at_position(world_pos: Vector3) -> Node3D:
+	var closest_player: Node3D = null
+	var closest_distance: float = PLAYER_SELECTION_RADIUS
+
+	for data in squad:
+		if not data.is_alive or not data.player_node:
+			continue
+		var dist := world_pos.distance_to(data.player_node.global_position)
+		if dist < closest_distance:
+			closest_distance = dist
+			closest_player = data.player_node
+
+	return closest_player
+
+
 ## 全プレイヤーのノード配列を取得
 func get_all_player_nodes() -> Array[Node3D]:
 	var nodes: Array[Node3D] = []
@@ -260,8 +301,11 @@ func get_alive_player_nodes() -> Array[Node3D]:
 	return nodes
 
 
-## 武器購入（価格ベース、後方互換性用）
+## 武器購入（価格ベース、非推奨 - 後方互換性のためのみ維持）
+## 警告: この関数はPlayerDataの武器情報を更新しません
+## 代わりにbuy_weapon_for_selected()またはbuy_weapon_for_player()を使用してください
 func buy_weapon_by_price(price: int) -> bool:
+	push_warning("[SquadManager] buy_weapon_by_price(price) is deprecated. Use buy_weapon_for_selected(weapon_id) instead.")
 	# 購入フェーズかどうかをMatchManagerに確認
 	if GameManager and GameManager.match_manager:
 		if not GameManager.match_manager.is_buy_phase():
@@ -277,18 +321,27 @@ func buy_weapon_by_price(price: int) -> bool:
 
 
 ## プレイヤーダメージ（特定プレイヤー）
+## プレイヤーノードのtake_damage()を呼び出す（CharacterBaseとPlayerDataの両方が更新される）
 func damage_player_node(player_node: Node3D, amount: float) -> void:
-	var data = get_player_data_by_node(player_node)
-	if data == null:
+	if player_node == null:
 		return
 
-	data.take_damage(amount)
-	if not data.is_alive:
-		on_player_died(player_node)
-
-		# GameEvents経由でイベント発火
-		if has_node("/root/GameEvents"):
-			get_node("/root/GameEvents").unit_killed.emit(null, player_node, 0)
+	# プレイヤーノードのtake_damage()を呼ぶ（CharacterBase→Player.take_damage()がPlayerDataも同期）
+	if player_node.has_method("take_damage"):
+		player_node.take_damage(amount)
+		# 注: 死亡処理はPlayer._on_player_died()経由でon_player_died()が呼ばれる
+	else:
+		# フォールバック: PlayerDataのみ更新（非推奨パス）
+		push_warning("[SquadManager] player_node has no take_damage method, falling back to PlayerData only")
+		var data = get_player_data_by_node(player_node)
+		if data == null:
+			return
+		data.take_damage(amount)
+		if not data.is_alive:
+			on_player_died(player_node)
+			# GameEvents経由でイベント発火
+			if has_node("/root/GameEvents"):
+				get_node("/root/GameEvents").unit_killed.emit(null, player_node, 0)
 
 
 ## プレイヤーダメージ（選択中プレイヤー）
