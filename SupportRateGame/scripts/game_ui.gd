@@ -55,6 +55,8 @@ func _ready() -> void:
 		events.round_ended.connect(_on_round_ended)
 		events.buy_phase_started.connect(_on_buy_phase_started)
 		events.play_phase_started.connect(_on_play_phase_started)
+		events.strategy_phase_started.connect(_on_strategy_phase_started)
+		events.execution_phase_started.connect(_on_execution_phase_started)
 		events.game_over.connect(_on_game_over)
 		events.money_changed.connect(_on_money_changed_event)
 
@@ -73,14 +75,23 @@ func _process(_delta: float) -> void:
 
 func _update_timer() -> void:
 	var state_prefix := ""
-	match GameManager.current_state:
-		GameManager.GameState.BUY_PHASE:
-			state_prefix = "BUY "
-		GameManager.GameState.PLAYING:
-			if GameManager.is_bomb_planted:
-				state_prefix = "💣 "
-			else:
-				state_prefix = ""
+
+	# MatchManagerからフェーズ名を取得
+	if GameManager and GameManager.match_manager:
+		var mm = GameManager.match_manager
+		state_prefix = mm.get_phase_name() + " "
+		if mm.current_turn > 0:
+			state_prefix = "T%d %s" % [mm.current_turn, state_prefix]
+	else:
+		# フォールバック: GameManager.current_stateを使用
+		match GameManager.current_state:
+			GameManager.GameState.BUY_PHASE:
+				state_prefix = "BUY "
+			GameManager.GameState.PLAYING:
+				if GameManager.is_bomb_planted:
+					state_prefix = "💣 "
+				else:
+					state_prefix = ""
 
 	timer_label.text = state_prefix + GameManager.get_formatted_time()
 
@@ -120,6 +131,17 @@ func _on_buy_phase_started() -> void:
 func _on_play_phase_started() -> void:
 	print("[GameUI] Play phase started")
 	shopping_panel.visible = false
+
+
+## 戦略フェーズ開始
+func _on_strategy_phase_started(turn_number: int) -> void:
+	print("[GameUI] Strategy phase started (Turn %d)" % turn_number)
+	shopping_panel.visible = false
+
+
+## 実行フェーズ開始
+func _on_execution_phase_started(turn_number: int) -> void:
+	print("[GameUI] Execution phase started (Turn %d)" % turn_number)
 
 
 ## ゲームオーバー

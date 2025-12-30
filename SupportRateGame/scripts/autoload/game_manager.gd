@@ -31,12 +31,13 @@ var fog_of_war_manager: Node = null
 var current_state: GameState:
 	get:
 		if match_manager:
+			# MatchState: WAITING=0, BUY_PHASE=1, STRATEGY_PHASE=2, EXECUTION_PHASE=3, ROUND_END=4, MATCH_OVER=5
 			match match_manager.current_state:
 				0: return GameState.MENU  # WAITING
 				1: return GameState.BUY_PHASE
-				2: return GameState.PLAYING
-				3: return GameState.ROUND_END
-				4: return GameState.GAME_OVER
+				2, 3: return GameState.PLAYING  # STRATEGY_PHASE, EXECUTION_PHASE
+				4: return GameState.ROUND_END
+				5: return GameState.GAME_OVER
 		return GameState.MENU
 
 var current_round: int:

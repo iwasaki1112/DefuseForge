@@ -7,7 +7,7 @@ extends Node
 
 # 列挙型
 enum Team { CT, TERRORIST }
-enum MatchState { WAITING, BUY_PHASE, PLAYING, ROUND_END, MATCH_OVER }
+enum MatchState { WAITING, BUY_PHASE, STRATEGY_PHASE, EXECUTION_PHASE, ROUND_END, MATCH_OVER }
 
 # デフォルト経済ルール（リソースファイル）
 const DEFAULT_ECONOMY_RULES = preload("res://resources/economy_rules.tres")
@@ -18,6 +18,7 @@ var economy_rules: Resource = null
 # マッチ状態
 var current_state: MatchState = MatchState.WAITING
 var current_round: int = 0
+var current_turn: int = 0  # ラウンド内のターン番号
 var ct_wins: int = 0
 var t_wins: int = 0
 var remaining_time: float = 0.0
@@ -40,7 +41,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if current_state == MatchState.PLAYING or current_state == MatchState.BUY_PHASE:
+	if current_state in [MatchState.BUY_PHASE, MatchState.STRATEGY_PHASE, MatchState.EXECUTION_PHASE]:
 		_update_timer(delta)
 
 
@@ -84,6 +85,7 @@ func start_match() -> void:
 ## 新しいラウンドを開始
 func start_new_round() -> void:
 	current_round += 1
+	current_turn = 0
 	is_bomb_planted = false
 
 	# SquadManagerで全員リセット
@@ -102,13 +104,32 @@ func start_new_round() -> void:
 		events.buy_phase_started.emit()
 
 
-## 購入フェーズを終了してプレイ開始
-func start_playing() -> void:
-	_set_state(MatchState.PLAYING)
-	remaining_time = economy_rules.round_time
+## 購入フェーズを終了して戦略フェーズ開始
+func start_strategy_phase() -> void:
+	current_turn += 1
+	_set_state(MatchState.STRATEGY_PHASE)
+	remaining_time = economy_rules.strategy_time
 
 	if has_node("/root/GameEvents"):
-		get_node("/root/GameEvents").play_phase_started.emit()
+		var events = get_node("/root/GameEvents")
+		events.strategy_phase_started.emit(current_turn)
+		# 後方互換: 最初のターンでplay_phase_startedも発火
+		if current_turn == 1:
+			events.play_phase_started.emit()
+
+
+## 戦略フェーズを終了して実行フェーズ開始
+func start_execution_phase() -> void:
+	_set_state(MatchState.EXECUTION_PHASE)
+	remaining_time = economy_rules.execution_time
+
+	if has_node("/root/GameEvents"):
+		get_node("/root/GameEvents").execution_phase_started.emit(current_turn)
+
+
+## 購入フェーズを終了してプレイ開始（後方互換用）
+func start_playing() -> void:
+	start_strategy_phase()
 
 
 ## タイマー更新
@@ -118,14 +139,48 @@ func _update_timer(delta: float) -> void:
 	if remaining_time <= 0:
 		remaining_time = 0
 
-		if current_state == MatchState.BUY_PHASE:
-			start_playing()
-		elif current_state == MatchState.PLAYING:
-			# 時間切れ - CTの勝利（爆弾未設置）/ Tの勝利（爆弾設置済み）
-			if not is_bomb_planted:
-				_end_round(Team.CT)
-			else:
-				_end_round(Team.TERRORIST)
+		match current_state:
+			MatchState.BUY_PHASE:
+				start_strategy_phase()
+			MatchState.STRATEGY_PHASE:
+				start_execution_phase()
+			MatchState.EXECUTION_PHASE:
+				# ラウンド終了条件をチェック
+				if _check_round_end_conditions():
+					return
+				# 次の戦略フェーズへ
+				start_strategy_phase()
+
+
+## ラウンド終了条件をチェック
+func _check_round_end_conditions() -> bool:
+	var sm = _get_squad_manager()
+
+	# 全プレイヤー死亡
+	if sm and sm.get_alive_count() == 0:
+		_end_round(Team.TERRORIST if player_team == Team.CT else Team.CT)
+		return true
+
+	# 全敵死亡
+	var enemies_alive := 0
+	if GameManager:
+		for enemy in GameManager.enemies:
+			if enemy and is_instance_valid(enemy):
+				if enemy.has_method("is_alive") and enemy.is_alive():
+					enemies_alive += 1
+				elif not enemy.has_method("is_alive"):
+					enemies_alive += 1
+
+	if enemies_alive == 0:
+		_end_round(player_team)
+		return true
+
+	# 爆弾関連
+	if is_bomb_planted:
+		# 爆弾タイマーは別途管理
+		pass
+
+	return false
 
 
 ## ラウンド終了
@@ -223,7 +278,7 @@ func _on_unit_killed(killer: Node3D, _victim: Node3D, weapon_id: int) -> void:
 				elif not enemy.has_method("is_alive"):
 					enemies_alive += 1  # メソッドがない場合は生存とみなす
 
-	if enemies_alive == 0 and current_state == MatchState.PLAYING:
+	if enemies_alive == 0 and is_playing():
 		_end_round(player_team)
 
 
@@ -276,6 +331,45 @@ func is_buy_phase() -> bool:
 	return current_state == MatchState.BUY_PHASE
 
 
-## プレイ中かどうか
+## 戦略フェーズかどうか
+func is_strategy_phase() -> bool:
+	return current_state == MatchState.STRATEGY_PHASE
+
+
+## 実行フェーズかどうか
+func is_execution_phase() -> bool:
+	return current_state == MatchState.EXECUTION_PHASE
+
+
+## プレイ中かどうか（戦略or実行フェーズ）
 func is_playing() -> bool:
-	return current_state == MatchState.PLAYING
+	return current_state in [MatchState.STRATEGY_PHASE, MatchState.EXECUTION_PHASE]
+
+
+## パス描画が可能かどうか
+func can_draw_path() -> bool:
+	return current_state == MatchState.STRATEGY_PHASE
+
+
+## 移動実行が可能かどうか
+func can_execute_movement() -> bool:
+	return current_state == MatchState.EXECUTION_PHASE
+
+
+## 現在のフェーズ名を取得
+func get_phase_name() -> String:
+	match current_state:
+		MatchState.WAITING:
+			return "待機中"
+		MatchState.BUY_PHASE:
+			return "購入"
+		MatchState.STRATEGY_PHASE:
+			return "戦略"
+		MatchState.EXECUTION_PHASE:
+			return "実行"
+		MatchState.ROUND_END:
+			return "終了"
+		MatchState.MATCH_OVER:
+			return "試合終了"
+		_:
+			return ""

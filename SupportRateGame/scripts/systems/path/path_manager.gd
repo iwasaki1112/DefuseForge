@@ -45,6 +45,10 @@ func _on_draw_started(_screen_pos: Vector2, world_pos: Vector3) -> void:
 	if world_pos == Vector3.INF:
 		return
 
+	# 戦略フェーズ以外では描画不可
+	if not _can_draw():
+		return
+
 	is_drawing = true
 	current_path.clear()
 	run_flags.clear()
@@ -130,3 +134,10 @@ func set_player(p: Node3D) -> void:
 ## 描画中かどうか
 func is_path_drawing() -> bool:
 	return is_drawing
+
+
+## パス描画が可能かどうか
+func _can_draw() -> bool:
+	if GameManager and GameManager.match_manager:
+		return GameManager.match_manager.can_draw_path()
+	return true  # MatchManagerがなければ許可

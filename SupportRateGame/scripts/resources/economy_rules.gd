@@ -80,6 +80,12 @@ extends Resource
 ## 購入フェーズ時間（秒）
 @export var buy_time: float = 3.0
 
+## 戦略フェーズ時間（秒）
+@export var strategy_time: float = 10.0
+
+## 実行フェーズ時間（秒）
+@export var execution_time: float = 10.0
+
 ## 爆弾タイマー（秒）
 @export var bomb_time: float = 40.0
 

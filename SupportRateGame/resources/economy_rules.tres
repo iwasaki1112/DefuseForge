@@ -25,5 +25,7 @@ kill_reward_shotgun = 900
 kill_reward_knife = 1500
 round_time = 105.0
 buy_time = 3.0
+strategy_time = 10.0
+execution_time = 10.0
 bomb_time = 40.0
 max_rounds = 15

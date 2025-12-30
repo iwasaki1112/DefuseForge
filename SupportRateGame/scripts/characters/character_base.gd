@@ -105,9 +105,19 @@ func _physics_process(delta: float) -> void:
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
 
-	_handle_path_movement(delta)
+	# 移動は実行フェーズのみ
+	if _can_execute_movement():
+		_handle_path_movement(delta)
+
 	_handle_terrain_follow(delta)
 	move_and_slide()
+
+
+## 移動実行が可能かどうか
+func _can_execute_movement() -> bool:
+	if GameManager and GameManager.match_manager:
+		return GameManager.match_manager.can_execute_movement()
+	return true  # MatchManagerがなければ許可
 
 
 ## パス追従移動

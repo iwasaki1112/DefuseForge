@@ -43,7 +43,13 @@ signal round_ended(winner_team: int)  # 0=CT, 1=T
 ## 購入フェーズ開始
 signal buy_phase_started()
 
-## プレイフェーズ開始
+## 戦略フェーズ開始（パス描画可能）
+signal strategy_phase_started(turn_number: int)
+
+## 実行フェーズ開始（移動実行）
+signal execution_phase_started(turn_number: int)
+
+## プレイフェーズ開始（後方互換用、戦略フェーズと同時に発火）
 signal play_phase_started()
 
 ## ゲーム終了
