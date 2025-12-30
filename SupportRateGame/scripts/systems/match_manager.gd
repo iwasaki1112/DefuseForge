@@ -72,10 +72,15 @@ func _count_alive_enemies() -> int:
 	var enemies := get_tree().get_nodes_in_group("enemies")
 	for enemy in enemies:
 		if enemy and is_instance_valid(enemy):
-			if enemy.has_method("is_alive") and enemy.is_alive():
-				count += 1
-			elif not enemy.has_method("is_alive"):
-				count += 1  # メソッドがない場合は生存とみなす
+			# is_character_alive()メソッドまたはis_aliveプロパティで判定
+			if enemy.has_method("is_character_alive"):
+				if enemy.is_character_alive():
+					count += 1
+			elif "is_alive" in enemy:
+				if enemy.is_alive:
+					count += 1
+			else:
+				count += 1  # 判定手段がない場合は生存とみなす
 	return count
 
 
