@@ -237,10 +237,14 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 			print("[CharacterSetup] %s: Failed to load %s" % [debug_name, path])
 		return
 
-	# rifle/pistolアニメーションはHips位置トラックのX,Z座標を0に固定（移動防止、高さは保持）
-	var fix_hips_position = anim_name.ends_with("_rifle") or anim_name.ends_with("_pistol")
+	# rifle/pistolアニメーションはHips位置トラックのX,Z座標を0に固定（移動防止）
+	# Y座標オフセット: rifle=0.62, pistol=0.1 (NONEと高さを合わせるため)
+	var is_rifle = anim_name.ends_with("_rifle")
+	var is_pistol = anim_name.ends_with("_pistol")
+	var fix_hips_position = is_rifle or is_pistol
 	if fix_hips_position and debug_name:
-		print("[CharacterSetup] %s: Will fix Hips position XZ for %s" % [debug_name, anim_name])
+		var offset_info = "rifle:0.62" if is_rifle else ("pistol:0.1" if is_pistol else "none")
+		print("[CharacterSetup] %s: Will fix Hips position XZ for %s (Y offset: %s)" % [debug_name, anim_name, offset_info])
 
 	var instance = scene.instantiate()
 	var scene_anim_player = instance.get_node_or_null("AnimationPlayer")
@@ -250,7 +254,7 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 			if anim:
 				var anim_copy = anim.duplicate()
 				anim_copy.loop_mode = Animation.LOOP_LINEAR
-				_adjust_animation_paths(anim_copy, model, fix_hips_position)
+				_adjust_animation_paths(anim_copy, model, fix_hips_position, is_rifle, is_pistol)
 				lib.add_animation(anim_name, anim_copy)
 				break
 	else:
@@ -260,7 +264,7 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 
 
 ## アニメーションのトラックパスをモデル階層に合わせて調整
-static func _adjust_animation_paths(anim: Animation, model: Node, fix_hips_position: bool = false) -> void:
+static func _adjust_animation_paths(anim: Animation, model: Node, fix_hips_position: bool = false, is_rifle: bool = false, is_pistol: bool = false) -> void:
 	if model == null:
 		return
 
@@ -302,21 +306,29 @@ static func _adjust_animation_paths(anim: Animation, model: Node, fix_hips_posit
 
 		anim.track_set_path(i, NodePath(path_str))
 
-	# Hips位置トラックを修正：X,Z座標を0に固定し、Y座標をNONEアニメーションと合わせる
-	# NONEアニメーションのHips Y: 約0.99、RIFLEアニメーションのHips Y: 約0.35
-	# 差分（約0.62）を加算してNONEと同じ高さに補正
-	const HIPS_Y_OFFSET: float = 0.62
+	# Hips位置トラックを修正：X,Z座標を0に固定
+	# Y座標オフセット: rifle=0.62, pistol=0.1 (NONEと高さを合わせるため)
+	const HIPS_Y_OFFSET_RIFLE: float = 0.62
+	const HIPS_Y_OFFSET_PISTOL: float = 0.1
+
+	# 適用するオフセットを決定
+	var y_offset: float = 0.0
+	if is_rifle:
+		y_offset = HIPS_Y_OFFSET_RIFLE
+	elif is_pistol:
+		y_offset = HIPS_Y_OFFSET_PISTOL
 
 	for track_idx in hips_position_tracks:
 		var key_count = anim.track_get_key_count(track_idx)
 		# 最初のキーのY座標を出力（デバッグ用）
 		if key_count > 0:
 			var first_pos: Vector3 = anim.track_get_key_value(track_idx, 0)
-			print("[CharacterSetup] Hips Y before fix: %.3f, after fix: %.3f" % [first_pos.y, first_pos.y + HIPS_Y_OFFSET])
+			print("[CharacterSetup] Hips Y before fix: %.3f, after fix: %.3f (offset: %.2f)" % [first_pos.y, first_pos.y + y_offset, y_offset])
 		for key_idx in range(key_count):
 			var pos: Vector3 = anim.track_get_key_value(track_idx, key_idx)
-			# X,Zを0に固定し、YにオフセットをNONEと合わせるための補正を加算
-			var fixed_pos = Vector3(0, pos.y + HIPS_Y_OFFSET, 0)
+			# X,Zを0に固定、Yは武器タイプに応じてオフセット加算
+			var y_value = pos.y + y_offset
+			var fixed_pos = Vector3(0, y_value, 0)
 			anim.track_set_key_value(track_idx, key_idx, fixed_pos)
 
 
