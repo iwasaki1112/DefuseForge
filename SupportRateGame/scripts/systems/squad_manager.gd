@@ -185,6 +185,11 @@ func reset_for_game() -> void:
 
 ## 武器購入（選択中のプレイヤー）
 func buy_weapon_for_selected(weapon_id: int, is_primary: bool = true) -> bool:
+	# 購入フェーズかどうかをMatchManagerに確認
+	if GameManager and GameManager.match_manager:
+		if not GameManager.match_manager.is_buy_phase():
+			return false
+
 	var data = get_selected_player()
 	if data == null:
 		return false
@@ -201,6 +206,11 @@ func buy_weapon_for_selected(weapon_id: int, is_primary: bool = true) -> bool:
 
 ## 特定プレイヤーの武器購入
 func buy_weapon_for_player(index: int, weapon_id: int, is_primary: bool = true) -> bool:
+	# 購入フェーズかどうかをMatchManagerに確認
+	if GameManager and GameManager.match_manager:
+		if not GameManager.match_manager.is_buy_phase():
+			return false
+
 	var data = get_player_data(index)
 	if data == null:
 		return false

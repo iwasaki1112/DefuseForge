@@ -318,7 +318,7 @@ func _check_and_switch_player(world_pos: Vector3) -> void:
 	var sm = GameManager.squad_manager
 
 	# SquadManagerの共通APIを使用
-	var closest_player := sm.get_player_at_position(world_pos)
+	var closest_player: Node3D = sm.get_player_at_position(world_pos)
 
 	# 別のプレイヤーをタップした場合、そのプレイヤーを選択してパス描画を続行
 	if closest_player and closest_player != player:

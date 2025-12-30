@@ -34,6 +34,9 @@ func _on_player_died() -> void:
 	# SquadManagerに死亡を通知（GameManager経由）
 	if GameManager and GameManager.squad_manager:
 		GameManager.squad_manager.on_player_died(self)
+	# GameEvents経由でunit_killedイベントを発火（ラウンド終了判定などに使用）
+	if has_node("/root/GameEvents"):
+		get_node("/root/GameEvents").unit_killed.emit(null, self, 0)
 
 
 ## チームを設定
