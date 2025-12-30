@@ -20,7 +20,7 @@ extends Control
 @onready var welcome_label: Label = $MainPanel/VBoxContainer/WelcomeLabel
 @onready var quick_match_button: Button = $MainPanel/VBoxContainer/QuickMatchButton
 @onready var create_room_button: Button = $MainPanel/VBoxContainer/CreateRoomButton
-@onready var join_room_button: Button = $MainPanel/VBoxContainer/JoinRoomButton
+@onready var join_room_button: Button = $MainPanel/VBoxContainer/RoomCodeContainer/JoinRoomButton
 @onready var room_code_input: LineEdit = $MainPanel/VBoxContainer/RoomCodeContainer/RoomCodeInput
 @onready var browse_rooms_button: Button = $MainPanel/VBoxContainer/BrowseRoomsButton
 
