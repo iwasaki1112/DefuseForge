@@ -11,8 +11,8 @@ const EconomyRulesClass = preload("res://scripts/resources/economy_rules.gd")
 enum Team { CT, TERRORIST }
 enum MatchState { WAITING, BUY_PHASE, PLAYING, ROUND_END, MATCH_OVER }
 
-# 経済ルール（Resource）
-@export var economy_rules: Resource = null
+# 経済ルール（preloadしたクラスを使用）
+var economy_rules = null
 
 # マッチ状態
 var current_state: MatchState = MatchState.WAITING

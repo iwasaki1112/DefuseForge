@@ -84,31 +84,28 @@ func _get_angle_change_at_2d(path: Array[Vector2], segment_index: int) -> float:
 	if path.size() < 3:
 		return 0.0
 
+	var dir_prev: Vector2
+	var dir_curr: Vector2
+
 	# 最初のセグメント
 	if segment_index == 0:
-		if path.size() < 3:
-			return 0.0
-		var dir_curr := (path[1] - path[0])
-		var dir_next := (path[2] - path[1])
+		dir_curr = path[1] - path[0]
+		var dir_next := path[2] - path[1]
 		if dir_curr.length() < 0.01 or dir_next.length() < 0.01:
 			return 0.0
 		return rad_to_deg(acos(clamp(dir_curr.normalized().dot(dir_next.normalized()), -1.0, 1.0)))
 
 	# 最後のセグメント
 	if segment_index == path.size() - 2:
-		var dir_prev := (path[segment_index] - path[segment_index - 1])
-		var dir_curr := (path[segment_index + 1] - path[segment_index])
+		dir_prev = path[segment_index] - path[segment_index - 1]
+		dir_curr = path[segment_index + 1] - path[segment_index]
 		if dir_prev.length() < 0.01 or dir_curr.length() < 0.01:
 			return 0.0
 		return rad_to_deg(acos(clamp(dir_prev.normalized().dot(dir_curr.normalized()), -1.0, 1.0)))
 
 	# 中間セグメント
-	var p0 := path[segment_index - 1]
-	var p1 := path[segment_index]
-	var p2 := path[segment_index + 1]
-
-	var dir_prev := (p1 - p0)
-	var dir_curr := (p2 - p1)
+	dir_prev = path[segment_index] - path[segment_index - 1]
+	dir_curr = path[segment_index + 1] - path[segment_index]
 
 	if dir_prev.length() < 0.01 or dir_curr.length() < 0.01:
 		return 0.0
