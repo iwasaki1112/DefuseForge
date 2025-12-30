@@ -48,11 +48,15 @@ func _ready() -> void:
 	# ボタンテキストに価格を表示
 	_update_weapon_button_texts()
 
-	# GameManagerのシグナルに接続
-	GameManager.money_changed.connect(_on_money_changed)
-	GameManager.game_state_changed.connect(_on_game_state_changed)
-	GameManager.round_started.connect(_on_round_started)
-	GameManager.round_ended.connect(_on_round_ended)
+	# GameEventsのシグナルに接続
+	if has_node("/root/GameEvents"):
+		var events = get_node("/root/GameEvents")
+		events.round_started.connect(_on_round_started)
+		events.round_ended.connect(_on_round_ended)
+		events.buy_phase_started.connect(_on_buy_phase_started)
+		events.play_phase_started.connect(_on_play_phase_started)
+		events.game_over.connect(_on_game_over)
+		events.money_changed.connect(_on_money_changed_event)
 
 	# 初期値を設定
 	_update_money(GameManager.player_money)
@@ -99,36 +103,40 @@ func _update_round() -> void:
 	]
 
 
-func _on_money_changed(amount: int) -> void:
+func _on_money_changed_event(_player: Node3D, amount: int) -> void:
 	_update_money(amount)
 
 
-func _on_game_state_changed(new_state: GameManager.GameState) -> void:
-	print("[GameUI] State changed to: %s" % GameManager.GameState.keys()[new_state])
-	match new_state:
-		GameManager.GameState.BUY_PHASE:
-			if shopping_panel:
-				shopping_panel.visible = true
-				print("[GameUI] Shopping panel shown, visible=%s" % shopping_panel.visible)
-			else:
-				print("[GameUI] ERROR: shopping_panel is null!")
-		GameManager.GameState.PLAYING:
-			shopping_panel.visible = false
-		GameManager.GameState.GAME_OVER:
-			shopping_panel.visible = false
-			_show_game_over()
-		_:
-			shopping_panel.visible = false
+## 購入フェーズ開始
+func _on_buy_phase_started() -> void:
+	print("[GameUI] Buy phase started")
+	if shopping_panel:
+		shopping_panel.visible = true
+	else:
+		print("[GameUI] ERROR: shopping_panel is null!")
+
+
+## プレイフェーズ開始
+func _on_play_phase_started() -> void:
+	print("[GameUI] Play phase started")
+	shopping_panel.visible = false
+
+
+## ゲームオーバー
+func _on_game_over(_winner_team: int) -> void:
+	print("[GameUI] Game over")
+	shopping_panel.visible = false
+	_show_game_over()
 
 
 func _on_round_started(_round_number: int) -> void:
 	_update_round()
 
 
-func _on_round_ended(winner: GameManager.Team) -> void:
+func _on_round_ended(winner_team: int) -> void:
 	_update_round()
 	# ラウンド終了メッセージを表示（オプション）
-	var winner_text := "CT" if winner == GameManager.Team.CT else "Terrorist"
+	var winner_text := "CT" if winner_team == 0 else "Terrorist"
 	print("%s wins the round!" % winner_text)
 
 

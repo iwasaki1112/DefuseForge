@@ -102,7 +102,8 @@ func get_kill_reward(weapon_id: int) -> int:
 
 
 ## デフォルト設定を作成
-static func create_default() -> EconomyRules:
-	var rules := EconomyRules.new()
+static func create_default() -> Resource:
+	var script = load("res://scripts/resources/economy_rules.gd")
+	var rules = script.new()
 	# デフォルト値は @export で設定済み
 	return rules

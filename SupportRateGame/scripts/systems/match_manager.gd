@@ -162,7 +162,7 @@ func _distribute_round_rewards(winner: Team) -> void:
 				events.reward_granted.emit(data.player_node, economy_rules.win_reward, "round_win")
 	else:
 		# 敗北報酬（連敗ボーナス）
-		var loss_reward := economy_rules.calculate_loss_reward(loss_streak)
+		var loss_reward: int = economy_rules.calculate_loss_reward(loss_streak)
 		SquadManager.add_money_to_all(loss_reward)
 		loss_streak += 1
 
@@ -190,7 +190,7 @@ func _on_unit_killed(killer: Node3D, victim: Node3D, weapon_id: int) -> void:
 	if SquadManager and killer:
 		var killer_data = SquadManager.get_player_data_by_node(killer)
 		if killer_data:
-			var reward := economy_rules.get_kill_reward(weapon_id)
+			var reward: int = economy_rules.get_kill_reward(weapon_id)
 			killer_data.add_money(reward)
 			killer_data.record_kill()
 
