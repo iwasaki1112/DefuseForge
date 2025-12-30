@@ -1,0 +1,316 @@
+[gd_scene load_steps=2 format=3 uid="uid://bw8rxk6l5w3qp"]
+
+[ext_resource type="Script" path="res://scripts/lobby/lobby_screen.gd" id="1_lobby"]
+
+[node name="LobbyScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_lobby")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.1, 0.12, 0.15, 1)
+
+[node name="AuthPanel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AuthPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="TitleLabel" type="Label" parent="AuthPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "TACTICAL STRIKE"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="AuthPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "オンラインマルチプレイヤー"
+horizontal_alignment = 1
+
+[node name="UsernameInput" type="LineEdit" parent="AuthPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+placeholder_text = "ユーザー名（任意）"
+alignment = 1
+
+[node name="GuestLoginButton" type="Button" parent="AuthPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "ゲストでプレイ"
+
+[node name="StatusLabel" type="Label" parent="AuthPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+horizontal_alignment = 1
+
+[node name="MainPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -180.0
+offset_right = 150.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 15
+
+[node name="WelcomeLabel" type="Label" parent="MainPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "ようこそ"
+horizontal_alignment = 1
+
+[node name="Separator1" type="HSeparator" parent="MainPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="QuickMatchButton" type="Button" parent="MainPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "クイックマッチ"
+
+[node name="Separator2" type="HSeparator" parent="MainPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="CreateRoomButton" type="Button" parent="MainPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "ルームを作成"
+
+[node name="RoomCodeContainer" type="HBoxContainer" parent="MainPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="RoomCodeInput" type="LineEdit" parent="MainPanel/VBoxContainer/RoomCodeContainer"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "ルームコード"
+alignment = 1
+max_length = 6
+caret_blink = true
+
+[node name="JoinRoomButton" type="Button" parent="MainPanel/VBoxContainer/RoomCodeContainer"]
+custom_minimum_size = Vector2(80, 40)
+layout_mode = 2
+text = "参加"
+
+[node name="BrowseRoomsButton" type="Button" parent="MainPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "公開ルームを探す"
+
+[node name="RoomListPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TitleLabel" type="Label" parent="RoomListPanel"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_top = 30.0
+offset_right = 100.0
+offset_bottom = 60.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 24
+text = "公開ルーム"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="RoomListPanel"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.1
+anchor_top = 0.15
+anchor_right = 0.9
+anchor_bottom = 0.85
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="RoomListContainer" type="VBoxContainer" parent="RoomListPanel/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="BackButton" type="Button" parent="RoomListPanel"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -60.0
+offset_right = -10.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "戻る"
+
+[node name="RefreshButton" type="Button" parent="RoomListPanel"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -60.0
+offset_right = 160.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "更新"
+
+[node name="CreateRoomPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CreateRoomPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -120.0
+offset_right = 150.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="TitleLabel" type="Label" parent="CreateRoomPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "ルーム作成"
+horizontal_alignment = 1
+
+[node name="TeamSizeLabel" type="Label" parent="CreateRoomPanel/VBoxContainer"]
+layout_mode = 2
+text = "チームサイズ"
+horizontal_alignment = 1
+
+[node name="TeamSizeOption" type="OptionButton" parent="CreateRoomPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+
+[node name="PrivateRoomCheck" type="CheckBox" parent="CreateRoomPanel/VBoxContainer"]
+layout_mode = 2
+text = "プライベートルーム（コード必須）"
+
+[node name="RoomCodeLabel" type="Label" parent="CreateRoomPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+
+[node name="CreateConfirmButton" type="Button" parent="CreateRoomPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "ルームを作成"
+
+[node name="BackButton" type="Button" parent="CreateRoomPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+text = "戻る"
+
+[node name="MatchmakingPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MatchmakingPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="TitleLabel" type="Label" parent="MatchmakingPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "クイックマッチ"
+horizontal_alignment = 1
+
+[node name="TeamSizeLabel" type="Label" parent="MatchmakingPanel/VBoxContainer"]
+layout_mode = 2
+text = "チームサイズ"
+horizontal_alignment = 1
+
+[node name="TeamSizeOption" type="OptionButton" parent="MatchmakingPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="MatchmakingPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
+text = "マッチング中..."
+horizontal_alignment = 1
+
+[node name="CancelButton" type="Button" parent="MatchmakingPanel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+text = "キャンセル"

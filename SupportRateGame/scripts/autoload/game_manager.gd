@@ -15,6 +15,11 @@ var current_mode: GameMode = GameMode.DEFUSE
 # フラグ
 var is_game_running: bool = false
 
+# オンラインマッチ情報
+var is_online_match: bool = false
+var current_match_id: String = ""
+var is_host: bool = false
+
 # シーン内ノード参照（game.tscn内に配置）
 var match_manager: Node = null
 var squad_manager: Node = null
@@ -143,12 +148,27 @@ func stop_game() -> void:
 ## シーン遷移: タイトルへ
 func goto_title() -> void:
 	stop_game()
+	_reset_online_state()
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
+
+
+## シーン遷移: ロビーへ
+func goto_lobby() -> void:
+	stop_game()
+	_reset_online_state()
+	get_tree().change_scene_to_file("res://scenes/lobby/lobby.tscn")
 
 
 ## シーン遷移: ゲームへ
 func goto_game() -> void:
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
+
+
+## オンライン状態をリセット
+func _reset_online_state() -> void:
+	is_online_match = false
+	current_match_id = ""
+	is_host = false
 
 
 ## フォーマット済み時間を取得（後方互換性）
