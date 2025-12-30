@@ -1,7 +1,9 @@
+class_name FogOfWarManagerNode
 extends Node
 
-## 視界マネージャー（Autoload）
+## 視界マネージャー（シーンノード）
 ## 視界システム全体を管理し、敵の可視性を制御
+## ゲームシーン内に配置して使用（Autoloadではない）
 
 signal fog_updated
 signal character_visibility_changed(character: CharacterBody3D, is_visible: bool)

@@ -5,14 +5,15 @@ extends Node
 ## ラウンド/経済/勝敗を管理
 ## GameEventsを介して他システムと連携
 
-const EconomyRulesClass = preload("res://scripts/resources/economy_rules.gd")
-
 # 列挙型
 enum Team { CT, TERRORIST }
 enum MatchState { WAITING, BUY_PHASE, PLAYING, ROUND_END, MATCH_OVER }
 
-# 経済ルール（preloadしたクラスを使用）
-var economy_rules = null
+# デフォルト経済ルール（リソースファイル）
+const DEFAULT_ECONOMY_RULES = preload("res://resources/economy_rules.tres")
+
+# 経済ルール
+var economy_rules: Resource = null
 
 # マッチ状態
 var current_state: MatchState = MatchState.WAITING
@@ -30,9 +31,9 @@ var is_bomb_planted: bool = false
 
 
 func _ready() -> void:
-	# 経済ルールが未設定ならデフォルトを使用
+	# 経済ルールが未設定ならデフォルトリソースを使用
 	if economy_rules == null:
-		economy_rules = EconomyRulesClass.create_default()
+		economy_rules = DEFAULT_ECONOMY_RULES
 
 	# GameEventsに接続
 	_connect_events()
@@ -59,6 +60,11 @@ func _connect_events() -> void:
 	events.bomb_exploded.connect(_on_bomb_exploded)
 
 
+## SquadManagerへの参照を取得
+func _get_squad_manager() -> Node:
+	return GameManager.squad_manager if GameManager else null
+
+
 ## マッチ開始
 func start_match() -> void:
 	current_round = 0
@@ -67,8 +73,9 @@ func start_match() -> void:
 	loss_streak = 0
 
 	# 全プレイヤーに初期資金を設定
-	if SquadManager:
-		for data in SquadManager.squad:
+	var sm = _get_squad_manager()
+	if sm:
+		for data in sm.squad:
 			data.money = economy_rules.starting_money
 
 	start_new_round()
@@ -80,8 +87,9 @@ func start_new_round() -> void:
 	is_bomb_planted = false
 
 	# SquadManagerで全員リセット
-	if SquadManager:
-		SquadManager.reset_for_round()
+	var sm = _get_squad_manager()
+	if sm:
+		sm.reset_for_round()
 
 	# 購入フェーズへ
 	_set_state(MatchState.BUY_PHASE)
@@ -147,27 +155,28 @@ func _end_round(winner: Team) -> void:
 
 ## ラウンド報酬を分配
 func _distribute_round_rewards(winner: Team) -> void:
-	if not SquadManager:
+	var sm = _get_squad_manager()
+	if not sm:
 		return
 
 	var events = get_node_or_null("/root/GameEvents")
 
 	if winner == player_team:
 		# 勝利報酬
-		SquadManager.add_money_to_all(economy_rules.win_reward)
+		sm.add_money_to_all(economy_rules.win_reward)
 		loss_streak = 0
 
 		if events:
-			for data in SquadManager.squad:
+			for data in sm.squad:
 				events.reward_granted.emit(data.player_node, economy_rules.win_reward, "round_win")
 	else:
 		# 敗北報酬（連敗ボーナス）
 		var loss_reward: int = economy_rules.calculate_loss_reward(loss_streak)
-		SquadManager.add_money_to_all(loss_reward)
+		sm.add_money_to_all(loss_reward)
 		loss_streak += 1
 
 		if events:
-			for data in SquadManager.squad:
+			for data in sm.squad:
 				events.reward_granted.emit(data.player_node, loss_reward, "round_loss")
 
 
@@ -185,10 +194,12 @@ func _set_state(new_state: MatchState) -> void:
 
 
 ## ユニット死亡イベント処理
-func _on_unit_killed(killer: Node3D, victim: Node3D, weapon_id: int) -> void:
+func _on_unit_killed(killer: Node3D, _victim: Node3D, weapon_id: int) -> void:
+	var sm = _get_squad_manager()
+
 	# 敵がキルされた場合、キル報酬
-	if SquadManager and killer:
-		var killer_data = SquadManager.get_player_data_by_node(killer)
+	if sm and killer:
+		var killer_data = sm.get_player_data_by_node(killer)
 		if killer_data:
 			var reward: int = economy_rules.get_kill_reward(weapon_id)
 			killer_data.add_money(reward)
@@ -198,7 +209,7 @@ func _on_unit_killed(killer: Node3D, victim: Node3D, weapon_id: int) -> void:
 				get_node("/root/GameEvents").reward_granted.emit(killer, reward, "kill")
 
 	# 全プレイヤー死亡チェック
-	if SquadManager and SquadManager.get_alive_count() == 0:
+	if sm and sm.get_alive_count() == 0:
 		_end_round(Team.TERRORIST if player_team == Team.CT else Team.CT)
 
 	# 全敵死亡チェック
@@ -222,8 +233,9 @@ func _on_bomb_planted(_site: String, planter: Node3D) -> void:
 	remaining_time = economy_rules.bomb_time
 
 	# 設置者に報酬
-	if SquadManager and planter:
-		var data = SquadManager.get_player_data_by_node(planter)
+	var sm = _get_squad_manager()
+	if sm and planter:
+		var data = sm.get_player_data_by_node(planter)
 		if data:
 			data.add_money(economy_rules.bomb_plant_reward)
 
@@ -236,8 +248,9 @@ func _on_bomb_planted(_site: String, planter: Node3D) -> void:
 ## 爆弾解除イベント処理
 func _on_bomb_defused(defuser: Node3D) -> void:
 	# 解除者に報酬
-	if SquadManager and defuser:
-		var data = SquadManager.get_player_data_by_node(defuser)
+	var sm = _get_squad_manager()
+	if sm and defuser:
+		var data = sm.get_player_data_by_node(defuser)
 		if data:
 			data.add_money(economy_rules.bomb_defuse_reward)
 

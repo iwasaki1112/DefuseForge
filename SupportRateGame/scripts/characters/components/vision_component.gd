@@ -34,17 +34,36 @@ func _ready() -> void:
 		push_error("[VisionComponent] Parent must be CharacterBody3D")
 		return
 
-	# FogOfWarManagerに登録
-	if FogOfWarManager:
-		FogOfWarManager.register_vision_component(self)
+	# FogOfWarManagerへの登録を遅延実行（game_sceneの初期化完了を待つ）
+	_deferred_register.call_deferred()
+
+
+## 遅延登録（FogOfWarManagerの初期化完了後に実行）
+func _deferred_register() -> void:
+	# 数フレーム待ってFogOfWarManagerが登録されるのを待つ
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var fow = _get_fog_of_war_manager()
+	if fow:
+		fow.register_vision_component(self)
+		print("[VisionComponent] Registered to FogOfWarManager: %s" % character.name)
+	else:
+		push_warning("[VisionComponent] FogOfWarManager not found for: %s" % character.name)
 
 	# 初回計算
 	_calculate_visibility()
 
 
 func _exit_tree() -> void:
-	if FogOfWarManager:
-		FogOfWarManager.unregister_vision_component(self)
+	var fow = _get_fog_of_war_manager()
+	if fow:
+		fow.unregister_vision_component(self)
+
+
+## FogOfWarManagerへの参照を取得
+func _get_fog_of_war_manager() -> Node:
+	return GameManager.fog_of_war_manager if GameManager else null
 
 
 func _process(delta: float) -> void:

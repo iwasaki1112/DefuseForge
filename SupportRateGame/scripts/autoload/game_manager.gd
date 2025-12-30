@@ -18,8 +18,10 @@ var enemies: Array[Node3D] = []
 # フラグ
 var is_game_running: bool = false
 
-# シーン内のMatchManager参照（game.tscn内に配置）
+# シーン内ノード参照（game.tscn内に配置）
 var match_manager: Node = null
+var squad_manager: Node = null
+var fog_of_war_manager: Node = null
 
 
 # === 後方互換性プロパティ ===
@@ -57,8 +59,8 @@ var is_bomb_planted: bool:
 
 var player: Node3D:
 	get:
-		if SquadManager:
-			return SquadManager.get_selected_player_node()
+		if squad_manager:
+			return squad_manager.get_selected_player_node()
 		return null
 
 var player_money: int:
@@ -83,8 +85,8 @@ func _ready() -> void:
 
 ## 選択中のプレイヤーデータを取得（ヘルパー）
 func _get_selected_player_data() -> RefCounted:
-	if SquadManager:
-		return SquadManager.get_selected_player()
+	if squad_manager:
+		return squad_manager.get_selected_player()
 	return null
 
 
@@ -96,6 +98,26 @@ func register_match_manager(manager: Node) -> void:
 ## MatchManagerを解除
 func unregister_match_manager() -> void:
 	match_manager = null
+
+
+## SquadManagerを登録
+func register_squad_manager(manager: Node) -> void:
+	squad_manager = manager
+
+
+## SquadManagerを解除
+func unregister_squad_manager() -> void:
+	squad_manager = null
+
+
+## FogOfWarManagerを登録
+func register_fog_of_war_manager(manager: Node) -> void:
+	fog_of_war_manager = manager
+
+
+## FogOfWarManagerを解除
+func unregister_fog_of_war_manager() -> void:
+	fog_of_war_manager = null
 
 
 ## ゲームを開始（MatchManagerに委譲）
@@ -157,7 +179,7 @@ func buy_weapon(price: int) -> bool:
 
 ## キル報酬（後方互換性、GameEvents経由が推奨）
 func on_enemy_killed(weapon_id: int = 0) -> void:
-	var selected = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected = squad_manager.get_selected_player_node() if squad_manager else null
 	if selected and has_node("/root/GameEvents"):
 		# enemyは不明なのでnullを渡す
 		get_node("/root/GameEvents").unit_killed.emit(selected, null, weapon_id)
@@ -171,21 +193,21 @@ func on_enemy_killed_by(killer: Node3D, weapon_id: int = 0) -> void:
 
 ## 爆弾設置（GameEvents経由が推奨）
 func on_bomb_planted() -> void:
-	var selected = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected = squad_manager.get_selected_player_node() if squad_manager else null
 	if has_node("/root/GameEvents"):
 		get_node("/root/GameEvents").bomb_planted.emit("A", selected)
 
 
 ## プレイヤーダメージ（特定プレイヤー）
 func damage_player_node(player_node: Node3D, amount: float) -> void:
-	if not SquadManager:
+	if not squad_manager:
 		return
 
-	var data = SquadManager.get_player_data_by_node(player_node)
+	var data = squad_manager.get_player_data_by_node(player_node)
 	if data:
 		data.take_damage(amount)
 		if not data.is_alive:
-			SquadManager.on_player_died(player_node)
+			squad_manager.on_player_died(player_node)
 
 			# GameEvents経由でイベント発火
 			if has_node("/root/GameEvents"):
@@ -194,6 +216,6 @@ func damage_player_node(player_node: Node3D, amount: float) -> void:
 
 ## プレイヤーダメージ（選択中プレイヤー、後方互換性）
 func damage_player(amount: float) -> void:
-	var selected = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected = squad_manager.get_selected_player_node() if squad_manager else null
 	if selected:
 		damage_player_node(selected, amount)

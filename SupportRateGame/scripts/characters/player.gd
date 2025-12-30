@@ -31,9 +31,9 @@ func _on_player_died() -> void:
 	if player_data:
 		player_data.is_alive = false
 		player_data.health = 0.0
-	# SquadManagerに死亡を通知（GameManagerは経由しない）
-	if SquadManager:
-		SquadManager.on_player_died(self)
+	# SquadManagerに死亡を通知（GameManager経由）
+	if GameManager and GameManager.squad_manager:
+		GameManager.squad_manager.on_player_died(self)
 
 
 ## チームを設定

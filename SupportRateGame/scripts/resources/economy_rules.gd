@@ -78,7 +78,7 @@ extends Resource
 @export var round_time: float = 105.0
 
 ## 購入フェーズ時間（秒）
-@export var buy_time: float = 15.0
+@export var buy_time: float = 3.0
 
 ## 爆弾タイマー（秒）
 @export var bomb_time: float = 40.0

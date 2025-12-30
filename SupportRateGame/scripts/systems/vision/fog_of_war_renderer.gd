@@ -19,14 +19,21 @@ func _ready() -> void:
 	_setup_visibility_layer()
 
 	# FogOfWarManagerに登録
-	if FogOfWarManager:
-		FogOfWarManager.set_fog_renderer(self)
-		FogOfWarManager.fog_updated.connect(_on_fog_updated)
+	var fow = _get_fog_of_war_manager()
+	if fow:
+		fow.set_fog_renderer(self)
+		fow.fog_updated.connect(_on_fog_updated)
 
 
 func _exit_tree() -> void:
-	if FogOfWarManager and FogOfWarManager.fog_updated.is_connected(_on_fog_updated):
-		FogOfWarManager.fog_updated.disconnect(_on_fog_updated)
+	var fow = _get_fog_of_war_manager()
+	if fow and fow.fog_updated.is_connected(_on_fog_updated):
+		fow.fog_updated.disconnect(_on_fog_updated)
+
+
+## FogOfWarManagerへの参照を取得
+func _get_fog_of_war_manager() -> Node:
+	return GameManager.fog_of_war_manager if GameManager else null
 
 
 ## 視野レイヤーをセットアップ（動的視野ポリゴン用）
@@ -45,10 +52,11 @@ func _setup_visibility_layer() -> void:
 
 ## 視野メッシュを更新
 func _update_visibility_mesh() -> void:
-	if not FogOfWarManager:
+	var fow = _get_fog_of_war_manager()
+	if not fow:
 		return
 
-	var visible_points := FogOfWarManager.get_current_visible_points()
+	var visible_points: Array = fow.get_current_visible_points()
 	if visible_points.size() < 3:
 		visibility_mesh_instance.mesh = null
 		return
@@ -58,7 +66,7 @@ func _update_visibility_mesh() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	var triangle_count := 0
-	for component in FogOfWarManager.vision_components:
+	for component in fow.vision_components:
 		if not component or component.visible_points.size() < 3:
 			continue
 

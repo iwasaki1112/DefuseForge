@@ -1,7 +1,9 @@
+class_name SquadManagerNode
 extends Node
 
-## 分隊（5体のプレイヤー）を管理するシングルトン
+## 分隊（5体のプレイヤー）を管理するシーンノード
 ## 各プレイヤーの経済、装備、ステータスを個別管理
+## ゲームシーン内に配置して使用（Autoloadではない）
 
 const PlayerDataClass = preload("res://scripts/data/player_data.gd")
 

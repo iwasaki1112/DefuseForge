@@ -157,24 +157,25 @@ SupportRateGame/
 ├── scripts/
 │   ├── autoload/                 # シングルトン（薄く保つ）
 │   │   ├── game_events.gd        # イベントバス - システム間連携
-│   │   ├── game_manager.gd       # シーン遷移・設定のみ
-│   │   ├── input_manager.gd      # 入力管理
-│   │   ├── squad_manager.gd      # 5人分隊管理
-│   │   └── fog_of_war_manager.gd # 視界管理
+│   │   ├── game_manager.gd       # シーン遷移・設定・参照保持のみ
+│   │   └── input_manager.gd      # 入力管理
 │   ├── characters/
 │   │   ├── character_base.gd     # キャラクター基底クラス
 │   │   ├── player.gd             # プレイヤー
-│   │   └── enemy.gd              # 敵AI
+│   │   ├── enemy.gd              # 敵AI
+│   │   └── components/
+│   │       └── vision_component.gd  # 視野コンポーネント
 │   ├── systems/                  # シーン内ノード
 │   │   ├── match_manager.gd      # ラウンド/経済/勝敗
+│   │   ├── squad_manager.gd      # 5人分隊管理（シーンノード）
 │   │   ├── camera_controller.gd  # カメラ制御
 │   │   ├── path/
 │   │   │   ├── path_manager.gd   # パス管理
 │   │   │   ├── path_renderer.gd  # 3D描画
 │   │   │   └── path_analyzer.gd  # 2D論理座標解析
 │   │   └── vision/
-│   │       ├── fog_of_war_renderer.gd
-│   │       └── vision_component.gd
+│   │       ├── fog_of_war_manager.gd   # 視界管理（シーンノード）
+│   │       └── fog_of_war_renderer.gd  # 視界描画
 │   ├── resources/
 │   │   └── economy_rules.gd      # 経済ルール（Resource）
 │   ├── data/
@@ -185,6 +186,7 @@ SupportRateGame/
 │   ├── game_ui.gd                # UI管理
 │   └── title_screen.gd           # タイトル
 ├── resources/
+│   ├── economy_rules.tres        # 経済ルール設定ファイル
 │   └── maps/
 │       └── dust3/                # PBRマップ
 ├── shaders/
@@ -196,10 +198,17 @@ SupportRateGame/
 
 ### アーキテクチャ設計原則
 
-1. **Autoloadは薄く**: シーン遷移・設定・イベントバスに限定
-2. **イベント駆動**: システム間はGameEventsを介して疎結合に連携
-3. **シーン内ノード**: ゲームロジック（MatchManager等）はシーン内に配置
+1. **Autoloadは薄く**: シーン遷移・設定・イベントバス・参照保持のみ
+   - GameManager: シーン遷移、設定、シーンノードへの参照保持
+   - GameEvents: イベントバス（ゲームイベントのみ、高頻度更新は除く）
+   - InputManager: 入力管理
+2. **シーン内ノード**: ゲームロジックはシーン内に配置（シーン切替時に自動クリーンアップ）
+   - MatchManager: ラウンド/経済/勝敗管理
+   - SquadManager: 5人分隊管理
+   - FogOfWarManager: 視界管理
+3. **イベント駆動**: システム間はGameEventsを介して疎結合に連携
 4. **2D論理座標**: パスはVector2で管理し、表示時に3Dに投影
+5. **Resourceで設定分離**: economy_rules.tresなどで設定をデータ化
 
 ---
 

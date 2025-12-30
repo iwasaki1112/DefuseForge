@@ -8,7 +8,9 @@ extends Node3D
 const PathManager = preload("res://scripts/systems/path/path_manager.gd")
 const CameraController = preload("res://scripts/systems/camera_controller.gd")
 const FogOfWarRendererScript = preload("res://scripts/systems/vision/fog_of_war_renderer.gd")
+const FogOfWarManagerScript = preload("res://scripts/systems/vision/fog_of_war_manager.gd")
 const MatchManagerScript = preload("res://scripts/systems/match_manager.gd")
+const SquadManagerScript = preload("res://scripts/systems/squad_manager.gd")
 
 @onready var players_node: Node3D = $Players
 @onready var enemies_node: Node3D = $Enemies
@@ -23,10 +25,17 @@ const SELECTION_RADIUS: float = 1.5  # プレイヤー選択の判定半径
 var path_manager: Node3D = null
 var camera_controller: Node3D = null
 var fog_renderer: Node3D = null
+var fog_of_war_manager: Node = null
 var match_manager: Node = null
+var squad_manager: Node = null
 
 
 func _ready() -> void:
+	# システムノードを初期化（順序重要）
+	_setup_squad_manager()
+	_setup_fog_of_war_manager()
+	_setup_match_manager()
+
 	# プレイヤーを収集してSquadManagerに登録
 	var players: Array[CharacterBody3D] = []
 	for child in players_node.get_children():
@@ -34,9 +43,9 @@ func _ready() -> void:
 			players.append(child)
 
 	# SquadManagerで分隊を初期化
-	if SquadManager:
-		SquadManager.initialize_squad(players)
-		SquadManager.player_selected.connect(_on_squad_player_selected)
+	if squad_manager:
+		squad_manager.initialize_squad(players)
+		squad_manager.player_selected.connect(_on_squad_player_selected)
 
 	# 敵を収集
 	for child in enemies_node.get_children():
@@ -52,11 +61,10 @@ func _ready() -> void:
 	# 選択インジケーターを作成
 	_create_selection_indicator()
 
-	# システムを初期化
-	_setup_match_manager()
+	# 追加システムを初期化
 	_setup_path_system()
 	_setup_camera_system()
-	_setup_fog_of_war()
+	_setup_fog_of_war_renderer()
 
 	# ゲームを開始（すべてのノードがreadyになった後に実行）
 	GameManager.start_game.call_deferred()
@@ -80,6 +88,8 @@ func _on_squad_player_selected(player_data: RefCounted, _index: int) -> void:
 func _exit_tree() -> void:
 	# シーン終了時にクリーンアップ
 	GameManager.unregister_match_manager()
+	GameManager.unregister_squad_manager()
+	GameManager.unregister_fog_of_war_manager()
 	GameManager.stop_game()
 	GameManager.enemies.clear()
 
@@ -116,7 +126,7 @@ func _create_selection_indicator() -> void:
 
 ## 選択インジケーターを更新
 func _update_selection_indicator() -> void:
-	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null
 	if selection_indicator and selected_player:
 		selection_indicator.visible = true
 		var pos = selected_player.global_position
@@ -127,14 +137,14 @@ func _update_selection_indicator() -> void:
 
 ## 位置からプレイヤーを検索してSquadManagerで選択
 func _find_and_select_player_at_position(world_pos: Vector3) -> bool:
-	if not SquadManager:
+	if not squad_manager:
 		return false
 
 	var closest_index: int = -1
 	var closest_distance: float = SELECTION_RADIUS
 
-	for i in range(SquadManager.squad.size()):
-		var data = SquadManager.squad[i]
+	for i in range(squad_manager.squad.size()):
+		var data = squad_manager.squad[i]
 		if not data.is_alive or not data.player_node:
 			continue
 		var dist := world_pos.distance_to(data.player_node.global_position)
@@ -142,11 +152,37 @@ func _find_and_select_player_at_position(world_pos: Vector3) -> bool:
 			closest_distance = dist
 			closest_index = i
 
-	if closest_index >= 0 and closest_index != SquadManager.selected_index:
-		SquadManager.select_player(closest_index)
+	if closest_index >= 0 and closest_index != squad_manager.selected_index:
+		squad_manager.select_player(closest_index)
 		return true
 
 	return false
+
+
+## SquadManagerをセットアップ
+func _setup_squad_manager() -> void:
+	squad_manager = Node.new()
+	squad_manager.name = "SquadManager"
+	squad_manager.set_script(SquadManagerScript)
+	add_child(squad_manager)
+
+	# GameManagerに登録
+	GameManager.register_squad_manager(squad_manager)
+
+	print("[GameScene] SquadManager initialized")
+
+
+## FogOfWarManagerをセットアップ
+func _setup_fog_of_war_manager() -> void:
+	fog_of_war_manager = Node.new()
+	fog_of_war_manager.name = "FogOfWarManager"
+	fog_of_war_manager.set_script(FogOfWarManagerScript)
+	add_child(fog_of_war_manager)
+
+	# GameManagerに登録
+	GameManager.register_fog_of_war_manager(fog_of_war_manager)
+
+	print("[GameScene] FogOfWarManager initialized")
 
 
 ## MatchManagerをセットアップ
@@ -170,7 +206,7 @@ func _setup_path_system() -> void:
 	add_child(path_manager)
 
 	# プレイヤー参照を設定
-	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null
 	if selected_player:
 		path_manager.set_player(selected_player)
 
@@ -187,7 +223,7 @@ func _setup_path_system() -> void:
 
 ## カメラシステムをセットアップ
 func _setup_camera_system() -> void:
-	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null
 	if not selected_player:
 		return
 
@@ -213,8 +249,8 @@ func _setup_camera_system() -> void:
 		camera_controller.snap_to_position(selected_player.global_position)
 
 
-## Fog of Warシステムをセットアップ
-func _setup_fog_of_war() -> void:
+## Fog of Warレンダラーをセットアップ
+func _setup_fog_of_war_renderer() -> void:
 	fog_renderer = Node3D.new()
 	fog_renderer.name = "FogOfWarRenderer"
 	fog_renderer.set_script(FogOfWarRendererScript)
@@ -227,18 +263,18 @@ func _setup_fog_of_war() -> void:
 	# 敵の初期可視性を設定（非表示から開始）
 	_initialize_enemy_fog_of_war.call_deferred()
 
-	print("[GameScene] Fog of War system initialized")
+	print("[GameScene] Fog of War renderer initialized")
 
 
 ## 敵の視界初期化
 func _initialize_enemy_fog_of_war() -> void:
 	await get_tree().process_frame
 
-	if FogOfWarManager:
+	if fog_of_war_manager:
 		for e in GameManager.enemies:
 			if e and is_instance_valid(e):
-				FogOfWarManager.set_character_visible(e, false)
-				FogOfWarManager.enemy_visibility[e] = false
+				fog_of_war_manager.set_character_visible(e, false)
+				fog_of_war_manager.enemy_visibility[e] = false
 
 
 ## 描画開始時のプレイヤー選択処理
@@ -252,7 +288,7 @@ func _on_draw_started_for_selection(_screen_pos: Vector2, world_pos: Vector3) ->
 
 ## パス確定時のコールバック
 func _on_path_confirmed(waypoints: Array) -> void:
-	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
+	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null
 	if selected_player and selected_player.has_method("set_path"):
 		selected_player.set_path(waypoints)
 

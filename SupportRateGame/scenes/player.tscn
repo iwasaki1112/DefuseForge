@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/characters/player.gd" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://cpmgyp4xd80ck" path="res://assets/characters/gsg9/gsg9.fbx" id="2_character"]
-[ext_resource type="Script" path="res://scripts/systems/vision/vision_component.gd" id="3_vision"]
+[ext_resource type="Script" path="res://scripts/characters/components/vision_component.gd" id="3_vision"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.3
