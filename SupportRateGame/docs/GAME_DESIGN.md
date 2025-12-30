@@ -150,52 +150,56 @@ SupportRateGame/
 ├── docs/
 │   └── GAME_DESIGN.md            # この文書
 ├── scenes/
-│   ├── main/
-│   │   ├── game.tscn             # メインゲームシーン
-│   │   └── title.tscn            # タイトル画面
-│   ├── characters/
-│   │   ├── player.tscn           # プレイヤー
-│   │   └── enemy.tscn            # 敵
-│   ├── items/
-│   │   ├── weapon_pickup.tscn    # 武器ピックアップ
-│   │   └── bomb.tscn             # 爆弾
-│   └── ui/
-│       ├── game_hud.tscn         # ゲームHUD
-│       ├── buy_menu.tscn         # 武器購入メニュー
-│       └── path_drawer.tscn      # パス描画UI
+│   ├── game.tscn                 # メインゲームシーン
+│   ├── title.tscn                # タイトル画面
+│   ├── player.tscn               # プレイヤー
+│   └── enemy.tscn                # 敵
 ├── scripts/
-│   ├── autoload/
-│   │   └── game_manager.gd       # ゲーム管理（シングルトン）
-│   ├── player/
-│   │   ├── player.gd             # プレイヤー制御
-│   │   ├── path_follower.gd      # パス追従
-│   │   └── combat_controller.gd  # 戦闘制御
-│   ├── enemy/
-│   │   ├── enemy.gd              # 敵AI
-│   │   ├── enemy_state_machine.gd
-│   │   └── enemy_spawner.gd
-│   ├── systems/
-│   │   ├── path_drawer.gd        # パス描画
-│   │   ├── vision_system.gd      # Fog of War
-│   │   ├── weapon_system.gd      # 武器管理
-│   │   └── economy_system.gd     # 経済システム
-│   └── ui/
-│       ├── game_hud.gd
-│       └── buy_menu.gd
+│   ├── autoload/                 # シングルトン（薄く保つ）
+│   │   ├── game_events.gd        # イベントバス - システム間連携
+│   │   ├── game_manager.gd       # シーン遷移・設定のみ
+│   │   ├── input_manager.gd      # 入力管理
+│   │   ├── squad_manager.gd      # 5人分隊管理
+│   │   └── fog_of_war_manager.gd # 視界管理
+│   ├── characters/
+│   │   ├── character_base.gd     # キャラクター基底クラス
+│   │   ├── player.gd             # プレイヤー
+│   │   └── enemy.gd              # 敵AI
+│   ├── systems/                  # シーン内ノード
+│   │   ├── match_manager.gd      # ラウンド/経済/勝敗
+│   │   ├── camera_controller.gd  # カメラ制御
+│   │   ├── path/
+│   │   │   ├── path_manager.gd   # パス管理
+│   │   │   ├── path_renderer.gd  # 3D描画
+│   │   │   └── path_analyzer.gd  # 2D論理座標解析
+│   │   └── vision/
+│   │       ├── fog_of_war_renderer.gd
+│   │       └── vision_component.gd
+│   ├── resources/
+│   │   └── economy_rules.gd      # 経済ルール（Resource）
+│   ├── data/
+│   │   └── player_data.gd        # プレイヤーデータ
+│   ├── utils/
+│   │   └── character_setup.gd    # 武器データ等
+│   ├── game_scene.gd             # ゲームシーン管理
+│   ├── game_ui.gd                # UI管理
+│   └── title_screen.gd           # タイトル
 ├── resources/
-│   └── weapons/
-│       ├── glock.tres
-│       ├── usp.tres
-│       ├── ak47.tres
-│       ├── m4a1.tres
-│       └── awp.tres
+│   └── maps/
+│       └── dust3/                # PBRマップ
 ├── shaders/
 │   └── fog_of_war.gdshader       # 視界シェーダー
 └── assets/
     ├── characters/               # キャラクターモデル
-    ├── weapons/                  # 武器モデル（新規）
     └── maps/                     # マップ
 ```
+
+### アーキテクチャ設計原則
+
+1. **Autoloadは薄く**: シーン遷移・設定・イベントバスに限定
+2. **イベント駆動**: システム間はGameEventsを介して疎結合に連携
+3. **シーン内ノード**: ゲームロジック（MatchManager等）はシーン内に配置
+4. **2D論理座標**: パスはVector2で管理し、表示時に3Dに投影
 
 ---
 
