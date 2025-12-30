@@ -2,6 +2,7 @@ extends Node3D
 
 ## ゲームシーンのメイン管理
 ## 各システムの初期化と接続を担当
+## プレイヤー管理はSquadManagerに委譲
 
 const PathManager = preload("res://scripts/systems/path/path_manager.gd")
 const CameraController = preload("res://scripts/systems/camera_controller.gd")
@@ -11,9 +12,7 @@ const FogOfWarRendererScript = preload("res://scripts/systems/vision/fog_of_war_
 @onready var enemies_node: Node3D = $Enemies
 @onready var game_ui: CanvasLayer = $GameUI
 
-var players: Array[CharacterBody3D] = []
 var enemies: Array[CharacterBody3D] = []
-var selected_player: CharacterBody3D = null
 
 # 選択インジケーター
 var selection_indicator: MeshInstance3D = null
@@ -25,19 +24,21 @@ var fog_renderer: Node3D = null
 
 
 func _ready() -> void:
-	# プレイヤーを収集
+	# プレイヤーを収集してSquadManagerに登録
+	var players: Array[CharacterBody3D] = []
 	for child in players_node.get_children():
 		if child is CharacterBody3D:
 			players.append(child)
+
+	# SquadManagerで分隊を初期化
+	if SquadManager:
+		SquadManager.initialize_squad(players)
+		SquadManager.player_selected.connect(_on_squad_player_selected)
 
 	# 敵を収集
 	for child in enemies_node.get_children():
 		if child is CharacterBody3D:
 			enemies.append(child)
-
-	# 最初のプレイヤーを選択
-	if players.size() > 0:
-		_select_player(players[0])
 
 	# 敵を敵リストに追加
 	for enemy in enemies:
@@ -55,6 +56,23 @@ func _ready() -> void:
 
 	# ゲームを開始（すべてのノードがreadyになった後に実行）
 	GameManager.start_game.call_deferred()
+
+
+## SquadManagerからプレイヤー選択変更通知
+func _on_squad_player_selected(player_data: RefCounted, _index: int) -> void:
+	var selected_player = player_data.player_node
+	if not selected_player:
+		return
+
+	# PathManagerのプレイヤー参照を更新
+	if path_manager:
+		path_manager.set_player(selected_player)
+
+	# カメラの追従対象を更新
+	if camera_controller:
+		camera_controller.follow_target = selected_player
+
+	print("[GameScene] Player selected via SquadManager: %s" % selected_player.name)
 
 
 func _exit_tree() -> void:
@@ -95,6 +113,7 @@ func _create_selection_indicator() -> void:
 
 ## 選択インジケーターを更新
 func _update_selection_indicator() -> void:
+	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
 	if selection_indicator and selected_player:
 		selection_indicator.visible = true
 		var pos = selected_player.global_position
@@ -103,35 +122,28 @@ func _update_selection_indicator() -> void:
 		selection_indicator.visible = false
 
 
-## プレイヤーを選択
-func _select_player(player: CharacterBody3D) -> void:
-	if not player in players:
-		return
+## 位置からプレイヤーを検索してSquadManagerで選択
+func _find_and_select_player_at_position(world_pos: Vector3) -> bool:
+	if not SquadManager:
+		return false
 
-	selected_player = player
-	GameManager.player = selected_player
-
-	# PathManagerのプレイヤー参照を更新
-	if path_manager:
-		path_manager.set_player(selected_player)
-
-	print("[GameScene] Selected player: %s" % selected_player.name)
-
-
-## 位置からプレイヤーを検索
-func _find_player_at_position(world_pos: Vector3) -> CharacterBody3D:
-	var closest_player: CharacterBody3D = null
+	var closest_index: int = -1
 	var closest_distance: float = SELECTION_RADIUS
 
-	for player in players:
-		if not player.is_alive:
+	for i in range(SquadManager.squad.size()):
+		var data = SquadManager.squad[i]
+		if not data.is_alive or not data.player_node:
 			continue
-		var dist := world_pos.distance_to(player.global_position)
+		var dist := world_pos.distance_to(data.player_node.global_position)
 		if dist < closest_distance:
 			closest_distance = dist
-			closest_player = player
+			closest_index = i
 
-	return closest_player
+	if closest_index >= 0 and closest_index != SquadManager.selected_index:
+		SquadManager.select_player(closest_index)
+		return true
+
+	return false
 
 
 ## パスシステムをセットアップ
@@ -142,6 +154,7 @@ func _setup_path_system() -> void:
 	add_child(path_manager)
 
 	# プレイヤー参照を設定
+	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
 	if selected_player:
 		path_manager.set_player(selected_player)
 
@@ -158,6 +171,7 @@ func _setup_path_system() -> void:
 
 ## カメラシステムをセットアップ
 func _setup_camera_system() -> void:
+	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
 	if not selected_player:
 		return
 
@@ -217,15 +231,13 @@ func _on_draw_started_for_selection(_screen_pos: Vector2, world_pos: Vector3) ->
 	if world_pos == Vector3.INF:
 		return
 
-	# タップ位置にプレイヤーがいるかチェック
-	var tapped_player := _find_player_at_position(world_pos)
-	if tapped_player and tapped_player != selected_player:
-		# 新しいプレイヤーを選択
-		_select_player(tapped_player)
+	# タップ位置にプレイヤーがいるかチェックして選択
+	_find_and_select_player_at_position(world_pos)
 
 
 ## パス確定時のコールバック
 func _on_path_confirmed(waypoints: Array) -> void:
+	var selected_player = SquadManager.get_selected_player_node() if SquadManager else null
 	if selected_player and selected_player.has_method("set_path"):
 		selected_player.set_path(waypoints)
 

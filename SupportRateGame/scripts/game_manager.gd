@@ -2,6 +2,7 @@ extends Node
 
 ## ゲーム全体を管理するシングルトン
 ## ラウンド、経済、ゲーム状態を管理（CS1.6スタイル）
+## プレイヤー管理はSquadManagerに委譲
 
 # シグナル
 signal round_started(round_number: int)
@@ -41,15 +42,33 @@ var ct_wins: int = 0
 var t_wins: int = 0
 var remaining_time: float = 0.0
 
-# プレイヤー情報
+# チーム設定
 var player_team: Team = Team.CT
-var player_money: int = STARTING_MONEY
-var player_health: float = 100.0
-var player_armor: float = 0.0
 var loss_streak: int = 0
 
+# 後方互換性のためのプロパティ（SquadManager経由で取得）
+var player: Node3D:
+	get:
+		if SquadManager:
+			return SquadManager.get_selected_player_node()
+		return null
+
+var player_money: int:
+	get:
+		var data = _get_selected_player_data()
+		return data.money if data else STARTING_MONEY
+
+var player_health: float:
+	get:
+		var data = _get_selected_player_data()
+		return data.health if data else 100.0
+
+var player_armor: float:
+	get:
+		var data = _get_selected_player_data()
+		return data.armor if data else 0.0
+
 # ゲームオブジェクト参照
-var player: Node3D = null
 var enemies: Array[Node3D] = []
 
 # フラグ
@@ -57,8 +76,17 @@ var is_game_running: bool = false
 var is_bomb_planted: bool = false
 
 
+## 選択中のプレイヤーデータを取得（ヘルパー）
+func _get_selected_player_data() -> RefCounted:
+	if SquadManager:
+		return SquadManager.get_selected_player()
+	return null
+
+
 func _ready() -> void:
-	pass
+	# SquadManagerの全員死亡シグナルを接続
+	if SquadManager:
+		SquadManager.all_players_died.connect(_on_all_players_died)
 
 
 func _process(delta: float) -> void:
@@ -82,13 +110,11 @@ func start_game(mode: GameMode = GameMode.DEFUSE) -> void:
 ## 新しいラウンドを開始
 func start_new_round() -> void:
 	current_round += 1
-	player_health = 100.0
-	player_armor = 0.0
 	is_bomb_planted = false
 
-	# プレイヤーの状態をリセット
-	if player and player.has_method("reset_stats"):
-		player.reset_stats()
+	# SquadManagerで全員リセット
+	if SquadManager:
+		SquadManager.reset_for_round()
 
 	# 購入フェーズへ
 	_set_state(GameState.BUY_PHASE)
@@ -129,13 +155,13 @@ func _end_round(winner: Team) -> void:
 	else:
 		t_wins += 1
 
-	# 報酬計算
+	# 報酬計算（全員に配布）
 	if winner == player_team:
-		_add_money(WIN_REWARD)
+		_add_money_to_squad(WIN_REWARD)
 		loss_streak = 0
 	else:
 		var loss_reward: int = min(LOSS_REWARD_BASE + (loss_streak * LOSS_REWARD_INCREMENT), MAX_LOSS_BONUS)
-		_add_money(loss_reward)
+		_add_money_to_squad(loss_reward)
 		loss_streak += 1
 
 	round_ended.emit(winner)
@@ -161,64 +187,73 @@ func _set_state(new_state: GameState) -> void:
 	game_state_changed.emit(new_state)
 
 
-## お金を追加
-func _add_money(amount: int) -> void:
-	player_money = min(player_money + amount, 16000)  # 上限$16000
-	money_changed.emit(player_money)
+## 分隊全員にお金を追加
+func _add_money_to_squad(amount: int) -> void:
+	if SquadManager:
+		SquadManager.add_money_to_all(amount)
+		money_changed.emit(SquadManager.get_total_money())
 
 
-## 武器購入
+## 武器購入（選択中のプレイヤー）
 func buy_weapon(price: int) -> bool:
 	if current_state != GameState.BUY_PHASE:
 		return false
 
-	if player_money >= price:
-		player_money -= price
-		money_changed.emit(player_money)
+	var data = _get_selected_player_data()
+	if data and data.money >= price:
+		data.money -= price
+		money_changed.emit(data.money)
 		return true
 
 	return false
 
 
-## キル報酬（武器IDベース）
+## キル報酬（武器IDベース、キラーのプレイヤーに付与）
+func on_enemy_killed_by(killer: Node3D, weapon_id: int = CharacterSetup.WeaponId.NONE) -> void:
+	if SquadManager:
+		SquadManager.award_kill(killer, weapon_id)
+
+
+## 後方互換性のためのキル報酬（選択中プレイヤーに付与）
 func on_enemy_killed(weapon_id: int = CharacterSetup.WeaponId.NONE) -> void:
-	var weapon_data = CharacterSetup.get_weapon_data(weapon_id)
-	var reward: int = weapon_data.kill_reward
-	_add_money(reward)
+	var selected = SquadManager.get_selected_player_node() if SquadManager else null
+	if selected:
+		on_enemy_killed_by(selected, weapon_id)
 
 
 ## 爆弾設置
 func on_bomb_planted() -> void:
 	is_bomb_planted = true
 	remaining_time = BOMB_TIME
-	_add_money(BOMB_PLANT_REWARD)
+	# 爆弾設置者に報酬（選択中プレイヤーに付与）
+	var data = _get_selected_player_data()
+	if data:
+		data.add_money(BOMB_PLANT_REWARD)
 
 
-## プレイヤーダメージ
+## プレイヤーダメージ（特定プレイヤー）
+func damage_player_node(player_node: Node3D, amount: float) -> void:
+	if not SquadManager:
+		return
+
+	var data = SquadManager.get_player_data_by_node(player_node)
+	if data:
+		data.take_damage(amount)
+		if not data.is_alive:
+			player_died.emit(player_node)
+			SquadManager.on_player_died(player_node)
+
+
+## 後方互換性のためのダメージ（選択中プレイヤー）
 func damage_player(amount: float) -> void:
-	# アーマー計算（アーマーは50%のダメージを吸収）
-	if player_armor > 0:
-		var armor_damage := amount * 0.5
-		if armor_damage <= player_armor:
-			player_armor -= armor_damage
-			amount -= armor_damage
-		else:
-			amount -= player_armor
-			player_armor = 0
-
-	player_health -= amount
-
-	if player_health <= 0:
-		player_health = 0
-		_on_player_died()
+	var selected = SquadManager.get_selected_player_node() if SquadManager else null
+	if selected:
+		damage_player_node(selected, amount)
 
 
-## プレイヤー死亡
-func _on_player_died() -> void:
-	if player:
-		player_died.emit(player)
-
-	# プレイヤーが死亡したらラウンド終了（シングルプレイヤーの場合）
+## 全員死亡時の処理
+func _on_all_players_died() -> void:
+	# 全員死亡でラウンド終了
 	_end_round(Team.TERRORIST if player_team == Team.CT else Team.CT)
 
 
