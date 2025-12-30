@@ -12,6 +12,9 @@ const PathAnalyzerClass = preload("res://scripts/systems/path/path_analyzer.gd")
 @export var path_height_offset: float = 0.001
 @export var smoothing_segments: int = 5
 
+# キャラクターカラー（設定時に使用）
+var character_base_color: Color = Color.GREEN
+
 # 描画用メッシュ
 var path_mesh_instance_walk: MeshInstance3D = null
 var path_mesh_instance_run: MeshInstance3D = null
@@ -40,6 +43,30 @@ func _ready() -> void:
 	path_mesh_instance_run.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	path_mesh_instance_run.material_override = _create_path_material(path_color_run, Color(1.0, 0.5, 0.0, 1.0))
 	add_child(path_mesh_instance_run)
+
+
+## キャラクターカラーを設定
+## 歩き=通常色（半透明）、走り=濃い色（半透明）
+func set_character_color(base_color: Color) -> void:
+	character_base_color = base_color
+
+	# 歩き用の色（通常色、半透明）
+	path_color_walk = Color(base_color.r, base_color.g, base_color.b, 0.5)
+
+	# 走り用の色（濃い色、半透明）
+	var dark_color := base_color.darkened(0.3)
+	path_color_run = Color(dark_color.r, dark_color.g, dark_color.b, 0.7)
+
+	# マテリアルを更新
+	if path_mesh_instance_walk and path_mesh_instance_walk.material_override:
+		var walk_material := path_mesh_instance_walk.material_override as StandardMaterial3D
+		walk_material.albedo_color = path_color_walk
+		walk_material.emission = Color(base_color.r, base_color.g, base_color.b, 1.0)
+
+	if path_mesh_instance_run and path_mesh_instance_run.material_override:
+		var run_material := path_mesh_instance_run.material_override as StandardMaterial3D
+		run_material.albedo_color = path_color_run
+		run_material.emission = Color(dark_color.r, dark_color.g, dark_color.b, 1.0)
 
 
 ## パス用マテリアルを作成

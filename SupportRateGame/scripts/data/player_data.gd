@@ -9,6 +9,18 @@ var player_id: int = 0
 var player_name: String = ""
 var player_node: Node3D = null  # シーン上のプレイヤーノード参照
 
+# キャラクターカラー（選択リング・パス描画に使用）
+var character_color: Color = Color.WHITE
+
+# 5人分のキャラクターカラー定義
+const CHARACTER_COLORS: Array[Color] = [
+	Color(0.2, 0.6, 1.0),   # 0: 青
+	Color(0.3, 0.9, 0.3),   # 1: 緑
+	Color(1.0, 0.9, 0.2),   # 2: 黄
+	Color(1.0, 0.5, 0.1),   # 3: オレンジ
+	Color(0.7, 0.3, 0.9),   # 4: 紫
+]
+
 # 経済
 var money: int = 800
 
@@ -36,6 +48,24 @@ var total_damage: float = 0.0
 func _init(id: int = 0, pname: String = "") -> void:
 	player_id = id
 	player_name = pname
+	# IDに基づいてキャラクターカラーを設定
+	if id >= 0 and id < CHARACTER_COLORS.size():
+		character_color = CHARACTER_COLORS[id]
+	else:
+		character_color = CHARACTER_COLORS[0]
+
+
+## キャラクターカラーを取得（静的メソッド）
+static func get_color_for_id(id: int) -> Color:
+	if id >= 0 and id < CHARACTER_COLORS.size():
+		return CHARACTER_COLORS[id]
+	return CHARACTER_COLORS[0]
+
+
+## スプリント用の濃い色を取得
+func get_sprint_color() -> Color:
+	# 彩度を上げ、明度を下げて濃い色にする
+	return character_color.darkened(0.3)
 
 
 ## ラウンド開始時のリセット

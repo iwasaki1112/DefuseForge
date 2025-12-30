@@ -21,6 +21,7 @@ var enemies: Array[CharacterBody3D] = []
 
 # 選択インジケーター
 var selection_indicator: MeshInstance3D = null
+var selection_indicator_material: StandardMaterial3D = null
 const SELECTION_RADIUS: float = 1.5  # プレイヤー選択の判定半径
 
 var path_manager: Node3D = null
@@ -109,14 +110,14 @@ func _create_selection_indicator() -> void:
 	torus.ring_segments = 32
 	selection_indicator.mesh = torus
 
-	# マテリアル設定
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0, 1, 0, 0.8)  # 緑色
-	material.emission_enabled = true
-	material.emission = Color(0, 1, 0)
-	material.emission_energy_multiplier = 2.0
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	selection_indicator.material_override = material
+	# マテリアル設定（初期色は後で更新される）
+	selection_indicator_material = StandardMaterial3D.new()
+	selection_indicator_material.albedo_color = Color(0, 1, 0, 0.8)
+	selection_indicator_material.emission_enabled = true
+	selection_indicator_material.emission = Color(0, 1, 0)
+	selection_indicator_material.emission_energy_multiplier = 2.0
+	selection_indicator_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	selection_indicator.material_override = selection_indicator_material
 
 	add_child(selection_indicator)
 
@@ -128,8 +129,27 @@ func _update_selection_indicator() -> void:
 		selection_indicator.visible = true
 		var pos = selected_player.global_position
 		selection_indicator.global_position = Vector3(pos.x, pos.y + 0.05, pos.z)
+
+		# 選択中のプレイヤーのキャラクターカラーでリングの色を更新
+		_update_selection_indicator_color()
 	elif selection_indicator:
 		selection_indicator.visible = false
+
+
+## 選択インジケーターの色を更新
+func _update_selection_indicator_color() -> void:
+	if not selection_indicator_material or not squad_manager:
+		return
+
+	var player_data = squad_manager.get_selected_player()
+	if not player_data:
+		return
+
+	var color: Color = player_data.character_color if "character_color" in player_data else Color.GREEN
+
+	# マテリアルの色を更新
+	selection_indicator_material.albedo_color = Color(color.r, color.g, color.b, 0.8)
+	selection_indicator_material.emission = color
 
 
 ## 位置からプレイヤーを検索してSquadManagerで選択

@@ -169,6 +169,10 @@ func _save_player_path(p: Node3D, path: Array, flags: Array) -> void:
 		var renderer = PathRendererClass.new()
 		renderer.name = "PathRenderer_%s" % p.name
 		add_child(renderer)
+
+		# キャラクターカラーを設定
+		_set_renderer_color_for_player(renderer, p)
+
 		player_paths[p] = {
 			"path": [],
 			"run_flags": [],
@@ -206,6 +210,10 @@ func _update_visual() -> void:
 		var renderer = PathRendererClass.new()
 		renderer.name = "PathRenderer_%s" % player.name
 		add_child(renderer)
+
+		# キャラクターカラーを設定
+		_set_renderer_color_for_player(renderer, player)
+
 		player_paths[player] = {
 			"path": [],
 			"run_flags": [],
@@ -398,3 +406,26 @@ func get_remaining_time() -> float:
 ## 最大パス時間を取得
 func get_max_path_time() -> float:
 	return max_path_time
+
+
+## プレイヤーノードからキャラクターカラーを取得してレンダラーに設定
+func _set_renderer_color_for_player(renderer: Node, p: Node3D) -> void:
+	if not renderer or not p:
+		return
+
+	# プレイヤーノードからPlayerDataを取得
+	var color := Color.GREEN  # デフォルト色
+
+	if p.has_method("get") and p.get("player_data"):
+		var player_data = p.player_data
+		if player_data and "character_color" in player_data:
+			color = player_data.character_color
+	elif GameManager and GameManager.squad_manager:
+		# SquadManager経由でPlayerDataを取得
+		var player_data = GameManager.squad_manager.get_player_data_by_node(p)
+		if player_data and "character_color" in player_data:
+			color = player_data.character_color
+
+	# レンダラーに色を設定
+	if renderer.has_method("set_character_color"):
+		renderer.set_character_color(color)
