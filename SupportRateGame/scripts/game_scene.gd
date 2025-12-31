@@ -23,6 +23,7 @@ var enemies: Array[CharacterBody3D] = []
 # 選択インジケーター
 var selection_indicator: MeshInstance3D = null
 var selection_indicator_material: StandardMaterial3D = null
+var _cached_indicator_color: Color = Color.BLACK  # 色変更検出用
 
 var path_manager: Node3D = null
 var camera_controller: Node3D = null
@@ -91,6 +92,8 @@ func _ready() -> void:
 
 	# 選択インジケーターを作成
 	_create_selection_indicator()
+	# 初回の色を設定（キャッシュ初期値との比較でスキップされないように）
+	_update_selection_indicator_color()
 
 	# 追加システムを初期化
 	_setup_path_system()
@@ -114,6 +117,9 @@ func _on_squad_player_selected(player_data: RefCounted, _index: int) -> void:
 	# PathManagerのプレイヤー参照を更新
 	if path_manager:
 		path_manager.set_player(selected_player)
+
+	# 選択インジケーターの色を更新（選択変更時のみ）
+	_update_selection_indicator_color()
 
 	# カメラは自動追従しない（2本指/WASDでのみ移動）
 
@@ -165,21 +171,20 @@ func _create_selection_indicator() -> void:
 	add_child(selection_indicator)
 
 
-## 選択インジケーターを更新
+## 選択インジケーターを更新（位置のみ、色は選択変更時に更新）
 func _update_selection_indicator() -> void:
 	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null
 	if selection_indicator and selected_player:
 		selection_indicator.visible = true
 		var pos = selected_player.global_position
 		selection_indicator.global_position = Vector3(pos.x, pos.y + 0.05, pos.z)
-
-		# 選択中のプレイヤーのキャラクターカラーでリングの色を更新
-		_update_selection_indicator_color()
 	elif selection_indicator:
 		selection_indicator.visible = false
 
 
-## 選択インジケーターの色を更新
+## 選択インジケーターの色を更新（選択変更時のみ呼び出し）
+## 注: キャラクターカラーが動的に変わる仕様がある場合は、
+##     _on_squad_player_selected以外からも呼び出すか、_processでの呼び出しを復活させる必要あり
 func _update_selection_indicator_color() -> void:
 	if not selection_indicator_material or not squad_manager:
 		return
@@ -190,7 +195,11 @@ func _update_selection_indicator_color() -> void:
 
 	var color: Color = player_data.character_color if "character_color" in player_data else Color.GREEN
 
-	# マテリアルの色を更新
+	# 色が変わった時だけマテリアルを更新
+	if color.is_equal_approx(_cached_indicator_color):
+		return
+
+	_cached_indicator_color = color
 	selection_indicator_material.albedo_color = Color(color.r, color.g, color.b, 0.8)
 	selection_indicator_material.emission = color
 

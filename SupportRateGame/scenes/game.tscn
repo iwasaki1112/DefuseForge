@@ -36,13 +36,11 @@ light_energy = 1.2
 shadow_enabled = true
 shadow_bias = 0.03
 shadow_normal_bias = 1.5
-shadow_blur = 1.0
+shadow_blur = 0.5
 directional_shadow_max_distance = 50.0
-directional_shadow_mode = 2
-directional_shadow_split_1 = 0.15
-directional_shadow_split_2 = 0.35
-directional_shadow_split_3 = 0.6
-directional_shadow_blend_splits = true
+directional_shadow_mode = 1
+directional_shadow_split_1 = 0.3
+directional_shadow_blend_splits = false
 
 [node name="Dust2Map" parent="." instance=ExtResource("6_dust2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
@@ -59,12 +57,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -19.7, 1, -15.6)
 [node name="CT3" parent="CT" instance=ExtResource("1_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.7, 1, -15.6)
 
-[node name="CT4" parent="CT" instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13.7, 1, -15.6)
-
-[node name="CT5" parent="CT" instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.7, 1, -15.6)
-
 [node name="T" type="Node3D" parent="."]
 
 [node name="T1" parent="T" instance=ExtResource("2_enemy")]
@@ -75,12 +67,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.2, 1, 5.6)
 
 [node name="T3" parent="T" instance=ExtResource("2_enemy")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.2, 1, 5.6)
-
-[node name="T4" parent="T" instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32.2, 1, 5.6)
-
-[node name="T5" parent="T" instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35.2, 1, 5.6)
 
 [node name="GameUI" type="CanvasLayer" parent="."]
 script = ExtResource("4_ui")

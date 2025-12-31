@@ -18,14 +18,20 @@ signal visibility_changed(visible_points: Array)
 # 親キャラクター参照
 var character: CharacterBody3D = null
 
-# 視野ポリゴンを構成する点のリスト
+# 視野ポリゴンを構成する点のリスト（事前確保してresize、メモリ割り当て削減）
 var visible_points: Array = []  # Array of Vector3
+var _visible_points_size: int = 0  # 実際に使用されているサイズ
 
 # 壁検出用コリジョンマスク
 var collision_mask: int = 2  # デフォルトは地形レイヤー
 
 # 更新タイマー
 var _update_timer: float = 0.0
+
+# キャッシュされたレイ方向（ローカル空間、+Z前方基準）
+var _cached_ray_directions: Array = []  # Array of Vector3
+var _cached_fov_angle: float = 0.0
+var _cached_ray_count: int = 0
 
 
 func _ready() -> void:
@@ -76,37 +82,61 @@ func _process(delta: float) -> void:
 		_calculate_visibility()
 
 
+## レイ方向キャッシュを更新（fov_angleやray_countが変更された場合）
+func _update_ray_direction_cache() -> void:
+	if _cached_fov_angle == fov_angle and _cached_ray_count == ray_count:
+		return  # キャッシュは有効
+
+	_cached_ray_directions.clear()
+	_cached_fov_angle = fov_angle
+	_cached_ray_count = ray_count
+
+	if ray_count < 2:
+		return
+
+	var half_fov := deg_to_rad(fov_angle / 2.0)
+	var angle_step := deg_to_rad(fov_angle) / float(ray_count - 1)
+
+	# ローカル空間でのレイ方向を事前計算（+Z前方基準）
+	for i in range(ray_count):
+		var current_angle := -half_fov + angle_step * i
+		# Vector3.BACK (0, 0, 1) = +Z方向（このプロジェクトの前方向）を基準に回転
+		var local_direction := Vector3.BACK.rotated(Vector3.UP, current_angle)
+		_cached_ray_directions.append(local_direction)
+
+
 ## 視界を計算
 func _calculate_visibility() -> void:
-	visible_points.clear()
-
 	if not character or not character.is_inside_tree():
+		_visible_points_size = 0
 		return
 
 	# ray_countが2未満の場合は計算をスキップ（ゼロ除算防止）
 	if ray_count < 2:
 		push_warning("[VisionComponent] ray_count must be at least 2")
+		_visible_points_size = 0
 		return
+
+	# レイ方向キャッシュを更新（必要な場合のみ）
+	_update_ray_direction_cache()
+
+	# 配列サイズを調整（メモリ割り当て削減、かつ古いデータが残らないように）
+	var required_size := ray_count + 1  # 中心点 + レイ数
+	if visible_points.size() != required_size:
+		visible_points.resize(required_size)
 
 	var space_state := character.get_world_3d().direct_space_state
 	var origin := character.global_position + Vector3(0, height_offset, 0)
-	var forward := character.global_transform.basis.z  # キャラクターの前方向（+Z方向、このプロジェクトの設定）
+	var basis := character.global_transform.basis
 
-	# 視野の開始角度と終了角度
-	var half_fov := deg_to_rad(fov_angle / 2.0)
-	var angle_step := deg_to_rad(fov_angle) / float(ray_count - 1)
+	# 中心点を設定
+	visible_points[0] = character.global_position
+	var idx := 1
 
-	# 中心点を追加
-	visible_points.append(character.global_position)
-
-	# 各レイをキャスト
-	for i in range(ray_count):
-		var current_angle := -half_fov + angle_step * i
-
-		# 前方向を基準に回転
-		var ray_direction := forward.rotated(Vector3.UP, current_angle)
-		ray_direction = ray_direction.normalized()
-
+	# 各レイをキャスト（キャッシュされた方向を使用）
+	for local_dir in _cached_ray_directions:
+		# ローカル方向をワールド方向に変換
+		var ray_direction: Vector3 = basis * local_dir
 		var end_point := origin + ray_direction * view_distance
 
 		# レイキャスト
@@ -118,11 +148,13 @@ func _calculate_visibility() -> void:
 
 		if result:
 			# 壁にヒット
-			visible_points.append(result.position)
+			visible_points[idx] = result.position
 		else:
 			# 視野の端まで見える
-			visible_points.append(end_point)
+			visible_points[idx] = end_point
+		idx += 1
 
+	_visible_points_size = idx
 	visibility_changed.emit(visible_points)
 
 

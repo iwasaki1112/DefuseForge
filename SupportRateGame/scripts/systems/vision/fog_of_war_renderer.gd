@@ -7,12 +7,16 @@ extends Node3D
 @export_group("表示設定")
 @export var fog_height: float = 0.05  # 視野を描画する高さ（地面付近）
 @export var visible_color: Color = Color(1.0, 1.0, 0.5, 0.3)  # 視野内の色（薄い黄色）
+@export var cull_margin: float = 50.0  # カリングマージン（視野距離に基づいた適切な値）
 
 # メッシュインスタンス
 var visibility_mesh_instance: MeshInstance3D = null
 
 # マテリアル
 var visibility_material: StandardMaterial3D = null
+
+# dirtyフラグ（1フレームに1回のみ更新）
+var _mesh_dirty: bool = false
 
 
 func _ready() -> void:
@@ -23,6 +27,13 @@ func _ready() -> void:
 	if fow:
 		fow.set_fog_renderer(self)
 		fow.fog_updated.connect(_on_fog_updated)
+
+
+func _process(_delta: float) -> void:
+	# dirtyフラグが立っている場合のみメッシュを更新（1フレームに1回）
+	if _mesh_dirty:
+		_mesh_dirty = false
+		_update_visibility_mesh()
 
 
 func _exit_tree() -> void:
@@ -40,7 +51,7 @@ func _get_fog_of_war_manager() -> Node:
 func _setup_visibility_layer() -> void:
 	visibility_mesh_instance = MeshInstance3D.new()
 	visibility_mesh_instance.name = "VisibilityMesh"
-	visibility_mesh_instance.extra_cull_margin = 1000.0  # カリング防止
+	visibility_mesh_instance.extra_cull_margin = cull_margin  # 適切なカリングマージン
 	add_child(visibility_mesh_instance)
 
 	# マテリアルを作成
@@ -90,7 +101,7 @@ func _update_visibility_mesh() -> void:
 			triangle_count += 1
 
 	if triangle_count > 0:
-		st.generate_normals()
+		# generate_normals()をスキップ - unshadedマテリアルでは不要
 		visibility_mesh_instance.mesh = st.commit()
 		visibility_mesh_instance.material_override = visibility_material
 	else:
@@ -99,7 +110,8 @@ func _update_visibility_mesh() -> void:
 
 ## フォグが更新されたときのコールバック
 func _on_fog_updated() -> void:
-	_update_visibility_mesh()
+	# dirtyフラグを立てる（_processで1フレームに1回だけ更新）
+	_mesh_dirty = true
 
 
 ## マップ設定を更新（互換性のため残す）

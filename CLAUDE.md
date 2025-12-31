@@ -38,7 +38,7 @@ SupportRateGame/
 │   │       └── vision_component.gd  # 視野コンポーネント
 │   ├── systems/
 │   │   ├── match_manager.gd      # マッチ管理（シーン内）- ラウンド・経済・勝敗
-│   │   ├── squad_manager.gd      # 分隊管理（シーン内）- 5人のプレイヤー管理
+│   │   ├── squad_manager.gd      # 分隊管理（シーン内）- 3人のプレイヤー管理
 │   │   ├── camera_controller.gd  # カメラ制御（ズーム・パン）
 │   │   ├── path/
 │   │   │   ├── path_manager.gd   # パス管理
@@ -84,7 +84,7 @@ SupportRateGame/
 
 ### シーン内ノード（game.tscn）
 - **MatchManager**: ラウンド/経済/勝敗（GameEventsと連携）
-- **SquadManager**: 5人の分隊管理、選択・経済・装備
+- **SquadManager**: 3人の分隊管理、選択・経済・装備
 - **FogOfWarManager**: 視界システム管理
 - **PathManager**: パス描画管理
 - **CameraController**: カメラ制御
@@ -137,11 +137,12 @@ CharacterBase (character_base.gd)
 ### シャドウ設定（DirectionalLight3D）
 ```
 shadow_enabled = true
-shadow_bias = 0.05
-shadow_normal_bias = 2.0
-directional_shadow_max_distance = 100.0
-directional_shadow_mode = 2 (PSSM 4 splits)
-directional_shadow_blend_splits = true
+shadow_bias = 0.03
+shadow_normal_bias = 1.5
+shadow_blur = 0.5
+directional_shadow_max_distance = 50.0
+directional_shadow_mode = 1 (PSSM 2 splits - 軽量化)
+directional_shadow_blend_splits = false
 ```
 
 ### プレイヤー/敵

@@ -23,11 +23,52 @@ var enemy_visibility: Dictionary = {}  # key: CharacterBody3D, value: bool
 # FogOfWarRenderer参照
 var fog_renderer: Node3D = null
 
+# キャッシュされた敵リスト（get_nodes_in_groupの呼び出しを削減）
+var _cached_enemies: Array = []  # Array of CharacterBody3D
+var _enemies_cache_dirty: bool = true
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 敵のスポーン/デスポーンを監視
+	get_tree().node_added.connect(_on_node_added)
+	get_tree().node_removed.connect(_on_node_removed)
 	# 初期状態で全敵を非表示にする（遅延実行）
 	_initialize_enemy_visibility.call_deferred()
+
+
+## ノード追加時のコールバック
+func _on_node_added(node: Node) -> void:
+	if node.is_in_group("enemies"):
+		_enemies_cache_dirty = true
+
+
+## ノード削除時のコールバック
+func _on_node_removed(node: Node) -> void:
+	if node.is_in_group("enemies"):
+		_enemies_cache_dirty = true
+		# 削除されたノードをキャッシュから即座に除去
+		_cached_enemies.erase(node)
+		enemy_visibility.erase(node)
+
+
+## 敵リストを取得（キャッシュ利用）
+## 注: グループから外れたノードはキャッシュから自動除去
+func _get_enemies() -> Array:
+	if _enemies_cache_dirty:
+		_cached_enemies = get_tree().get_nodes_in_group("enemies")
+		_enemies_cache_dirty = false
+	else:
+		# キャッシュ有効時も、グループ離脱したノードを除去（低コスト検証）
+		var i := 0
+		while i < _cached_enemies.size():
+			var enemy = _cached_enemies[i]
+			if not is_instance_valid(enemy) or not enemy.is_in_group("enemies"):
+				_cached_enemies.remove_at(i)
+				enemy_visibility.erase(enemy)
+			else:
+				i += 1
+	return _cached_enemies
 
 
 ## 敵の初期可視性を設定
@@ -35,8 +76,8 @@ func _initialize_enemy_visibility() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# グループから敵を取得
-	for enemy in get_tree().get_nodes_in_group("enemies"):
+	# キャッシュから敵を取得
+	for enemy in _get_enemies():
 		if enemy and is_instance_valid(enemy):
 			set_character_visible(enemy, false)
 			enemy_visibility[enemy] = false
@@ -91,8 +132,8 @@ func is_position_visible(pos: Vector3) -> bool:
 
 ## 敵の可視性を更新
 func _update_enemy_visibility() -> void:
-	# グループから敵を取得
-	for enemy in get_tree().get_nodes_in_group("enemies"):
+	# キャッシュから敵を取得
+	for enemy in _get_enemies():
 		if not enemy or not is_instance_valid(enemy):
 			continue
 
@@ -146,9 +187,10 @@ func set_enemy_visibility(enemy: CharacterBody3D, is_visible: bool) -> void:
 func reset_visibility() -> void:
 	enemy_visibility.clear()
 	current_visible_points.clear()
+	_enemies_cache_dirty = true  # キャッシュを更新
 
-	# 全敵を非表示にする（グループから取得）
-	for enemy in get_tree().get_nodes_in_group("enemies"):
+	# 全敵を非表示にする（キャッシュから取得）
+	for enemy in _get_enemies():
 		if enemy and is_instance_valid(enemy):
 			set_character_visible(enemy, false)
 
