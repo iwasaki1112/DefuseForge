@@ -11,6 +11,7 @@ const PathAnalyzerClass = preload("res://scripts/systems/path/path_analyzer.gd")
 @export var path_width: float = 0.15
 @export var path_height_offset: float = 0.05
 @export var smoothing_segments: int = 5
+@export var cull_margin: float = 50.0  # 適切なカリングマージン
 
 # キャラクターカラー（設定時に使用）
 var character_base_color: Color = Color.GREEN
@@ -24,6 +25,10 @@ var immediate_mesh_run: ImmediateMesh = null
 # パス解析器
 var analyzer: RefCounted = null
 
+# パスキャッシュ（変更検出用）
+var _cached_path: Array[Vector3] = []
+var _cached_run_flags: Array[bool] = []
+
 
 func _ready() -> void:
 	analyzer = PathAnalyzerClass.new()
@@ -34,7 +39,7 @@ func _ready() -> void:
 	path_mesh_instance_walk.mesh = immediate_mesh_walk
 	path_mesh_instance_walk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	path_mesh_instance_walk.material_override = _create_path_material(path_color_walk, Color(0.0, 1.0, 0.0, 1.0))
-	path_mesh_instance_walk.extra_cull_margin = 1000.0  # カリング防止
+	path_mesh_instance_walk.extra_cull_margin = cull_margin  # 適切なカリングマージン
 	add_child(path_mesh_instance_walk)
 
 	# 走り用メッシュを作成
@@ -43,7 +48,7 @@ func _ready() -> void:
 	path_mesh_instance_run.mesh = immediate_mesh_run
 	path_mesh_instance_run.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	path_mesh_instance_run.material_override = _create_path_material(path_color_run, Color(1.0, 0.5, 0.0, 1.0))
-	path_mesh_instance_run.extra_cull_margin = 1000.0  # カリング防止
+	path_mesh_instance_run.extra_cull_margin = cull_margin  # 適切なカリングマージン
 	add_child(path_mesh_instance_run)
 
 
@@ -86,8 +91,31 @@ func _create_path_material(albedo: Color, emission: Color) -> StandardMaterial3D
 	return material
 
 
+## パスが変更されたかチェック
+func _is_path_changed(path: Array[Vector3], run_flags: Array[bool]) -> bool:
+	if path.size() != _cached_path.size():
+		return true
+	if run_flags.size() != _cached_run_flags.size():
+		return true
+	for i in range(path.size()):
+		if not path[i].is_equal_approx(_cached_path[i]):
+			return true
+	for i in range(run_flags.size()):
+		if run_flags[i] != _cached_run_flags[i]:
+			return true
+	return false
+
+
 ## パスを描画
 func render(path: Array[Vector3], run_flags: Array[bool]) -> void:
+	# パスが変更されていない場合はスキップ
+	if not _is_path_changed(path, run_flags):
+		return
+
+	# キャッシュを更新
+	_cached_path = path.duplicate()
+	_cached_run_flags = run_flags.duplicate()
+
 	immediate_mesh_walk.clear_surfaces()
 	immediate_mesh_run.clear_surfaces()
 
@@ -122,6 +150,8 @@ func render(path: Array[Vector3], run_flags: Array[bool]) -> void:
 func clear() -> void:
 	immediate_mesh_walk.clear_surfaces()
 	immediate_mesh_run.clear_surfaces()
+	_cached_path.clear()
+	_cached_run_flags.clear()
 
 
 ## 1セグメントを描画
