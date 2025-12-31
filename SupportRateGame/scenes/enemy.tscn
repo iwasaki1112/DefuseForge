@@ -29,4 +29,5 @@ fov = 45.0
 script = ExtResource("3_vision")
 fov_angle = 120.0
 view_distance = 15.0
-ray_count = 40
+ray_count = 24
+update_interval = 0.05
