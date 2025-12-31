@@ -129,10 +129,17 @@ local function match_loop(context, dispatcher, tick, state, messages)
                 })
                 dispatcher.broadcast_message(2, event_data)
             end
+        elseif op_code == 5 then
+            -- チーム割り当て: ホストから全員にブロードキャスト（送信者含む）
+            nk.logger_info(string.format("Broadcasting team assignment from %s", sender.user_id))
+            dispatcher.broadcast_message(5, message.data)
         elseif op_code == 10 then
-            dispatcher.broadcast_message(10, message.data, {sender})
+            -- プレイヤー位置: 全員にブロードキャスト（送信者含む）
+            -- クライアント側で自分自身のデータをフィルタリングする
+            dispatcher.broadcast_message(10, message.data)
         elseif op_code == 11 then
-            dispatcher.broadcast_message(11, message.data, {sender})
+            -- プレイヤーアクション: 全員にブロードキャスト
+            dispatcher.broadcast_message(11, message.data)
         elseif op_code == 20 and sender.user_id == state.host_user_id then
             local data = nk.json_decode(message.data)
             if data and data.phase then

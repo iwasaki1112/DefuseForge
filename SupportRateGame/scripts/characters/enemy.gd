@@ -22,6 +22,9 @@ var ai_state: AIState = AIState.IDLE
 var target: CharacterBase = null
 var current_patrol_index: int = 0
 
+# プレイヤー操作フラグ（オンラインマッチで人間が操作する場合true）
+var is_player_controlled: bool = false
+
 
 func _ready() -> void:
 	super._ready()
@@ -40,6 +43,10 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 
 	if not is_alive:
+		return
+
+	# プレイヤー操作中はAIを無効化
+	if is_player_controlled:
 		return
 
 	# 実行フェーズでのみAIを動かす（作戦フェーズでは動かない）

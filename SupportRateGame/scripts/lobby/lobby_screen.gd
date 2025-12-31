@@ -38,6 +38,7 @@ const TEAM_SIZE: int = 1  # 1v1固定
 # 変数
 # =====================================
 var _created_match_id: String = ""
+var _waiting_for_team_assignment: bool = false  # ゲストがチーム割り当て待ち
 
 # =====================================
 # 初期化
@@ -58,6 +59,7 @@ func _connect_signals() -> void:
 	NakamaClient.room_created.connect(_on_room_created)
 	NakamaClient.rooms_listed.connect(_on_rooms_listed)
 	NakamaClient.match_presence_joined.connect(_on_match_presence_joined)
+	NakamaClient.match_data_received.connect(_on_match_data_received)
 
 	# UIシグナル
 	if guest_login_button:
@@ -170,6 +172,11 @@ func _on_room_created(match_id: String, _room_code: String) -> void:
 	_created_match_id = match_id
 	GameManager.is_host = true
 
+	# ホストはランダムでチームを割り当て（0=CT, 1=TERRORIST）
+	var random_team = randi() % 2
+	GameManager.assigned_team = random_team as GameManager.Team
+	print("[LobbyScreen] Host assigned team: %s" % ("CT" if random_team == 0 else "TERRORIST"))
+
 	if create_room_button:
 		create_room_button.disabled = false
 
@@ -242,11 +249,14 @@ func _on_match_joined(match_id: String) -> void:
 		_show_waiting_panel()
 		return
 
-	# 参加者はゲームへ
-	_transition_to_game(match_id)
+	# ゲストはチーム割り当てを待つ
+	_waiting_for_team_assignment = true
+	_show_waiting_panel()
+	if waiting_status_label:
+		waiting_status_label.text = "チーム割り当て待ち..."
 
 func _on_match_presence_joined(presences: Array) -> void:
-	# ホストの場合、他のプレイヤーが参加したらゲームに遷移
+	# ホストの場合、他のプレイヤーが参加したらチーム割り当てを送信
 	if not GameManager.is_host:
 		return
 
@@ -268,11 +278,73 @@ func _on_match_presence_joined(presences: Array) -> void:
 			is_me = true
 
 		if not is_me and (not session_id.is_empty() or not user_id.is_empty()):
-			print("[LobbyScreen] Other player joined, transitioning to game")
-			_transition_to_game(GameManager.current_match_id)
+			print("[LobbyScreen] Other player joined, sending team assignment")
+			# チーム割り当てをゲストに送信
+			_send_team_assignment_to_guest()
 			return
+
+# =====================================
+# チーム割り当て（ロビー内で完了）
+# =====================================
+const OPCODE_TEAM_ASSIGNMENT: int = 5  # NetworkSyncManager.OpCode.TEAM_ASSIGNMENTと同じ
+
+## ホストがチーム割り当てをゲストに送信
+func _send_team_assignment_to_guest() -> void:
+	# ゲストがマッチに完全に参加するまで待つ（長めに設定）
+	await get_tree().create_timer(1.0).timeout
+
+	# ホストのチームはすでにランダムで決定済み（room作成時）
+	var host_team = GameManager.assigned_team
+	var guest_team = 1 - host_team  # 反対のチーム
+
+	var data = {
+		"host_team": host_team,
+		"guest_team": guest_team
+	}
+
+	print("[LobbyScreen] Sending team assignment - Host: %s, Guest: %s" % [
+		"CT" if host_team == 0 else "TERRORIST",
+		"CT" if guest_team == 0 else "TERRORIST"
+	])
+
+	# 複数回送信してゲストが確実に受け取れるようにする
+	for i in range(3):
+		NakamaClient.send_match_data(OPCODE_TEAM_ASSIGNMENT, data)
+		print("[LobbyScreen] Team assignment sent (attempt %d)" % (i + 1))
+		await get_tree().create_timer(0.3).timeout
+
+	# ホストもゲームに遷移
+	await get_tree().create_timer(0.5).timeout
+	_transition_to_game(GameManager.current_match_id)
+
+## マッチデータ受信（ゲスト側でチーム割り当てを受信）
+func _on_match_data_received(op_code: int, data: Dictionary, _sender_id: String) -> void:
+	print("[LobbyScreen] Received match data - op_code: %d, waiting: %s" % [op_code, _waiting_for_team_assignment])
+
+	if op_code != OPCODE_TEAM_ASSIGNMENT:
+		print("[LobbyScreen] Ignoring op_code %d (expected %d)" % [op_code, OPCODE_TEAM_ASSIGNMENT])
+		return
+
+	if not _waiting_for_team_assignment:
+		print("[LobbyScreen] Not waiting for team assignment, ignoring")
+		return
+
+	# ゲストはguest_teamを自分のチームとして設定
+	var my_team = data.get("guest_team", 0)
+	GameManager.assigned_team = my_team as GameManager.Team
+	_waiting_for_team_assignment = false
+
+	print("[LobbyScreen] Received team assignment: %s" % ("CT" if my_team == 0 else "TERRORIST"))
+
+	# ゲームに遷移
+	_transition_to_game(GameManager.current_match_id)
 
 func _transition_to_game(match_id: String) -> void:
 	GameManager.current_match_id = match_id
 	GameManager.is_online_match = true
+
+	print("[LobbyScreen] Transitioning to game - My team: %s" % (
+		"CT" if GameManager.assigned_team == GameManager.Team.CT else "TERRORIST"
+	))
+
 	get_tree().change_scene_to_file("res://scenes/game.tscn")

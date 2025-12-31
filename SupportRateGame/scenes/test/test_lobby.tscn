@@ -297,3 +297,22 @@ text = "サーバー: 未接続"
 [node name="CheckServerButton" type="Button" parent="TestController/VBoxContainer"]
 layout_mode = 2
 text = "サーバー確認"
+
+[node name="HSeparator3" type="HSeparator" parent="TestController/VBoxContainer"]
+layout_mode = 2
+
+[node name="AutoTestLabel" type="Label" parent="TestController/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "=== 自動テスト ==="
+horizontal_alignment = 1
+
+[node name="DebugSpawnCheck" type="CheckBox" parent="TestController/VBoxContainer"]
+layout_mode = 2
+button_pressed = true
+text = "近接スポーン"
+
+[node name="AutoTestButton" type="Button" parent="TestController/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 1, 0.3, 1)
+text = "自動マッチング開始"

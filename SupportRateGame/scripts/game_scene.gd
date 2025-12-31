@@ -14,8 +14,8 @@ const FogOfWarManagerScene = preload("res://scenes/systems/fog_of_war_manager.ts
 const FogOfWarRendererScene = preload("res://scenes/systems/fog_of_war_renderer.tscn")
 const NetworkSyncManagerScript = preload("res://scripts/systems/network_sync_manager.gd")
 
-@onready var players_node: Node3D = $Players
-@onready var enemies_node: Node3D = $Enemies
+@onready var ct_node: Node3D = $CT
+@onready var t_node: Node3D = $T
 @onready var game_ui: CanvasLayer = $GameUI
 
 var enemies: Array[CharacterBody3D] = []
@@ -32,6 +32,13 @@ var match_manager: Node = null
 var squad_manager: Node = null
 var network_sync_manager: Node = null
 
+# デバッグ用
+var _debug_printed_children: bool = false
+
+# リモートプレイヤー補間用
+var _remote_player_targets: Dictionary = {}  # character_name -> {position, rotation, node}
+const INTERPOLATION_SPEED: float = 15.0  # 補間速度
+
 
 func _ready() -> void:
 	# システムノードを初期化（順序重要）
@@ -39,23 +46,48 @@ func _ready() -> void:
 	_setup_fog_of_war_manager()
 	_setup_match_manager()
 
-	# プレイヤーを収集してSquadManagerに登録
-	var players: Array[CharacterBody3D] = []
-	for child in players_node.get_children():
+	# オンラインマッチの場合、割り当てられたチームに基づいて初期化
+	var my_team_node: Node3D = ct_node
+	var enemy_team_node: Node3D = t_node
+
+	if GameManager.is_online_match:
+		# 割り当てられたチームに応じてノードを入れ替え
+		if GameManager.assigned_team == GameManager.Team.TERRORIST:
+			my_team_node = t_node
+			enemy_team_node = ct_node
+		print("[GameScene] Online match - My team: %s" % ("CT" if GameManager.assigned_team == GameManager.Team.CT else "TERRORIST"))
+
+	# 自分のチームを収集してSquadManagerに登録
+	var my_team_members: Array[CharacterBody3D] = []
+	for child in my_team_node.get_children():
 		if child is CharacterBody3D:
-			players.append(child)
+			my_team_members.append(child)
+			# オンラインマッチで自分のチームを操作する場合、AIを無効化
+			if GameManager.is_online_match:
+				if "is_player_controlled" in child:
+					child.is_player_controlled = true
+					print("[GameScene] Set is_player_controlled=true for %s" % child.name)
 
 	# SquadManagerで分隊を初期化
 	if squad_manager:
-		squad_manager.initialize_squad(players)
+		squad_manager.initialize_squad(my_team_members)
 		squad_manager.player_selected.connect(_on_squad_player_selected)
 
-	# 敵を収集（敵はenemyスクリプトでグループに自動追加される）
-	for child in enemies_node.get_children():
+	# 敵チームを収集（enemyスクリプトでグループに自動追加される）
+	for child in enemy_team_node.get_children():
 		if child is CharacterBody3D:
 			enemies.append(child)
+			# オンラインマッチでは敵チームのAIも無効化（相手プレイヤーが操作する）
+			if GameManager.is_online_match:
+				if "is_player_controlled" in child:
+					child.is_player_controlled = true
+					print("[GameScene] Disabled AI for enemy: %s" % child.name)
 
-	print("[GameScene] Players: %d, Enemies: %d" % [players.size(), enemies.size()])
+	print("[GameScene] My team: %d, Enemies: %d" % [my_team_members.size(), enemies.size()])
+
+	# デバッグ用：近接スポーン
+	if GameManager.debug_spawn_nearby:
+		_apply_debug_spawn_positions(my_team_members, enemies)
 
 	# 選択インジケーターを作成
 	_create_selection_indicator()
@@ -99,9 +131,13 @@ func _exit_tree() -> void:
 	# 敵はグループで管理されるため、シーン離脱時に自動クリーンアップ
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	# 選択インジケーターを更新
 	_update_selection_indicator()
+
+	# オンラインマッチの場合、リモートプレイヤーの位置を補間
+	if GameManager.is_online_match:
+		_interpolate_remote_players(delta)
 
 
 ## 選択インジケーターを作成
@@ -235,24 +271,40 @@ func _setup_camera_system() -> void:
 	if not selected_player:
 		return
 
-	# プレイヤーのカメラを取得してCameraControllerに移動
+	# プレイヤーのカメラを取得、なければ新規作成
 	var player_camera: Camera3D = selected_player.get_node_or_null("Camera3D")
+
 	if player_camera:
 		# カメラをプレイヤーから切り離してシーンルートに配置
 		player_camera.get_parent().remove_child(player_camera)
+	else:
+		# カメラがない場合（enemy.tscnなど）は新規作成
+		# player.tscnのCamera3Dと同じ設定を使用
+		player_camera = Camera3D.new()
+		player_camera.name = "Camera3D"
+		# Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 8, 0) = 90度X軸回転、Y=8の位置
+		player_camera.transform = Transform3D(
+			Vector3(1, 0, 0),
+			Vector3(0, 0, 1),
+			Vector3(0, -1, 0),
+			Vector3(0, 8, 0)
+		)
+		player_camera.fov = 45.0
+		print("[GameScene] Created new camera for player without Camera3D")
 
-		camera_controller = CameraControllerScene.instantiate()
-		add_child(camera_controller)
+	camera_controller = CameraControllerScene.instantiate()
+	add_child(camera_controller)
 
-		# カメラをコントローラーに追加
-		camera_controller.add_child(player_camera)
-		camera_controller.camera = player_camera
+	# カメラをコントローラーに追加
+	camera_controller.add_child(player_camera)
+	camera_controller.camera = player_camera
 
-		# カメラをアクティブに設定
-		player_camera.current = true
+	# カメラをアクティブに設定
+	player_camera.current = true
 
-		# 初期カメラ位置をプレイヤー位置に設定（追従はしない）
-		camera_controller.snap_to_position(selected_player.global_position)
+	# 初期カメラ位置をプレイヤー位置に設定（追従はしない）
+	camera_controller.snap_to_position(selected_player.global_position)
+	print("[GameScene] Camera snapped to player position: %s" % selected_player.global_position)
 
 
 ## Fog of Warレンダラーをセットアップ
@@ -351,7 +403,10 @@ func _setup_network_sync() -> void:
 	# 有効化
 	network_sync_manager.activate()
 
-	print("[GameScene] NetworkSyncManager initialized for online match")
+	# チーム割り当ては既にlobby_screen.gdで完了している
+	print("[GameScene] NetworkSyncManager initialized - My team: %s" % (
+		"CT" if GameManager.assigned_team == GameManager.Team.CT else "TERRORIST"
+	))
 
 
 ## リモートプレイヤー参加
@@ -367,9 +422,71 @@ func _on_remote_player_left(user_id: String) -> void:
 
 
 ## リモートプレイヤー位置更新
-func _on_remote_player_updated(user_id: String, position: Vector3, rotation: float) -> void:
-	# TODO: リモートプレイヤーのキャラクターを更新
-	pass
+func _on_remote_player_updated(user_id: String, character_name: String, position: Vector3, rotation: float, is_moving: bool, is_running: bool) -> void:
+	# 相手チームのキャラクターを探して位置を更新
+	if character_name.is_empty():
+		return
+
+	# 相手チームのノードを取得
+	var enemy_team_node: Node3D
+	if GameManager.assigned_team == GameManager.Team.CT:
+		enemy_team_node = t_node
+	else:
+		enemy_team_node = ct_node
+
+	if not enemy_team_node:
+		return
+
+	# キャラクター名でノードを検索
+	var target_node = enemy_team_node.get_node_or_null(character_name)
+	if target_node and target_node is CharacterBody3D:
+		# ターゲット位置とアニメーション状態を保存（_processで補間する）
+		_remote_player_targets[character_name] = {
+			"position": position,
+			"rotation": rotation,
+			"is_moving": is_moving,
+			"is_running": is_running,
+			"node": target_node
+		}
+	else:
+		# デバッグ：1回だけ子ノード一覧を出力
+		if not _debug_printed_children:
+			_debug_printed_children = true
+			var children_names = []
+			for child in enemy_team_node.get_children():
+				children_names.append(child.name)
+			print("[GameScene] Looking for '%s' but enemy team (%s) has children: %s" % [character_name, enemy_team_node.name, children_names])
+
+
+## リモートプレイヤーの位置を補間
+func _interpolate_remote_players(delta: float) -> void:
+	for char_name in _remote_player_targets:
+		var target_data = _remote_player_targets[char_name]
+		var node: CharacterBody3D = target_data.node
+		if not is_instance_valid(node):
+			continue
+
+		var target_pos: Vector3 = target_data.position
+		var target_rot: float = target_data.rotation
+
+		# アニメーション状態を設定（送信元の状態を反映）
+		if "is_moving" in node:
+			node.is_moving = target_data.get("is_moving", false)
+		if "is_running" in node:
+			node.is_running = target_data.get("is_running", false)
+
+		# 位置の補間
+		node.global_position = node.global_position.lerp(target_pos, delta * INTERPOLATION_SPEED)
+
+		# 回転の補間（角度のラップアラウンドを考慮）
+		var current_rot = node.rotation.y
+		var rot_diff = target_rot - current_rot
+		# 角度を-PIからPIの範囲に正規化
+		while rot_diff > PI:
+			rot_diff -= TAU
+		while rot_diff < -PI:
+			rot_diff += TAU
+		node.rotation.y = current_rot + rot_diff * delta * INTERPOLATION_SPEED
 
 
 ## リモートプレイヤーアクション
@@ -396,3 +513,31 @@ func _on_game_state_updated(state: Dictionary) -> void:
 			var phase = state.get("phase", "")
 			var round_num = state.get("round", 0)
 			print("[GameScene] Phase changed to: %s (Round %d)" % [phase, round_num])
+
+
+# =====================================
+# デバッグ用機能
+# =====================================
+
+## デバッグ用：キャラクターを近くにスポーン
+func _apply_debug_spawn_positions(my_team: Array[CharacterBody3D], enemy_team: Array[CharacterBody3D]) -> void:
+	print("[GameScene] Applying debug spawn positions (nearby)")
+
+	# 中心位置（マップの中央付近）
+	var center_pos = Vector3(0, 1, 0)
+
+	# 自チームは中心から-5の位置に配置
+	var my_team_offset = Vector3(-5, 0, 0)
+	for i in range(my_team.size()):
+		var char = my_team[i]
+		var spawn_pos = center_pos + my_team_offset + Vector3(0, 0, i * 2)
+		char.global_position = spawn_pos
+		print("[GameScene] Moved %s to %s" % [char.name, spawn_pos])
+
+	# 敵チームは中心から+5の位置に配置
+	var enemy_team_offset = Vector3(5, 0, 0)
+	for i in range(enemy_team.size()):
+		var char = enemy_team[i]
+		var spawn_pos = center_pos + enemy_team_offset + Vector3(0, 0, i * 2)
+		char.global_position = spawn_pos
+		print("[GameScene] Moved %s to %s" % [char.name, spawn_pos])

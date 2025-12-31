@@ -24,7 +24,7 @@ signal join_by_code_failed(error: String)
 # =====================================
 # 設定
 # =====================================
-@export var server_host: String = "127.0.0.1"
+@export var server_host: String = "192.168.11.32"  # LAN IP for cross-device testing
 @export var server_port: int = 7350
 @export var server_key: String = "supportrate_dev_key"
 @export var use_ssl: bool = false
@@ -181,6 +181,7 @@ func send_match_data(op_code: int, data: Dictionary) -> void:
 			"data": Marshalls.utf8_to_base64(JSON.stringify(data))
 		}
 	}
+	print("[NakamaClient] Sending match_data - op_code: %d, match_id: %s" % [op_code, _current_match_id])
 	_send_socket_message(message)
 
 # =====================================
@@ -412,6 +413,7 @@ func _handle_socket_message(message: String) -> void:
 		return
 
 	var data = json.data
+	print("[NakamaClient] Socket message received - keys: ", data.keys())
 
 	# マッチ参加成功
 	if data.has("match"):
@@ -435,6 +437,7 @@ func _handle_socket_message(message: String) -> void:
 	elif data.has("match_data"):
 		var match_data = data.match_data
 		var op_code = int(match_data.get("op_code", "0"))
+		# match_data受信（op_codeで処理を分岐）
 		var payload_base64 = match_data.get("data", "")
 		var payload_str = Marshalls.base64_to_utf8(payload_base64)
 		var payload = {}
@@ -442,7 +445,12 @@ func _handle_socket_message(message: String) -> void:
 			var payload_json = JSON.new()
 			if payload_json.parse(payload_str) == OK:
 				payload = payload_json.data
-		var sender = match_data.get("presence", {}).get("user_id", "")
+		# presenceの取得方法を修正
+		var presence = match_data.get("presence", {})
+		var sender = ""
+		if presence is Dictionary:
+			sender = presence.get("user_id", "")
+		print("[NakamaClient] Emitting match_data_received - op_code: %d, sender: %s" % [op_code, sender])
 		match_data_received.emit(op_code, payload, sender)
 
 	# プレゼンス更新
