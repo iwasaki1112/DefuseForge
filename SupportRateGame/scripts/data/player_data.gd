@@ -12,7 +12,7 @@ var player_node: Node3D = null  # シーン上のプレイヤーノード参照
 # キャラクターカラー（選択リング・パス描画に使用）
 var character_color: Color = Color.WHITE
 
-# 5人分のキャラクターカラー定義
+# 3人分のキャラクターカラー定義（3v3）
 const CHARACTER_COLORS: Array[Color] = [
 	Color(0.2, 0.6, 1.0),   # 0: 青
 	Color(0.3, 0.9, 0.3),   # 1: 緑

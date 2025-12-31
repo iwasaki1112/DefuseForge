@@ -1,7 +1,7 @@
 class_name SquadManagerNode
 extends Node
 
-## 分隊（5体のプレイヤー）を管理するシーンノード
+## 分隊（3体のプレイヤー）を管理するシーンノード
 ## 各プレイヤーの経済、装備、ステータスを個別管理
 ## ゲームシーン内に配置して使用（Autoloadではない）
 
@@ -18,7 +18,7 @@ var squad: Array = []  # Array of PlayerData
 var selected_index: int = 0
 
 # 分隊サイズ
-const SQUAD_SIZE: int = 5
+const SQUAD_SIZE: int = 3
 
 # プレイヤー選択の判定半径（タップ/クリック時）
 const PLAYER_SELECTION_RADIUS: float = 1.5
