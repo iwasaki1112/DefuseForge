@@ -12,6 +12,7 @@ const PathManagerScene = preload("res://scenes/systems/path_manager.tscn")
 const CameraControllerScene = preload("res://scenes/systems/camera_controller.tscn")
 const FogOfWarManagerScene = preload("res://scenes/systems/fog_of_war_manager.tscn")
 const FogOfWarRendererScene = preload("res://scenes/systems/fog_of_war_renderer.tscn")
+const NetworkSyncManagerScript = preload("res://scripts/systems/network_sync_manager.gd")
 
 @onready var players_node: Node3D = $Players
 @onready var enemies_node: Node3D = $Enemies
@@ -29,6 +30,7 @@ var fog_renderer: Node3D = null
 var fog_of_war_manager: Node = null
 var match_manager: Node = null
 var squad_manager: Node = null
+var network_sync_manager: Node = null
 
 
 func _ready() -> void:
@@ -63,6 +65,10 @@ func _ready() -> void:
 	_setup_camera_system()
 	_setup_fog_of_war_renderer()
 
+	# オンラインマッチの場合はネットワーク同期を初期化
+	if GameManager.is_online_match:
+		_setup_network_sync()
+
 	# ゲームを開始（すべてのノードがreadyになった後に実行）
 	GameManager.start_game.call_deferred()
 
@@ -84,6 +90,8 @@ func _on_squad_player_selected(player_data: RefCounted, _index: int) -> void:
 
 func _exit_tree() -> void:
 	# シーン終了時にクリーンアップ
+	if network_sync_manager:
+		network_sync_manager.deactivate()
 	GameManager.unregister_match_manager()
 	GameManager.unregister_squad_manager()
 	GameManager.unregister_fog_of_war_manager()
@@ -324,3 +332,67 @@ func _on_execution_phase_started(_turn_number: int) -> void:
 			if player_node.has_method("set_path"):
 				player_node.set_path(waypoints)
 				print("[GameScene] Path applied to %s (%d waypoints)" % [player_node.name, waypoints.size()])
+
+
+## ネットワーク同期をセットアップ
+func _setup_network_sync() -> void:
+	network_sync_manager = Node.new()
+	network_sync_manager.name = "NetworkSyncManager"
+	network_sync_manager.set_script(NetworkSyncManagerScript)
+	add_child(network_sync_manager)
+
+	# シグナル接続
+	network_sync_manager.remote_player_joined.connect(_on_remote_player_joined)
+	network_sync_manager.remote_player_left.connect(_on_remote_player_left)
+	network_sync_manager.remote_player_updated.connect(_on_remote_player_updated)
+	network_sync_manager.remote_player_action.connect(_on_remote_player_action)
+	network_sync_manager.game_state_updated.connect(_on_game_state_updated)
+
+	# 有効化
+	network_sync_manager.activate()
+
+	print("[GameScene] NetworkSyncManager initialized for online match")
+
+
+## リモートプレイヤー参加
+func _on_remote_player_joined(user_id: String, username: String) -> void:
+	print("[GameScene] Remote player joined: %s (%s)" % [username, user_id])
+	# TODO: リモートプレイヤーのキャラクターを生成
+
+
+## リモートプレイヤー離脱
+func _on_remote_player_left(user_id: String) -> void:
+	print("[GameScene] Remote player left: %s" % user_id)
+	# TODO: リモートプレイヤーのキャラクターを削除
+
+
+## リモートプレイヤー位置更新
+func _on_remote_player_updated(user_id: String, position: Vector3, rotation: float) -> void:
+	# TODO: リモートプレイヤーのキャラクターを更新
+	pass
+
+
+## リモートプレイヤーアクション
+func _on_remote_player_action(user_id: String, action_type: String, data: Dictionary) -> void:
+	print("[GameScene] Remote player action: %s -> %s" % [user_id, action_type])
+	# TODO: アクションに応じた処理
+
+
+## ゲーム状態更新
+func _on_game_state_updated(state: Dictionary) -> void:
+	var event_type = state.get("event", "")
+	print("[GameScene] Game state updated: %s" % event_type)
+
+	match event_type:
+		"match_ready":
+			# マッチ準備完了
+			pass
+		"game_start":
+			# ゲーム開始
+			if match_manager:
+				match_manager.start_match()
+		"phase_change":
+			# フェーズ変更
+			var phase = state.get("phase", "")
+			var round_num = state.get("round", 0)
+			print("[GameScene] Phase changed to: %s (Round %d)" % [phase, round_num])

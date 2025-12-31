@@ -164,6 +164,11 @@ func _ready() -> void:
 ├── docs/
 │   └── GAME_DESIGN.md            # この文書
 ├── CLAUDE.md                     # 開発ルール
+├── nakama/                       # オンラインサーバー（Nakama）
+│   ├── README.md                 # サーバー起動方法
+│   └── data/modules/
+│       ├── main.lua              # RPC定義
+│       └── supportrate_match.lua # マッチハンドラー
 └── SupportRateGame/              # Godotプロジェクト
     ├── scenes/
     │   ├── game.tscn                 # メインゲームシーン
@@ -174,7 +179,10 @@ func _ready() -> void:
     │   ├── autoload/                 # シングルトン（薄く保つ）
     │   │   ├── game_events.gd        # イベントバス - システム間連携
     │   │   ├── game_manager.gd       # シーン遷移・設定・参照保持のみ
-    │   │   └── input_manager.gd      # 入力管理
+    │   │   ├── input_manager.gd      # 入力管理
+    │   │   └── nakama_client.gd      # オンライン通信クライアント
+    │   ├── lobby/
+    │   │   └── lobby_screen.gd       # ロビー画面（認証・部屋作成/参加）
     │   ├── characters/
     │   │   ├── character_base.gd     # キャラクター基底クラス
     │   │   ├── player.gd             # プレイヤー
