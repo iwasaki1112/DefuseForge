@@ -40,6 +40,13 @@ func _ready() -> void:
 		push_error("[VisionComponent] Parent must be CharacterBody3D")
 		return
 
+	# 敵チームの場合は即座に処理を無効化（遅延を待たずに）
+	# これにより、モバイルでの初期化タイミング問題を回避
+	if not _should_register_with_fog():
+		set_process(false)
+		print("[VisionComponent] Disabled for enemy team: %s" % character.name)
+		return
+
 	# FogOfWarManagerへの登録を遅延実行（game_sceneの初期化完了を待つ）
 	_deferred_register.call_deferred()
 
@@ -78,6 +85,8 @@ func _get_fog_of_war_manager() -> Node:
 
 ## 敵チームの視界はFogOfWarに登録しない
 func _should_register_with_fog() -> bool:
+	if character and character.has_method("is_player") and not character.is_player():
+		return false
 	if character and character.is_in_group("enemies"):
 		return false
 	return true
