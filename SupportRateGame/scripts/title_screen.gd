@@ -4,10 +4,12 @@ extends Control
 
 @export var game_scene_path: String = "res://scenes/game.tscn"
 @export var lobby_scene_path: String = "res://scenes/lobby/lobby.tscn"
+@export var test_anim_scene_path: String = "res://scenes/test_animation.tscn"
 
 @onready var title_label: Label = $VBoxContainer/TitleLabel
 @onready var start_button: Button = $VBoxContainer/StartButton
 @onready var online_button: Button = $VBoxContainer/OnlineButton
+@onready var test_anim_button: Button = $VBoxContainer/TestAnimButton
 
 var tween: Tween
 
@@ -17,6 +19,8 @@ func _ready() -> void:
 		start_button.pressed.connect(_on_start_button_pressed)
 	if online_button:
 		online_button.pressed.connect(_on_online_button_pressed)
+	if test_anim_button:
+		test_anim_button.pressed.connect(_on_test_anim_button_pressed)
 	_start_title_animation()
 
 
@@ -38,3 +42,7 @@ func _on_start_button_pressed() -> void:
 
 func _on_online_button_pressed() -> void:
 	get_tree().change_scene_to_file(lobby_scene_path)
+
+
+func _on_test_anim_button_pressed() -> void:
+	get_tree().change_scene_to_file(test_anim_scene_path)

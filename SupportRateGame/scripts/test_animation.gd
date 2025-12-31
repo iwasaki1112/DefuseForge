@@ -35,6 +35,19 @@ func _ready() -> void:
 	# GameManagerの状態をPLAYINGに設定
 	GameManager.current_state = GameManager.GameState.PLAYING
 	_update_status()
+	# iOSでの可視性問題を回避するため、遅延してキャラクターを強制表示
+	_ensure_player_visible.call_deferred()
+
+
+## プレイヤーの可視性を確保（iOS対策）
+func _ensure_player_visible() -> void:
+	await get_tree().create_timer(0.1).timeout
+	if player:
+		player.visible = true
+		var model = player.get_node_or_null("CharacterModel")
+		if model:
+			model.visible = true
+		print("[TestAnimation] Player visibility forced to true")
 
 
 func _process(_delta: float) -> void:
@@ -222,6 +235,14 @@ func _switch_character(new_type: CharacterType) -> void:
 		player.set_weapon_type(weapon_type)
 	player.is_moving = was_moving
 	player.is_running = was_running
+
+	# iOS対策: 可視性を強制設定
+	await get_tree().create_timer(0.1).timeout
+	if player:
+		player.visible = true
+		var model = player.get_node_or_null("CharacterModel")
+		if model:
+			model.visible = true
 
 	var type_name = "GSG9" if new_type == CharacterType.GSG9 else "LEET"
 	print("[Test] Character changed to: %s" % type_name)

@@ -9,7 +9,7 @@ signal visibility_changed(visible_points: Array)
 @export_group("視野設定")
 @export var fov_angle: float = 120.0  # 視野角（度）
 @export var view_distance: float = 15.0  # 視野距離
-@export var ray_count: int = 40  # 視野を構成するレイの数
+@export var ray_count: int = 120  # 視野を構成するレイの数（遮蔽精度向上のため増加）
 @export var height_offset: float = 1.5  # レイキャストの高さオフセット
 
 @export_group("更新設定")

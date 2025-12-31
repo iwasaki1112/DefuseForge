@@ -18,8 +18,10 @@ echo "=== iOS実機ビルドスクリプト ==="
 # Godotエクスポートオプション
 if [[ "$1" == "--export" ]]; then
     echo "1. Godotプロジェクトをエクスポート中..."
-    "$GODOT_PATH" --headless --path "$PROJECT_ROOT/SupportRateGame" --export-debug "iOS" "builds/ios/SupportRateGame.xcodeproj"
-    echo "   エクスポート完了"
+    # Godot 4.5ではxcodebuildも実行しようとするが、署名未設定でエラーになる
+    # エラーを無視してエクスポートを続行し、後で署名設定を修正する
+    "$GODOT_PATH" --headless --path "$PROJECT_ROOT/SupportRateGame" --export-debug "iOS" "builds/ios/SupportRateGame.xcodeproj" || true
+    echo "   エクスポート完了（xcodebuildエラーは後で修正）"
 fi
 
 # 署名設定を自動的に修正
