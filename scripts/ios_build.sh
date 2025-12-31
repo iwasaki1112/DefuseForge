@@ -11,6 +11,7 @@ PBXPROJ="$XCODE_PROJECT/project.pbxproj"
 TEAM_ID="NSB57DVW9V"
 DEVICE_ID="00008101-000958903C46001E"
 DEVICE_NAME="iwasaki"
+BUNDLE_ID=$(grep -m1 "PRODUCT_BUNDLE_IDENTIFIER" "$PBXPROJ" | sed 's/.*= //; s/;$//')
 
 echo "=== iOS実機ビルドスクリプト ==="
 
@@ -49,7 +50,24 @@ else
 fi
 
 # ビルド
-echo "4. Xcodeビルド中..."
+echo "4. クリーンビルドを実行中..."
+xcodebuild \
+    -project "$XCODE_PROJECT" \
+    -scheme "SupportRateGame" \
+    -configuration Debug \
+    -destination "id=$DEVICE_ID" \
+    clean >/dev/null 2>&1 || true
+
+echo "5. 既存アプリをアンインストール中..."
+if [ -n "$BUNDLE_ID" ]; then
+    xcrun devicectl device uninstall app --device "$DEVICE_ID" "$BUNDLE_ID" 2>/dev/null || \
+    ios-deploy --uninstall_only --bundle_id "$BUNDLE_ID" --id "$DEVICE_ID" 2>/dev/null || \
+    true
+else
+    echo "   警告: BUNDLE_IDが取得できず、アンインストールをスキップ"
+fi
+
+echo "6. Xcodeビルド中..."
 xcodebuild \
     -project "$XCODE_PROJECT" \
     -scheme "SupportRateGame" \
@@ -64,7 +82,7 @@ xcodebuild \
     -allowProvisioningUpdates \
     build
 
-echo "5. 実機にインストール中..."
+echo "7. 実機にインストール中..."
 # ビルド成果物のパスを取得
 BUILD_DIR=$(xcodebuild -project "$XCODE_PROJECT" -scheme "SupportRateGame" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | head -1 | awk '{print $3}')
 APP_PATH="$BUILD_DIR/SupportRateGame.app"
