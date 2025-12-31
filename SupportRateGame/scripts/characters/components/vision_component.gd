@@ -50,6 +50,10 @@ func _deferred_register() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
+	if not _should_register_with_fog():
+		set_process(false)
+		return
+
 	var fow = _get_fog_of_war_manager()
 	if fow:
 		fow.register_vision_component(self)
@@ -70,6 +74,13 @@ func _exit_tree() -> void:
 ## FogOfWarManagerへの参照を取得
 func _get_fog_of_war_manager() -> Node:
 	return GameManager.fog_of_war_manager if GameManager else null
+
+
+## 敵チームの視界はFogOfWarに登録しない
+func _should_register_with_fog() -> bool:
+	if character and character.is_in_group("enemies"):
+		return false
+	return true
 
 
 func _process(delta: float) -> void:
@@ -129,6 +140,12 @@ func _calculate_visibility() -> void:
 	var origin := character.global_position + Vector3(0, height_offset, 0)
 	var basis := character.global_transform.basis
 
+	var query := PhysicsRayQueryParameters3D.new()
+	query.collision_mask = collision_mask
+	query.exclude = [character]
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+
 	# 中心点を設定
 	visible_points[0] = character.global_position
 	var idx := 1
@@ -140,9 +157,8 @@ func _calculate_visibility() -> void:
 		var end_point := origin + ray_direction * view_distance
 
 		# レイキャスト
-		var query := PhysicsRayQueryParameters3D.create(origin, end_point)
-		query.collision_mask = collision_mask
-		query.exclude = [character]
+		query.from = origin
+		query.to = end_point
 
 		var result := space_state.intersect_ray(query)
 
