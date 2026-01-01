@@ -1,26 +1,59 @@
 class_name FogOfWarRenderer
 extends Node3D
 
-## 視野範囲レンダラー
-## プレイヤーの視野範囲を3Dで描画
+## Fog of Warレンダラー（3Dワールド空間方式）
+## 2つのメッシュを使用：フォグメッシュ + ビジョンメッシュ（減算）
+## Door Kickers 2スタイルの実装
 
 @export_group("表示設定")
-@export var fog_height: float = 0.05  # 視野を描画する高さ（地面付近）
-@export var visible_color: Color = Color(1.0, 1.0, 0.5, 0.3)  # 視野内の色（薄い黄色）
-@export var cull_margin: float = 50.0  # カリングマージン（視野距離に基づいた適切な値）
+@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.9)  # 青みがかった暗い色（90%不透明）
+@export var fog_height: float = 0.1  # 地面からの高さ
 
-# メッシュインスタンス
-var visibility_mesh_instance: MeshInstance3D = null
+@export_group("マップ設定")
+@export var map_size: Vector2 = Vector2(100, 100)  # マップサイズ
+@export var map_center: Vector3 = Vector3.ZERO  # マップ中心
 
-# マテリアル
-var visibility_material: StandardMaterial3D = null
+# フォグメッシュ（全面を覆う）
+var fog_mesh_instance: MeshInstance3D = null
+var fog_material: StandardMaterial3D = null
 
-# dirtyフラグ（1フレームに1回のみ更新）
-var _mesh_dirty: bool = false
+# ビジョンメッシュ（視野エリアをくり抜く）
+var vision_mesh_instance: MeshInstance3D = null
+var vision_material: StandardMaterial3D = null
+
+# dirtyフラグ
+var _dirty: bool = true
 
 
 func _ready() -> void:
-	_setup_visibility_layer()
+	# ビジョンマテリアルを作成（透明だが深度に書き込む - 先に描画）
+	vision_material = StandardMaterial3D.new()
+	vision_material.albedo_color = Color(0, 0, 0, 0)  # 完全透明
+	vision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+	vision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	vision_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	vision_material.render_priority = -1  # フォグより先に描画
+	vision_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+
+	# フォグマテリアルを作成（深度テストでビジョン部分を避ける）
+	fog_material = StandardMaterial3D.new()
+	fog_material.albedo_color = fog_color
+	fog_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fog_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fog_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	fog_material.render_priority = 10
+
+	# ビジョンメッシュインスタンスを作成（先に描画）
+	vision_mesh_instance = MeshInstance3D.new()
+	vision_mesh_instance.name = "VisionMesh"
+	vision_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(vision_mesh_instance)
+
+	# フォグメッシュインスタンスを作成（後に描画）
+	fog_mesh_instance = MeshInstance3D.new()
+	fog_mesh_instance.name = "FogMesh"
+	fog_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(fog_mesh_instance)
 
 	# FogOfWarManagerに登録
 	var fow = _get_fog_of_war_manager()
@@ -28,12 +61,14 @@ func _ready() -> void:
 		fow.set_fog_renderer(self)
 		fow.fog_updated.connect(_on_fog_updated)
 
+	# 初期メッシュを構築
+	_rebuild_meshes()
+
 
 func _process(_delta: float) -> void:
-	# dirtyフラグが立っている場合のみメッシュを更新（1フレームに1回）
-	if _mesh_dirty:
-		_mesh_dirty = false
-		_update_visibility_mesh()
+	if _dirty:
+		_dirty = false
+		_rebuild_meshes()
 
 
 func _exit_tree() -> void:
@@ -47,73 +82,103 @@ func _get_fog_of_war_manager() -> Node:
 	return GameManager.fog_of_war_manager if GameManager else null
 
 
-## 視野レイヤーをセットアップ（動的視野ポリゴン用）
-func _setup_visibility_layer() -> void:
-	visibility_mesh_instance = MeshInstance3D.new()
-	visibility_mesh_instance.name = "VisibilityMesh"
-	visibility_mesh_instance.extra_cull_margin = cull_margin  # 適切なカリングマージン
-	add_child(visibility_mesh_instance)
+## メッシュを再構築
+func _rebuild_meshes() -> void:
+	# フォグメッシュは常に全面
+	_build_fog_mesh()
 
-	# マテリアルを作成
-	visibility_material = StandardMaterial3D.new()
-	visibility_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	visibility_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	visibility_material.albedo_color = visible_color
-	visibility_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-
-## 視野メッシュを更新
-func _update_visibility_mesh() -> void:
+	# ビジョンメッシュを構築
 	var fow = _get_fog_of_war_manager()
 	if not fow:
+		vision_mesh_instance.mesh = null
 		return
 
-	var visible_points: Array = fow.get_current_visible_points()
-	if visible_points.size() < 3:
-		visibility_mesh_instance.mesh = null
-		return
-
-	# 各視野コンポーネントごとにポリゴンを生成
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var triangle_count := 0
+	# 視野ポリゴンを収集
+	var vision_polygons: Array = []
 	for component in fow.vision_components:
 		if not component or component.visible_points.size() < 3:
 			continue
 
-		var points: Array = component.visible_points
-		var center: Vector3 = points[0] as Vector3  # 最初のポイントは中心
+		var polygon_2d := PackedVector2Array()
+		for point_3d in component.visible_points:
+			polygon_2d.append(Vector2(point_3d.x, point_3d.z))
 
-		# 扇形をトライアングルファンで描画
-		for i in range(1, points.size() - 1):
-			var p1: Vector3 = points[i] as Vector3
-			var p2: Vector3 = points[i + 1] as Vector3
+		if polygon_2d.size() >= 3:
+			vision_polygons.append(polygon_2d)
 
-			# 高さを調整（地面から少し上）
-			var c := Vector3(center.x, fog_height, center.z)
-			var v1 := Vector3(p1.x, fog_height, p1.z)
-			var v2 := Vector3(p2.x, fog_height, p2.z)
+	if vision_polygons.is_empty():
+		vision_mesh_instance.mesh = null
+		return
 
-			st.add_vertex(c)
-			st.add_vertex(v1)
-			st.add_vertex(v2)
-			triangle_count += 1
+	_build_vision_mesh(vision_polygons)
 
-	if triangle_count > 0:
-		# generate_normals()をスキップ - unshadedマテリアルでは不要
-		visibility_mesh_instance.mesh = st.commit()
-		visibility_mesh_instance.material_override = visibility_material
+
+## フォグメッシュを構築（全面）
+func _build_fog_mesh() -> void:
+	var half_x := map_size.x / 2.0
+	var half_z := map_size.y / 2.0
+	var y := fog_height
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(fog_material)
+
+	# 四角形を2つの三角形で構築
+	var v0 := Vector3(map_center.x - half_x, y, map_center.z - half_z)
+	var v1 := Vector3(map_center.x + half_x, y, map_center.z - half_z)
+	var v2 := Vector3(map_center.x + half_x, y, map_center.z + half_z)
+	var v3 := Vector3(map_center.x - half_x, y, map_center.z + half_z)
+
+	# 三角形1
+	st.add_vertex(v0)
+	st.add_vertex(v1)
+	st.add_vertex(v2)
+
+	# 三角形2
+	st.add_vertex(v0)
+	st.add_vertex(v2)
+	st.add_vertex(v3)
+
+	fog_mesh_instance.mesh = st.commit()
+
+
+## ビジョンメッシュを構築（視野エリア）
+func _build_vision_mesh(vision_polygons: Array) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(vision_material)
+
+	var y := fog_height + 0.05  # フォグより上（深度テスト用）
+	var vertex_count := 0
+
+	for poly in vision_polygons:
+		if poly.size() < 3:
+			continue
+
+		# ポリゴンを三角形分割
+		var indices := Geometry2D.triangulate_polygon(poly)
+		if indices.is_empty():
+			continue
+
+		for idx in indices:
+			if idx < poly.size():
+				var p2d: Vector2 = poly[idx]
+				st.add_vertex(Vector3(p2d.x, y, p2d.y))
+				vertex_count += 1
+
+	if vertex_count >= 3:
+		vision_mesh_instance.mesh = st.commit()
 	else:
-		visibility_mesh_instance.mesh = null
+		vision_mesh_instance.mesh = null
 
 
 ## フォグが更新されたときのコールバック
 func _on_fog_updated() -> void:
-	# dirtyフラグを立てる（_processで1フレームに1回だけ更新）
-	_mesh_dirty = true
+	_dirty = true
 
 
-## マップ設定を更新（互換性のため残す）
-func set_map_bounds(_center: Vector3, _size: Vector2) -> void:
-	pass
+## マップ設定を更新
+func set_map_bounds(center: Vector3, size: Vector2) -> void:
+	map_center = center
+	map_size = size
+	_dirty = true
