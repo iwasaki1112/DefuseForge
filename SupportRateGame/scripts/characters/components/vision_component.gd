@@ -15,12 +15,19 @@ signal visibility_changed(visible_points: Array)
 @export_group("更新設定")
 @export var update_interval: float = 0.0  # 視野更新間隔（秒）- 0で毎フレーム更新
 
+@export_group("スムージング設定")
+@export var smoothing_enabled: bool = true  # 視野ポイントのスムージングを有効化
+@export var smoothing_speed: float = 15.0  # スムージング速度（大きいほど追従が速い）
+
 # 親キャラクター参照
 var character: CharacterBody3D = null
 
 # 視野ポリゴンを構成する点のリスト（事前確保してresize、メモリ割り当て削減）
-var visible_points: Array = []  # Array of Vector3
+var visible_points: Array = []  # Array of Vector3（スムージング後の表示用）
+var _target_points: Array = []  # Array of Vector3（レイキャストの生の結果）
+var _hit_wall: Array = []  # Array of bool（各ポイントが壁にヒットしたか）
 var _visible_points_size: int = 0  # 実際に使用されているサイズ
+var _smoothing_initialized: bool = false  # スムージング初期化フラグ
 
 # 壁検出用コリジョンマスク
 var collision_mask: int = 2  # デフォルトは地形レイヤー
@@ -101,6 +108,10 @@ func _process(delta: float) -> void:
 		_update_timer = 0.0
 		_calculate_visibility()
 
+	# スムージング処理（毎フレーム実行）
+	if smoothing_enabled and _smoothing_initialized:
+		_apply_smoothing(delta)
+
 
 ## レイ方向キャッシュを更新（fov_angleやray_countが変更された場合）
 func _update_ray_direction_cache() -> void:
@@ -142,8 +153,12 @@ func _calculate_visibility() -> void:
 
 	# 配列サイズを調整（メモリ割り当て削減、かつ古いデータが残らないように）
 	var required_size := ray_count + 1  # 中心点 + レイ数
+	if _target_points.size() != required_size:
+		_target_points.resize(required_size)
 	if visible_points.size() != required_size:
 		visible_points.resize(required_size)
+	if _hit_wall.size() != required_size:
+		_hit_wall.resize(required_size)
 
 	var space_state := character.get_world_3d().direct_space_state
 	var origin := character.global_position + Vector3(0, height_offset, 0)
@@ -156,7 +171,8 @@ func _calculate_visibility() -> void:
 	query.collide_with_areas = false
 
 	# 中心点を設定
-	visible_points[0] = character.global_position
+	_target_points[0] = character.global_position
+	_hit_wall[0] = false  # 中心点は壁ヒットなし
 	var idx := 1
 
 	# 各レイをキャスト（キャッシュされた方向を使用）
@@ -173,14 +189,57 @@ func _calculate_visibility() -> void:
 
 		if result:
 			# 壁にヒット
-			visible_points[idx] = result.position
+			_target_points[idx] = result.position
+			_hit_wall[idx] = true
 		else:
 			# 視野の端まで見える
-			visible_points[idx] = end_point
+			_target_points[idx] = end_point
+			_hit_wall[idx] = false
 		idx += 1
 
 	_visible_points_size = idx
-	visibility_changed.emit(visible_points)
+
+	# スムージングが無効な場合、または初回計算時は直接コピー
+	if not smoothing_enabled or not _smoothing_initialized:
+		for i in range(_visible_points_size):
+			visible_points[i] = _target_points[i]
+		_smoothing_initialized = true
+		visibility_changed.emit(visible_points)
+
+
+## スムージング処理（毎フレーム実行）
+## visible_pointsをターゲットポイントに向かって滑らかに補間
+## 壁にヒットしたポイントは即座に更新（エッジをシャープに保つ）
+func _apply_smoothing(delta: float) -> void:
+	if _visible_points_size == 0:
+		return
+
+	var lerp_factor := minf(1.0, smoothing_speed * delta)
+	var has_changed := false
+
+	for i in range(_visible_points_size):
+		var current: Vector3 = visible_points[i]
+		var target: Vector3 = _target_points[i]
+
+		# 壁にヒットしたポイントは即座に更新（エッジをシャープに保つ）
+		if _hit_wall[i]:
+			if current != target:
+				visible_points[i] = target
+				has_changed = true
+			continue
+
+		# 距離が非常に近い場合はスキップ（パフォーマンス最適化）
+		var distance_sq := current.distance_squared_to(target)
+		if distance_sq < 0.0001:  # 1cm未満の差
+			continue
+
+		# lerp補間でターゲットに近づける（壁にヒットしていない部分のみ）
+		visible_points[i] = current.lerp(target, lerp_factor)
+		has_changed = true
+
+	# 変更があった場合のみシグナルを発火
+	if has_changed:
+		visibility_changed.emit(visible_points)
 
 
 ## 指定した位置が視野内かどうかを判定
