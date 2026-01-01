@@ -6,6 +6,7 @@ extends Node3D
 ## Unreal Engine記事を参考: https://minmax.itch.io/operators/devlog/222177/rendering-grid-based-fog-of-war-in-unreal-engine-4-part-1
 
 const VisibilityTextureWriterClass = preload("res://scripts/systems/vision/visibility_texture_writer.gd")
+const VisibilityGridSyncClass = preload("res://scripts/systems/vision/visibility_grid_sync.gd")
 
 @export_group("表示設定")
 @export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.9)  # 青みがかった暗い色
@@ -193,3 +194,74 @@ func set_edge_sharpness(sharpness: float) -> void:
 	edge_sharpness = clampf(sharpness, 0.0, 1.0)
 	if fog_shader_material:
 		fog_shader_material.set_shader_parameter("edge_sharpness", edge_sharpness)
+
+
+# =============================================================================
+# ネットワーク同期API
+# =============================================================================
+
+## VisibilityGridSyncを取得（直接アクセス用）
+func get_grid_sync():  # -> VisibilityGridSync
+	if visibility_writer:
+		return visibility_writer.grid_sync
+	return null
+
+
+## 差分データを取得（サーバー→クライアント送信用）
+## 戻り値: RLE圧縮された差分バイト配列
+func get_visibility_diff() -> PackedByteArray:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		return grid_sync.get_diff_data()
+	return PackedByteArray()
+
+
+## フルデータを取得（初期同期用）
+## 戻り値: RLE圧縮されたビットマップ
+func get_visibility_full() -> PackedByteArray:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		return grid_sync.get_full_data()
+	return PackedByteArray()
+
+
+## 差分データを適用（クライアント側）
+func apply_visibility_diff(compressed_diff: PackedByteArray) -> void:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		grid_sync.apply_diff_data(compressed_diff)
+
+
+## フルデータを適用（初期同期用、クライアント側）
+func apply_visibility_full(compressed_data: PackedByteArray) -> void:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		grid_sync.apply_full_data(compressed_data)
+
+
+## 敵位置をフィルタリング（チート対策）
+## 視界外の敵位置を隠す
+## enemies: Dictionary { enemy_id: Vector3 }
+## 戻り値: Dictionary { enemy_id: Vector3 or null }
+func filter_enemy_positions(enemies: Dictionary) -> Dictionary:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		return grid_sync.filter_enemy_positions(enemies)
+	return enemies
+
+
+## 指定位置が可視かどうか（高速版）
+## ビットマップを直接参照するため、ポリゴン判定より高速
+func is_position_visible_fast(world_pos: Vector3) -> bool:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		return grid_sync.is_position_visible(world_pos)
+	return false
+
+
+## 同期統計を取得（デバッグ用）
+func get_sync_stats() -> Dictionary:
+	var grid_sync = get_grid_sync()
+	if grid_sync:
+		return grid_sync.get_sync_stats()
+	return {}
