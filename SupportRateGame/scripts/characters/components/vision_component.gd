@@ -3,31 +3,28 @@ extends Node
 
 ## 視野コンポーネント
 ## キャラクターの視野を管理し、視界内のポイントを計算
+## 参考: https://ncase.me/sight-and-light/
 
 signal visibility_changed(visible_points: Array)
 
 @export_group("視野設定")
 @export var fov_angle: float = 120.0  # 視野角（度）
 @export var view_distance: float = 15.0  # 視野距離
-@export var ray_count: int = 40  # 視野を構成するレイの数
 @export var height_offset: float = 1.5  # レイキャストの高さオフセット
+
+@export_group("精度設定")
+@export var arc_segments: int = 32  # FOV弧を分割するセグメント数
+@export var corner_offset: float = 0.0001  # コーナーへのレイのオフセット角度（ラジアン）
 
 @export_group("更新設定")
 @export var update_interval: float = 0.0  # 視野更新間隔（秒）- 0で毎フレーム更新
 
-@export_group("スムージング設定")
-@export var smoothing_enabled: bool = true  # 視野ポイントのスムージングを有効化
-@export var smoothing_speed: float = 15.0  # スムージング速度（大きいほど追従が速い）
-
 # 親キャラクター参照
 var character: CharacterBody3D = null
 
-# 視野ポリゴンを構成する点のリスト（事前確保してresize、メモリ割り当て削減）
-var visible_points: Array = []  # Array of Vector3（スムージング後の表示用）
-var _target_points: Array = []  # Array of Vector3（レイキャストの生の結果）
-var _hit_wall: Array = []  # Array of bool（各ポイントが壁にヒットしたか）
-var _visible_points_size: int = 0  # 実際に使用されているサイズ
-var _smoothing_initialized: bool = false  # スムージング初期化フラグ
+# 視野ポリゴンを構成する点のリスト
+var visible_points: Array = []  # Array of Vector3
+var _visible_points_size: int = 0
 
 # 壁検出用コリジョンマスク
 var collision_mask: int = 2  # デフォルトは地形レイヤー
@@ -35,10 +32,8 @@ var collision_mask: int = 2  # デフォルトは地形レイヤー
 # 更新タイマー
 var _update_timer: float = 0.0
 
-# キャッシュされたレイ方向（ローカル空間、+Z前方基準）
-var _cached_ray_directions: Array = []  # Array of Vector3
-var _cached_fov_angle: float = 0.0
-var _cached_ray_count: int = 0
+# キャッシュされた障害物コーナー
+var _obstacle_corners: Array = []  # Array of Vector3
 
 
 func _ready() -> void:
@@ -47,25 +42,23 @@ func _ready() -> void:
 		push_error("[VisionComponent] Parent must be CharacterBody3D")
 		return
 
-	# 敵チームの場合は即座に処理を無効化（遅延を待たずに）
-	# これにより、モバイルでの初期化タイミング問題を回避
+	# 敵チームの場合は即座に処理を無効化
 	if not _should_register_with_fog():
-		set_process(false)
+		set_physics_process(false)
 		print("[VisionComponent] Disabled for enemy team: %s" % character.name)
 		return
 
-	# FogOfWarManagerへの登録を遅延実行（game_sceneの初期化完了を待つ）
+	# FogOfWarManagerへの登録を遅延実行
 	_deferred_register.call_deferred()
 
 
-## 遅延登録（FogOfWarManagerの初期化完了後に実行）
+## 遅延登録
 func _deferred_register() -> void:
-	# 数フレーム待ってFogOfWarManagerが登録されるのを待つ
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 	if not _should_register_with_fog():
-		set_process(false)
+		set_physics_process(false)
 		return
 
 	var fow = _get_fog_of_war_manager()
@@ -85,12 +78,10 @@ func _exit_tree() -> void:
 		fow.unregister_vision_component(self)
 
 
-## FogOfWarManagerへの参照を取得
 func _get_fog_of_war_manager() -> Node:
 	return GameManager.fog_of_war_manager if GameManager else null
 
 
-## 敵チームの視界はFogOfWarに登録しない
 func _should_register_with_fog() -> bool:
 	if character and character.has_method("is_player") and not character.is_player():
 		return false
@@ -99,7 +90,7 @@ func _should_register_with_fog() -> bool:
 	return true
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not character:
 		return
 
@@ -108,138 +99,183 @@ func _process(delta: float) -> void:
 		_update_timer = 0.0
 		_calculate_visibility()
 
-	# スムージング処理（毎フレーム実行）
-	if smoothing_enabled and _smoothing_initialized:
-		_apply_smoothing(delta)
 
-
-## レイ方向キャッシュを更新（fov_angleやray_countが変更された場合）
-func _update_ray_direction_cache() -> void:
-	if _cached_fov_angle == fov_angle and _cached_ray_count == ray_count:
-		return  # キャッシュは有効
-
-	_cached_ray_directions.clear()
-	_cached_fov_angle = fov_angle
-	_cached_ray_count = ray_count
-
-	if ray_count < 2:
-		return
-
-	var half_fov := deg_to_rad(fov_angle / 2.0)
-	var angle_step := deg_to_rad(fov_angle) / float(ray_count - 1)
-
-	# ローカル空間でのレイ方向を事前計算（+Z前方基準）
-	for i in range(ray_count):
-		var current_angle := -half_fov + angle_step * i
-		# Vector3.BACK (0, 0, 1) = +Z方向（このプロジェクトの前方向）を基準に回転
-		var local_direction := Vector3.BACK.rotated(Vector3.UP, current_angle)
-		_cached_ray_directions.append(local_direction)
-
-
-## 視界を計算
+## 視界を計算（Sight & Lightアルゴリズム）
 func _calculate_visibility() -> void:
 	if not character or not character.is_inside_tree():
 		_visible_points_size = 0
 		return
 
-	# ray_countが2未満の場合は計算をスキップ（ゼロ除算防止）
-	if ray_count < 2:
-		push_warning("[VisionComponent] ray_count must be at least 2")
-		_visible_points_size = 0
-		return
+	var origin := character.global_position + Vector3(0, height_offset, 0)
+	var forward := character.global_transform.basis.z  # +Z方向
+	var forward_angle := atan2(forward.x, forward.z)
+	var half_fov := deg_to_rad(fov_angle / 2.0)
 
-	# レイ方向キャッシュを更新（必要な場合のみ）
-	_update_ray_direction_cache()
+	# FOVの境界角度
+	var min_angle := forward_angle - half_fov
+	var max_angle := forward_angle + half_fov
 
-	# 配列サイズを調整（メモリ割り当て削減、かつ古いデータが残らないように）
-	var required_size := ray_count + 1  # 中心点 + レイ数
-	if _target_points.size() != required_size:
-		_target_points.resize(required_size)
-	if visible_points.size() != required_size:
-		visible_points.resize(required_size)
-	if _hit_wall.size() != required_size:
-		_hit_wall.resize(required_size)
+	# 障害物コーナーを収集
+	_collect_obstacle_corners(origin)
+
+	# レイを発射する角度を収集
+	var ray_angles: Array[float] = []
+
+	# 1. FOV境界のレイ
+	ray_angles.append(min_angle)
+	ray_angles.append(max_angle)
+
+	# 2. FOV弧に沿ったレイ（滑らかな外縁のため）
+	for i in range(1, arc_segments):
+		var t := float(i) / float(arc_segments)
+		var angle := min_angle + (max_angle - min_angle) * t
+		ray_angles.append(angle)
+
+	# 3. 各障害物コーナーに向かうレイ（+ オフセットレイ）
+	for i in range(_obstacle_corners.size()):
+		var corner: Vector3 = _obstacle_corners[i]
+		var to_corner: Vector3 = corner - origin
+		var corner_angle: float = atan2(to_corner.x, to_corner.z)
+
+		# 角度がFOV内かチェック
+		if _is_angle_in_fov(corner_angle, forward_angle, half_fov):
+			ray_angles.append(corner_angle)
+			ray_angles.append(corner_angle - corner_offset)
+			ray_angles.append(corner_angle + corner_offset)
+
+	# 角度でソート
+	ray_angles.sort()
+
+	# 重複を除去
+	var unique_angles: Array[float] = []
+	for angle in ray_angles:
+		if unique_angles.is_empty() or absf(angle - unique_angles[-1]) > 0.00001:
+			unique_angles.append(angle)
+
+	# レイキャストを実行して交点を収集
+	var intersection_points: Array = []
+	intersection_points.append(character.global_position)  # 中心点
 
 	var space_state := character.get_world_3d().direct_space_state
-	var origin := character.global_position + Vector3(0, height_offset, 0)
-	var basis := character.global_transform.basis
-
 	var query := PhysicsRayQueryParameters3D.new()
 	query.collision_mask = collision_mask
 	query.exclude = [character]
 	query.collide_with_bodies = true
 	query.collide_with_areas = false
 
-	# 中心点を設定
-	_target_points[0] = character.global_position
-	_hit_wall[0] = false  # 中心点は壁ヒットなし
-	var idx := 1
+	for angle in unique_angles:
+		var direction := Vector3(sin(angle), 0, cos(angle))
+		var end_point := origin + direction * view_distance
 
-	# 各レイをキャスト（キャッシュされた方向を使用）
-	for local_dir in _cached_ray_directions:
-		# ローカル方向をワールド方向に変換
-		var ray_direction: Vector3 = basis * local_dir
-		var end_point := origin + ray_direction * view_distance
-
-		# レイキャスト
 		query.from = origin
 		query.to = end_point
 
 		var result := space_state.intersect_ray(query)
 
 		if result:
-			# 壁にヒット
-			_target_points[idx] = result.position
-			_hit_wall[idx] = true
+			intersection_points.append(result.position)
 		else:
-			# 視野の端まで見える
-			_target_points[idx] = end_point
-			_hit_wall[idx] = false
-		idx += 1
+			intersection_points.append(end_point)
 
-	_visible_points_size = idx
-
-	# スムージングが無効な場合、または初回計算時は直接コピー
-	if not smoothing_enabled or not _smoothing_initialized:
-		for i in range(_visible_points_size):
-			visible_points[i] = _target_points[i]
-		_smoothing_initialized = true
-		visibility_changed.emit(visible_points)
+	visible_points = intersection_points
+	_visible_points_size = visible_points.size()
+	visibility_changed.emit(visible_points)
 
 
-## スムージング処理（毎フレーム実行）
-## visible_pointsをターゲットポイントに向かって滑らかに補間
-## 壁にヒットしたポイントは即座に更新（エッジをシャープに保つ）
-func _apply_smoothing(delta: float) -> void:
-	if _visible_points_size == 0:
+## 角度がFOV内かどうかをチェック
+func _is_angle_in_fov(angle: float, forward_angle: float, half_fov: float) -> bool:
+	var diff := angle_difference(angle, forward_angle)
+	return absf(diff) <= half_fov
+
+
+## 障害物のコーナーを収集
+func _collect_obstacle_corners(origin: Vector3) -> void:
+	_obstacle_corners.clear()
+
+	# シーン内の障害物（collision_layer = 2）を取得
+	var obstacles := get_tree().get_nodes_in_group("obstacles")
+
+	# グループがない場合は、物理クエリで取得
+	if obstacles.is_empty():
+		_collect_corners_from_physics(origin)
 		return
 
-	var lerp_factor := minf(1.0, smoothing_speed * delta)
-	var has_changed := false
+	for obstacle in obstacles:
+		if obstacle is StaticBody3D or obstacle is CSGShape3D:
+			_extract_corners_from_node(obstacle, origin)
 
-	for i in range(_visible_points_size):
-		var current: Vector3 = visible_points[i]
-		var target: Vector3 = _target_points[i]
 
-		# 壁にヒットしたポイントは即座に更新（エッジをシャープに保つ）
-		if _hit_wall[i]:
-			if current != target:
-				visible_points[i] = target
-				has_changed = true
-			continue
+## 物理クエリでコーナーを収集
+func _collect_corners_from_physics(origin: Vector3) -> void:
+	var space_state := character.get_world_3d().direct_space_state
 
-		# 距離が非常に近い場合はスキップ（パフォーマンス最適化）
-		var distance_sq := current.distance_squared_to(target)
-		if distance_sq < 0.0001:  # 1cm未満の差
-			continue
+	# 球形状でオーバーラップチェック
+	var shape := SphereShape3D.new()
+	shape.radius = view_distance
 
-		# lerp補間でターゲットに近づける（壁にヒットしていない部分のみ）
-		visible_points[i] = current.lerp(target, lerp_factor)
-		has_changed = true
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = shape
+	params.transform = Transform3D(Basis.IDENTITY, origin)
+	params.collision_mask = collision_mask
 
-	# 変更があった場合のみシグナルを発火
-	if has_changed:
-		visibility_changed.emit(visible_points)
+	var results := space_state.intersect_shape(params, 32)
+
+	for result in results:
+		var collider = result.collider
+		if collider:
+			_extract_corners_from_node(collider, origin)
+
+
+## ノードからコーナーを抽出
+func _extract_corners_from_node(node: Node, origin: Vector3) -> void:
+	# CollisionShape3Dを探す
+	for child in node.get_children():
+		if child is CollisionShape3D:
+			var col_shape: CollisionShape3D = child
+			var shape: Shape3D = col_shape.shape
+			var shape_transform: Transform3D = col_shape.global_transform
+
+			if shape is BoxShape3D:
+				_extract_box_corners(shape as BoxShape3D, shape_transform, origin)
+			elif shape is CylinderShape3D:
+				_extract_cylinder_corners(shape as CylinderShape3D, shape_transform, origin)
+			# 他の形状も必要に応じて追加
+
+
+## BoxShape3Dのコーナーを抽出
+func _extract_box_corners(shape: BoxShape3D, transform: Transform3D, origin: Vector3) -> void:
+	var half_size := shape.size / 2.0
+
+	# ボックスの8頂点（ローカル座標）
+	var local_corners := [
+		Vector3(-half_size.x, 0, -half_size.z),
+		Vector3(half_size.x, 0, -half_size.z),
+		Vector3(half_size.x, 0, half_size.z),
+		Vector3(-half_size.x, 0, half_size.z),
+	]
+
+	for local_corner in local_corners:
+		var world_corner: Vector3 = transform * local_corner
+		world_corner.y = origin.y  # 高さを合わせる
+
+		# 視野距離内かチェック
+		if origin.distance_to(world_corner) <= view_distance * 1.5:
+			_obstacle_corners.append(world_corner)
+
+
+## CylinderShape3Dのコーナーを抽出（円周上の点）
+func _extract_cylinder_corners(shape: CylinderShape3D, transform: Transform3D, origin: Vector3) -> void:
+	var radius := shape.radius
+	var segments := 8  # 円周を8分割
+
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		var local_point := Vector3(cos(angle) * radius, 0, sin(angle) * radius)
+		var world_point: Vector3 = transform * local_point
+		world_point.y = origin.y
+
+		if origin.distance_to(world_point) <= view_distance * 1.5:
+			_obstacle_corners.append(world_point)
 
 
 ## 指定した位置が視野内かどうかを判定
@@ -249,14 +285,14 @@ func is_position_visible(target_pos: Vector3) -> bool:
 
 	var origin := character.global_position + Vector3(0, height_offset, 0)
 	var to_target := target_pos - origin
-	to_target.y = 0  # 水平方向のみ
+	to_target.y = 0
 
 	# 距離チェック
 	if to_target.length() > view_distance:
 		return false
 
 	# 角度チェック
-	var forward := character.global_transform.basis.z  # +Z方向（このプロジェクトの設定）
+	var forward := character.global_transform.basis.z
 	forward.y = 0
 	forward = forward.normalized()
 	to_target = to_target.normalized()
@@ -272,8 +308,6 @@ func is_position_visible(target_pos: Vector3) -> bool:
 	query.exclude = [character]
 
 	var result := space_state.intersect_ray(query)
-
-	# ヒットしなければ見える
 	return result.is_empty()
 
 

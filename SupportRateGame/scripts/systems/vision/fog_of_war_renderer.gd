@@ -65,7 +65,7 @@ func _ready() -> void:
 	_rebuild_meshes()
 
 
-func _process(_delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	if _dirty:
 		_dirty = false
 		_rebuild_meshes()
@@ -172,9 +172,9 @@ func _build_vision_mesh(vision_polygons: Array) -> void:
 		vision_mesh_instance.mesh = null
 
 
-## フォグが更新されたときのコールバック
+## フォグが更新されたときのコールバック（即座に更新）
 func _on_fog_updated() -> void:
-	_dirty = true
+	_rebuild_meshes()
 
 
 ## マップ設定を更新
