@@ -91,6 +91,9 @@ func register_vision_component(component: Node) -> void:
 		var callback := _on_visibility_changed.bind(component)
 		_component_callbacks[component] = callback
 		component.visibility_changed.connect(callback)
+		# レンダラーにも登録
+		if fog_renderer and fog_renderer.has_method("register_vision_component"):
+			fog_renderer.register_vision_component(component)
 
 
 ## 視野コンポーネントを解除
@@ -103,6 +106,9 @@ func unregister_vision_component(component: Node) -> void:
 			if component.visibility_changed.is_connected(callback):
 				component.visibility_changed.disconnect(callback)
 			_component_callbacks.erase(component)
+		# レンダラーからも解除
+		if fog_renderer and fog_renderer.has_method("unregister_vision_component"):
+			fog_renderer.unregister_vision_component(component)
 
 
 ## 視野が更新されたときのコールバック
@@ -200,6 +206,10 @@ func reset_visibility() -> void:
 ## FogOfWarRendererを設定
 func set_fog_renderer(renderer: Node3D) -> void:
 	fog_renderer = renderer
+	# 既存の視野コンポーネントをレンダラーに登録
+	if fog_renderer and fog_renderer.has_method("register_vision_component"):
+		for component in vision_components:
+			fog_renderer.register_vision_component(component)
 
 
 ## 現在の視野ポイントを取得

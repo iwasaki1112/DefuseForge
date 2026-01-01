@@ -1,59 +1,63 @@
 class_name FogOfWarRenderer
 extends Node3D
 
-## Fog of Warレンダラー（3Dワールド空間方式）
-## 2つのメッシュを使用：フォグメッシュ + ビジョンメッシュ（減算）
-## Door Kickers 2スタイルの実装
+## Fog of Warレンダラー（テクスチャベース方式）
+## グリッドベースの可視性テクスチャを使用し、シェーダーでテンポラル補間
+## Unreal Engine記事を参考: https://minmax.itch.io/operators/devlog/222177/rendering-grid-based-fog-of-war-in-unreal-engine-4-part-1
+
+const VisibilityTextureWriterClass = preload("res://scripts/systems/vision/visibility_texture_writer.gd")
 
 @export_group("表示設定")
-@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.9)  # 青みがかった暗い色（90%不透明）
+@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.9)  # 青みがかった暗い色
 @export var fog_height: float = 0.1  # 地面からの高さ
 
 @export_group("マップ設定")
 @export var map_size: Vector2 = Vector2(100, 100)  # マップサイズ
 @export var map_center: Vector3 = Vector3.ZERO  # マップ中心
 
-# フォグメッシュ（全面を覆う）
+@export_group("テクスチャ設定")
+@export var grid_resolution: Vector2i = Vector2i(128, 128)  # グリッド解像度
+@export var temporal_blend: float = 0.4  # テンポラル補間係数（0-1）
+@export var edge_sharpness: float = 0.5  # エッジのシャープさ（0=ソフト、1=ハード）
+@export var update_interval: float = 0.05  # 更新間隔（秒）- 0.05 = 20fps
+
+var _update_timer: float = 0.0
+
+# フォグメッシュ
 var fog_mesh_instance: MeshInstance3D = null
-var fog_material: StandardMaterial3D = null
+var fog_shader_material: ShaderMaterial = null
 
-# ビジョンメッシュ（視野エリアをくり抜く）
-var vision_mesh_instance: MeshInstance3D = null
-var vision_material: StandardMaterial3D = null
-
-# dirtyフラグ
-var _dirty: bool = true
+# 可視性テクスチャライター
+var visibility_writer = null  # VisibilityTextureWriter
 
 
 func _ready() -> void:
-	# ビジョンマテリアルを作成（透明だが深度に書き込む - 先に描画）
-	vision_material = StandardMaterial3D.new()
-	vision_material.albedo_color = Color(0, 0, 0, 0)  # 完全透明
-	vision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
-	vision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	vision_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	vision_material.render_priority = -1  # フォグより先に描画
-	vision_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	# 可視性テクスチャライターを初期化
+	visibility_writer = VisibilityTextureWriterClass.new(grid_resolution)
+	_update_map_bounds()
 
-	# フォグマテリアルを作成（深度テストでビジョン部分を避ける）
-	fog_material = StandardMaterial3D.new()
-	fog_material.albedo_color = fog_color
-	fog_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	fog_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	fog_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	fog_material.render_priority = 10
+	# シェーダーをロード
+	var shader := load("res://shaders/fog_of_war.gdshader") as Shader
+	if not shader:
+		push_error("[FogOfWarRenderer] Failed to load fog_of_war.gdshader")
+		return
 
-	# ビジョンメッシュインスタンスを作成（先に描画）
-	vision_mesh_instance = MeshInstance3D.new()
-	vision_mesh_instance.name = "VisionMesh"
-	vision_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(vision_mesh_instance)
+	# シェーダーマテリアルを作成
+	fog_shader_material = ShaderMaterial.new()
+	fog_shader_material.shader = shader
+	fog_shader_material.set_shader_parameter("fog_color", fog_color)
+	fog_shader_material.set_shader_parameter("temporal_blend", temporal_blend)
+	fog_shader_material.set_shader_parameter("edge_sharpness", edge_sharpness)
+	_update_shader_map_bounds()
 
-	# フォグメッシュインスタンスを作成（後に描画）
+	# フォグメッシュを作成
 	fog_mesh_instance = MeshInstance3D.new()
 	fog_mesh_instance.name = "FogMesh"
 	fog_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(fog_mesh_instance)
+
+	# メッシュを構築
+	_build_fog_mesh()
 
 	# FogOfWarManagerに登録
 	var fow = _get_fog_of_war_manager()
@@ -61,14 +65,15 @@ func _ready() -> void:
 		fow.set_fog_renderer(self)
 		fow.fog_updated.connect(_on_fog_updated)
 
-	# 初期メッシュを構築
-	_rebuild_meshes()
 
-
-func _process(_delta: float) -> void:
-	if _dirty:
-		_dirty = false
-		_rebuild_meshes()
+func _process(delta: float) -> void:
+	_update_timer += delta
+	if _update_timer >= update_interval:
+		_update_timer = 0.0
+		# 可視性テクスチャを更新
+		if visibility_writer:
+			visibility_writer.update_visibility()
+			_update_shader_textures()
 
 
 func _exit_tree() -> void:
@@ -82,38 +87,33 @@ func _get_fog_of_war_manager() -> Node:
 	return GameManager.fog_of_war_manager if GameManager else null
 
 
-## メッシュを再構築
-func _rebuild_meshes() -> void:
-	# フォグメッシュは常に全面
-	_build_fog_mesh()
-
-	# ビジョンメッシュを構築
-	var fow = _get_fog_of_war_manager()
-	if not fow:
-		vision_mesh_instance.mesh = null
-		return
-
-	# 視野ポリゴンを収集
-	var vision_polygons: Array = []
-	for component in fow.vision_components:
-		if not component or component.visible_points.size() < 3:
-			continue
-
-		var polygon_2d := PackedVector2Array()
-		for point_3d in component.visible_points:
-			polygon_2d.append(Vector2(point_3d.x, point_3d.z))
-
-		if polygon_2d.size() >= 3:
-			vision_polygons.append(polygon_2d)
-
-	if vision_polygons.is_empty():
-		vision_mesh_instance.mesh = null
-		return
-
-	_build_vision_mesh(vision_polygons)
+## シェーダーのテクスチャを更新
+func _update_shader_textures() -> void:
+	if fog_shader_material and visibility_writer:
+		fog_shader_material.set_shader_parameter("visibility_texture", visibility_writer.current_texture)
+		fog_shader_material.set_shader_parameter("prev_visibility_texture", visibility_writer.previous_texture)
 
 
-## フォグメッシュを構築（全面）
+## シェーダーのマップ範囲を更新
+func _update_shader_map_bounds() -> void:
+	if fog_shader_material:
+		var half_size := map_size / 2.0
+		var map_min := Vector2(map_center.x - half_size.x, map_center.z - half_size.y)
+		var map_max := Vector2(map_center.x + half_size.x, map_center.z + half_size.y)
+		fog_shader_material.set_shader_parameter("map_min", map_min)
+		fog_shader_material.set_shader_parameter("map_max", map_max)
+
+
+## 可視性ライターのマップ範囲を更新
+func _update_map_bounds() -> void:
+	if visibility_writer:
+		var half_size := map_size / 2.0
+		var map_min := Vector2(map_center.x - half_size.x, map_center.z - half_size.y)
+		var map_max := Vector2(map_center.x + half_size.x, map_center.z + half_size.y)
+		visibility_writer.set_map_bounds(map_min, map_max)
+
+
+## フォグメッシュを構築（マップ全体を覆う平面）
 func _build_fog_mesh() -> void:
 	var half_x := map_size.x / 2.0
 	var half_z := map_size.y / 2.0
@@ -121,7 +121,7 @@ func _build_fog_mesh() -> void:
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(fog_material)
+	st.set_material(fog_shader_material)
 
 	# 四角形を2つの三角形で構築
 	var v0 := Vector3(map_center.x - half_x, y, map_center.z - half_z)
@@ -129,56 +129,67 @@ func _build_fog_mesh() -> void:
 	var v2 := Vector3(map_center.x + half_x, y, map_center.z + half_z)
 	var v3 := Vector3(map_center.x - half_x, y, map_center.z + half_z)
 
-	# 三角形1
+	# UV座標も追加（シェーダーでワールド座標から計算するので不要だが念のため）
+	st.set_uv(Vector2(0, 0))
 	st.add_vertex(v0)
+	st.set_uv(Vector2(1, 0))
 	st.add_vertex(v1)
+	st.set_uv(Vector2(1, 1))
 	st.add_vertex(v2)
 
-	# 三角形2
+	st.set_uv(Vector2(0, 0))
 	st.add_vertex(v0)
+	st.set_uv(Vector2(1, 1))
 	st.add_vertex(v2)
+	st.set_uv(Vector2(0, 1))
 	st.add_vertex(v3)
 
 	fog_mesh_instance.mesh = st.commit()
 
 
-## ビジョンメッシュを構築（視野エリア）
-func _build_vision_mesh(vision_polygons: Array) -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(vision_material)
-
-	var y := fog_height + 0.05  # フォグより上（深度テスト用）
-	var vertex_count := 0
-
-	for poly in vision_polygons:
-		if poly.size() < 3:
-			continue
-
-		# ポリゴンを三角形分割
-		var indices := Geometry2D.triangulate_polygon(poly)
-		if indices.is_empty():
-			continue
-
-		for idx in indices:
-			if idx < poly.size():
-				var p2d: Vector2 = poly[idx]
-				st.add_vertex(Vector3(p2d.x, y, p2d.y))
-				vertex_count += 1
-
-	if vertex_count >= 3:
-		vision_mesh_instance.mesh = st.commit()
-	else:
-		vision_mesh_instance.mesh = null
-
-
 ## フォグが更新されたときのコールバック
 func _on_fog_updated() -> void:
-	_dirty = true
+	# テクスチャ更新は_processで行う
+	pass
+
+
+## VisionComponentを登録
+func register_vision_component(component: Node) -> void:
+	if visibility_writer:
+		visibility_writer.register_vision_component(component)
+
+
+## VisionComponentを解除
+func unregister_vision_component(component: Node) -> void:
+	if visibility_writer:
+		visibility_writer.unregister_vision_component(component)
 
 
 ## マップ設定を更新
 func set_map_bounds(center: Vector3, size: Vector2) -> void:
 	map_center = center
 	map_size = size
-	_dirty = true
+	_update_map_bounds()
+	_update_shader_map_bounds()
+	_build_fog_mesh()
+
+
+## テンポラル補間係数を設定
+func set_temporal_blend(blend: float) -> void:
+	temporal_blend = clampf(blend, 0.0, 1.0)
+	if fog_shader_material:
+		fog_shader_material.set_shader_parameter("temporal_blend", temporal_blend)
+
+
+## フォグの色を設定
+func set_fog_color(color: Color) -> void:
+	fog_color = color
+	if fog_shader_material:
+		fog_shader_material.set_shader_parameter("fog_color", fog_color)
+
+
+## エッジのシャープさを設定
+func set_edge_sharpness(sharpness: float) -> void:
+	edge_sharpness = clampf(sharpness, 0.0, 1.0)
+	if fog_shader_material:
+		fog_shader_material.set_shader_parameter("edge_sharpness", edge_sharpness)
