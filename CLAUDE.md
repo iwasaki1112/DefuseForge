@@ -83,8 +83,7 @@ SupportRateGame/
 │   ├── economy_rules.tres # 経済ルール設定ファイル
 │   ├── maps/
 │   │   └── dust3/         # PBRマップ（動的シャドウ対応）
-│   ├── shaders/
-│   │   └── fog_of_war.gdshader  # Fog of Warシェーダー
+│   ├── shaders/                # (未使用)
 │   └── weapons/
 │       └── ak47/          # 武器モデル・テクスチャ
 ├── shaders/
@@ -173,7 +172,7 @@ CharacterBase (character_base.gd)
 - **dust3**: PBRマテリアル使用（動的シャドウ対応）
 - コリジョンは`map_collision_generator.gd`と`wall_collision_generator.gd`で自動生成
   - 地形: collision_layer=2
-  - 壁: collision_layer=4
+  - 壁: collision_layer=6（bit 1 + bit 2）
 
 ### シャドウ設定（DirectionalLight3D）
 ```

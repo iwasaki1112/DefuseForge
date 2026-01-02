@@ -232,8 +232,6 @@ func _ready() -> void:
     │   ├── economy_rules.tres        # 経済ルール設定ファイル
     │   ├── maps/
     │   │   └── dust3/                # PBRマップ
-    │   ├── shaders/
-    │   │   └── fog_of_war.gdshader   # 視界シェーダー
     │   └── weapons/
     │       └── ak47/                 # 武器モデル・テクスチャ
     ├── shaders/
