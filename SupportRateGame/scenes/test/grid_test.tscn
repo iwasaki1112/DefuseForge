@@ -1,8 +1,9 @@
-[gd_scene load_steps=16 format=3 uid="uid://dxgrid_test_scene"]
+[gd_scene load_steps=16 format=3 uid="uid://csc5spoe6gytn"]
 
-[ext_resource type="Script" path="res://scripts/test/grid_test_scene.gd" id="1_test_scene"]
-[ext_resource type="Script" path="res://scripts/systems/grid/grid_manager.gd" id="2_grid_manager"]
-[ext_resource type="Script" path="res://scripts/systems/grid/grid_visualizer.gd" id="3_grid_visualizer"]
+[ext_resource type="Script" uid="uid://snt2nso5u6gf" path="res://scripts/test/grid_test_scene.gd" id="1_test_scene"]
+[ext_resource type="Script" uid="uid://b4467vkiwr1sp" path="res://scripts/systems/grid/grid_manager.gd" id="2_grid_manager"]
+[ext_resource type="Script" uid="uid://cwf2m77u8dvw1" path="res://scripts/systems/grid/grid_visualizer.gd" id="3_grid_visualizer"]
+[ext_resource type="Material" path="res://resources/maps/grid_floor_material.tres" id="4_floor_material"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.4, 0.6, 0.8, 1)
@@ -20,11 +21,11 @@ ambient_light_source = 2
 ambient_light_color = Color(0.8, 0.8, 0.8, 1)
 ambient_light_energy = 0.5
 
-[sub_resource type="BoxMesh" id="BoxMesh_floor"]
-size = Vector3(16, 0.1, 16)
+[sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
+size = Vector2(16, 16)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
-size = Vector3(16, 0.1, 16)
+size = Vector3(16, 0.2, 16)
 
 [sub_resource type="BoxMesh" id="BoxMesh_obstacle1"]
 size = Vector3(2, 1, 2)
@@ -44,9 +45,6 @@ size = Vector3(2, 1, 3)
 [sub_resource type="BoxShape3D" id="BoxShape3D_obstacle3"]
 size = Vector3(2, 1, 3)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
-albedo_color = Color(0.6, 0.6, 0.6, 1)
-
 [node name="GridTestScene" type="Node3D"]
 script = ExtResource("1_test_scene")
 
@@ -63,27 +61,26 @@ fov = 50.0
 
 [node name="GridManager" type="Node3D" parent="."]
 script = ExtResource("2_grid_manager")
-cell_size = 1.0
 grid_width = 16
 grid_height = 16
-grid_origin = Vector3(0, 0, 0)
-obstacle_collision_layer = 2
 
 [node name="GridVisualizer" type="Node3D" parent="."]
 script = ExtResource("3_grid_visualizer")
 grid_manager_path = NodePath("../GridManager")
-show_grid_lines = true
-show_cells = true
-show_walkable = true
-show_blocked = true
+show_grid_lines = false
+show_cells = false
+show_walkable = false
+show_blocked = false
 
-[node name="Floor" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, -0.05, 8)
-material_override = SubResource("StandardMaterial3D_floor")
-mesh = SubResource("BoxMesh_floor")
+[node name="Floor" type="Node3D" parent="."]
+
+[node name="GridFloorMesh" type="MeshInstance3D" parent="Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 8)
+mesh = SubResource("PlaneMesh_floor")
+surface_material_override/0 = ExtResource("4_floor_material")
 
 [node name="FloorCollision" type="StaticBody3D" parent="Floor"]
-collision_layer = 1
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, -0.1, 8)
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Floor/FloorCollision"]
