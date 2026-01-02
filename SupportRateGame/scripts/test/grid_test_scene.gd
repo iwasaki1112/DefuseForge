@@ -139,6 +139,21 @@ func _create_test_character() -> void:
 func _on_grid_initialized() -> void:
 	_path_converter = PathGridConverterClass.new(grid_manager)
 	print("[GridTest] Grid initialized")
+
+	# ブロックされているセルをデバッグ出力
+	var blocked_cells: Array[Vector2i] = []
+	for y in range(grid_manager.grid_height):
+		for x in range(grid_manager.grid_width):
+			var cell := Vector2i(x, y)
+			if not grid_manager.is_walkable(cell):
+				blocked_cells.append(cell)
+
+	if blocked_cells.size() > 0:
+		print("[GridTest] Blocked cells:")
+		for cell in blocked_cells:
+			var world_pos: Vector3 = grid_manager.cell_to_world(cell)
+			print("  - Cell (%d, %d) -> World (%.1f, %.1f)" % [cell.x, cell.y, world_pos.x, world_pos.z])
+
 	_update_ui()
 
 
@@ -222,6 +237,29 @@ func _move_character(delta: float) -> void:
 
 	# アニメーション更新
 	_update_character_animation(is_sprinting)
+
+
+## 線形パスを生成（壁を貫通しない）
+func _generate_linear_path(waypoints: Array[Vector3], samples_per_segment: int = 4) -> Array[Vector3]:
+	if waypoints.size() < 2:
+		return waypoints
+
+	var result: Array[Vector3] = []
+
+	# 各セグメントをサンプリング
+	for i in range(waypoints.size() - 1):
+		var p0 := waypoints[i]
+		var p1 := waypoints[i + 1]
+
+		for j in range(samples_per_segment):
+			var t := float(j) / float(samples_per_segment)
+			var point := p0.lerp(p1, t)
+			result.append(point)
+
+	# 最後のポイントを追加
+	result.append(waypoints[waypoints.size() - 1])
+
+	return result
 
 
 ## Catmull-Romスプラインを生成
@@ -386,10 +424,11 @@ func _finish_drawing() -> void:
 		# パスをグリッドに変換（A*パスファインディングで障害物回避）
 		var grid_cells = _path_converter.convert_with_pathfinding(_freehand_points)
 
-		# 結果を表示
-		grid_visualizer.show_path(grid_cells)
+		# 表示用に最適化（方向が変わる点のみ）
+		var optimized_cells = _path_converter.optimize_path(grid_cells)
+		grid_visualizer.show_path(optimized_cells)
 
-		# キャラクター用のパスを保存
+		# キャラクター用のパスは全セル（スムーズな移動のため）
 		_character_path = grid_cells.duplicate()
 		_character_path_index = 0
 
@@ -483,16 +522,16 @@ func _start_character_movement() -> void:
 				pos.y = 0
 			waypoints.append(pos)
 
-		# スプラインパスを生成
-		var samples_per_segment := 4
-		_spline_points = _generate_spline_path(waypoints, samples_per_segment)
+		# 線形パスを生成（壁を貫通しないようスプラインを使わない）
+		_spline_points = _generate_linear_path(waypoints)
 		_spline_index = 0
 		_spline_t = 0.0
 
 		# スプラインポイントごとのスプリントフラグを生成
 		_spline_sprint_flags.clear()
+		var samples_per_segment := 4  # 線形補間でも同じサンプル数
 		for i in range(_spline_points.size()):
-			# スプラインポイントがどのウェイポイントセグメントに属するか計算
+			# ポイントがどのウェイポイントセグメントに属するか計算
 			var waypoint_idx: int = mini(i / samples_per_segment, _character_sprint_flags.size() - 1)
 			var is_sprint := _character_sprint_flags[waypoint_idx] if waypoint_idx < _character_sprint_flags.size() else false
 			_spline_sprint_flags.append(is_sprint)

@@ -67,12 +67,20 @@ shape = SubResource("BoxShape3D_floor")
 
 [node name="WallModel" parent="Wall" instance=ExtResource("5_wall")]
 
-[node name="WallCollision" type="StaticBody3D" parent="Wall"]
+[node name="WallCollision1" type="StaticBody3D" parent="Wall"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.75, 14.5)
 collision_layer = 3
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall/WallCollision"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall/WallCollision1"]
+shape = SubResource("BoxShape3D_wall")
+
+[node name="WallCollision2" type="StaticBody3D" parent="Wall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.75, 5.5)
+collision_layer = 3
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall/WallCollision2"]
 shape = SubResource("BoxShape3D_wall")
 
 [node name="UI" type="CanvasLayer" parent="."]

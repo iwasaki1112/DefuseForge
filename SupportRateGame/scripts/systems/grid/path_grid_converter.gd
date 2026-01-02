@@ -211,19 +211,36 @@ func convert_with_pathfinding(freehand_points: Array) -> Array[Vector2i]:
 	if waypoint_cells.size() < 2:
 		return waypoint_cells
 
+	# 通行可能なセルのみをフィルタリング
+	var walkable_waypoints: Array[Vector2i] = []
+	for cell in waypoint_cells:
+		if _grid_manager.is_walkable(cell):
+			walkable_waypoints.append(cell)
+
+	if walkable_waypoints.size() < 2:
+		return walkable_waypoints
+
 	# 最適化して主要ウェイポイントだけにする
-	var key_waypoints := optimize_path(waypoint_cells)
+	var key_waypoints := optimize_path(walkable_waypoints)
 
 	# 各ウェイポイント間をA*で接続
 	var full_path: Array[Vector2i] = []
 
 	for i in range(key_waypoints.size() - 1):
-		var segment = _grid_manager.find_path(key_waypoints[i], key_waypoints[i + 1])
+		var from_cell := key_waypoints[i]
+		var to_cell := key_waypoints[i + 1]
+
+		# 両方のセルが通行可能か確認
+		if not _grid_manager.is_walkable(from_cell) or not _grid_manager.is_walkable(to_cell):
+			continue
+
+		var segment = _grid_manager.find_path(from_cell, to_cell)
 
 		if segment.is_empty():
-			# パスが見つからない場合は直線で繋ぐ
-			if full_path.is_empty() or full_path[full_path.size() - 1] != key_waypoints[i]:
-				full_path.append(key_waypoints[i])
+			# パスが見つからない場合はスキップ（壁を通らない）
+			# 開始点だけは追加
+			if full_path.is_empty():
+				full_path.append(from_cell)
 		else:
 			# 最初のセグメント以外は開始点を除去（重複防止）
 			var start_idx := 0 if full_path.is_empty() else 1
