@@ -3,6 +3,9 @@
 This document summarizes UX-preserving performance improvement directions for mobile (Android/iOS).
 Focus is to keep gameplay feel unchanged while reducing CPU/GPU cost.
 
+**Last Updated**: 2026-01-02
+**Status**: Some optimizations implemented, others pending
+
 ## High Impact, Low UX Risk
 
 ### 1) Coalesce Fog Mesh Updates (Per-frame batching)

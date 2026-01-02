@@ -174,7 +174,18 @@ func _ready() -> void:
     │   ├── game.tscn                 # メインゲームシーン
     │   ├── title.tscn                # タイトル画面
     │   ├── player.tscn               # プレイヤー
-    │   └── enemy.tscn                # 敵
+    │   ├── enemy.tscn                # 敵
+    │   ├── lobby/
+    │   │   └── lobby.tscn            # ロビー画面
+    │   ├── systems/                  # システムシーン
+    │   │   ├── squad_manager.tscn
+    │   │   ├── match_manager.tscn
+    │   │   ├── path_manager.tscn
+    │   │   ├── camera_controller.tscn
+    │   │   ├── fog_of_war_manager.tscn
+    │   │   └── fog_of_war_renderer.tscn
+    │   └── weapons/
+    │       └── ak47.tscn             # 武器シーン
     ├── scripts/
     │   ├── autoload/                 # シングルトン（薄く保つ）
     │   │   ├── game_events.gd        # イベントバス - システム間連携
@@ -191,33 +202,50 @@ func _ready() -> void:
     │   │       └── vision_component.gd  # 視野コンポーネント
     │   ├── systems/                  # シーン内ノード
     │   │   ├── match_manager.gd      # ラウンド/経済/勝敗
-    │   │   ├── squad_manager.gd      # 5人分隊管理（シーンノード）
+    │   │   ├── squad_manager.gd      # 分隊管理（シーンノード）
     │   │   ├── camera_controller.gd  # カメラ制御
+    │   │   ├── network_sync_manager.gd  # オンライン同期
+    │   │   ├── grid/
+    │   │   │   ├── grid_manager.gd      # グリッド管理（A*パスファインディング）
+    │   │   │   └── path_grid_converter.gd  # パス変換
     │   │   ├── path/
     │   │   │   ├── path_manager.gd   # パス管理
     │   │   │   ├── path_renderer.gd  # 3D描画
     │   │   │   └── path_analyzer.gd  # 2D論理座標解析
     │   │   └── vision/
     │   │       ├── fog_of_war_manager.gd   # 視界管理（シーンノード）
-    │   │       └── fog_of_war_renderer.gd  # 視界描画
+    │   │       ├── fog_of_war_renderer.gd  # 視界描画
+    │   │       ├── visibility_grid_sync.gd # グリッド同期
+    │   │       └── visibility_texture_writer.gd  # テクスチャ書き込み
     │   ├── resources/
     │   │   └── economy_rules.gd      # 経済ルール（Resource）
     │   ├── data/
     │   │   └── player_data.gd        # プレイヤーデータ
     │   ├── utils/
-    │   │   └── character_setup.gd    # 武器データ等
+    │   │   └── character_setup.gd    # 武器データ・キャラクター設定
     │   ├── game_scene.gd             # ゲームシーン管理
     │   ├── game_ui.gd                # UI管理
-    │   └── title_screen.gd           # タイトル
+    │   ├── title_screen.gd           # タイトル
+    │   ├── map_collision_generator.gd  # マップコリジョン生成
+    │   └── wall_collision_generator.gd # 壁コリジョン生成
     ├── resources/
     │   ├── economy_rules.tres        # 経済ルール設定ファイル
-    │   └── maps/
-    │       └── dust3/                # PBRマップ
+    │   ├── maps/
+    │   │   └── dust3/                # PBRマップ
+    │   └── weapons/
+    │       └── ak47/                 # 武器モデル・テクスチャ
     ├── shaders/
     │   └── fog_of_war.gdshader       # 視界シェーダー
-    └── assets/
-        ├── characters/               # キャラクターモデル
-        └── maps/                     # マップ
+    ├── assets/
+    │   └── characters/               # キャラクターモデル
+    │       ├── gsg9/                 # CT側キャラクター
+    │       ├── leet/                 # T側キャラクター
+    │       └── animations/           # 共通アニメーション
+    ├── addons/
+    │   └── nakama/                   # Nakamaプラグイン
+    └── builds/
+        ├── ios/                      # iOSビルド出力
+        └── android/                  # Androidビルド出力
 ```
 
 ### アーキテクチャ設計原則
@@ -251,40 +279,59 @@ func _ready() -> void:
 
 ## 実装フェーズ
 
-### Phase 1: 基盤整備 ✓ 進行中
+### Phase 1: 基盤整備 ✓ 完了
 - [x] 設計ドキュメント作成
-- [ ] 不要ファイル削除
-- [ ] ディレクトリ構造整理
-- [ ] GameManager更新
+- [x] 不要ファイル削除
+- [x] ディレクトリ構造整理
+- [x] GameManager更新
+- [x] イベントバス（GameEvents）実装
+- [x] シーン内ノード設計
 
-### Phase 2: パス描画・移動
-- [ ] PathDrawer実装（UI）
-- [ ] 画面座標→ワールド座標変換
-- [ ] PathFollower実装
-- [ ] プレイヤー移動をパス追従に変更
+### Phase 2: パス描画・移動 ✓ 完了
+- [x] PathManager実装
+- [x] PathRenderer実装（3Dメッシュ）
+- [x] 画面座標→ワールド座標変換
+- [x] PathAnalyzer実装
+- [x] プレイヤー移動をパス追従に変更
+- [x] GridManager実装（A*パスファインディング）
+- [x] 作戦フェーズ/実行フェーズ分離
 
-### Phase 3: 視界システム
-- [ ] Fog of Warシェーダー
-- [ ] VisionSystem実装
-- [ ] 壁による視線遮断
+### Phase 3: 視界システム ✓ 完了
+- [x] Fog of Warシェーダー
+- [x] FogOfWarManager実装
+- [x] FogOfWarRenderer実装
+- [x] VisionComponent実装
+- [x] 壁による視線遮断
+- [x] グリッドベース視界システム
 
-### Phase 4: 戦闘システム
-- [ ] Weaponリソース定義
+### Phase 4: 戦闘システム ⚠️ 一部完了
+- [x] Weaponデータ定義（CharacterSetup）
+- [x] 武器装着システム
 - [ ] CombatController（自動射撃）
 - [ ] ダメージ・ヒット判定
+- [ ] 弾丸/エフェクト
 
-### Phase 5: 敵AI
-- [ ] 基本AI（巡回・待機）
-- [ ] 検知システム（視覚・聴覚）
+### Phase 5: 敵AI ⚠️ 一部完了
+- [x] 基本AI（巡回・待機）
+- [x] VisionComponentによる検知
 - [ ] 戦闘AI
+- [ ] 遮蔽物利用
 
-### Phase 6: CS1.6ルール
-- [ ] ラウンドシステム
-- [ ] 経済システム
+### Phase 6: CS1.6ルール ⚠️ 一部完了
+- [x] ラウンドシステム（MatchManager）
+- [x] 経済システム（EconomyRules）
 - [ ] 武器購入メニュー
 - [ ] 爆弾設置/解除
 
-### Phase 7: ポリッシュ
+### Phase 7: オンラインマルチプレイ ⚠️ 進行中
+- [x] Nakamaクライアント実装
+- [x] 認証システム
+- [x] マッチメイキング（ルーム作成/参加）
+- [x] リアルタイム同期（NetworkSyncManager）
+- [ ] 完全な状態同期
+- [ ] 切断/再接続処理
+
+### Phase 8: ポリッシュ
 - [ ] エフェクト
 - [ ] サウンド
 - [ ] マップ作成

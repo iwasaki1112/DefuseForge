@@ -326,7 +326,7 @@ func _make_request(request_type: String, url: String, method: int, headers: Pack
 	else:
 		http.request(url, headers, method, body)
 
-func _on_dynamic_http_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray, request_id: int, http_node: HTTPRequest) -> void:
+func _on_dynamic_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request_id: int, http_node: HTTPRequest) -> void:
 	http_node.queue_free()
 
 	var request_type = _pending_requests.get(request_id, "")
@@ -352,7 +352,7 @@ func _on_dynamic_http_completed(result: int, response_code: int, headers: Packed
 	var data = json.data
 	_handle_request_success(request_type, data)
 
-func _on_http_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_http_request_completed(_result: int, _response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	# 基本的なHTTPリクエスト完了（互換性のため残す）
 	pass
 
