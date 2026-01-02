@@ -10,7 +10,7 @@ const VisibilityGridSyncClass = preload("res://scripts/systems/vision/visibility
 
 @export_group("表示設定")
 @export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.9)  # 青みがかった暗い色
-@export var fog_height: float = 0.1  # 地面からの高さ
+@export var fog_height: float = 0.02  # 地面からの高さ（Z-fighting対策で低く設定）
 
 @export_group("テクスチャ設定")
 ## テンポラル補間係数（0-1）

@@ -21,8 +21,8 @@ sky_material = SubResource("ProceduralSkyMaterial_sky")
 background_mode = 2
 sky = SubResource("Sky_sky")
 ambient_light_source = 2
-ambient_light_color = Color(0.5, 0.5, 0.6, 1)
-ambient_light_energy = 0.2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.8
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(16, 16)
