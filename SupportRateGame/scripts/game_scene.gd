@@ -13,11 +13,12 @@ const CameraControllerScene = preload("res://scenes/systems/camera_controller.ts
 const FogOfWarManagerScene = preload("res://scenes/systems/fog_of_war_manager.tscn")
 const FogOfWarRendererScene = preload("res://scenes/systems/fog_of_war_renderer.tscn")
 const NetworkSyncManagerScript = preload("res://scripts/systems/network_sync_manager.gd")
+const GridManagerClass = preload("res://scripts/systems/grid/grid_manager.gd")
 
 @onready var ct_node: Node3D = $CT
 @onready var t_node: Node3D = $T
 @onready var game_ui: CanvasLayer = $GameUI
-@onready var map_node: Node3D = $Dust2Map
+@onready var map_node: Node3D = null  # grid_testマップはスポーンポイントを使用しない
 
 var enemies: Array[CharacterBody3D] = []
 
@@ -33,6 +34,7 @@ var fog_of_war_manager: Node = null
 var match_manager: Node = null
 var squad_manager: Node = null
 var network_sync_manager: Node = null
+var grid_manager: Node3D = null
 
 # デバッグ用
 var _debug_printed_children: bool = false
@@ -100,6 +102,7 @@ func _ready() -> void:
 	_update_selection_indicator_color()
 
 	# 追加システムを初期化
+	_setup_grid_system()  # パスシステムより先にGridManagerを初期化
 	_setup_path_system()
 	_setup_camera_system()
 	_setup_fog_of_war_renderer()
@@ -128,6 +131,17 @@ func _on_squad_player_selected(player_data: RefCounted, _index: int) -> void:
 	# カメラは自動追従しない（2本指/WASDでのみ移動）
 
 	print("[GameScene] Player selected via SquadManager: %s" % selected_player.name)
+
+
+## WallCollisionGeneratorからのコリジョン生成完了通知
+func _on_wall_collisions_generated(count: int) -> void:
+	print("[GameScene] Wall collisions generated: %d meshes" % count)
+	if grid_manager and count > 0:
+		# 物理エンジンへの登録を待ってから再スキャン
+		await get_tree().physics_frame
+		await get_tree().physics_frame  # 念のため2フレーム待つ
+		grid_manager.rescan_obstacles()
+		print("[GameScene] GridManager rescanned obstacles")
 
 
 func _exit_tree() -> void:
@@ -248,10 +262,41 @@ func _setup_match_manager() -> void:
 	print("[GameScene] MatchManager initialized")
 
 
+## GridManagerをセットアップ（A*パスファインディング用）
+func _setup_grid_system() -> void:
+	grid_manager = Node3D.new()
+	grid_manager.name = "GridManager"
+	grid_manager.set_script(GridManagerClass)
+
+	# grid_testマップ用の設定（16x16グリッド）
+	grid_manager.grid_origin = Vector3(0, 0, 0)
+	grid_manager.grid_width = 16
+	grid_manager.grid_height = 16
+	grid_manager.cell_size = 1.0
+	grid_manager.obstacle_collision_layer = 4  # 壁のcollision_layer=6にはbit 2が含まれる
+
+	add_child(grid_manager)
+
+	# GameManagerに登録
+	if GameManager:
+		GameManager.grid_manager = grid_manager
+
+	# WallCollisionGeneratorのシグナルに接続（コリジョン生成後に再スキャン）
+	var wall_node = get_node_or_null("Wall")
+	if wall_node and wall_node.has_signal("collisions_generated"):
+		wall_node.collisions_generated.connect(_on_wall_collisions_generated)
+
+	print("[GameScene] GridManager initialized (16x16 grid)")
+
+
 ## パスシステムをセットアップ
 func _setup_path_system() -> void:
 	path_manager = PathManagerScene.instantiate()
 	add_child(path_manager)
+
+	# GridManagerを接続（A*パスファインディング用）
+	if grid_manager:
+		path_manager.set_grid_manager(grid_manager)
 
 	# プレイヤー参照を設定
 	var selected_player = squad_manager.get_selected_player_node() if squad_manager else null

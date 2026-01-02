@@ -5,6 +5,8 @@ extends RefCounted
 ## VisionComponentの視野データをテクスチャに書き込む
 ## グリッドベースのFog of War用
 
+const VisibilityGridSyncClass = preload("res://scripts/systems/vision/visibility_grid_sync.gd")
+
 # テクスチャ解像度（1ピクセル = 1グリッドセル）
 var grid_resolution: Vector2i = Vector2i(128, 128)
 
@@ -23,10 +25,15 @@ var _previous_image: Image = null
 # 視野コンポーネントへの参照
 var _vision_components: Array = []
 
+# ネットワーク同期用グリッド
+var grid_sync = null  # VisibilityGridSync
+
 
 func _init(resolution: Vector2i = Vector2i(128, 128)) -> void:
 	grid_resolution = resolution
 	_initialize_textures()
+	# ネットワーク同期用グリッドを初期化
+	grid_sync = VisibilityGridSyncClass.new(resolution)
 
 
 ## テクスチャを初期化
@@ -59,6 +66,9 @@ func unregister_vision_component(component: Node) -> void:
 func set_map_bounds(min_pos: Vector2, max_pos: Vector2) -> void:
 	map_min = min_pos
 	map_max = max_pos
+	# ネットワーク同期用グリッドにも設定
+	if grid_sync:
+		grid_sync.set_map_bounds(min_pos, max_pos)
 
 
 ## 毎フレーム呼び出し：可視性テクスチャを更新
@@ -76,6 +86,10 @@ func update_visibility() -> void:
 
 	# テクスチャを更新
 	current_texture.update(_current_image)
+
+	# ネットワーク同期用グリッドを更新
+	if grid_sync:
+		grid_sync.update_from_image(_current_image)
 
 
 ## 前フレームと現フレームのテクスチャをスワップ

@@ -3,9 +3,11 @@ extends Node3D
 ## パスマネージャー
 ## パス描画の管理とキャラクターへの指示を担当
 ## 各プレイヤーのパスを個別に保持
+## グリッドベースA*パスファインディング対応
 
 const PathRendererClass = preload("res://scripts/systems/path/path_renderer.gd")
 const PathAnalyzerClass = preload("res://scripts/systems/path/path_analyzer.gd")
+const PathGridConverterClass = preload("res://scripts/systems/grid/path_grid_converter.gd")
 
 signal path_confirmed(waypoints: Array)  # Array of {position: Vector3, run: bool}
 signal path_cleared
@@ -29,6 +31,10 @@ var player_paths: Dictionary = {}
 
 # 子コンポーネント
 var analyzer: RefCounted = null
+
+# グリッドシステム
+var grid_manager: Node = null
+var path_converter: RefCounted = null
 
 # プレイヤー参照
 var player: Node3D = null
@@ -57,6 +63,14 @@ func _ready() -> void:
 
 	# execution_timeを取得
 	_update_max_path_time()
+
+
+## GridManagerを設定
+func set_grid_manager(gm: Node) -> void:
+	grid_manager = gm
+	if grid_manager:
+		path_converter = PathGridConverterClass.new(grid_manager)
+		print("[PathManager] GridManager connected")
 
 
 ## 最大パス時間を更新（MatchManagerから取得）
@@ -138,6 +152,12 @@ func _on_draw_moved(_screen_pos: Vector2, world_pos: Vector3) -> void:
 		if distance < min_point_distance:
 			return
 
+	# グリッドの通行可能チェック（障害物上には描画しない）
+	if grid_manager:
+		var cell = grid_manager.world_to_cell(world_pos)
+		if not grid_manager.is_walkable(cell):
+			return
+
 	# パス時間制限チェック
 	if _would_exceed_time_limit(world_pos):
 		# 制限に達している場合は追加しない
@@ -164,8 +184,17 @@ func _on_draw_ended(_screen_pos: Vector2) -> void:
 	draw_start_world_pos = Vector3.INF
 
 	if current_path.size() >= 2 and player:
-		# 最終的な解析
-		run_flags = analyzer.analyze(current_path)
+		# グリッドベースのパス変換（A*パスファインディング）
+		if path_converter:
+			var grid_cells = path_converter.convert_with_pathfinding(current_path)
+			if grid_cells.size() >= 2:
+				var world_path = path_converter.cells_to_world_path(grid_cells)
+				current_path.clear()
+				for pos in world_path:
+					current_path.append(pos)
+
+		# 走り判定（グリッドベースまたはフォールバック）
+		run_flags = _detect_auto_sprint_grid(current_path)
 
 		# プレイヤーのパスデータを保存
 		_save_player_path(player, current_path.duplicate(), run_flags.duplicate())
@@ -470,3 +499,33 @@ func _set_renderer_color_for_player(renderer: Node, p: Node3D) -> void:
 	# レンダラーに色を設定
 	if renderer.has_method("set_character_color"):
 		renderer.set_character_color(color)
+
+
+## グリッドベースの走り判定
+## 3セル以上同じ方向に進む場合は走り
+func _detect_auto_sprint_grid(path: Array[Vector3]) -> Array[bool]:
+	# GridManagerがない場合はフォールバック
+	if not grid_manager or path.size() < 2:
+		return analyzer.analyze(path)
+
+	var flags: Array[bool] = []
+	var min_straight_cells := 3
+	var direction_count := 0
+	var last_dir := Vector2i.ZERO
+
+	for i in range(path.size() - 1):
+		var from_cell: Vector2i = grid_manager.world_to_cell(path[i])
+		var to_cell: Vector2i = grid_manager.world_to_cell(path[i + 1])
+		var dir: Vector2i = to_cell - from_cell
+
+		# 方向が変わらない場合はカウント継続
+		if dir == last_dir and dir != Vector2i.ZERO:
+			direction_count += 1
+		else:
+			direction_count = 1
+			last_dir = dir
+
+		# 3セル以上同じ方向なら走り
+		flags.append(direction_count >= min_straight_cells)
+
+	return flags

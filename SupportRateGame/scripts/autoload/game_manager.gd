@@ -28,6 +28,7 @@ var debug_spawn_nearby: bool = false  # キャラクターを近くにスポー�
 var match_manager: Node = null
 var squad_manager: Node = null
 var fog_of_war_manager: Node = null
+var grid_manager: Node = null  # A*パスファインディング用
 
 
 # === 後方互換性プロパティ ===

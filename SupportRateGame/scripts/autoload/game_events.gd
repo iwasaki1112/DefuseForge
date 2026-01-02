@@ -88,6 +88,20 @@ signal fog_updated()
 ## キャラクター可視性変更
 signal character_visibility_changed(character: Node3D, is_visible: bool)
 
+# === ネットワーク同期イベント ===
+
+## 視界グリッド差分送信要求（サーバー→クライアント）
+## data: PackedByteArray（RLE圧縮済み差分データ）
+signal visibility_sync_diff(team_id: int, data: PackedByteArray)
+
+## 視界グリッドフル送信要求（初期同期用）
+## data: PackedByteArray（RLE圧縮済みフルデータ）
+signal visibility_sync_full(team_id: int, data: PackedByteArray)
+
+## 敵位置フィルタリング済みデータ送信
+## positions: Dictionary { enemy_id: Vector3 or null }
+signal enemy_positions_filtered(team_id: int, positions: Dictionary)
+
 
 func _ready() -> void:
 	# イベントバスは常に処理
