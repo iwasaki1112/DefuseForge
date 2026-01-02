@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://cenemy"]
+[gd_scene load_steps=6 format=3 uid="uid://cenemy"]
 
 [ext_resource type="Script" path="res://scripts/characters/enemy.gd" id="1_enemy"]
 [ext_resource type="PackedScene" uid="uid://dtsmyimekx8ye" path="res://assets/characters/leet/leet.fbx" id="2_character"]
 [ext_resource type="Script" path="res://scripts/characters/components/vision_component.gd" id="3_vision"]
+[ext_resource type="Script" path="res://scripts/characters/components/combat_component.gd" id="4_combat"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_enemy"]
 radius = 0.3
@@ -31,3 +32,8 @@ fov_angle = 120.0
 view_distance = 15.0
 ray_count = 24
 update_interval = 0.05
+
+[node name="CombatComponent" type="Node" parent="."]
+script = ExtResource("4_combat")
+auto_attack = true
+headshot_chance = 0.15

@@ -26,7 +26,7 @@ func set_player_data(data: RefCounted) -> void:
 
 
 ## プレイヤー死亡時の処理
-func _on_player_died() -> void:
+func _on_player_died(killer: Node3D) -> void:
 	player_died.emit()
 	if player_data:
 		player_data.is_alive = false
@@ -34,9 +34,6 @@ func _on_player_died() -> void:
 	# SquadManagerに死亡を通知（GameManager経由）
 	if GameManager and GameManager.squad_manager:
 		GameManager.squad_manager.on_player_died(self)
-	# GameEvents経由でunit_killedイベントを発火（ラウンド終了判定などに使用）
-	if has_node("/root/GameEvents"):
-		get_node("/root/GameEvents").unit_killed.emit(null, self, 0)
 
 
 ## チームを設定
@@ -55,8 +52,8 @@ func is_player() -> bool:
 
 
 ## ダメージを受ける（PlayerDataと同期）
-func take_damage(amount: float) -> void:
-	super.take_damage(amount)
+func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void:
+	super.take_damage(amount, attacker, is_headshot)
 	# PlayerDataの値を同期
 	if player_data:
 		player_data.health = health

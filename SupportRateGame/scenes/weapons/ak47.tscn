@@ -1,8 +1,14 @@
-[gd_scene load_steps=2 format=3 uid="uid://dak47weapon"]
+[gd_scene load_steps=3 format=3 uid="uid://dak47weapon"]
 
 [ext_resource type="PackedScene" uid="uid://ci20cr5qtch0l" path="res://resources/weapons/ak47/ak47.glb" id="1_ak47"]
+[ext_resource type="PackedScene" path="res://scenes/effects/muzzle_flash.tscn" id="2_muzzle_flash"]
 
 [node name="AK47" type="Node3D"]
 
 [node name="Model" parent="." instance=ExtResource("1_ak47")]
 transform = Transform3D(-0.10790455, 0.99171764, 0.069660865, 0.9931588, 0.10438515, 0.05233595, 0.044630934, 0.0748316, -0.9961968, -0.03, 0.13, 0.02)
+
+[node name="MuzzlePoint" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.011359699, 0.3526657, 0.03757134)
+
+[node name="MuzzleFlash" parent="MuzzlePoint" instance=ExtResource("2_muzzle_flash")]

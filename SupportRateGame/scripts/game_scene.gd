@@ -618,6 +618,9 @@ func _apply_spawn_positions_from_map(my_team: Array[CharacterBody3D], enemy_team
 		my_team[i].global_position = spawn_pos
 		# Blenderからの回転を適用（BlenderのZ回転 → GodotのY回転）
 		my_team[i].rotation.y = spawn.rotation.y
+		# 初期武器を設定（AK47）
+		if my_team[i].has_method("set_weapon"):
+			my_team[i].set_weapon(CharacterSetup.WeaponId.AK47)
 		print("[GameScene] Spawned %s at %s, rot=%.1f" % [my_team[i].name, spawn_pos, rad_to_deg(spawn.rotation.y)])
 
 	# 敵チームの位置と向きを設定
@@ -628,6 +631,9 @@ func _apply_spawn_positions_from_map(my_team: Array[CharacterBody3D], enemy_team
 		enemy_team[i].global_position = spawn_pos
 		# Blenderからの回転を適用
 		enemy_team[i].rotation.y = spawn.rotation.y
+		# 初期武器を設定（AK47）
+		if enemy_team[i].has_method("set_weapon"):
+			enemy_team[i].set_weapon(CharacterSetup.WeaponId.AK47)
 		print("[GameScene] Spawned %s at %s, rot=%.1f" % [enemy_team[i].name, spawn_pos, rad_to_deg(spawn.rotation.y)])
 
 

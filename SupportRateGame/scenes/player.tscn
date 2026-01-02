@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://cplayer"]
+[gd_scene load_steps=6 format=3 uid="uid://cplayer"]
 
 [ext_resource type="Script" path="res://scripts/characters/player.gd" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://cpmgyp4xd80ck" path="res://assets/characters/gsg9/gsg9.fbx" id="2_character"]
 [ext_resource type="Script" path="res://scripts/characters/components/vision_component.gd" id="3_vision"]
+[ext_resource type="Script" path="res://scripts/characters/components/combat_component.gd" id="4_combat"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.3
@@ -30,3 +31,8 @@ fov_angle = 120.0
 view_distance = 15.0
 ray_count = 24
 update_interval = 0.05
+
+[node name="CombatComponent" type="Node" parent="."]
+script = ExtResource("4_combat")
+auto_attack = true
+headshot_chance = 0.15

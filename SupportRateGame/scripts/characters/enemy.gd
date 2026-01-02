@@ -180,11 +180,9 @@ func _detect_player() -> bool:
 
 
 ## 敵死亡時の処理
-func _on_enemy_died() -> void:
+func _on_enemy_died(killer: Node3D) -> void:
 	enemy_died.emit()
-	# GameEventsを通じて死亡を通知（killer不明の場合はnull）
-	if has_node("/root/GameEvents"):
-		get_node("/root/GameEvents").unit_killed.emit(null, self, 0)
+	# 注: killerが渡された場合、CharacterBaseの_die()で既にunit_killedが発火されている
 
 
 ## シーン離脱時の処理

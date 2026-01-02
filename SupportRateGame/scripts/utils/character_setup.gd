@@ -27,6 +27,10 @@ enum WeaponType { NONE, RIFLE, PISTOL }
 enum WeaponId { NONE, AK47, USP }
 
 ## 武器データ定義
+## accuracy: 基本命中率 (0.0-1.0)
+## range: 有効射程距離 (この距離で命中率が半減)
+## headshot_multiplier: ヘッドショット時のダメージ倍率
+## bodyshot_multiplier: ボディショット時のダメージ倍率
 const WEAPON_DATA := {
 	WeaponId.NONE: {
 		"name": "None",
@@ -34,6 +38,10 @@ const WEAPON_DATA := {
 		"price": 0,
 		"damage": 0,
 		"fire_rate": 0.0,
+		"accuracy": 0.0,
+		"range": 0.0,
+		"headshot_multiplier": 1.0,
+		"bodyshot_multiplier": 1.0,
 		"scene_path": "",
 		"kill_reward": 300
 	},
@@ -43,7 +51,11 @@ const WEAPON_DATA := {
 		"price": 0,
 		"damage": 36,
 		"fire_rate": 0.1,
-		"scene_path": "res://scenes/weapons/ak47.tscn",  # シーンファイルを使用
+		"accuracy": 0.85,
+		"range": 20.0,
+		"headshot_multiplier": 4.0,
+		"bodyshot_multiplier": 1.0,
+		"scene_path": "res://scenes/weapons/ak47.tscn",
 		"kill_reward": 300
 	},
 	WeaponId.USP: {
@@ -52,7 +64,11 @@ const WEAPON_DATA := {
 		"price": 500,
 		"damage": 25,
 		"fire_rate": 0.15,
-		"scene_path": "",  # TODO: USPシーンを追加
+		"accuracy": 0.75,
+		"range": 12.0,
+		"headshot_multiplier": 4.0,
+		"bodyshot_multiplier": 1.0,
+		"scene_path": "",
 		"kill_reward": 300
 	}
 }
@@ -74,6 +90,7 @@ const ANIMATION_FILES := {
 	},
 	WeaponType.RIFLE: {
 		"idle": "res://assets/characters/animations/rifle/idle.fbx",
+		"idle_aiming": "res://assets/characters/animations/rifle/idleAiming.fbx",
 		"walking": "res://assets/characters/animations/rifle/walking.fbx",
 		"running": "res://assets/characters/animations/rifle/running.fbx"
 	},
@@ -95,6 +112,17 @@ const COMMON_ANIMATIONS := {
 		"path": "res://assets/characters/animations/dying.fbx",
 		"loop": false,
 		"normalize_mode": "relative"
+	}
+}
+
+## 射撃アニメーション（武器タイプ別）
+## 上半身のみで再生される想定
+const SHOOTING_ANIMATIONS := {
+	WeaponType.RIFLE: {
+		"shoot": "res://assets/characters/animations/rifle/shoot.fbx"
+	},
+	WeaponType.PISTOL: {
+		"shoot": "res://assets/characters/animations/pistol/shoot.fbx"
 	}
 }
 
@@ -247,7 +275,7 @@ static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: S
 		print("[CharacterSetup] %s: Applied texture to mesh '%s'" % [debug_name, mesh_instance.name])
 
 
-## AnimationPlayerにアニメーションを読み込む（全武器タイプ + 共通）
+## AnimationPlayerにアニメーションを読み込む（全武器タイプ + 共通 + 射撃）
 static func load_animations(anim_player: AnimationPlayer, model: Node, _debug_name: String = "") -> void:
 	var lib = anim_player.get_animation_library("")
 	if lib == null:
@@ -260,6 +288,14 @@ static func load_animations(anim_player: AnimationPlayer, model: Node, _debug_na
 		for anim_name in anims.keys():
 			var full_anim_name = "%s_%s" % [anim_name, weapon_name]  # 例: idle_none, walking_rifle
 			_load_animation_from_fbx(lib, anims[anim_name], full_anim_name, model, true, "full")
+
+	# 射撃アニメーションを読み込み（ループなし、Hips Y完全正規化）
+	for weapon_type in SHOOTING_ANIMATIONS.keys():
+		var weapon_name = WEAPON_TYPE_NAMES[weapon_type]
+		var anims = SHOOTING_ANIMATIONS[weapon_type]
+		for anim_name in anims.keys():
+			var full_anim_name = "%s_%s" % [anim_name, weapon_name]  # 例: shoot_rifle
+			_load_animation_from_fbx(lib, anims[anim_name], full_anim_name, model, false, "full")
 
 	# 共通アニメーションを読み込み
 	for anim_name in COMMON_ANIMATIONS.keys():
@@ -500,3 +536,134 @@ static func print_tree(node: Node, depth: int = 0, prefix: String = "") -> void:
 	print("%s%s%s (%s)%s" % [prefix, indent, node.name, node.get_class(), extra])
 	for child in node.get_children():
 		print_tree(child, depth + 1, prefix)
+
+
+## スキンバインディングを修正（FBXインポート時にbone_idx=-1になる問題の対策）
+## この関数は、MeshInstance3Dのスキンに正しいボーンインデックスを設定し、
+## スケルトンに登録することでアニメーションが正しく動作するようにする
+## @param model: キャラクターモデルのルートノード
+## @param skeleton: 対象のSkeleton3D（nullの場合は自動検索）
+## @param debug_name: デバッグ用の名前
+static func fix_skin_bindings(model: Node, skeleton: Skeleton3D = null, debug_name: String = "") -> void:
+	# スケルトンが未指定の場合は自動検索
+	if skeleton == null:
+		skeleton = find_skeleton(model)
+
+	if skeleton == null:
+		if debug_name:
+			print("[CharacterSetup] %s: Cannot fix skin bindings - skeleton not found" % debug_name)
+		return
+
+	_fix_skin_bindings_recursive(model, skeleton, debug_name)
+
+
+## 再帰的にスキンバインディングを修正
+static func _fix_skin_bindings_recursive(node: Node, skeleton: Skeleton3D, debug_name: String) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance = node as MeshInstance3D
+		var original_skin = mesh_instance.skin
+
+		if original_skin and skeleton:
+			# 新しいスキンを作成してボーンインデックスを正しく設定
+			var new_skin = Skin.new()
+			var fixed_count := 0
+
+			for i in range(original_skin.get_bind_count()):
+				var bind_name = original_skin.get_bind_name(i)
+				var bind_pose = original_skin.get_bind_pose(i)
+
+				# スケルトンからボーンインデックスを取得
+				var bone_idx = skeleton.find_bone(bind_name)
+
+				new_skin.add_bind(bone_idx, bind_pose)
+				new_skin.set_bind_name(i, bind_name)
+
+				if bone_idx >= 0:
+					fixed_count += 1
+
+			# 新しいスキンを適用
+			mesh_instance.skin = new_skin
+
+			# スキンをスケルトンに登録
+			skeleton.register_skin(new_skin)
+
+			if debug_name:
+				print("[CharacterSetup] %s: Fixed skin '%s' - %d/%d binds resolved" % [
+					debug_name, mesh_instance.name, fixed_count, new_skin.get_bind_count()
+				])
+
+	for child in node.get_children():
+		_fix_skin_bindings_recursive(child, skeleton, debug_name)
+
+
+## 上半身ボーンのリストを取得（アニメーションブレンディング用）
+## Spineより上の全てのボーン（頭、腕、手、指など）を返す
+static func get_upper_body_bones(skeleton: Skeleton3D) -> Array[String]:
+	var upper_bones: Array[String] = []
+	if skeleton == null:
+		return upper_bones
+
+	# 上半身の起点ボーン（Spine以上）
+	var upper_root_bones = [
+		"mixamorig_Spine", "mixamorig_Spine1", "mixamorig_Spine2",
+		"mixamorig_Neck", "mixamorig_Head",
+		"mixamorig_LeftShoulder", "mixamorig_RightShoulder"
+	]
+
+	# 全ボーンをチェックして上半身ボーンを収集
+	for i in range(skeleton.get_bone_count()):
+		var bone_name = skeleton.get_bone_name(i)
+
+		# 上半身ボーンかどうかを判定
+		if _is_upper_body_bone(bone_name):
+			upper_bones.append(bone_name)
+
+	return upper_bones
+
+
+## ボーンが上半身に属するかを判定
+static func _is_upper_body_bone(bone_name: String) -> bool:
+	# 上半身に属するキーワード
+	var upper_keywords = [
+		"Spine", "Neck", "Head",
+		"Shoulder", "Arm", "ForeArm", "Hand",
+		"Thumb", "Index", "Middle", "Ring", "Pinky"  # 指
+	]
+
+	for keyword in upper_keywords:
+		if keyword in bone_name:
+			return true
+
+	return false
+
+
+## 下半身ボーンのリストを取得（アニメーションブレンディング用）
+## Hipsより下の全てのボーン（脚、足など）を返す
+static func get_lower_body_bones(skeleton: Skeleton3D) -> Array[String]:
+	var lower_bones: Array[String] = []
+	if skeleton == null:
+		return lower_bones
+
+	for i in range(skeleton.get_bone_count()):
+		var bone_name = skeleton.get_bone_name(i)
+
+		# 下半身ボーンかどうかを判定
+		if _is_lower_body_bone(bone_name):
+			lower_bones.append(bone_name)
+
+	return lower_bones
+
+
+## ボーンが下半身に属するかを判定
+static func _is_lower_body_bone(bone_name: String) -> bool:
+	# 下半身に属するキーワード
+	var lower_keywords = [
+		"Hips",
+		"UpLeg", "Leg", "Foot", "Toe"
+	]
+
+	for keyword in lower_keywords:
+		if keyword in bone_name:
+			return true
+
+	return false

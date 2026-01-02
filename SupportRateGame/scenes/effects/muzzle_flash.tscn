@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3 uid="uid://muzzle_flash"]
+
+[ext_resource type="Script" path="res://scripts/effects/muzzle_flash.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_flash"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.9, 0.5, 1)
+emission_enabled = true
+emission = Color(1, 0.8, 0.3, 1)
+emission_energy_multiplier = 3.0
+billboard_mode = 1
+billboard_keep_scale = true
+
+[sub_resource type="QuadMesh" id="QuadMesh_flash"]
+size = Vector2(0.15, 0.15)
+
+[node name="MuzzleFlash" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="FlashSprite" type="MeshInstance3D" parent="."]
+visible = false
+mesh = SubResource("QuadMesh_flash")
+surface_material_override/0 = SubResource("StandardMaterial3D_flash")
+
+[node name="Timer" type="Timer" parent="."]
+wait_time = 0.05
+one_shot = true
