@@ -5,16 +5,15 @@ render_mode unshaded, cull_disabled, depth_draw_opaque;
 uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.9);
 
 // 可視性テクスチャ（グリッドベース）
-uniform sampler2D visibility_texture : filter_linear, repeat_disable;
+// filter_nearest: セル単位でくっきり表示（バイリニア補間なし）
+uniform sampler2D visibility_texture : filter_nearest, repeat_disable;
 
 // 前フレームの可視性テクスチャ（テンポラル補間用）
-uniform sampler2D prev_visibility_texture : filter_linear, repeat_disable;
+uniform sampler2D prev_visibility_texture : filter_nearest, repeat_disable;
 
 // テンポラル補間の係数（0.0 = 前フレーム、1.0 = 現フレーム）
-uniform float temporal_blend : hint_range(0.0, 1.0) = 0.15;
-
-// エッジのシャープさ（0.0 = ソフト、1.0 = ハード）
-uniform float edge_sharpness : hint_range(0.0, 1.0) = 0.8;
+// 1.0 = 補間なし（即座に反映）
+uniform float temporal_blend : hint_range(0.0, 1.0) = 1.0;
 
 // マップの設定
 uniform vec2 map_min = vec2(-50.0, -50.0);  // マップの最小座標
@@ -36,15 +35,11 @@ void fragment() {
 		float current_visibility = texture(visibility_texture, uv).r;
 		float prev_visibility = texture(prev_visibility_texture, uv).r;
 
-		// テンポラル補間（スムーズな遷移）
+		// テンポラル補間（temporal_blend = 1.0 で即座反映）
 		float visibility = mix(prev_visibility, current_visibility, temporal_blend);
 
-		// エッジシャープ化（edge_sharpness > 0 の場合のみ）
-		if (edge_sharpness > 0.01) {
-			float edge_width = max(0.05, 0.4 * (1.0 - edge_sharpness));
-			float sharp_visibility = smoothstep(0.5 - edge_width, 0.5 + edge_width, visibility);
-			visibility = mix(visibility, sharp_visibility, edge_sharpness);
-		}
+		// グリッドベース: 0.5以上なら可視、それ以外は不可視（ハードエッジ）
+		visibility = step(0.5, visibility);
 
 		// 可視性に基づいてフォグの透明度を計算
 		fog_alpha = fog_color.a * (1.0 - visibility);

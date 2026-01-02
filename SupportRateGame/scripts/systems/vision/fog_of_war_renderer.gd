@@ -13,8 +13,10 @@ const VisibilityGridSyncClass = preload("res://scripts/systems/vision/visibility
 @export var fog_height: float = 0.1  # 地面からの高さ
 
 @export_group("テクスチャ設定")
-@export var temporal_blend: float = 0.4  # テンポラル補間係数（0-1）
-@export var edge_sharpness: float = 0.5  # エッジのシャープさ（0=ソフト、1=ハード）
+## テンポラル補間係数（0-1）
+## 1.0 = 補間なし（グリッド単位で即座に反映）
+## 0.5以下 = 滑らかな遷移（パフォーマンス優先時に使用）
+@export var temporal_blend: float = 1.0
 @export var update_interval: float = 0.05  # 更新間隔（秒）- 0.05 = 20fps
 
 var _update_timer: float = 0.0
@@ -72,7 +74,6 @@ func _deferred_init() -> void:
 	fog_shader_material.shader = shader
 	fog_shader_material.set_shader_parameter("fog_color", fog_color)
 	fog_shader_material.set_shader_parameter("temporal_blend", temporal_blend)
-	fog_shader_material.set_shader_parameter("edge_sharpness", edge_sharpness)
 	_update_shader_map_bounds()
 
 	# フォグメッシュを作成
@@ -225,13 +226,6 @@ func set_fog_color(color: Color) -> void:
 	fog_color = color
 	if fog_shader_material:
 		fog_shader_material.set_shader_parameter("fog_color", fog_color)
-
-
-## エッジのシャープさを設定
-func set_edge_sharpness(sharpness: float) -> void:
-	edge_sharpness = clampf(sharpness, 0.0, 1.0)
-	if fog_shader_material:
-		fog_shader_material.set_shader_parameter("edge_sharpness", edge_sharpness)
 
 
 # =============================================================================
