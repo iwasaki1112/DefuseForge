@@ -1,11 +1,11 @@
-[gd_scene load_steps=10 format=3 uid="uid://cgame"]
+[gd_scene load_steps=14 format=3 uid="uid://cgame"]
 
 [ext_resource type="PackedScene" uid="uid://cplayer" path="res://scenes/player.tscn" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://cenemy" path="res://scenes/enemy.tscn" id="2_enemy"]
 [ext_resource type="Script" path="res://scripts/game_ui.gd" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/game_scene.gd" id="5_game"]
-[ext_resource type="PackedScene" path="res://resources/maps/dust3/dust3.glb" id="6_dust2"]
-[ext_resource type="Script" path="res://scripts/map_collision_generator.gd" id="7_mapcol"]
+[ext_resource type="PackedScene" path="res://resources/maps/wall.glb" id="6_wall"]
+[ext_resource type="Material" path="res://resources/maps/grid_floor_material.tres" id="7_floor_material"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.4, 0.6, 0.9, 1)
@@ -23,6 +23,15 @@ ambient_light_source = 2
 ambient_light_color = Color(0.5, 0.5, 0.6, 1)
 ambient_light_energy = 0.2
 
+[sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
+size = Vector2(16, 16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(16, 0.2, 16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall"]
+size = Vector3(6, 1.5, 1)
+
 [node name="Game" type="Node3D"]
 script = ExtResource("5_game")
 
@@ -30,7 +39,7 @@ script = ExtResource("5_game")
 environment = SubResource("Environment_env")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.707, 0, -0.707, 0.5, 0.707, 0.5, 0.5, -0.707, 0.5, 10, 15, 10)
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 10, 0)
 light_color = Color(1.0, 0.95, 0.85, 1)
 light_energy = 1.2
 shadow_enabled = true
@@ -42,31 +51,62 @@ directional_shadow_mode = 1
 directional_shadow_split_1 = 0.3
 directional_shadow_blend_splits = false
 
-[node name="Dust2Map" parent="." instance=ExtResource("6_dust2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
-script = ExtResource("7_mapcol")
+[node name="Floor" type="Node3D" parent="."]
+
+[node name="GridFloorMesh" type="MeshInstance3D" parent="Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 8)
+mesh = SubResource("PlaneMesh_floor")
+surface_material_override/0 = ExtResource("7_floor_material")
+
+[node name="FloorCollision" type="StaticBody3D" parent="Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 8)
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor/FloorCollision"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="Wall" type="Node3D" parent="."]
+
+[node name="WallModel" parent="Wall" instance=ExtResource("6_wall")]
+
+[node name="WallCollision1" type="StaticBody3D" parent="Wall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.75, 14.5)
+collision_layer = 6
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall/WallCollision1"]
+shape = SubResource("BoxShape3D_wall")
+
+[node name="WallCollision2" type="StaticBody3D" parent="Wall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.75, 5.5)
+collision_layer = 6
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall/WallCollision2"]
+shape = SubResource("BoxShape3D_wall")
 
 [node name="CT" type="Node3D" parent="."]
 
 [node name="CT1" parent="CT" instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22.7, 1, -15.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1, 2)
 
 [node name="CT2" parent="CT" instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -19.7, 1, -15.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, 2)
 
 [node name="CT3" parent="CT" instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.7, 1, -15.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1, 2)
 
 [node name="T" type="Node3D" parent="."]
 
 [node name="T1" parent="T" instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 23.2, 1, 5.6)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 1, 14)
 
 [node name="T2" parent="T" instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.2, 1, 5.6)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 12, 1, 14)
 
 [node name="T3" parent="T" instance=ExtResource("2_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.2, 1, 5.6)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 14, 1, 14)
 
 [node name="GameUI" type="CanvasLayer" parent="."]
 script = ExtResource("4_ui")
