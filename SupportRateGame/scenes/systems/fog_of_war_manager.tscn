@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://e9k3m5p7r1t3v"]
-
-[ext_resource type="Script" path="res://scripts/systems/vision/fog_of_war_manager.gd" id="1_fog_manager"]
-
-[node name="FogOfWarManager" type="Node"]
-script = ExtResource("1_fog_manager")

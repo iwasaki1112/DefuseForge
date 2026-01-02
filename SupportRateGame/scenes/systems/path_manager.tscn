@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://df3m7n2k5x9r6"]
-
-[ext_resource type="Script" path="res://scripts/systems/path/path_manager.gd" id="1_path"]
-
-[node name="PathManager" type="Node3D"]
-script = ExtResource("1_path")

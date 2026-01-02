@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://cqsz8v7r0y0k8"]
-
-[ext_resource type="Script" path="res://scripts/systems/squad_manager.gd" id="1_squad"]
-
-[node name="SquadManager" type="Node"]
-script = ExtResource("1_squad")

@@ -1,8 +1,6 @@
-[gd_scene load_steps=7 format=3 uid="uid://test_combat"]
+[gd_scene load_steps=5 format=3 uid="uid://dn7gwssrpkm4d"]
 
-[ext_resource type="PackedScene" uid="uid://cplayer" path="res://scenes/player.tscn" id="1_player"]
-[ext_resource type="PackedScene" uid="uid://cenemy" path="res://scenes/enemy.tscn" id="2_enemy"]
-[ext_resource type="Script" path="res://scripts/test_combat_scene.gd" id="3_script"]
+[ext_resource type="Script" path="res://scripts/test_animation_minimal.gd" id="1_script"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(20, 0.2, 20)
@@ -13,8 +11,8 @@ size = Vector3(20, 0.2, 20)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
 albedo_color = Color(0.3, 0.3, 0.3, 1)
 
-[node name="TestCombat" type="Node3D"]
-script = ExtResource("3_script")
+[node name="TestAnimationMinimal" type="Node3D"]
+script = ExtResource("1_script")
 
 [node name="Floor" type="StaticBody3D" parent="."]
 collision_layer = 2
@@ -32,12 +30,6 @@ transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.6
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="Player" parent="." instance=ExtResource("1_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 5)
-
-[node name="Enemy" parent="." instance=ExtResource("2_enemy")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 1, -5)
-
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.5, 0.866, 0, -0.866, 0.5, 0, 15, 10)
+transform = Transform3D(1, 0, 0, 0, 0.707, 0.707, 0, -0.707, 0.707, 0, 3, 3)
 fov = 50.0

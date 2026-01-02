@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://f1g3h5j7l9n1q"]
-
-[ext_resource type="Script" path="res://scripts/systems/vision/fog_of_war_renderer.gd" id="1_fog_renderer"]
-
-[node name="FogOfWarRenderer" type="Node3D"]
-script = ExtResource("1_fog_renderer")

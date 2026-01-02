@@ -24,19 +24,17 @@ SupportRateGame/
 ├── scenes/
 │   ├── title.tscn         # タイトルシーン
 │   ├── game.tscn          # ゲームシーン（dust3マップ使用）
-│   ├── player.tscn        # プレイヤーシーン
-│   ├── enemy.tscn         # 敵シーン
+│   ├── characters/        # キャラクターシーン
+│   │   ├── player.tscn    # プレイヤーシーン
+│   │   └── enemy.tscn     # 敵シーン
 │   ├── lobby/
 │   │   └── lobby.tscn     # ロビーシーン（オンラインマッチ）
-│   ├── systems/           # システムシーン
-│   │   ├── squad_manager.tscn
-│   │   ├── match_manager.tscn
-│   │   ├── path_manager.tscn
-│   │   ├── camera_controller.tscn
-│   │   ├── fog_of_war_manager.tscn
-│   │   └── fog_of_war_renderer.tscn
-│   └── weapons/
-│       └── ak47.tscn      # 武器シーン
+│   ├── effects/           # エフェクトシーン
+│   │   └── muzzle_flash.tscn
+│   ├── weapons/           # 武器シーン
+│   │   └── ak47.tscn
+│   └── tests/             # テスト用シーン
+│       └── test_*.tscn
 ├── scripts/
 │   ├── autoload/
 │   │   ├── game_events.gd     # イベントバス（Autoload）- システム間連携
@@ -68,8 +66,13 @@ SupportRateGame/
 │   │       └── visibility_texture_writer.gd  # テクスチャ書き込み
 │   ├── lobby/
 │   │   └── lobby_screen.gd    # ロビー画面（認証・部屋作成/参加）
+│   ├── api/
+│   │   └── character_api.gd   # キャラクター操作統一API
 │   ├── resources/
-│   │   └── economy_rules.gd   # 経済ルール（Resource）
+│   │   ├── economy_rules.gd   # 経済ルール（Resource）
+│   │   ├── weapon_resource.gd # 武器データ（Resource）
+│   │   ├── weapon_database.gd # 武器データベース
+│   │   └── character_model_resource.gd  # キャラクターモデル（Resource）
 │   ├── data/
 │   │   └── player_data.gd     # プレイヤーデータ（RefCounted）
 │   ├── utils/
@@ -115,7 +118,8 @@ SupportRateGame/
 - **InputManager**: 全入力を一元管理、シグナルで各システムに通知
 - **NakamaClient**: オンライン通信 - 認証・マッチメイキング・リアルタイム同期
 
-### シーン内ノード（game.tscn）
+### 動的生成ノード（game_scene.gdで生成）
+game_scene.gd内で`Node.new()` + `set_script()`により動的生成：
 - **MatchManager**: ラウンド/経済/勝敗（GameEventsと連携）
 - **SquadManager**: 分隊管理、選択・経済・装備
 - **FogOfWarManager**: 視界システム管理
@@ -125,7 +129,8 @@ SupportRateGame/
 - **GridManager**: A*パスファインディング
 - **NetworkSyncManager**: オンライン同期（オンラインマッチ時のみ）
 
-※ シーンノードへの参照は`GameManager.squad_manager`、`GameManager.fog_of_war_manager`、`GameManager.grid_manager`経由でアクセス可能
+※ 参照は`GameManager.squad_manager`、`GameManager.fog_of_war_manager`、`GameManager.grid_manager`経由でアクセス可能
+※ シーン（.tscn）ではなくスクリプトから直接生成することで、不要なシーンファイルを削減
 
 ### イベントバス（GameEvents）
 systems同士が直接呼び合う代わりにGameEventsを介して連携：

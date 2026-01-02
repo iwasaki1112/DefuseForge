@@ -175,3 +175,83 @@ func get_view_distance_cells() -> int:
 ## デバッグ用：可視セル数を取得
 func get_visible_cell_count() -> int:
 	return visible_cells.size()
+
+
+## ========================================
+## 拡張視界API
+## ========================================
+
+## レイキャストで遮蔽物を考慮した視線チェック
+## @param target_pos: チェック対象位置
+## @param collision_mask: 遮蔽物判定用のコリジョンマスク（デフォルト: 壁レイヤー = 6）
+## @return: 視線が通っているか
+func has_line_of_sight(target_pos: Vector3, collision_mask: int = 6) -> bool:
+	if not character or not character.is_inside_tree():
+		return false
+
+	var space_state = character.get_world_3d().direct_space_state
+	if not space_state:
+		return false
+
+	# 視点位置（キャラクターの頭の高さ）
+	var eye_pos = character.global_position + Vector3(0, 1.6, 0)
+	var target_eye_pos = target_pos + Vector3(0, 1.6, 0)
+
+	var query = PhysicsRayQueryParameters3D.create(eye_pos, target_eye_pos)
+	query.collision_mask = collision_mask
+	query.exclude = [character]
+
+	var result = space_state.intersect_ray(query)
+	return result.is_empty()
+
+
+## 視野内かつ視線が通っているか判定（遮蔽物考慮）
+## @param target_pos: チェック対象位置
+## @param check_occlusion: 遮蔽物チェックを行うか
+func is_position_truly_visible(target_pos: Vector3, check_occlusion: bool = true) -> bool:
+	# まずグリッドベースの視野チェック
+	if not is_position_visible(target_pos):
+		return false
+
+	# 遮蔽物チェックが有効な場合、レイキャストで確認
+	if check_occlusion:
+		return has_line_of_sight(target_pos)
+
+	return true
+
+
+## キャラクターが視野内かつ視線が通っているか判定
+func is_character_truly_visible(target: CharacterBody3D, check_occlusion: bool = true) -> bool:
+	if not target:
+		return false
+	return is_position_truly_visible(target.global_position, check_occlusion)
+
+
+## 視野角を動的に変更
+## @param new_fov: 新しい視野角（度）
+func set_fov_angle(new_fov: float) -> void:
+	fov_angle = clamp(new_fov, 10.0, 360.0)
+	_calculate_visibility()
+
+
+## 視野距離を動的に変更
+## @param new_distance: 新しい視野距離（ワールド単位）
+func set_view_distance_value(new_distance: float) -> void:
+	view_distance = max(1.0, new_distance)
+	_calculate_visibility()
+
+
+## 視界情報を辞書形式で取得
+func get_vision_info() -> Dictionary:
+	return {
+		"fov_angle": fov_angle,
+		"view_distance": view_distance,
+		"origin_cell": origin_cell,
+		"visible_cell_count": visible_cells.size(),
+		"vision_origin": vision_origin
+	}
+
+
+## 視野を強制更新
+func force_update() -> void:
+	_calculate_visibility()

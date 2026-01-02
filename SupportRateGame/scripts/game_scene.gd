@@ -5,15 +5,15 @@ extends Node3D
 ## プレイヤー管理はSquadManagerに委譲
 ## ラウンド/経済はMatchManagerに委譲
 
-# システムノードのPackedScene（instantiate()で生成）
-const SquadManagerScene = preload("res://scenes/systems/squad_manager.tscn")
-const MatchManagerScene = preload("res://scenes/systems/match_manager.tscn")
-const PathManagerScene = preload("res://scenes/systems/path_manager.tscn")
-const CameraControllerScene = preload("res://scenes/systems/camera_controller.tscn")
-const FogOfWarManagerScene = preload("res://scenes/systems/fog_of_war_manager.tscn")
-const FogOfWarRendererScene = preload("res://scenes/systems/fog_of_war_renderer.tscn")
+# システムスクリプト（Node.new() + set_script()で生成）
+const SquadManagerScript = preload("res://scripts/systems/squad_manager.gd")
+const MatchManagerScript = preload("res://scripts/systems/match_manager.gd")
+const PathManagerScript = preload("res://scripts/systems/path/path_manager.gd")
+const CameraControllerScript = preload("res://scripts/systems/camera_controller.gd")
+const FogOfWarManagerScript = preload("res://scripts/systems/vision/fog_of_war_manager.gd")
+const FogOfWarRendererScript = preload("res://scripts/systems/vision/fog_of_war_renderer.gd")
 const NetworkSyncManagerScript = preload("res://scripts/systems/network_sync_manager.gd")
-const GridManagerClass = preload("res://scripts/systems/grid/grid_manager.gd")
+const GridManagerScript = preload("res://scripts/systems/grid/grid_manager.gd")
 
 @onready var ct_node: Node3D = $CT
 @onready var t_node: Node3D = $T
@@ -232,7 +232,9 @@ func _find_and_select_player_at_position(world_pos: Vector3) -> bool:
 
 ## SquadManagerをセットアップ
 func _setup_squad_manager() -> void:
-	squad_manager = SquadManagerScene.instantiate()
+	squad_manager = Node.new()
+	squad_manager.name = "SquadManager"
+	squad_manager.set_script(SquadManagerScript)
 	add_child(squad_manager)
 
 	# GameManagerに登録
@@ -243,7 +245,9 @@ func _setup_squad_manager() -> void:
 
 ## FogOfWarManagerをセットアップ
 func _setup_fog_of_war_manager() -> void:
-	fog_of_war_manager = FogOfWarManagerScene.instantiate()
+	fog_of_war_manager = Node.new()
+	fog_of_war_manager.name = "FogOfWarManager"
+	fog_of_war_manager.set_script(FogOfWarManagerScript)
 	add_child(fog_of_war_manager)
 
 	# GameManagerに登録
@@ -254,7 +258,9 @@ func _setup_fog_of_war_manager() -> void:
 
 ## MatchManagerをセットアップ
 func _setup_match_manager() -> void:
-	match_manager = MatchManagerScene.instantiate()
+	match_manager = Node.new()
+	match_manager.name = "MatchManager"
+	match_manager.set_script(MatchManagerScript)
 	add_child(match_manager)
 
 	# GameManagerに登録
@@ -267,7 +273,7 @@ func _setup_match_manager() -> void:
 func _setup_grid_system() -> void:
 	grid_manager = Node3D.new()
 	grid_manager.name = "GridManager"
-	grid_manager.set_script(GridManagerClass)
+	grid_manager.set_script(GridManagerScript)
 
 	# grid_testマップ用の設定（16x16グリッド）
 	grid_manager.grid_origin = Vector3(0, 0, 0)
@@ -291,7 +297,9 @@ func _setup_grid_system() -> void:
 
 ## パスシステムをセットアップ
 func _setup_path_system() -> void:
-	path_manager = PathManagerScene.instantiate()
+	path_manager = Node3D.new()
+	path_manager.name = "PathManager"
+	path_manager.set_script(PathManagerScript)
 	add_child(path_manager)
 
 	# GridManagerを接続（A*パスファインディング用）
@@ -354,7 +362,9 @@ func _setup_camera_system() -> void:
 	player_camera.near = 0.1
 	player_camera.far = 100.0
 
-	camera_controller = CameraControllerScene.instantiate()
+	camera_controller = Node3D.new()
+	camera_controller.name = "CameraController"
+	camera_controller.set_script(CameraControllerScript)
 	add_child(camera_controller)
 
 	# カメラをコントローラーに追加
@@ -371,7 +381,9 @@ func _setup_camera_system() -> void:
 
 ## Fog of Warレンダラーをセットアップ
 func _setup_fog_of_war_renderer() -> void:
-	fog_renderer = FogOfWarRendererScene.instantiate()
+	fog_renderer = Node3D.new()
+	fog_renderer.name = "FogOfWarRenderer"
+	fog_renderer.set_script(FogOfWarRendererScript)
 	add_child(fog_renderer)
 
 	# マップ範囲はGridManagerから自動取得される

@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3 uid="uid://ci8oschs1nea4"]
+[gd_scene load_steps=5 format=3 uid="uid://4o01ghaxy0l6"]
 
-[ext_resource type="Script" path="res://scripts/test_animation_minimal.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/test_animation_fixed.gd" id="1_script"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(20, 0.2, 20)
@@ -11,7 +11,7 @@ size = Vector3(20, 0.2, 20)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
 albedo_color = Color(0.3, 0.3, 0.3, 1)
 
-[node name="TestAnimationMinimal" type="Node3D"]
+[node name="TestAnimationFixed" type="Node3D"]
 script = ExtResource("1_script")
 
 [node name="Floor" type="StaticBody3D" parent="."]
