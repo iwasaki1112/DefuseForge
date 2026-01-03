@@ -308,13 +308,12 @@ func _create_shadow_receiving_floor() -> void:
 
 
 ## 再帰的にメッシュに影設定を適用
+## Blenderで法線を修正済みなので、cast_shadowの設定のみ行う
 func _apply_shadow_settings_recursive(node: Node, count: int) -> int:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
-		# 影を投げる設定
+		# 影を投げる・受ける設定
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		# 影を受けるためのマテリアル設定
-		_setup_shadow_material(mesh_instance)
 		count += 1
 		print("[GameScene] Shadow setup for mesh: %s (cast_shadow=%d)" % [mesh_instance.name, mesh_instance.cast_shadow])
 
@@ -322,37 +321,6 @@ func _apply_shadow_settings_recursive(node: Node, count: int) -> int:
 		count = _apply_shadow_settings_recursive(child, count)
 
 	return count
-
-
-## メッシュに影を受けるマテリアルを設定
-func _setup_shadow_material(mesh_instance: MeshInstance3D) -> void:
-	if mesh_instance.mesh == null:
-		print("[GameScene] Mesh is null for: %s" % mesh_instance.name)
-		return
-
-	var surface_count = mesh_instance.mesh.get_surface_count()
-	for i in range(surface_count):
-		var mat = mesh_instance.get_active_material(i)
-		if mat == null:
-			# マテリアルがない場合は新規作成
-			var new_mat = StandardMaterial3D.new()
-			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			new_mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # 両面レンダリング
-			mesh_instance.set_surface_override_material(i, new_mat)
-			print("[GameScene] Created new material for %s surface %d" % [mesh_instance.name, i])
-		elif mat is BaseMaterial3D:
-			# BaseMaterial3D（StandardMaterial3D, ORMMaterial3Dなど）の場合
-			var base_mat = mat as BaseMaterial3D
-			print("[GameScene] Material for %s surface %d: %s, shading_mode=%d, cull=%d" % [mesh_instance.name, i, mat.get_class(), base_mat.shading_mode, base_mat.cull_mode])
-			# 常に複製して両面レンダリング＋shading_modeを設定
-			var new_mat = base_mat.duplicate() as BaseMaterial3D
-			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			new_mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # 両面レンダリング（法線が裏向きでも影を受ける）
-			mesh_instance.set_surface_override_material(i, new_mat)
-			print("[GameScene] Updated material for %s surface %d (cull_mode=DISABLED)" % [mesh_instance.name, i])
-		else:
-			# ShaderMaterialなど他のマテリアルタイプ
-			print("[GameScene] Non-BaseMaterial3D for %s surface %d: %s" % [mesh_instance.name, i, mat.get_class()])
 
 
 ## GridManagerをセットアップ（A*パスファインディング用）

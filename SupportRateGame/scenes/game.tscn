@@ -37,15 +37,13 @@ transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0
 light_color = Color(1.0, 0.95, 0.85, 1)
 light_energy = 1.2
 shadow_enabled = true
-shadow_bias = 0.001
-shadow_normal_bias = 0.5
-shadow_blur = 1.0
-directional_shadow_max_distance = 200.0
-directional_shadow_mode = 0
-directional_shadow_split_1 = 0.1
-directional_shadow_split_2 = 0.2
-directional_shadow_split_3 = 0.5
-directional_shadow_blend_splits = true
+shadow_bias = 0.1
+shadow_normal_bias = 2.0
+shadow_blur = 0.5
+directional_shadow_max_distance = 50.0
+directional_shadow_mode = 1
+directional_shadow_split_1 = 0.3
+directional_shadow_blend_splits = false
 
 [node name="Floor" type="Node3D" parent="."]
 
