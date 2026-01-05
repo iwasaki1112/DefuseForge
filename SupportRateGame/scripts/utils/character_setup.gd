@@ -80,51 +80,136 @@ const WEAPON_ID_NAMES := {
 	WeaponId.USP: "usp"
 }
 
-## アニメーションファイルパス（武器タイプ別）
-## 構造: { WeaponType: { "idle": path, "walking": path, "running": path } }
-const ANIMATION_FILES := {
-	WeaponType.NONE: {
-		"idle": "res://assets/characters/animations/none/idle.fbx",
-		"walking": "res://assets/characters/animations/none/walking.fbx",
-		"running": "res://assets/characters/animations/none/running.fbx"
-	},
-	WeaponType.RIFLE: {
-		"idle": "res://assets/characters/animations/rifle/idle.fbx",
-		"idle_aiming": "res://assets/characters/animations/rifle/idleAiming.fbx",
-		"walking": "res://assets/characters/animations/rifle/walking.fbx",
-		"running": "res://assets/characters/animations/rifle/running.fbx"
-	},
-	WeaponType.PISTOL: {
-		"idle": "res://assets/characters/animations/pistol/idle.fbx",
-		"walking": "res://assets/characters/animations/pistol/walking.fbx",
-		"running": "res://assets/characters/animations/pistol/running.fbx"
-	}
+## Rifle Animset Pro FBXファイルパス
+const RIFLE_ANIMSET_PRO_PATH := "res://assets/characters/animations/rifle_animset_pro/"
+const RIFLE_ANIMSET_FBX := {
+	"main": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro.fbx",
+	"sprint": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro_Sprint.fbx",
+	"additionals": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro_Additionals.fbx",
+	"diagonals": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro_Diagonals.fbx",
+	"equips": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro_Equips.fbx",
+	"jumps": RIFLE_ANIMSET_PRO_PATH + "RifleAnimsetPro_Platformer_Jumps.fbx"
 }
 
-## 共通アニメーション（全武器タイプで共有）
-## 構造: { "anim_name": { "path": path, "loop": bool, "normalize_mode": string } }
-## normalize_mode:
-##   "full" - Hips Y を完全に0に固定（locomotion用）
-##   "relative" - Hips Y の開始位置を0に合わせ、相対的な動きを維持（dying等）
-##   "none" - 正規化なし
-const COMMON_ANIMATIONS := {
-	"dying": {
-		"path": "res://assets/characters/animations/dying.fbx",
-		"loop": false,
-		"normalize_mode": "relative"
-	}
+## HumanIK → Mixamo ボーン名マッピング
+const BONE_NAME_MAP := {
+	"Hips": "mixamorig_Hips",
+	"Spine": "mixamorig_Spine",
+	"Spine1": "mixamorig_Spine1",
+	"Spine2": "mixamorig_Spine2",
+	"Neck": "mixamorig_Neck",
+	"Head": "mixamorig_Head",
+	"HeadTop_End": "mixamorig_HeadTop_End",
+	"LeftShoulder": "mixamorig_LeftShoulder",
+	"LeftArm": "mixamorig_LeftArm",
+	"LeftArmRoll": "mixamorig_LeftArm",  # Roll bones map to parent
+	"LeftForeArm": "mixamorig_LeftForeArm",
+	"LeftForeArmRoll": "mixamorig_LeftForeArm",
+	"LeftHand": "mixamorig_LeftHand",
+	"LeftHandThumb1": "mixamorig_LeftHandThumb1",
+	"LeftHandThumb2": "mixamorig_LeftHandThumb2",
+	"LeftHandThumb3": "mixamorig_LeftHandThumb3",
+	"LeftHandThumb4": "mixamorig_LeftHandThumb4",
+	"LeftHandIndex1": "mixamorig_LeftHandIndex1",
+	"LeftHandIndex2": "mixamorig_LeftHandIndex2",
+	"LeftHandIndex3": "mixamorig_LeftHandIndex3",
+	"LeftHandIndex4": "mixamorig_LeftHandIndex4",
+	"LeftHandMiddle1": "mixamorig_LeftHandMiddle1",
+	"LeftHandMiddle2": "mixamorig_LeftHandMiddle2",
+	"LeftHandMiddle3": "mixamorig_LeftHandMiddle3",
+	"LeftHandMiddle4": "mixamorig_LeftHandMiddle4",
+	"LeftHandRing1": "mixamorig_LeftHandRing1",
+	"LeftHandRing2": "mixamorig_LeftHandRing2",
+	"LeftHandRing3": "mixamorig_LeftHandRing3",
+	"LeftHandRing4": "mixamorig_LeftHandRing4",
+	"LeftHandPinky1": "mixamorig_LeftHandPinky1",
+	"LeftHandPinky2": "mixamorig_LeftHandPinky2",
+	"LeftHandPinky3": "mixamorig_LeftHandPinky3",
+	"LeftHandPinky4": "mixamorig_LeftHandPinky4",
+	"RightShoulder": "mixamorig_RightShoulder",
+	"RightArm": "mixamorig_RightArm",
+	"RightArmRoll": "mixamorig_RightArm",
+	"RightForeArm": "mixamorig_RightForeArm",
+	"RightForeArmRoll": "mixamorig_RightForeArm",
+	"RightHand": "mixamorig_RightHand",
+	"RightHandThumb1": "mixamorig_RightHandThumb1",
+	"RightHandThumb2": "mixamorig_RightHandThumb2",
+	"RightHandThumb3": "mixamorig_RightHandThumb3",
+	"RightHandThumb4": "mixamorig_RightHandThumb4",
+	"RightHandIndex1": "mixamorig_RightHandIndex1",
+	"RightHandIndex2": "mixamorig_RightHandIndex2",
+	"RightHandIndex3": "mixamorig_RightHandIndex3",
+	"RightHandIndex4": "mixamorig_RightHandIndex4",
+	"RightHandMiddle1": "mixamorig_RightHandMiddle1",
+	"RightHandMiddle2": "mixamorig_RightHandMiddle2",
+	"RightHandMiddle3": "mixamorig_RightHandMiddle3",
+	"RightHandMiddle4": "mixamorig_RightHandMiddle4",
+	"RightHandRing1": "mixamorig_RightHandRing1",
+	"RightHandRing2": "mixamorig_RightHandRing2",
+	"RightHandRing3": "mixamorig_RightHandRing3",
+	"RightHandRing4": "mixamorig_RightHandRing4",
+	"RightHandPinky1": "mixamorig_RightHandPinky1",
+	"RightHandPinky2": "mixamorig_RightHandPinky2",
+	"RightHandPinky3": "mixamorig_RightHandPinky3",
+	"RightHandPinky4": "mixamorig_RightHandPinky4",
+	"LeftUpLeg": "mixamorig_LeftUpLeg",
+	"LeftUpLegRoll": "mixamorig_LeftUpLeg",
+	"LeftLeg": "mixamorig_LeftLeg",
+	"LeftLegRoll": "mixamorig_LeftLeg",
+	"LeftFoot": "mixamorig_LeftFoot",
+	"LeftToeBase": "mixamorig_LeftToeBase",
+	"LeftToeBase_END": "mixamorig_LeftToe_End",
+	"RightUpLeg": "mixamorig_RightUpLeg",
+	"RightUpLegRoll": "mixamorig_RightUpLeg",
+	"RightLeg": "mixamorig_RightLeg",
+	"RightLegRoll": "mixamorig_RightLeg",
+	"RightFoot": "mixamorig_RightFoot",
+	"RightToeBase": "mixamorig_RightToeBase",
+	"RightToeBase_END": "mixamorig_RightToe_End"
 }
 
-## 射撃アニメーション（武器タイプ別）
-## 上半身のみで再生される想定
-const SHOOTING_ANIMATIONS := {
-	WeaponType.RIFLE: {
-		"shoot": "res://assets/characters/animations/rifle/shoot.fbx"
-	},
-	WeaponType.PISTOL: {
-		"shoot": "res://assets/characters/animations/pistol/shoot.fbx"
-	}
+## Rifle Animset Proのアニメーションマッピング
+## 構造: { "内部アニメーション名": { "fbx": FBXキー, "clip": クリップ名, "loop": bool } }
+## 全武器タイプで同じアニメーションを使用（タクティカルシューターでは一般的）
+const RIFLE_ANIMSET_ANIMATIONS := {
+	# RIFLE アニメーション
+	"idle_rifle": { "fbx": "main", "clip": "Rifle_Idle", "loop": true },
+	"walking_rifle": { "fbx": "main", "clip": "Rifle_WalkFwdLoop", "loop": true },
+	"running_rifle": { "fbx": "sprint", "clip": "Rifle_SprintLoop", "loop": true },
+	"shoot_rifle": { "fbx": "main", "clip": "Rifle_ShootOnce", "loop": false },
+	"reload_rifle": { "fbx": "main", "clip": "Rifle_Reload_2", "loop": false },
+	"melee_rifle": { "fbx": "main", "clip": "Rifle_Melee_Hard", "loop": false },
+
+	# PISTOL アニメーション（ライフルと同じアニメーションを使用）
+	"idle_pistol": { "fbx": "main", "clip": "Rifle_Idle", "loop": true },
+	"walking_pistol": { "fbx": "main", "clip": "Rifle_WalkFwdLoop", "loop": true },
+	"running_pistol": { "fbx": "sprint", "clip": "Rifle_SprintLoop", "loop": true },
+	"shoot_pistol": { "fbx": "main", "clip": "Rifle_ShootOnce", "loop": false },
+
+	# NONE アニメーション（武器なし - ライフルと同じアニメーションを使用）
+	"idle_none": { "fbx": "main", "clip": "Rifle_Idle", "loop": true },
+	"walking_none": { "fbx": "main", "clip": "Rifle_WalkFwdLoop", "loop": true },
+	"running_none": { "fbx": "sprint", "clip": "Rifle_SprintLoop", "loop": true },
+
+	# 共通アニメーション
+	"dying": { "fbx": "main", "clip": "Rifle_Death_R", "loop": false },
+	"dying_left": { "fbx": "main", "clip": "Rifle_Death_L", "loop": false },
+
+	# ターンアニメーション
+	"turn_right_90": { "fbx": "main", "clip": "Rifle_TurnR_90", "loop": false },
+	"turn_left_90": { "fbx": "main", "clip": "Rifle_TurnL_90", "loop": false },
+	"turn_right_180": { "fbx": "main", "clip": "Rifle_TurnR_180", "loop": false },
+	"turn_left_180": { "fbx": "main", "clip": "Rifle_TurnL_180", "loop": false },
+
+	# ヒットリアクション
+	"hit_left": { "fbx": "main", "clip": "Rifle_Hit_L_1", "loop": false },
+	"hit_right": { "fbx": "main", "clip": "Rifle_Hit_R_2", "loop": false },
+	"hit_center": { "fbx": "main", "clip": "Rifle_Hit_C_1", "loop": false },
+
+	# グレネード
+	"grenade_throw": { "fbx": "main", "clip": "Rifle_Grenade_Throw_Single", "loop": false }
 }
+
 
 ## 武器タイプ名称
 const WEAPON_TYPE_NAMES := {
@@ -213,14 +298,11 @@ const WEAPON_BASE_TRANSFORM := {
 ## この値にHips Yを正規化することで、武器タイプ切替時の位置ズレを防ぐ
 const ANIMATION_HIPS_TARGET_Y: float = 0.0
 
-## Skeletonのレストポーズからfeet-to-hips距離を計算してYオフセットを算出
-## アニメーションでHips Yを0に正規化した場合、
-## feet_to_hips距離分だけモデルを上にオフセットすることで足が地面に接地する
+## Skeletonのレストポーズから足が地面に接地するためのYオフセットを算出
+## アニメーションでHips YをレストポーズのY位置に正規化している前提
 ##
-## 計算式: y_offset = character_feet_to_hips × scale
-##
-## 注意: 現在はidle/walk/runのみ対応。ジャンプ/しゃがみ等の上下動アニメーションは
-## Hips固定方式では対応できないため、別途対応が必要
+## 計算式: y_offset = -toe_rest_y × scale
+## （ToeBaseがレスト位置にある場合、その分だけモデルを上げて地面に合わせる）
 ##
 ## @param skeleton: キャラクターのSkeleton3D
 ## @param model_scale: モデルのスケール（通常は2.0）
@@ -229,14 +311,6 @@ const ANIMATION_HIPS_TARGET_Y: float = 0.0
 static func calculate_y_offset_from_skeleton(skeleton: Skeleton3D, model_scale: float = 2.0, debug_name: String = "") -> float:
 	if skeleton == null:
 		push_warning("[CharacterSetup] %s: Skeleton is null, cannot calculate Y offset" % debug_name)
-		return 0.0
-
-	# Hipsボーンを探す（Mixamo各種表記に対応）
-	var hips_idx := _find_bone_by_name(skeleton, [
-		"mixamorig_Hips", "mixamorig1_Hips", "mixamorig:Hips", "Hips"
-	])
-	if hips_idx == -1:
-		push_warning("[CharacterSetup] %s: Hips bone not found, Y offset will be 0" % debug_name)
 		return 0.0
 
 	# ToeBaseボーンを探す（左右どちらでもOK、各種表記に対応）
@@ -249,19 +323,15 @@ static func calculate_y_offset_from_skeleton(skeleton: Skeleton3D, model_scale: 
 		return 0.0
 
 	# レストポーズのグローバル位置を取得
-	var hips_rest: Transform3D = skeleton.get_bone_global_rest(hips_idx)
 	var toe_rest: Transform3D = skeleton.get_bone_global_rest(toe_idx)
 
-	# キャラクター固有のfeet-to-hips距離
-	var character_feet_to_hips := hips_rest.origin.y - toe_rest.origin.y
-
-	# アニメーションでHips Yを0に正規化した場合、
-	# feet_to_hips距離分だけモデルを上にオフセットすることで足が地面に接地する
-	var y_offset := character_feet_to_hips * model_scale
+	# ToeBaseのレストY位置の逆数がオフセット
+	# （ToeBaseが地面レベル Y=0 になるようにモデルを配置）
+	var y_offset := -toe_rest.origin.y * model_scale
 
 	if debug_name:
-		print("[CharacterSetup] %s: Y offset: feet_to_hips=%.3f, scale=%.1f, total=%.3f" % [
-			debug_name, character_feet_to_hips, model_scale, y_offset
+		print("[CharacterSetup] %s: Y offset: toe_rest_y=%.3f, scale=%.1f, total=%.3f" % [
+			debug_name, toe_rest.origin.y, model_scale, y_offset
 		])
 
 	return y_offset
@@ -344,39 +414,87 @@ static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: S
 		print("[CharacterSetup] %s: Applied texture to mesh '%s'" % [debug_name, mesh_instance.name])
 
 
-## AnimationPlayerにアニメーションを読み込む（全武器タイプ + 共通 + 射撃）
-static func load_animations(anim_player: AnimationPlayer, model: Node, _debug_name: String = "") -> void:
+## AnimationPlayerにアニメーションを読み込む（Rifle Animset Pro使用）
+static func load_animations(anim_player: AnimationPlayer, model: Node, debug_name: String = "") -> void:
 	var lib = anim_player.get_animation_library("")
 	if lib == null:
 		return
 
-	# 全武器タイプのアニメーションを読み込み（Hips Y完全正規化）
-	for weapon_type in ANIMATION_FILES.keys():
-		var weapon_name = WEAPON_TYPE_NAMES[weapon_type]
-		var anims = ANIMATION_FILES[weapon_type]
-		for anim_name in anims.keys():
-			var full_anim_name = "%s_%s" % [anim_name, weapon_name]  # 例: idle_none, walking_rifle
-			_load_animation_from_fbx(lib, anims[anim_name], full_anim_name, model, true, "full")
+	# Rifle Animset Proからアニメーションを読み込み
+	_load_rifle_animset_pro_animations(lib, model, debug_name)
 
-	# 射撃アニメーションを読み込み（ループなし、Hips Y完全正規化）
-	for weapon_type in SHOOTING_ANIMATIONS.keys():
-		var weapon_name = WEAPON_TYPE_NAMES[weapon_type]
-		var anims = SHOOTING_ANIMATIONS[weapon_type]
-		for anim_name in anims.keys():
-			var full_anim_name = "%s_%s" % [anim_name, weapon_name]  # 例: shoot_rifle
-			_load_animation_from_fbx(lib, anims[anim_name], full_anim_name, model, false, "full")
 
-	# 共通アニメーションを読み込み
-	for anim_name in COMMON_ANIMATIONS.keys():
-		var anim_data = COMMON_ANIMATIONS[anim_name]
-		var normalize_mode = anim_data.get("normalize_mode", "none")
-		_load_animation_from_fbx(lib, anim_data.path, anim_name, model, anim_data.loop, normalize_mode)
+## Rifle Animset Proからアニメーションを読み込む
+static func _load_rifle_animset_pro_animations(lib: AnimationLibrary, model: Node, debug_name: String = "") -> void:
+	# FBXファイルをキャッシュ（同じFBXから複数アニメーションを読み込むため）
+	var fbx_cache: Dictionary = {}
+
+	for anim_name in RIFLE_ANIMSET_ANIMATIONS.keys():
+		var anim_data: Dictionary = RIFLE_ANIMSET_ANIMATIONS[anim_name]
+		var fbx_key: String = anim_data.fbx
+		var clip_name: String = anim_data.clip
+		var loop: bool = anim_data.loop
+
+		# FBXパスを取得
+		var fbx_path: String = RIFLE_ANIMSET_FBX.get(fbx_key, "")
+		if fbx_path.is_empty():
+			continue
+
+		# FBXがまだロードされていなければロード
+		if not fbx_cache.has(fbx_key):
+			if not ResourceLoader.exists(fbx_path):
+				if debug_name:
+					print("[CharacterSetup] %s: FBX not found: %s" % [debug_name, fbx_path])
+				continue
+			var scene = load(fbx_path)
+			if scene:
+				fbx_cache[fbx_key] = scene.instantiate()
+
+		var fbx_instance = fbx_cache.get(fbx_key, null)
+		if fbx_instance == null:
+			continue
+
+		# FBXからAnimationPlayerを取得
+		var scene_anim_player = fbx_instance.get_node_or_null("AnimationPlayer")
+		if scene_anim_player == null:
+			continue
+
+		# 指定されたクリップを検索
+		if not scene_anim_player.has_animation(clip_name):
+			if debug_name:
+				print("[CharacterSetup] %s: Animation clip not found: %s in %s" % [debug_name, clip_name, fbx_path])
+			continue
+
+		# アニメーションをコピーして追加
+		var anim = scene_anim_player.get_animation(clip_name)
+		if anim:
+			var anim_copy = anim.duplicate()
+			anim_copy.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
+			_adjust_animation_paths(anim_copy, model, "full", true)  # リターゲット有効
+			lib.add_animation(anim_name, anim_copy)
+			if debug_name:
+				print("[CharacterSetup] %s: Loaded animation '%s' from '%s'" % [debug_name, anim_name, clip_name])
+
+	# キャッシュしたインスタンスを解放
+	for key in fbx_cache.keys():
+		var instance = fbx_cache[key]
+		if instance:
+			instance.queue_free()
 
 
 ## 指定した武器タイプのアニメーション名を取得
 static func get_animation_name(base_name: String, weapon_type: int) -> String:
 	var weapon_name = WEAPON_TYPE_NAMES.get(weapon_type, "none")
 	return "%s_%s" % [base_name, weapon_name]
+
+
+## 武器タイプからプレフィックスを取得（例: RIFLE -> "rifle_"）
+## 歩行シーケンスなど、武器名が先に来るアニメーション用
+static func get_weapon_prefix(weapon_type: int) -> String:
+	var weapon_name = WEAPON_TYPE_NAMES.get(weapon_type, "")
+	if weapon_name.is_empty() or weapon_name == "none":
+		return ""
+	return weapon_name + "_"
 
 
 ## 指定した武器タイプのアニメーションが存在するか確認
@@ -392,7 +510,8 @@ static func has_weapon_animations(anim_player: AnimationPlayer, weapon_type: int
 ## @param model: モデルノード（パス調整用）
 ## @param loop: ループするか（デフォルト: true）
 ## @param normalize_mode: Hips Y正規化モード ("full", "relative", "none")
-static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_name: String, model: Node, loop: bool = true, normalize_mode: String = "full") -> void:
+## @param retarget: ボーン名をリターゲットするか（デフォルト: false）
+static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_name: String, model: Node, loop: bool = true, normalize_mode: String = "full", retarget: bool = false) -> void:
 	if not ResourceLoader.exists(path):
 		return
 
@@ -408,7 +527,7 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 			if anim:
 				var anim_copy = anim.duplicate()
 				anim_copy.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
-				_adjust_animation_paths(anim_copy, model, normalize_mode)
+				_adjust_animation_paths(anim_copy, model, normalize_mode, retarget)
 				lib.add_animation(anim_name, anim_copy)
 				break
 	instance.queue_free()
@@ -421,7 +540,8 @@ static func _load_animation_from_fbx(lib: AnimationLibrary, path: String, anim_n
 ##   "full" - X,Z=0, Y=目標値に完全固定（locomotion用）
 ##   "relative" - 開始位置を目標値に合わせ、相対的な動きを維持（dying等）
 ##   "none" - 正規化なし
-static func _adjust_animation_paths(anim: Animation, model: Node, normalize_mode: String = "full") -> void:
+## @param retarget: HumanIK → Mixamoボーン名リターゲットを行うか
+static func _adjust_animation_paths(anim: Animation, model: Node, normalize_mode: String = "full", retarget: bool = false) -> void:
 	if model == null:
 		return
 
@@ -436,6 +556,10 @@ static func _adjust_animation_paths(anim: Animation, model: Node, normalize_mode
 		var track_path = anim.track_get_path(i)
 		var path_str = str(track_path)
 		var track_type = anim.track_get_type(i)
+
+		# リターゲット: HumanIK → Mixamo ボーン名変換
+		if retarget:
+			path_str = _retarget_bone_path(path_str)
 
 		# Mixamoボーン名を統一形式に変換
 		# mixamorig1_ / mixamorig: → mixamorig_（Godotインポート後の標準形式）
@@ -453,6 +577,8 @@ static func _adjust_animation_paths(anim: Animation, model: Node, normalize_mode
 		anim.track_set_path(i, NodePath(path_str))
 
 	# Hips位置トラックを正規化
+	# 注意: CharacterBody3D + 物理演算で接地する場合、この正規化は参考程度
+	# 物理がキャラクターを地面に押し付けるため、Hips Yの値は視覚的に影響しにくい
 	for track_idx in hips_position_tracks:
 		var key_count = anim.track_get_key_count(track_idx)
 		if key_count == 0:
@@ -472,6 +598,25 @@ static func _adjust_animation_paths(anim: Animation, model: Node, normalize_mode
 				var original_pos: Vector3 = anim.track_get_key_value(track_idx, key_idx)
 				var adjusted_pos = original_pos + offset
 				anim.track_set_key_value(track_idx, key_idx, adjusted_pos)
+
+
+## HumanIK ボーン名を Mixamo ボーン名にリターゲット
+## @param path_str: トラックパス文字列（例: "Skeleton3D:Hips"）
+## @return: リターゲット後のパス文字列（例: "Skeleton3D:mixamorig_Hips"）
+static func _retarget_bone_path(path_str: String) -> String:
+	# パスを分解: "Skeleton3D:BoneName" or "Armature/Skeleton3D:BoneName"
+	var colon_idx := path_str.rfind(":")
+	if colon_idx == -1:
+		return path_str
+
+	var prefix := path_str.substr(0, colon_idx + 1)  # "Skeleton3D:" など
+	var bone_name := path_str.substr(colon_idx + 1)  # "Hips" など
+
+	# ボーン名をマッピング
+	if BONE_NAME_MAP.has(bone_name):
+		return prefix + BONE_NAME_MAP[bone_name]
+
+	return path_str
 
 
 ## モデルからSkeletonを探す

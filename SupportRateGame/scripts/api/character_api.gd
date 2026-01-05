@@ -126,6 +126,49 @@ static func get_available_animations(character: CharacterBase) -> Array[String]:
 
 
 ## ========================================
+## 歩行シーケンスAPI
+## walk_start -> walk_loop -> walk_end の自動遷移
+## ========================================
+
+## 歩行シーケンスを開始
+## @param character: 対象キャラクター
+## @param base_name: "walk" や "sprint" などのベース名
+## @param blend_time: ブレンド時間（秒）
+## @example: CharacterAPI.start_walk_sequence(player, "walk") -> rifle_walk_start -> rifle_walk (loop)
+static func start_walk_sequence(character: CharacterBase, base_name: String = "walk", blend_time: float = 0.3) -> void:
+	if not is_instance_valid(character):
+		return
+	character.start_walk_sequence(base_name, blend_time)
+
+
+## 歩行シーケンスを停止（end アニメーションを再生してから idle に戻る）
+## @param character: 対象キャラクター
+## @param blend_time: ブレンド時間（秒）
+## @example: CharacterAPI.stop_walk_sequence(player) -> rifle_walk_end -> idle
+static func stop_walk_sequence(character: CharacterBase, blend_time: float = 0.3) -> void:
+	if not is_instance_valid(character):
+		return
+	character.stop_walk_sequence(blend_time)
+
+
+## 歩行シーケンスを強制終了（即座に停止、end アニメーションなし）
+## @param character: 対象キャラクター
+static func cancel_walk_sequence(character: CharacterBase) -> void:
+	if not is_instance_valid(character):
+		return
+	character.cancel_walk_sequence()
+
+
+## 歩行シーケンスがアクティブか確認
+## @param character: 対象キャラクター
+## @return: 歩行シーケンス中なら true
+static func is_walk_sequence_active(character: CharacterBase) -> bool:
+	if not is_instance_valid(character):
+		return false
+	return character.is_walk_sequence_active()
+
+
+## ========================================
 ## パスAPI
 ## ========================================
 

@@ -56,4 +56,10 @@ nakama/data/
 builds/
 SupportRateGame/builds/
 
+# FBX2glTF binary (download with tools/setup_fbx2gltf.sh)
+tools/FBX2glTF
+tools/FBX2glTF.exe
+tools/FBX-SDK-License.rtf
+tools/FBX2glTF-License.txt
+
 # Note: *.uid files are tracked for consistency (Godot 4.4+ uses UIDs for resource references)

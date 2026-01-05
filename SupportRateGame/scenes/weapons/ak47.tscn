@@ -6,9 +6,9 @@
 [node name="AK47" type="Node3D"]
 
 [node name="Model" parent="." instance=ExtResource("1_ak47")]
-transform = Transform3D(-0.10790455, 0.99171764, 0.069660865, 0.9931588, 0.10438515, 0.05233595, 0.044630934, 0.0748316, -0.9961968, -0.03, 0.13, 0.02)
+transform = Transform3D(-0.6595757, 2.489067, -0.3598678, 2.5089488, 0.6255512, -0.271774, -0.17359537, -0.41620982, -2.5605924, -0.08, 0.36, 0)
 
 [node name="MuzzlePoint" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.011359699, 0.3526657, 0.03757134)
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, -0.10898829, 0.94719803, -0.040415853)
 
 [node name="MuzzleFlash" parent="MuzzlePoint" instance=ExtResource("2_muzzle_flash")]
