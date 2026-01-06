@@ -30,7 +30,13 @@ var walk_status_label: Label = null
 var right_hand_bone_idx: int = -1
 var weapon_attachment: BoneAttachment3D = null
 var muzzle_flash: Node3D = null
-const AK47_SCENE_PATH: String = "res://scenes/weapons/ak47.tscn"
+
+# Weapon resource - 武器の設定を .tres ファイルから読み込み
+const WEAPONS_DIR: String = "res://resources/weapons/"
+var available_weapons: Array[String] = []  # 利用可能な武器IDリスト
+var current_weapon_id: String = "ak47"  # 現在選択中の武器ID
+var weapon_resource: WeaponResource = null
+var weapon_option_button: OptionButton = null
 
 # Shooting / Recoil
 var is_shooting: bool = false
@@ -39,18 +45,12 @@ const RECOIL_MAX_ANGLE: float = 8.0  # Max recoil rotation in degrees
 const RECOIL_RECOVERY_SPEED: float = 15.0  # How fast recoil recovers
 var recoil_tween: Tween = null
 
-# Left hand IK
+# Left hand IK - 値は weapon_resource から読み込み
 var left_hand_ik: SkeletonIK3D = null
 var left_hand_grip_target: Marker3D = null
-var left_hand_ik_offset: Vector3 = Vector3(-0.02, -0.06, -0.07)  # 手首→手のひらのオフセット（ローカル座標）
-var left_hand_ik_rotation: Vector3 = Vector3(-67, -165, 4)  # 手の角度オフセット（度数）
-
-# IKを無効にするアニメーション（リロード、死亡、ドア開けなど）
-const LEFT_HAND_IK_DISABLED_ANIMATIONS: Array[String] = [
-	"rifle_reload",
-	"rifle_death",
-	"rifle_open_door",
-]
+var left_hand_ik_offset: Vector3 = Vector3.ZERO
+var left_hand_ik_rotation: Vector3 = Vector3.ZERO
+var left_hand_ik_disabled_animations: PackedStringArray = []
 
 
 func _ready() -> void:
@@ -121,6 +121,10 @@ func _apply_upper_body_rotation() -> void:
 
 
 func _setup_character() -> void:
+	# Scan available weapons and load current weapon resource
+	_scan_available_weapons()
+	_load_weapon_resource()
+
 	var bot_model = $CharacterBody/BotModel
 	if not bot_model:
 		push_warning("[BotViewer] BotModel not found")
@@ -208,6 +212,86 @@ func _find_spine_bone() -> void:
 	push_warning("[BotViewer] Spine bone not found")
 
 
+func _scan_available_weapons() -> void:
+	available_weapons.clear()
+	var dir = DirAccess.open(WEAPONS_DIR)
+	if dir == null:
+		push_warning("[BotViewer] Cannot open weapons directory: %s" % WEAPONS_DIR)
+		return
+
+	dir.list_dir_begin()
+	var folder_name = dir.get_next()
+	while folder_name != "":
+		if dir.current_is_dir() and not folder_name.begins_with("."):
+			var tres_path = WEAPONS_DIR + folder_name + "/" + folder_name + ".tres"
+			if ResourceLoader.exists(tres_path):
+				available_weapons.append(folder_name)
+				print("[BotViewer] Found weapon: %s" % folder_name)
+		folder_name = dir.get_next()
+	dir.list_dir_end()
+
+	available_weapons.sort()
+	print("[BotViewer] Available weapons: ", available_weapons)
+
+
+func _load_weapon_resource() -> void:
+	_load_weapon_resource_by_id(current_weapon_id)
+
+
+func _change_weapon(weapon_id: String) -> void:
+	if weapon_id == current_weapon_id:
+		return
+
+	print("[BotViewer] Changing weapon to: %s" % weapon_id)
+
+	# Remove current weapon and IK
+	if left_hand_ik:
+		left_hand_ik.stop()
+		left_hand_ik.queue_free()
+		left_hand_ik = null
+
+	if left_hand_grip_target:
+		left_hand_grip_target.queue_free()
+		left_hand_grip_target = null
+
+	_left_hand_grip_source = null
+	muzzle_flash = null
+
+	if weapon_attachment:
+		weapon_attachment.queue_free()
+		weapon_attachment = null
+
+	# Update current weapon ID and load new resource
+	current_weapon_id = weapon_id
+	_load_weapon_resource_by_id(weapon_id)
+
+	# Attach new weapon
+	_attach_weapon()
+
+	# Update IK sliders to reflect new weapon's values
+	_update_ik_sliders()
+
+
+func _load_weapon_resource_by_id(weapon_id: String) -> void:
+	var resource_path = WEAPONS_DIR + weapon_id + "/" + weapon_id + ".tres"
+
+	if ResourceLoader.exists(resource_path):
+		weapon_resource = load(resource_path) as WeaponResource
+		if weapon_resource:
+			# IK設定を武器リソースから読み込み
+			left_hand_ik_offset = weapon_resource.left_hand_ik_position
+			left_hand_ik_rotation = weapon_resource.left_hand_ik_rotation
+			left_hand_ik_disabled_animations = weapon_resource.left_hand_ik_disabled_anims
+			print("[BotViewer] Loaded weapon resource: %s" % weapon_resource.weapon_name)
+			print("[BotViewer]   IK Position: %s" % left_hand_ik_offset)
+			print("[BotViewer]   IK Rotation: %s" % left_hand_ik_rotation)
+			print("[BotViewer]   IK Disabled Anims: ", Array(left_hand_ik_disabled_animations))
+		else:
+			push_warning("[BotViewer] Failed to load weapon resource: %s" % resource_path)
+	else:
+		push_warning("[BotViewer] Weapon resource not found: %s" % resource_path)
+
+
 func _attach_weapon() -> void:
 	if not skeleton:
 		return
@@ -233,14 +317,20 @@ func _attach_weapon() -> void:
 	weapon_attachment.bone_idx = right_hand_bone_idx
 	skeleton.add_child(weapon_attachment)
 
-	# Load and instance AK47 scene
-	var ak47_scene = load(AK47_SCENE_PATH)
-	if not ak47_scene:
-		push_warning("[BotViewer] Failed to load AK47 scene: %s" % AK47_SCENE_PATH)
+	# Load weapon scene from resource or fallback
+	var weapon_scene_path := ""
+	if weapon_resource:
+		weapon_scene_path = weapon_resource.scene_path
+	else:
+		weapon_scene_path = "res://scenes/weapons/ak47.tscn"  # fallback
+
+	var weapon_scene = load(weapon_scene_path)
+	if not weapon_scene:
+		push_warning("[BotViewer] Failed to load weapon scene: %s" % weapon_scene_path)
 		return
 
-	var weapon = ak47_scene.instantiate()
-	weapon.name = "AK47"
+	var weapon = weapon_scene.instantiate()
+	weapon.name = weapon_resource.weapon_id.to_upper() if weapon_resource else "Weapon"
 	weapon_attachment.add_child(weapon)
 
 	# Get MuzzleFlash reference
@@ -287,14 +377,21 @@ func _setup_left_hand_ik(weapon: Node3D) -> void:
 		push_warning("[BotViewer] Model node not found in weapon")
 		return
 
-	# Search for LeftHandGrip node in the model hierarchy
-	var left_hand_grip = _find_node_by_name(model_node, "LeftHandGrip")
+	# Search for LeftHandGrip_{WeaponID} node in the model hierarchy
+	# 命名規則: LeftHandGrip_{weapon_id.to_upper()} (例: LeftHandGrip_AK47, LeftHandGrip_M4A1)
+	var grip_name = "LeftHandGrip_%s" % current_weapon_id.to_upper()
+	var left_hand_grip = _find_node_by_name(model_node, grip_name)
 	if not left_hand_grip:
 		# Try searching in weapon root as well
-		left_hand_grip = _find_node_by_name(weapon, "LeftHandGrip")
+		left_hand_grip = _find_node_by_name(weapon, grip_name)
+	if not left_hand_grip:
+		# Fallback: 旧命名規則 "LeftHandGrip" も試す（後方互換性）
+		left_hand_grip = _find_node_by_name(model_node, "LeftHandGrip")
+		if not left_hand_grip:
+			left_hand_grip = _find_node_by_name(weapon, "LeftHandGrip")
 
 	if not left_hand_grip:
-		push_warning("[BotViewer] LeftHandGrip not found in weapon model")
+		push_warning("[BotViewer] LeftHandGrip not found in weapon model (tried: %s)" % grip_name)
 		print("[BotViewer] Weapon model structure:")
 		_print_node_tree(weapon, 0)
 		return
@@ -421,6 +518,26 @@ func _create_animation_buttons() -> void:
 
 	var separator := HSeparator.new()
 	button_container.add_child(separator)
+
+	# Weapon selection
+	var weapon_label := Label.new()
+	weapon_label.text = "Weapon"
+	weapon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	weapon_label.add_theme_font_size_override("font_size", 18)
+	button_container.add_child(weapon_label)
+
+	weapon_option_button = OptionButton.new()
+	weapon_option_button.custom_minimum_size.x = 180
+	for i in range(available_weapons.size()):
+		var weapon_id = available_weapons[i]
+		weapon_option_button.add_item(weapon_id.to_upper(), i)
+		if weapon_id == current_weapon_id:
+			weapon_option_button.select(i)
+	weapon_option_button.item_selected.connect(_on_weapon_selected)
+	button_container.add_child(weapon_option_button)
+
+	var weapon_sep := HSeparator.new()
+	button_container.add_child(weapon_sep)
 
 	# Animation buttons
 	for anim_name in _animations:
@@ -666,6 +783,51 @@ func _on_print_ik_values() -> void:
 	print("  Rotation Offset: Vector3(%.1f, %.1f, %.1f)" % [left_hand_ik_rotation.x, left_hand_ik_rotation.y, left_hand_ik_rotation.z])
 
 
+func _on_weapon_selected(index: int) -> void:
+	if index < 0 or index >= available_weapons.size():
+		return
+	var weapon_id = available_weapons[index]
+	_change_weapon(weapon_id)
+
+
+func _update_ik_sliders() -> void:
+	# Update IK slider values to match current weapon's settings
+	if not button_container:
+		return
+
+	# Find and update position sliders
+	var pos_x_slider = _find_slider_by_label("Pos X")
+	var pos_y_slider = _find_slider_by_label("Pos Y")
+	var pos_z_slider = _find_slider_by_label("Pos Z")
+	var rot_x_slider = _find_slider_by_label("Rot X")
+	var rot_y_slider = _find_slider_by_label("Rot Y")
+	var rot_z_slider = _find_slider_by_label("Rot Z")
+
+	if pos_x_slider:
+		pos_x_slider.value = left_hand_ik_offset.x
+	if pos_y_slider:
+		pos_y_slider.value = left_hand_ik_offset.y
+	if pos_z_slider:
+		pos_z_slider.value = left_hand_ik_offset.z
+	if rot_x_slider:
+		rot_x_slider.value = left_hand_ik_rotation.x
+	if rot_y_slider:
+		rot_y_slider.value = left_hand_ik_rotation.y
+	if rot_z_slider:
+		rot_z_slider.value = left_hand_ik_rotation.z
+
+
+func _find_slider_by_label(label_text: String) -> HSlider:
+	for child in button_container.get_children():
+		if child is HBoxContainer:
+			for subchild in child.get_children():
+				if subchild is Label and subchild.text == label_text:
+					for sibling in child.get_children():
+						if sibling is HSlider:
+							return sibling
+	return null
+
+
 func _play_animation(anim_name: String) -> void:
 	if not anim_player:
 		return
@@ -691,7 +853,12 @@ func _update_left_hand_ik_enabled(anim_name: String) -> void:
 	if not left_hand_ik:
 		return
 
-	var should_disable := anim_name in LEFT_HAND_IK_DISABLED_ANIMATIONS
+	# 武器リソースの設定または変数から無効化アニメーションを確認
+	var should_disable := anim_name in left_hand_ik_disabled_animations
+
+	# weapon_resource が IK 無効の場合も無効化
+	if weapon_resource and not weapon_resource.left_hand_ik_enabled:
+		should_disable = true
 
 	if should_disable:
 		if left_hand_ik.is_running():
