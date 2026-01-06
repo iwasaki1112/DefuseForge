@@ -30,7 +30,7 @@ var walk_status_label: Label = null
 var right_hand_bone_idx: int = -1
 var weapon_attachment: BoneAttachment3D = null
 var muzzle_flash: Node3D = null
-const AK47_SCENE_PATH: String = "res://scenes/weapons/ak47.tscn"
+const AK47_SCENE_PATH: String = "res://scenes/weapons/ak47_new.tscn"
 
 # Shooting / Recoil
 var is_shooting: bool = false
@@ -38,6 +38,12 @@ var recoil_amount: float = 0.0  # Current recoil (0.0 - 1.0)
 const RECOIL_MAX_ANGLE: float = 8.0  # Max recoil rotation in degrees
 const RECOIL_RECOVERY_SPEED: float = 15.0  # How fast recoil recovers
 var recoil_tween: Tween = null
+
+# Left hand IK
+var left_hand_ik: SkeletonIK3D = null
+var left_hand_grip_target: Marker3D = null
+var left_hand_ik_offset: Vector3 = Vector3(-0.02, -0.06, -0.07)  # 手首→手のひらのオフセット（ローカル座標）
+var left_hand_ik_rotation: Vector3 = Vector3(-67, -165, 4)  # 手の角度オフセット（度数）
 
 
 func _ready() -> void:
@@ -62,6 +68,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			character_body.velocity.y = 0
 		character_body.move_and_slide()
+
+	# IKターゲットを物理フレームで更新（遅延を減らす）
+	_update_left_hand_ik_target()
 
 
 func _process(_delta: float) -> void:
@@ -239,6 +248,130 @@ func _attach_weapon() -> void:
 		push_warning("[BotViewer] MuzzlePoint not found in weapon")
 
 	print("[BotViewer] Weapon attached to right hand")
+
+	# Setup left hand IK
+	_setup_left_hand_ik(weapon)
+
+
+func _setup_left_hand_ik(weapon: Node3D) -> void:
+	if not skeleton:
+		push_warning("[BotViewer] Cannot setup left hand IK: no skeleton")
+		return
+
+	# Find left hand bone
+	var left_hand_names := ["mixamorig_LeftHand", "LeftHand", "left_hand", "mixamorig:LeftHand"]
+	var left_hand_bone_idx: int = -1
+
+	for bone_name in left_hand_names:
+		var idx := skeleton.find_bone(bone_name)
+		if idx >= 0:
+			left_hand_bone_idx = idx
+			print("[BotViewer] Found left hand bone: %s (index: %d)" % [bone_name, idx])
+			break
+
+	if left_hand_bone_idx < 0:
+		push_warning("[BotViewer] Left hand bone not found")
+		return
+
+	# Find LeftHandGrip in weapon model
+	# The weapon scene has Model child which contains the GLB content
+	var model_node = weapon.get_node_or_null("Model")
+	if not model_node:
+		push_warning("[BotViewer] Model node not found in weapon")
+		return
+
+	# Search for LeftHandGrip node in the model hierarchy
+	var left_hand_grip = _find_node_by_name(model_node, "LeftHandGrip")
+	if not left_hand_grip:
+		# Try searching in weapon root as well
+		left_hand_grip = _find_node_by_name(weapon, "LeftHandGrip")
+
+	if not left_hand_grip:
+		push_warning("[BotViewer] LeftHandGrip not found in weapon model")
+		print("[BotViewer] Weapon model structure:")
+		_print_node_tree(weapon, 0)
+		return
+
+	print("[BotViewer] Found LeftHandGrip: %s" % left_hand_grip.get_path())
+
+	# Create a Marker3D as the actual IK target (child of skeleton for proper transform)
+	left_hand_grip_target = Marker3D.new()
+	left_hand_grip_target.name = "LeftHandIKTarget"
+	skeleton.add_child(left_hand_grip_target)
+
+	# Create SkeletonIK3D
+	left_hand_ik = SkeletonIK3D.new()
+	left_hand_ik.name = "LeftHandIK"
+
+	# Find the tip bone name for IK
+	var tip_bone_name := skeleton.get_bone_name(left_hand_bone_idx)
+	left_hand_ik.set_tip_bone(tip_bone_name)
+
+	# Find root bone for IK chain (left upper arm or shoulder)
+	var root_bone_names := ["mixamorig_LeftArm", "LeftArm", "left_arm", "mixamorig:LeftArm",
+						   "mixamorig_LeftShoulder", "LeftShoulder"]
+	var root_bone_name := ""
+	for bone_name in root_bone_names:
+		if skeleton.find_bone(bone_name) >= 0:
+			root_bone_name = bone_name
+			break
+
+	if root_bone_name.is_empty():
+		push_warning("[BotViewer] Left arm root bone not found")
+		return
+
+	left_hand_ik.set_root_bone(root_bone_name)
+	left_hand_ik.set_target_node(left_hand_grip_target.get_path())
+
+	# Configure IK settings
+	left_hand_ik.interpolation = 1.0  # Full IK influence
+	left_hand_ik.override_tip_basis = true  # Override hand rotation to match target
+
+	skeleton.add_child(left_hand_ik)
+
+	print("[BotViewer] Left hand IK setup: root=%s, tip=%s" % [root_bone_name, tip_bone_name])
+
+	# Start IK (will be updated in _process)
+	left_hand_ik.start()
+
+	# Store reference to original grip for position updates
+	_left_hand_grip_source = left_hand_grip
+
+
+var _left_hand_grip_source: Node3D = null
+
+
+func _update_left_hand_ik_target() -> void:
+	if not left_hand_grip_target or not _left_hand_grip_source:
+		return
+
+	# Update IK target to match LeftHandGrip global position with offset
+	# オフセットを適用して手のひらがターゲットに来るように調整
+	var grip_transform := _left_hand_grip_source.global_transform
+
+	# 位置オフセットを適用
+	var offset_global := grip_transform.basis * left_hand_ik_offset
+	grip_transform.origin += offset_global
+
+	# 角度オフセットを適用（度数→ラジアン）
+	var rotation_offset := Basis.from_euler(Vector3(
+		deg_to_rad(left_hand_ik_rotation.x),
+		deg_to_rad(left_hand_ik_rotation.y),
+		deg_to_rad(left_hand_ik_rotation.z)
+	))
+	grip_transform.basis = grip_transform.basis * rotation_offset
+
+	left_hand_grip_target.global_transform = grip_transform
+
+
+func _find_node_by_name(root: Node, target_name: String) -> Node:
+	if root.name == target_name:
+		return root
+	for child in root.get_children():
+		var result = _find_node_by_name(child, target_name)
+		if result:
+			return result
+	return null
 
 
 func _collect_animations() -> void:
@@ -428,6 +561,98 @@ func _create_animation_buttons() -> void:
 	auto_fire_btn.text = "Auto-Fire (Toggle)"
 	auto_fire_btn.pressed.connect(_on_auto_fire_pressed)
 	button_container.add_child(auto_fire_btn)
+
+	# Left Hand IK controls
+	var ik_spacer := Control.new()
+	ik_spacer.custom_minimum_size.y = 10
+	button_container.add_child(ik_spacer)
+
+	var ik_label := Label.new()
+	ik_label.text = "Left Hand IK"
+	ik_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ik_label.add_theme_font_size_override("font_size", 18)
+	button_container.add_child(ik_label)
+
+	var ik_sep := HSeparator.new()
+	button_container.add_child(ik_sep)
+
+	# Position offset sliders
+	_create_ik_slider(button_container, "Pos X", left_hand_ik_offset.x, -0.2, 0.2, _on_ik_pos_x_changed)
+	_create_ik_slider(button_container, "Pos Y", left_hand_ik_offset.y, -0.2, 0.2, _on_ik_pos_y_changed)
+	_create_ik_slider(button_container, "Pos Z", left_hand_ik_offset.z, -0.2, 0.2, _on_ik_pos_z_changed)
+
+	# Rotation offset sliders
+	_create_ik_slider(button_container, "Rot X", left_hand_ik_rotation.x, -180, 180, _on_ik_rot_x_changed)
+	_create_ik_slider(button_container, "Rot Y", left_hand_ik_rotation.y, -180, 180, _on_ik_rot_y_changed)
+	_create_ik_slider(button_container, "Rot Z", left_hand_ik_rotation.z, -180, 180, _on_ik_rot_z_changed)
+
+	# Print current values button
+	var print_ik_btn := Button.new()
+	print_ik_btn.text = "Print IK Values"
+	print_ik_btn.pressed.connect(_on_print_ik_values)
+	button_container.add_child(print_ik_btn)
+
+
+func _create_ik_slider(container: VBoxContainer, label_text: String, initial_value: float, min_val: float, max_val: float, callback: Callable) -> void:
+	var hbox := HBoxContainer.new()
+
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size.x = 50
+	hbox.add_child(label)
+
+	var slider := HSlider.new()
+	slider.min_value = min_val
+	slider.max_value = max_val
+	slider.step = 0.01 if max_val <= 1.0 else 1.0
+	slider.value = initial_value
+	slider.custom_minimum_size.x = 100
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.value_changed.connect(callback)
+	hbox.add_child(slider)
+
+	var value_label := Label.new()
+	value_label.text = "%.2f" % initial_value if max_val <= 1.0 else "%.0f" % initial_value
+	value_label.custom_minimum_size.x = 40
+	value_label.name = label_text.replace(" ", "") + "Value"
+	hbox.add_child(value_label)
+
+	container.add_child(hbox)
+
+
+func _on_ik_pos_x_changed(value: float) -> void:
+	left_hand_ik_offset.x = value
+	_update_ik_value_label("PosX", value, true)
+
+func _on_ik_pos_y_changed(value: float) -> void:
+	left_hand_ik_offset.y = value
+	_update_ik_value_label("PosY", value, true)
+
+func _on_ik_pos_z_changed(value: float) -> void:
+	left_hand_ik_offset.z = value
+	_update_ik_value_label("PosZ", value, true)
+
+func _on_ik_rot_x_changed(value: float) -> void:
+	left_hand_ik_rotation.x = value
+	_update_ik_value_label("RotX", value, false)
+
+func _on_ik_rot_y_changed(value: float) -> void:
+	left_hand_ik_rotation.y = value
+	_update_ik_value_label("RotY", value, false)
+
+func _on_ik_rot_z_changed(value: float) -> void:
+	left_hand_ik_rotation.z = value
+	_update_ik_value_label("RotZ", value, false)
+
+func _update_ik_value_label(name: String, value: float, is_position: bool) -> void:
+	var label = button_container.find_child(name + "Value", true, false)
+	if label:
+		label.text = "%.2f" % value if is_position else "%.0f" % value
+
+func _on_print_ik_values() -> void:
+	print("[BotViewer] Left Hand IK Values:")
+	print("  Position Offset: Vector3(%.3f, %.3f, %.3f)" % [left_hand_ik_offset.x, left_hand_ik_offset.y, left_hand_ik_offset.z])
+	print("  Rotation Offset: Vector3(%.1f, %.1f, %.1f)" % [left_hand_ik_rotation.x, left_hand_ik_rotation.y, left_hand_ik_rotation.z])
 
 
 func _play_animation(anim_name: String) -> void:
