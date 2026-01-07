@@ -26,6 +26,6 @@ attach_position = Vector3(0, 0, 0)
 attach_rotation = Vector3(0, 0, 0)
 
 left_hand_ik_enabled = true
-left_hand_ik_position = Vector3(-0.02, -0.06, -0.07)
-left_hand_ik_rotation = Vector3(-67, -165, 4)
+left_hand_ik_position = Vector3(-0.06, -0.08, -0.10)
+left_hand_ik_rotation = Vector3(-61, -180, 7)
 left_hand_ik_disabled_anims = PackedStringArray("rifle_reload", "rifle_death", "rifle_open_door")

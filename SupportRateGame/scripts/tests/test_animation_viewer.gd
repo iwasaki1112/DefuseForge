@@ -16,7 +16,7 @@ var blend_time_label: Label = null
 # Character selection
 const CHARACTERS_DIR: String = "res://assets/characters/"
 var available_characters: Array[String] = []  # 利用可能なキャラクターIDリスト
-var current_character_id: String = "bot"  # 現在選択中のキャラクターID
+var current_character_id: String = "counter_terrorist"  # 現在選択中のキャラクターID
 var character_model: Node3D = null  # 現在のキャラクターモデルノード
 var character_option_button: OptionButton = null
 
@@ -66,8 +66,8 @@ func _ready() -> void:
 	_create_animation_buttons()
 
 	# Play idle animation first
-	if anim_player and anim_player.has_animation("rifle_idle"):
-		_play_animation("rifle_idle")
+	if anim_player and anim_player.has_animation("Rifle_Idle"):
+		_play_animation("Rifle_Idle")
 	elif _animations.size() > 0:
 		_play_animation(_animations[0])
 
@@ -151,8 +151,8 @@ func _change_character(character_id: String) -> void:
 	_create_animation_buttons()
 
 	# Play idle animation
-	if anim_player and anim_player.has_animation("rifle_idle"):
-		_play_animation("rifle_idle")
+	if anim_player and anim_player.has_animation("Rifle_Idle"):
+		_play_animation("Rifle_Idle")
 	elif _animations.size() > 0:
 		_play_animation(_animations[0])
 
@@ -215,7 +215,7 @@ func _setup_character() -> void:
 	_load_weapon_resource()
 
 	# Get existing character model from scene or load dynamically
-	character_model = character_body.get_node_or_null("BotModel")
+	character_model = character_body.get_node_or_null("CharacterModel")
 	if not character_model:
 		# Try to find any model node
 		for child in character_body.get_children():
@@ -445,16 +445,19 @@ func _attach_weapon() -> void:
 	weapon.name = weapon_resource.weapon_id.to_upper() if weapon_resource else "Weapon"
 	weapon_attachment.add_child(weapon)
 
-	# Get MuzzleFlash reference
-	var muzzle_point = weapon.get_node_or_null("MuzzlePoint")
-	if muzzle_point:
-		muzzle_flash = muzzle_point.get_node_or_null("MuzzleFlash")
-		if muzzle_flash:
-			print("[BotViewer] Found MuzzleFlash")
-		else:
-			push_warning("[BotViewer] MuzzleFlash not found in MuzzlePoint")
+	# Compensate for skeleton's global scale to ensure weapon renders at correct size
+	var skeleton_global_scale = skeleton.global_transform.basis.get_scale()
+	if skeleton_global_scale.x < 0.5:  # If skeleton is scaled down significantly
+		var compensation_scale = 1.0 / skeleton_global_scale.x
+		weapon.scale = Vector3(compensation_scale, compensation_scale, compensation_scale)
+		print("[BotViewer] Applied weapon scale compensation: %s" % compensation_scale)
+
+	# Get MuzzleFlash reference (find_childで再帰的に探す)
+	muzzle_flash = weapon.find_child("MuzzleFlash", true, false)
+	if muzzle_flash:
+		print("[BotViewer] Found MuzzleFlash")
 	else:
-		push_warning("[BotViewer] MuzzlePoint not found in weapon")
+		push_warning("[BotViewer] MuzzleFlash not found in weapon")
 
 	print("[BotViewer] Weapon attached to right hand")
 
@@ -940,7 +943,7 @@ func _play_animation(anim_name: String) -> void:
 	if anim_player.has_animation(anim_name):
 		# ループアニメーションのloop_modeを強制設定
 		var anim = anim_player.get_animation(anim_name)
-		if anim and anim_name in ["rifle_idle", "rifle_walk", "rifle_sprint", "rifle_crouch"]:
+		if anim and anim_name in ["Rifle_Idle", "Rifle_WalkFwdLoop", "Rifle_SprintLoop", "Rifle_CrouchLoop"]:
 			if anim.loop_mode != Animation.LOOP_LINEAR:
 				anim.loop_mode = Animation.LOOP_LINEAR
 				print("[BotViewer] Set loop_mode to LINEAR for: %s" % anim_name)

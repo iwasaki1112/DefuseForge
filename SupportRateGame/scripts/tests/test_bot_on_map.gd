@@ -355,9 +355,9 @@ func _update_animation_speed() -> void:
 
 	# 現在のアニメーションに応じて基準速度を決定
 	var base_speed: float = ANIM_WALK_BASE_SPEED
-	if current_anim == "rifle_sprint" or current_anim == "running":
+	if current_anim == "Rifle_SprintLoop":
 		base_speed = ANIM_RUN_BASE_SPEED
-	elif current_anim == "rifle_walk" or current_anim == "walking":
+	elif current_anim == "Rifle_WalkFwdLoop":
 		base_speed = ANIM_WALK_BASE_SPEED
 	else:
 		# idle等の場合は速度調整しない
@@ -383,40 +383,38 @@ func _ensure_loop_mode(anim_name: String) -> void:
 
 ## アイドルアニメーション再生
 func _play_idle_animation() -> void:
-	if anim_player and anim_player.has_animation("rifle_idle"):
-		_ensure_loop_mode("rifle_idle")
-		if anim_player.current_animation != "rifle_idle":
-			anim_player.play("rifle_idle", ANIMATION_BLEND_TIME)
+	if not anim_player:
+		return
+	const ANIM_NAME = "Rifle_Idle"
+	if anim_player.has_animation(ANIM_NAME):
+		_ensure_loop_mode(ANIM_NAME)
+		if anim_player.current_animation != ANIM_NAME:
+			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
 
 
 ## 歩行アニメーション再生
 func _play_walk_animation() -> void:
-	if anim_player:
-		if anim_player.has_animation("rifle_walk"):
-			_ensure_loop_mode("rifle_walk")
-			if anim_player.current_animation != "rifle_walk":
-				anim_player.play("rifle_walk", ANIMATION_BLEND_TIME)
-		elif anim_player.has_animation("walking"):
-			_ensure_loop_mode("walking")
-			if anim_player.current_animation != "walking":
-				anim_player.play("walking", ANIMATION_BLEND_TIME)
+	if not anim_player:
+		return
+	const ANIM_NAME = "Rifle_WalkFwdLoop"
+	if anim_player.has_animation(ANIM_NAME):
+		_ensure_loop_mode(ANIM_NAME)
+		if anim_player.current_animation != ANIM_NAME:
+			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
 
 
 ## 走りアニメーション再生
 func _play_run_animation() -> void:
-	if anim_player:
-		if anim_player.has_animation("rifle_sprint"):
-			_ensure_loop_mode("rifle_sprint")
-			if anim_player.current_animation != "rifle_sprint":
-				anim_player.play("rifle_sprint", ANIMATION_BLEND_TIME)
-		elif anim_player.has_animation("running"):
-			_ensure_loop_mode("running")
-			if anim_player.current_animation != "running":
-				anim_player.play("running", ANIMATION_BLEND_TIME)
-		else:
-			# フォールバック: 歩行アニメーションを使用
-			# （速度スケールは_update_animation_speed()で自動調整される）
-			_play_walk_animation()
+	if not anim_player:
+		return
+	const ANIM_NAME = "Rifle_SprintLoop"
+	if anim_player.has_animation(ANIM_NAME):
+		_ensure_loop_mode(ANIM_NAME)
+		if anim_player.current_animation != ANIM_NAME:
+			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
+	else:
+		# フォールバック: 歩行アニメーションを使用
+		_play_walk_animation()
 
 
 ## WASDでカメラを移動
@@ -456,12 +454,12 @@ func _setup_bot() -> void:
 	if anim_player:
 		print("[TestBotOnMap] Found AnimationPlayer")
 		_print_available_animations()  # アニメーション一覧とループ設定を表示
-		# Play rifle_idle animation
-		if anim_player.has_animation("rifle_idle"):
-			anim_player.play("rifle_idle")
-			print("[TestBotOnMap] Playing rifle_idle animation")
+		# Play Rifle_Idle animation
+		if anim_player.has_animation("Rifle_Idle"):
+			anim_player.play("Rifle_Idle")
+			print("[TestBotOnMap] Playing Rifle_Idle animation")
 		else:
-			push_warning("[TestBotOnMap] rifle_idle animation not found")
+			push_warning("[TestBotOnMap] Rifle_Idle animation not found")
 	else:
 		push_warning("[TestBotOnMap] AnimationPlayer not found")
 

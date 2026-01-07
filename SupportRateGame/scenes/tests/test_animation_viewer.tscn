@@ -1,8 +1,8 @@
 [gd_scene load_steps=9 format=3 uid="uid://ch1iq7cygkru2"]
 
-[ext_resource type="Script" path="res://scripts/tests/test_animation_viewer.gd" id="1_viewer"]
+[ext_resource type="Script" uid="uid://dwm58yf7niht0" path="res://scripts/tests/test_animation_viewer.gd" id="1_viewer"]
 [ext_resource type="Script" uid="uid://dg2obkxmhp4v2" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
-[ext_resource type="PackedScene" uid="uid://by1a76qetg32e" path="res://assets/characters/bot/bot.glb" id="3_bot"]
+[ext_resource type="PackedScene" uid="uid://doh1b0a6pmavp" path="res://assets/characters/counter_terrorist/counter_terrorist.glb" id="3_character"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_char"]
 radius = 0.3
@@ -34,7 +34,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025291145, 0)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
 shape = SubResource("CapsuleShape3D_char")
 
-[node name="BotModel" parent="CharacterBody" instance=ExtResource("3_bot")]
+[node name="CharacterModel" parent="CharacterBody" instance=ExtResource("3_character")]
 
 [node name="OrbitCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 2, 4)
