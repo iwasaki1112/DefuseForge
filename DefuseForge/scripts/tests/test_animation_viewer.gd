@@ -61,7 +61,6 @@ var left_hand_ik: SkeletonIK3D = null
 var left_hand_grip_target: Marker3D = null
 var left_hand_ik_offset: Vector3 = Vector3.ZERO
 var left_hand_ik_rotation: Vector3 = Vector3.ZERO
-var left_hand_ik_disabled_animations: PackedStringArray = []
 
 
 func _ready() -> void:
@@ -823,11 +822,9 @@ func _load_weapon_resource_by_id(weapon_id: String) -> void:
 			# IK設定を武器リソースから読み込み
 			left_hand_ik_offset = weapon_resource.left_hand_ik_position
 			left_hand_ik_rotation = weapon_resource.left_hand_ik_rotation
-			left_hand_ik_disabled_animations = weapon_resource.left_hand_ik_disabled_anims
 			print("[BotViewer] Loaded weapon resource: %s" % weapon_resource.weapon_name)
 			print("[BotViewer]   IK Position: %s" % left_hand_ik_offset)
 			print("[BotViewer]   IK Rotation: %s" % left_hand_ik_rotation)
-			print("[BotViewer]   IK Disabled Anims: ", Array(left_hand_ik_disabled_animations))
 		else:
 			push_warning("[BotViewer] Failed to load weapon resource: %s" % resource_path)
 	else:
@@ -1161,12 +1158,7 @@ func _update_left_hand_ik_enabled(anim_name: String) -> void:
 	if not left_hand_ik:
 		return
 
-	# 武器リソースの設定または変数から無効化アニメーションを確認
-	var should_disable := anim_name in left_hand_ik_disabled_animations
-
-	# weapon_resource が IK 無効の場合も無効化
-	if weapon_resource and not weapon_resource.left_hand_ik_enabled:
-		should_disable = true
+	var should_disable := _should_disable_ik_for_animation(anim_name)
 
 	if should_disable:
 		if left_hand_ik.is_running():
@@ -1176,6 +1168,24 @@ func _update_left_hand_ik_enabled(anim_name: String) -> void:
 		if not left_hand_ik.is_running():
 			left_hand_ik.start()
 			print("[BotViewer] Left hand IK enabled for: %s" % anim_name)
+
+
+## アニメーション名からIKを無効にすべきか判定
+## Convention over Configuration: 命名規則に基づいて自動判定
+func _should_disable_ik_for_animation(anim_name: String) -> bool:
+	# 武器リソースがIK無効の場合は常に無効
+	if weapon_resource and not weapon_resource.left_hand_ik_enabled:
+		return true
+
+	# パターンマッチングで判定（命名規則に基づく）
+	if anim_name.begins_with("reload") or anim_name.contains("Reload"):
+		return true
+	if anim_name.begins_with("dying") or anim_name.contains("Death"):
+		return true
+	if anim_name == "open_door" or anim_name.contains("OpenDoor"):
+		return true
+
+	return false
 
 
 func _on_animation_button_pressed(anim_name: String) -> void:

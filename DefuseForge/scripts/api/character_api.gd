@@ -388,19 +388,6 @@ static func get_health(character: CharacterBase) -> float:
 	return 0.0
 
 
-## アーマーを設定
-static func set_armor(character: CharacterBase, armor: float) -> void:
-	if is_instance_valid(character):
-		character.armor = clamp(armor, 0.0, 100.0)
-
-
-## アーマーを取得
-static func get_armor(character: CharacterBase) -> float:
-	if is_instance_valid(character):
-		return character.armor
-	return 0.0
-
-
 ## ダメージを与える
 ## @param character: 対象キャラクター
 ## @param amount: ダメージ量
@@ -417,11 +404,10 @@ static func heal(character: CharacterBase, amount: float) -> void:
 		character.heal(amount)
 
 
-## 完全回復（HP + アーマー）
+## 完全回復
 static func full_heal(character: CharacterBase) -> void:
 	if is_instance_valid(character):
 		character.health = 100.0
-		character.armor = 100.0
 
 
 ## 移動速度を設定

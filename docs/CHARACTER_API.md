@@ -661,33 +661,6 @@ var hp = CharacterAPI.get_health(character)
 
 **戻り値:** `float` - 現在のHP
 
-### set_armor
-アーマーを設定します。
-
-```gdscript
-CharacterAPI.set_armor(character, 50.0)
-```
-
-| パラメータ | 型 | 説明 |
-|-----------|-----|------|
-| character | CharacterBase | 対象キャラクター |
-| armor | float | アーマー値 |
-
-**戻り値:** `void`
-
-### get_armor
-アーマーを取得します。
-
-```gdscript
-var armor = CharacterAPI.get_armor(character)
-```
-
-| パラメータ | 型 | 説明 |
-|-----------|-----|------|
-| character | CharacterBase | 対象キャラクター |
-
-**戻り値:** `float` - 現在のアーマー
-
 ### apply_damage
 ダメージを与えます。
 
@@ -706,9 +679,8 @@ CharacterAPI.apply_damage(character, 100.0, attacker, true)  # ヘッドショ�
 **戻り値:** `void`
 
 **処理内容:**
-- アーマーがある場合は先にアーマーから減算
-- ヘッドショットの場合はダメージ倍率を適用
 - HP0以下で `died` シグナルを発行
+- 死亡アニメーションを再生
 
 ### heal
 回復します。
@@ -725,7 +697,7 @@ CharacterAPI.heal(character, 20.0)
 **戻り値:** `void`
 
 ### full_heal
-完全回復します（HP + アーマー）。
+HPを完全回復します。
 
 ```gdscript
 CharacterAPI.full_heal(character)
@@ -936,7 +908,6 @@ extends CharacterBody3D
 
 # ステータス
 var health: float = 100.0
-var armor: float = 0.0
 var is_dead: bool = false
 
 # 移動
@@ -969,7 +940,6 @@ var weapon_attachment: BoneAttachment3D = null
 |----------|-----------|------|
 | `died` | `killer: CharacterBase` | 死亡時に発行 |
 | `health_changed` | `new_health: float` | HP変更時に発行 |
-| `armor_changed` | `new_armor: float` | アーマー変更時に発行 |
 | `weapon_changed` | `weapon_id: int` | 武器変更時に発行 |
 | `path_completed` | なし | パス完了時に発行 |
 | `position_changed` | `new_position: Vector3` | 位置変更時に発行 |
@@ -1030,7 +1000,6 @@ func switch_weapon(weapon_id: int):
 func setup_player(player: CharacterBase) -> void:
     # ステータス設定
     CharacterAPI.set_health(player, 100.0)
-    CharacterAPI.set_armor(player, 50.0)
     CharacterAPI.set_speed(player, 3.5, 7.0)
 
     # 視界設定

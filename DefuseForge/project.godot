@@ -22,6 +22,7 @@ GameEvents="*res://scripts/autoload/game_events.gd"
 GameManager="*res://scripts/autoload/game_manager.gd"
 InputManager="*res://scripts/autoload/input_manager.gd"
 NakamaClient="*res://scripts/autoload/nakama_client.gd"
+ResourceValidator="*res://scripts/autoload/resource_validator.gd"
 
 [display]
 

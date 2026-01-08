@@ -6,6 +6,8 @@ extends CharacterBody3D
 
 # CharacterSetup はグローバルクラス名として登録されているため、直接参照可能
 const ActionState = preload("res://scripts/resources/action_state.gd")
+const CharacterRegistry = preload("res://scripts/registries/character_registry.gd")
+const WeaponRegistry = preload("res://scripts/registries/weapon_registry.gd")
 
 signal path_completed
 signal waypoint_reached(index: int)
@@ -67,6 +69,19 @@ var _pending_walk_stop: bool = false  # 停止リクエストがあるか
 var weapon_attachment: Node3D = null
 var skeleton: Skeleton3D = null
 
+# 左手IK（武器のLeftHandGripに手を追従させる）
+var left_hand_ik: SkeletonIK3D = null
+var left_hand_ik_target: Marker3D = null
+var _left_hand_grip_source: Node3D = null
+var _left_hand_ik_offset: Vector3 = Vector3.ZERO
+var _left_hand_ik_rotation: Vector3 = Vector3.ZERO
+var _weapon_resource: Resource = null  # WeaponResource
+
+# キャラクターリソース（武器オフセット等）
+var _character_resource: Resource = null  # CharacterResource
+var _weapon_position_offset: Vector3 = Vector3.ZERO  # キャラクター固有の武器位置オフセット
+var _weapon_rotation_offset: Vector3 = Vector3.ZERO  # キャラクター固有の武器回転オフセット
+
 # ステータス
 var health: float = 100.0
 var armor: float = 0.0
@@ -84,6 +99,9 @@ func _ready() -> void:
 func _setup_character() -> void:
 	var model = get_node_or_null("CharacterModel")
 	if model:
+		# キャラクターリソースを読み込み（武器オフセット等）
+		_load_character_resource()
+
 		# マテリアルとテクスチャを設定
 		CharacterSetup.setup_materials(model, name)
 
@@ -234,6 +252,9 @@ func _physics_process(delta: float) -> void:
 	# 射撃ブレンドを更新
 	_update_shooting_blend(delta)
 
+	# 左手IKターゲットを更新
+	_update_left_hand_ik_target()
+
 	# アニメーションは常に更新（PLAYING以外でもidleを再生）
 	_update_animation()
 
@@ -331,6 +352,8 @@ func _play_action_animation(action_type: int) -> void:
 		if anim_tree and anim_tree.active:
 			anim_tree.active = false
 		anim_player.play(anim_name, ANIM_BLEND_TIME)
+		# IK状態を更新（リロード中はIKを無効にする等）
+		_update_left_hand_ik_enabled(anim_name)
 		print("[CharacterBase] Playing action animation: %s" % anim_name)
 
 
@@ -531,17 +554,324 @@ func _play_current_animation() -> void:
 			# AnimationTreeが無効な場合はAnimationPlayerを直接使用
 			anim_player.play(anim_name, ANIM_BLEND_TIME)
 
+		# IK状態を更新（移動アニメーションではIKを再有効化）
+		_update_left_hand_ik_enabled(anim_name)
+
 	# 武器位置を更新
 	_update_weapon_position()
 
 
 ## 武器の位置をアニメーション状態に応じて更新
+## キャラクターオフセット + アニメーションオフセットを組み合わせ
 func _update_weapon_position() -> void:
 	if weapon_attachment == null or current_weapon_id == CharacterSetup.WeaponId.NONE:
 		return
 
+	# 武器ノードを取得
+	var weapon_node: Node3D = null
+	for child in weapon_attachment.get_children():
+		if child is Node3D:
+			weapon_node = child as Node3D
+			break
+
+	if weapon_node == null:
+		return
+
+	# アニメーション状態に応じたオフセットを取得
 	var anim_state := CharacterSetup.get_anim_state_from_move_state(current_move_state, is_shooting)
-	CharacterSetup.update_weapon_position(weapon_attachment, current_weapon_id, anim_state, name)
+	var anim_offset_pos := Vector3.ZERO
+	var anim_offset_rot := Vector3.ZERO
+
+	if CharacterSetup.WEAPON_ANIMATION_OFFSETS.has(current_weapon_id):
+		var weapon_offsets: Dictionary = CharacterSetup.WEAPON_ANIMATION_OFFSETS[current_weapon_id]
+		if weapon_offsets.has(anim_state):
+			var offset_data: Dictionary = weapon_offsets[anim_state]
+			anim_offset_pos = offset_data.get("position", Vector3.ZERO)
+			anim_offset_rot = offset_data.get("rotation", Vector3.ZERO)
+
+	# キャラクターオフセット + アニメーションオフセットを組み合わせ
+	weapon_node.position = _weapon_position_offset + anim_offset_pos
+	weapon_node.rotation_degrees = _weapon_rotation_offset + anim_offset_rot
+
+
+# ========================================
+# 左手IK & キャラクターリソース
+# ========================================
+
+## キャラクターリソースを読み込み（武器オフセット等を取得）
+## CharacterRegistryを使用して明示的なエラーメッセージを提供
+func _load_character_resource() -> void:
+	_character_resource = null
+	_weapon_position_offset = Vector3.ZERO
+	_weapon_rotation_offset = Vector3.ZERO
+
+	# キャラクターIDを検出
+	var character_id := _detect_character_id()
+	if character_id.is_empty():
+		push_warning("[CharacterBase] Could not detect character ID")
+		return
+
+	# CharacterRegistryからリソースを取得
+	_character_resource = CharacterRegistry.get_character(character_id)
+	if _character_resource:
+		_weapon_position_offset = _character_resource.weapon_position_offset
+		_weapon_rotation_offset = _character_resource.weapon_rotation_offset
+		print("[CharacterBase] Weapon Pos Offset: %s, Rot Offset: %s" % [_weapon_position_offset, _weapon_rotation_offset])
+
+
+## キャラクターIDを検出
+## @return: キャラクターID、検出できない場合は空文字列
+func _detect_character_id() -> String:
+	# 1. CharacterModelのシーンパスからIDを取得（最も信頼性が高い）
+	var model = get_node_or_null("CharacterModel")
+	if model:
+		var scene_path: String = model.scene_file_path
+		if not scene_path.is_empty():
+			var detected = CharacterRegistry.detect_character_id_from_scene_path(scene_path)
+			if not detected.is_empty():
+				print("[CharacterBase] Detected character from scene path: %s" % detected)
+				return detected
+
+	# 2. フォールバック: ノード名から推測
+	if model:
+		var model_name = model.name.to_lower()
+		if model_name.ends_with("model"):
+			return model_name.substr(0, model_name.length() - 5)
+		return model_name
+
+	return name.to_lower()
+
+
+## 武器にキャラクター固有のオフセットを適用
+## test_animation_viewer.gd の _apply_weapon_offset() と同等
+func _apply_weapon_offset() -> void:
+	if weapon_attachment == null:
+		return
+
+	# 武器ノードを取得（BoneAttachment3Dの子ノード）
+	var weapon_node: Node3D = null
+	for child in weapon_attachment.get_children():
+		if child is Node3D:
+			weapon_node = child as Node3D
+			break
+
+	if weapon_node:
+		weapon_node.position = _weapon_position_offset
+		weapon_node.rotation_degrees = _weapon_rotation_offset
+		print("[CharacterBase] Applied weapon offset: pos=%s, rot=%s" % [_weapon_position_offset, _weapon_rotation_offset])
+
+
+## WeaponResourceを読み込み
+## WeaponRegistryを使用して明示的なエラーメッセージを提供
+func _load_weapon_resource(weapon_id: int) -> void:
+	_weapon_resource = null
+	_left_hand_ik_offset = Vector3.ZERO
+	_left_hand_ik_rotation = Vector3.ZERO
+
+	# 武器なしの場合は何もしない
+	if weapon_id == CharacterSetup.WeaponId.NONE:
+		return
+
+	# WeaponRegistryからリソースを取得
+	_weapon_resource = WeaponRegistry.get_weapon(weapon_id)
+	if _weapon_resource:
+		_left_hand_ik_offset = _weapon_resource.left_hand_ik_position
+		_left_hand_ik_rotation = _weapon_resource.left_hand_ik_rotation
+		print("[CharacterBase] IK Offset: %s, Rotation: %s" % [_left_hand_ik_offset, _left_hand_ik_rotation])
+
+
+## 左手IKを設定
+func _setup_left_hand_ik() -> void:
+	if not skeleton or not weapon_attachment:
+		return
+
+	# 武器ノードを取得
+	var weapon_node: Node3D = null
+	for child in weapon_attachment.get_children():
+		if child is Node3D:
+			weapon_node = child as Node3D
+			break
+
+	if not weapon_node:
+		return
+
+	# 左手ボーンを検索
+	var left_hand_bone_names := ["mixamorig_LeftHand", "LeftHand", "left_hand", "mixamorig:LeftHand"]
+	var left_hand_bone_idx: int = -1
+
+	for bone_name in left_hand_bone_names:
+		var idx := skeleton.find_bone(bone_name)
+		if idx >= 0:
+			left_hand_bone_idx = idx
+			break
+
+	if left_hand_bone_idx < 0:
+		return
+
+	# 武器モデル内のLeftHandGripを検索
+	var model_node = weapon_node.get_node_or_null("Model")
+	if not model_node:
+		model_node = weapon_node
+
+	# 武器ID名でLeftHandGripを検索（例: LeftHandGrip_AK47）
+	# scene_pathからIDを導出 (例: "res://scenes/weapons/ak47.tscn" → "ak47" → "AK47")
+	var scene_path: String = CharacterSetup.WEAPON_DATA.get(current_weapon_id, {}).get("scene_path", "")
+	var weapon_id_name: String = ""
+	if scene_path:
+		weapon_id_name = scene_path.get_file().get_basename().to_upper()  # "ak47" → "AK47"
+	var grip_name = "LeftHandGrip_%s" % weapon_id_name
+	print("[CharacterBase] Searching for left hand grip: %s (in %s)" % [grip_name, model_node.get_path()])
+	var left_hand_grip = _find_node_recursive(model_node, grip_name)
+	if not left_hand_grip:
+		# 汎用名でフォールバック
+		left_hand_grip = _find_node_recursive(model_node, "LeftHandGrip")
+		if left_hand_grip:
+			print("[CharacterBase] Found generic LeftHandGrip")
+		else:
+			print("[CharacterBase] Left hand grip not found: %s" % grip_name)
+
+	if not left_hand_grip:
+		return
+
+	# IKターゲット用Marker3Dを作成（スケルトンの子として）
+	left_hand_ik_target = Marker3D.new()
+	left_hand_ik_target.name = "LeftHandIKTarget"
+	skeleton.add_child(left_hand_ik_target)
+
+	# SkeletonIK3Dを作成
+	left_hand_ik = SkeletonIK3D.new()
+	left_hand_ik.name = "LeftHandIK"
+
+	# チップボーン（左手）を設定
+	var tip_bone_name := skeleton.get_bone_name(left_hand_bone_idx)
+	left_hand_ik.set_tip_bone(tip_bone_name)
+
+	# ルートボーン（左腕）を検索
+	var root_bone_names := ["mixamorig_LeftArm", "LeftArm", "left_arm", "mixamorig:LeftArm",
+						   "mixamorig_LeftShoulder", "LeftShoulder"]
+	var root_bone_name := ""
+	for bone_name in root_bone_names:
+		if skeleton.find_bone(bone_name) >= 0:
+			root_bone_name = bone_name
+			break
+
+	if root_bone_name.is_empty():
+		left_hand_ik_target.queue_free()
+		left_hand_ik_target = null
+		left_hand_ik.queue_free()
+		left_hand_ik = null
+		return
+
+	left_hand_ik.set_root_bone(root_bone_name)
+	left_hand_ik.set_target_node(left_hand_ik_target.get_path())
+
+	# IK設定
+	left_hand_ik.interpolation = 1.0  # フルIK影響
+	left_hand_ik.override_tip_basis = true  # 手の回転もターゲットに合わせる
+
+	skeleton.add_child(left_hand_ik)
+
+	# IK開始
+	left_hand_ik.start()
+
+	# グリップソースを保存（毎フレーム位置更新用）
+	_left_hand_grip_source = left_hand_grip
+
+	print("[CharacterBase] Left hand IK setup complete: grip=%s" % left_hand_grip.get_path())
+
+
+## 左手IKの有効/無効を更新
+## 特定のアニメーション（リロード等）ではIKを無効にする
+## パターンマッチングで自動判定し、設定の分散を防ぐ
+func _update_left_hand_ik_enabled(anim_name: String) -> void:
+	if not left_hand_ik:
+		return
+
+	var should_disable := _should_disable_ik_for_animation(anim_name)
+
+	if should_disable:
+		if left_hand_ik.is_running():
+			left_hand_ik.stop()
+			print("[CharacterBase] Left hand IK disabled for: %s" % anim_name)
+	else:
+		if not left_hand_ik.is_running():
+			left_hand_ik.start()
+			print("[CharacterBase] Left hand IK enabled for: %s" % anim_name)
+
+
+## アニメーション名からIKを無効にすべきか判定
+## Convention over Configuration: 命名規則に基づいて自動判定
+func _should_disable_ik_for_animation(anim_name: String) -> bool:
+	# 武器リソースがIK無効の場合は常に無効
+	if _weapon_resource and not _weapon_resource.left_hand_ik_enabled:
+		return true
+
+	# パターンマッチングで判定（命名規則に基づく）
+	# リロード系: reload_rifle, reload_pistol, etc.
+	if anim_name.begins_with("reload"):
+		return true
+
+	# 死亡系: dying, dying_left, Rifle_Death_R, etc.
+	if anim_name.begins_with("dying") or anim_name.contains("Death"):
+		return true
+
+	# ドア開け: open_door
+	if anim_name == "open_door":
+		return true
+
+	return false
+
+
+## 左手IKターゲットを更新
+func _update_left_hand_ik_target() -> void:
+	if not left_hand_ik_target or not _left_hand_grip_source:
+		return
+
+	if not left_hand_ik or not left_hand_ik.is_running():
+		return
+
+	# グリップのグローバル位置をオフセット付きでIKターゲットに反映
+	# (test_animation_viewer.gd の実装に合わせる)
+	var grip_transform := _left_hand_grip_source.global_transform
+
+	# 位置オフセットを適用（ローカル座標系）
+	var offset_global := grip_transform.basis * _left_hand_ik_offset
+	grip_transform.origin += offset_global
+
+	# 角度オフセットを適用（度数→ラジアン）
+	var rotation_offset := Basis.from_euler(Vector3(
+		deg_to_rad(_left_hand_ik_rotation.x),
+		deg_to_rad(_left_hand_ik_rotation.y),
+		deg_to_rad(_left_hand_ik_rotation.z)
+	))
+	grip_transform.basis = grip_transform.basis * rotation_offset
+
+	left_hand_ik_target.global_transform = grip_transform
+
+
+## 左手IKをクリーンアップ
+func _cleanup_left_hand_ik() -> void:
+	if left_hand_ik:
+		left_hand_ik.stop()
+		left_hand_ik.queue_free()
+		left_hand_ik = null
+
+	if left_hand_ik_target:
+		left_hand_ik_target.queue_free()
+		left_hand_ik_target = null
+
+	_left_hand_grip_source = null
+
+
+## ノードを再帰的に検索
+func _find_node_recursive(parent: Node, target_name: String) -> Node:
+	for child in parent.get_children():
+		if child.name == target_name:
+			return child
+		var found = _find_node_recursive(child, target_name)
+		if found:
+			return found
+	return null
 
 
 ## ダメージを受ける
@@ -551,18 +881,6 @@ func _update_weapon_position() -> void:
 func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void:
 	if not is_alive:
 		return
-
-	var original_amount = amount
-
-	# アーマー計算（ヘッドショットはアーマー貫通）
-	if armor > 0 and not is_headshot:
-		var armor_damage := amount * 0.5
-		if armor_damage <= armor:
-			armor -= armor_damage
-			amount -= armor_damage
-		else:
-			amount -= armor
-			armor = 0
 
 	health -= amount
 	damaged.emit(int(amount), attacker, is_headshot)
@@ -603,6 +921,11 @@ func play_dying_animation() -> void:
 	if anim_tree:
 		anim_tree.active = false
 
+	# 左手IKを無効化（死亡時は手が武器から離れる）
+	if left_hand_ik and left_hand_ik.is_running():
+		left_hand_ik.stop()
+		print("[CharacterBase] Left hand IK disabled for death animation")
+
 	if not anim_player:
 		return
 
@@ -640,11 +963,6 @@ func is_character_alive() -> bool:
 ## HP取得
 func get_health() -> float:
 	return health
-
-
-## アーマー取得
-func get_armor() -> float:
-	return armor
 
 
 ## 武器タイプを設定
@@ -704,17 +1022,27 @@ func set_weapon(weapon_id: int) -> void:
 	if current_weapon_id == weapon_id:
 		return
 
+	# 既存の左手IKを削除
+	_cleanup_left_hand_ik()
+
 	current_weapon_id = weapon_id
 
 	# 武器タイプを更新（アニメーション用）
 	var weapon_type = CharacterSetup.get_weapon_type_from_id(weapon_id)
 	set_weapon_type(weapon_type)
 
+	# WeaponResourceを読み込み（IK設定等を取得）
+	_load_weapon_resource(weapon_id)
+
 	# 武器モデルを装着
 	if skeleton:
 		weapon_attachment = CharacterSetup.attach_weapon_to_character(self, skeleton, weapon_id, name)
+		# キャラクター固有の武器オフセットを適用（test_animation_viewerと同様）
+		_apply_weapon_offset()
 		# 武器位置を現在のアニメーション状態に合わせて更新
 		_update_weapon_position()
+		# 左手IKを設定
+		_setup_left_hand_ik()
 
 	weapon_changed.emit(weapon_id)
 

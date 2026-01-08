@@ -61,7 +61,7 @@ player.set_weapon(CharacterSetup.WeaponId.AK47)
 | `scenes/characters/enemy_base.tscn` | 敵キャラクター |
 
 ### 自動セットアップ内容
-- CharacterBase（移動、アニメーション、HP/アーマー）
+- CharacterBase（移動、アニメーション、HP管理）
 - CombatComponent（自動攻撃、弾数管理、リロード）
 - AnimationTree（上半身/下半身ブレンド）
 - 武器装着（右手ボーン）

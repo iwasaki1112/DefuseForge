@@ -1,10 +1,14 @@
-[gd_scene load_steps=9 format=3 uid="uid://test_combat_reload"]
+[gd_scene load_steps=9 format=3 uid="uid://wmlp2vs2rymx"]
 
-[ext_resource type="Script" path="res://scripts/tests/test_combat_reload.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://vgvclyomd73d" path="res://scripts/tests/test_combat_reload.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://dg2obkxmhp4v2" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
-[ext_resource type="PackedScene" path="res://assets/characters/vanguard/vanguard.glb" id="3_character"]
-[ext_resource type="Script" path="res://scripts/characters/character_base.gd" id="4_character_base"]
-[ext_resource type="Script" path="res://scripts/characters/components/combat_component.gd" id="5_combat_component"]
+[ext_resource type="PackedScene" uid="uid://bqh2ldrdfsiha" path="res://assets/characters/vanguard/vanguard.glb" id="3_character"]
+[ext_resource type="Script" uid="uid://dg33nhpmacdpl" path="res://scripts/characters/character_base.gd" id="4_character_base"]
+[ext_resource type="Script" uid="uid://jawpkvf324ja" path="res://scripts/characters/components/combat_component.gd" id="5_combat_component"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_char"]
+radius = 0.3
+height = 1.8
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -16,22 +20,11 @@ ambient_light_energy = 0.6
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(50, 0.2, 50)
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_char"]
-radius = 0.3
-height = 1.8
-
-[sub_resource type="BoxMesh" id="BoxMesh_floor"]
-size = Vector3(50, 0.1, 50)
-
-[sub_resource type="StandardMaterial3D" id="Material_floor"]
-albedo_color = Color(0.4, 0.45, 0.5, 1)
-
 [node name="TestCombatReload" type="Node3D"]
 script = ExtResource("1_script")
 
 [node name="Player" type="CharacterBody3D" parent="." groups=["player"]]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 0)
-collision_layer = 1
 collision_mask = 3
 script = ExtResource("4_character_base")
 
@@ -46,7 +39,6 @@ script = ExtResource("5_combat_component")
 
 [node name="Enemy" type="CharacterBody3D" parent="." groups=["enemies"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5)
-collision_layer = 1
 collision_mask = 3
 script = ExtResource("4_character_base")
 
@@ -63,15 +55,14 @@ script = ExtResource("5_combat_component")
 transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 3, 6)
 fov = 50.0
 script = ExtResource("2_orbit_camera")
-distance = 8.0
-height = 2.0
+distance = 12.0
+initial_vertical_angle = 75.0
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 10, 20, 10)
 shadow_enabled = true
 shadow_bias = 0.03
 shadow_normal_bias = 1.5
-directional_shadow_max_distance = 100.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_1")
@@ -84,8 +75,6 @@ collision_mask = 0
 shape = SubResource("BoxShape3D_floor")
 
 [node name="FloorMesh" type="MeshInstance3D" parent="Floor"]
-mesh = SubResource("BoxMesh_floor")
-surface_material_override/0 = SubResource("Material_floor")
 
 [node name="UI" type="CanvasLayer" parent="."]
 

@@ -8,6 +8,7 @@ extends Node3D
 @onready var player: CharacterBody3D = $Player
 @onready var enemy: CharacterBody3D = $Enemy
 @onready var ui_label: Label = $UI/AmmoLabel
+@onready var orbit_camera: Camera3D = $OrbitCamera
 
 var combat_component: Node = null
 
@@ -22,14 +23,15 @@ func _ready() -> void:
 	if player.has_method("set_weapon"):
 		player.set_weapon(CharacterSetup.WeaponId.AK47)
 
-	# 敵に武器を装備（敵も攻撃できるようにする）
+	# 敵に武器を装備（攻撃させない）
 	if enemy.has_method("set_weapon"):
 		enemy.set_weapon(CharacterSetup.WeaponId.AK47)
 	var enemy_combat = enemy.get_node_or_null("CombatComponent")
 	if enemy_combat:
-		enemy_combat.auto_attack = true  # 敵も攻撃できるように
-		enemy_combat.max_ammo = 5
-		enemy_combat.current_ammo = 5
+		enemy_combat.auto_attack = false  # リロード確認のため敵は攻撃しない
+
+	# 敵のHPを高くしてリロードを確認できるようにする
+	enemy.health = 10000.0
 
 	# 死亡シグナルを接続
 	if player.has_signal("died"):
@@ -51,6 +53,10 @@ func _ready() -> void:
 
 	# UIを更新
 	_update_ui()
+
+	# カメラのターゲットを設定
+	if orbit_camera and orbit_camera.has_method("set_target"):
+		orbit_camera.set_target(player)
 
 	print("[TestCombatReload] Test scene ready")
 	print("  Player position: %s" % player.global_position)

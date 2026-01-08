@@ -740,15 +740,26 @@ static func attach_weapon_to_character(character: Node, skeleton: Skeleton3D, we
 	# BoneAttachment3Dを作成
 	var bone_attachment = BoneAttachment3D.new()
 	bone_attachment.name = "WeaponAttachment"
-	bone_attachment.bone_name = bone_name
+	bone_attachment.bone_idx = bone_idx
 	skeleton.add_child(bone_attachment)
 
 	# 武器シーンをロード（位置・回転はシーンファイル内で設定済み）
 	var weapon_model = create_weapon_attachment(weapon_id)
 	if weapon_model:
 		bone_attachment.add_child(weapon_model)
+
+		# スケルトンのスケールを補正（test_animation_viewerと同様）
+		# キャラクターモデルがスケールダウンされている場合、武器が小さすぎて見えなくなる
+		var skeleton_global_scale = skeleton.global_transform.basis.get_scale()
+		if skeleton_global_scale.x < 0.5:  # スケルトンが大幅にスケールダウンされている場合
+			var compensation_scale = 1.0 / skeleton_global_scale.x
+			weapon_model.scale = Vector3(compensation_scale, compensation_scale, compensation_scale)
+			print("[CharacterSetup] Applied weapon scale compensation: %s (skeleton scale: %s)" % [compensation_scale, skeleton_global_scale])
+
+		print("[CharacterSetup] Weapon attached: %s to bone_idx=%d" % [weapon_model.name, bone_idx])
 		return bone_attachment
 
+	print("[CharacterSetup] Failed to create weapon model for weapon_id=%d" % weapon_id)
 	bone_attachment.queue_free()
 	return null
 
@@ -758,11 +769,12 @@ static func attach_weapon_to_character(character: Node, skeleton: Skeleton3D, we
 ## @param weapon_id: 武器ID
 ## @param anim_state: アニメーション状態（AnimState enum）
 ## @param debug_name: デバッグ用キャラクター名
+## 注意: 位置・回転は武器ルートノードに適用される（Modelノードのシーントランスフォームは保持）
 static func update_weapon_position(weapon_attachment: Node3D, weapon_id: int, anim_state: int, _debug_name: String = "") -> void:
 	if weapon_attachment == null:
 		return
 
-	# 武器モデル（BoneAttachment3Dの子ノード）を取得
+	# 武器ルートノード（BoneAttachment3Dの子ノード）を取得
 	var weapon_node: Node3D = null
 	for child in weapon_attachment.get_children():
 		if child is Node3D:
@@ -772,21 +784,7 @@ static func update_weapon_position(weapon_attachment: Node3D, weapon_id: int, an
 	if weapon_node == null:
 		return
 
-	# 武器内のModelノードを取得
-	var model_node: Node3D = weapon_node.get_node_or_null("Model")
-	if model_node == null:
-		# Modelノードがない場合は武器ノード自体を使用
-		model_node = weapon_node
-
-	# ベース位置・回転を取得
-	var base_pos := Vector3.ZERO
-	var base_rot := Vector3.ZERO
-	if WEAPON_BASE_TRANSFORM.has(weapon_id):
-		var base_data: Dictionary = WEAPON_BASE_TRANSFORM[weapon_id]
-		base_pos = base_data.get("position", Vector3.ZERO)
-		base_rot = base_data.get("rotation", Vector3.ZERO)
-
-	# アニメーションオフセットを取得
+	# アニメーションオフセットのみを取得（ベーストランスフォームはシーンファイルで設定済み）
 	var offset_pos := Vector3.ZERO
 	var offset_rot := Vector3.ZERO
 	if WEAPON_ANIMATION_OFFSETS.has(weapon_id):
@@ -796,13 +794,10 @@ static func update_weapon_position(weapon_attachment: Node3D, weapon_id: int, an
 			offset_pos = offset_data.get("position", Vector3.ZERO)
 			offset_rot = offset_data.get("rotation", Vector3.ZERO)
 
-	# 最終的な位置・回転を計算
-	var final_pos := base_pos + offset_pos
-	var final_rot := base_rot + offset_rot
-
-	# 適用
-	model_node.position = final_pos
-	model_node.rotation_degrees = final_rot
+	# 武器ルートノードにオフセットを適用（Modelノードのシーントランスフォームは保持）
+	# test_animation_viewerと同様のアプローチ
+	weapon_node.position = offset_pos
+	weapon_node.rotation_degrees = offset_rot
 
 
 ## アニメーション名からアニメーション状態を取得

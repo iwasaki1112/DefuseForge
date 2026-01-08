@@ -10,6 +10,8 @@ extends Camera3D
 @export var pan_speed: float = 0.01
 @export var vertical_angle_min: float = -80.0
 @export var vertical_angle_max: float = 80.0
+@export var initial_vertical_angle: float = 30.0
+@export var initial_horizontal_angle: float = 0.0
 
 var _horizontal_angle: float = 0.0
 var _vertical_angle: float = 30.0
@@ -25,6 +27,8 @@ var _initial_zoom_distance: float = 0.0
 
 
 func _ready() -> void:
+	_horizontal_angle = initial_horizontal_angle
+	_vertical_angle = initial_vertical_angle
 	_update_camera_position()
 
 

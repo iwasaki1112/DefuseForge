@@ -40,7 +40,55 @@ extends Resource
 @export var left_hand_ik_enabled: bool = true  ## 左手IKを使用するか
 @export var left_hand_ik_position: Vector3 = Vector3.ZERO  ## 左手IKの位置オフセット
 @export var left_hand_ik_rotation: Vector3 = Vector3.ZERO  ## 左手IKの回転オフセット（度数）
-@export var left_hand_ik_disabled_anims: PackedStringArray = []  ## IKを無効にするアニメーション名リスト
+## NOTE: IK無効アニメーションはCharacterBase._should_disable_ik_for_animation()で
+## パターンマッチングにより自動判定（Convention over Configuration）
+
+@export_group("アニメーション設定")
+## アニメーション状態ごとの位置・回転オフセット
+## 構造: { AnimState(int): { "position": Vector3, "rotation": Vector3 (degrees) } }
+## AnimState: 0=IDLE, 1=WALKING, 2=RUNNING, 3=FIRE
+@export var animation_offsets: Dictionary = {}
+
+
+## リソースのバリデーション
+## @return: { "valid": bool, "errors": Array[String] }
+func validate() -> Dictionary:
+	var errors: Array[String] = []
+
+	# 必須フィールドのチェック
+	if weapon_id.is_empty():
+		errors.append("weapon_id is empty")
+
+	if weapon_name.is_empty():
+		errors.append("weapon_name is empty")
+
+	# シーンパスのチェック
+	if scene_path.is_empty():
+		errors.append("scene_path is empty")
+	elif not ResourceLoader.exists(scene_path):
+		errors.append("scene_path does not exist: %s" % scene_path)
+
+	# IK設定の一貫性チェック
+	if left_hand_ik_enabled:
+		if left_hand_ik_position == Vector3.ZERO and left_hand_ik_rotation == Vector3.ZERO:
+			errors.append("IK enabled but both position and rotation are zero (probably not configured)")
+
+	# 武器タイプのチェック
+	if weapon_type < TYPE_NONE or weapon_type > TYPE_PISTOL:
+		errors.append("Invalid weapon_type: %d" % weapon_type)
+
+	# 戦闘性能の妥当性チェック
+	if damage < 0:
+		errors.append("damage cannot be negative: %f" % damage)
+	if fire_rate < 0:
+		errors.append("fire_rate cannot be negative: %f" % fire_rate)
+	if accuracy < 0.0 or accuracy > 1.0:
+		errors.append("accuracy must be between 0.0 and 1.0: %f" % accuracy)
+
+	return {
+		"valid": errors.is_empty(),
+		"errors": errors
+	}
 
 
 ## 辞書形式に変換（後方互換性用）
@@ -63,7 +111,7 @@ func to_dict() -> Dictionary:
 		"left_hand_ik_enabled": left_hand_ik_enabled,
 		"left_hand_ik_position": left_hand_ik_position,
 		"left_hand_ik_rotation": left_hand_ik_rotation,
-		"left_hand_ik_disabled_anims": Array(left_hand_ik_disabled_anims)
+		"animation_offsets": animation_offsets
 	}
 
 
@@ -87,8 +135,7 @@ static func from_dict(data: Dictionary, id: String = "") -> WeaponResource:
 	res.left_hand_ik_enabled = data.get("left_hand_ik_enabled", true)
 	res.left_hand_ik_position = data.get("left_hand_ik_position", Vector3.ZERO)
 	res.left_hand_ik_rotation = data.get("left_hand_ik_rotation", Vector3.ZERO)
-	var disabled_anims = data.get("left_hand_ik_disabled_anims", [])
-	res.left_hand_ik_disabled_anims = PackedStringArray(disabled_anims)
+	res.animation_offsets = data.get("animation_offsets", {})
 	return res
 
 
