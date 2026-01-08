@@ -334,11 +334,12 @@ func _apply_damage(target: Node3D, damage: int, zone: HitZone) -> void:
 	elif "health" in target:
 		target.health -= damage
 		if target.health <= 0:
-			_on_target_killed(target)
+			var is_headshot = (zone == HitZone.HEAD)
+			_on_target_killed(target, is_headshot)
 
 
 ## ターゲットを倒した時
-func _on_target_killed(target: Node3D) -> void:
+func _on_target_killed(target: Node3D, was_headshot: bool = false) -> void:
 	killed.emit(target)
 
 	# GameEventsに通知
@@ -346,7 +347,7 @@ func _on_target_killed(target: Node3D) -> void:
 		var weapon_id = 0
 		if character.has_method("get_current_weapon_id"):
 			weapon_id = character.get_current_weapon_id()
-		get_node("/root/GameEvents").unit_killed.emit(character, target, weapon_id)
+		get_node("/root/GameEvents").unit_killed.emit(character, target, weapon_id, was_headshot)
 
 	print("[CombatComponent] %s killed %s" % [character.name, target.name])
 

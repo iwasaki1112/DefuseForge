@@ -260,7 +260,7 @@ func _set_state(new_state: MatchState) -> void:
 
 
 ## ユニット死亡イベント処理
-func _on_unit_killed(killer: Node3D, _victim: Node3D, weapon_id: int) -> void:
+func _on_unit_killed(killer: Node3D, _victim: Node3D, weapon_id: int, is_headshot: bool = false) -> void:
 	var sm = _get_squad_manager()
 
 	# 敵がキルされた場合、キル報酬
@@ -268,11 +268,15 @@ func _on_unit_killed(killer: Node3D, _victim: Node3D, weapon_id: int) -> void:
 		var killer_data = sm.get_player_data_by_node(killer)
 		if killer_data:
 			var reward: int = economy_rules.get_kill_reward(weapon_id)
+			# ヘッドショットボーナス
+			if is_headshot:
+				reward += economy_rules.headshot_bonus
 			killer_data.add_money(reward)
 			killer_data.record_kill()
 
+			var reward_type = "headshot_kill" if is_headshot else "kill"
 			if has_node("/root/GameEvents"):
-				get_node("/root/GameEvents").reward_granted.emit(killer, reward, "kill")
+				get_node("/root/GameEvents").reward_granted.emit(killer, reward, reward_type)
 
 	# 全プレイヤー死亡チェック
 	if sm and sm.get_alive_count() == 0:

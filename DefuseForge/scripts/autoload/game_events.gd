@@ -10,7 +10,7 @@ extends Node
 signal unit_spotted(observer: Node3D, target: Node3D)
 
 ## ユニットが死亡
-signal unit_killed(killer: Node3D, victim: Node3D, weapon_id: int)
+signal unit_killed(killer: Node3D, victim: Node3D, weapon_id: int, is_headshot: bool)
 
 ## ユニットがダメージを受けた
 signal unit_damaged(target: Node3D, damage: float, attacker: Node3D)

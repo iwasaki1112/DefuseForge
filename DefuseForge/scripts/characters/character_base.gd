@@ -459,11 +459,11 @@ func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = fal
 
 	if health <= 0:
 		health = 0
-		_die(attacker)
+		_die(attacker, is_headshot)
 
 
 ## 死亡処理
-func _die(killer: Node3D = null) -> void:
+func _die(killer: Node3D = null, was_headshot: bool = false) -> void:
 	is_alive = false
 	is_moving = false
 
@@ -480,7 +480,7 @@ func _die(killer: Node3D = null) -> void:
 		var weapon_id = 0
 		if killer.has_method("get_current_weapon_id"):
 			weapon_id = killer.get_current_weapon_id()
-		get_node("/root/GameEvents").unit_killed.emit(killer, self, weapon_id)
+		get_node("/root/GameEvents").unit_killed.emit(killer, self, weapon_id, was_headshot)
 
 
 ## 死亡アニメーションを再生

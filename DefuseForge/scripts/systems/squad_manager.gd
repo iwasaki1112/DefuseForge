@@ -364,7 +364,7 @@ func damage_player_node(player_node: Node3D, amount: float) -> void:
 			on_player_died(player_node)
 			# GameEvents経由でイベント発火
 			if has_node("/root/GameEvents"):
-				get_node("/root/GameEvents").unit_killed.emit(null, player_node, 0)
+				get_node("/root/GameEvents").unit_killed.emit(null, player_node, 0, false)
 
 
 ## プレイヤーダメージ（選択中プレイヤー）

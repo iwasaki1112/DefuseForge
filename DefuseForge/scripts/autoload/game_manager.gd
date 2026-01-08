@@ -229,14 +229,14 @@ func buy_weapon(price: int) -> bool:
 func on_enemy_killed(weapon_id: int = 0) -> void:
 	var selected = squad_manager.get_selected_player_node() if squad_manager else null
 	if selected and has_node("/root/GameEvents"):
-		get_node("/root/GameEvents").unit_killed.emit(selected, null, weapon_id)
+		get_node("/root/GameEvents").unit_killed.emit(selected, null, weapon_id, false)
 
 
 ## キル報酬（キラー指定版）
 ## 非推奨: GameEvents.unit_killed.emit()を直接使用してください
 func on_enemy_killed_by(killer: Node3D, weapon_id: int = 0) -> void:
 	if has_node("/root/GameEvents"):
-		get_node("/root/GameEvents").unit_killed.emit(killer, null, weapon_id)
+		get_node("/root/GameEvents").unit_killed.emit(killer, null, weapon_id, false)
 
 
 ## 爆弾設置

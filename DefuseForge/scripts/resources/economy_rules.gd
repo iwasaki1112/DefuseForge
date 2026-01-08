@@ -72,12 +72,16 @@ extends Resource
 ## ナイフキル報酬（高め）
 @export var kill_reward_knife: int = 1500
 
+## ヘッドショットボーナス
+@export var headshot_bonus: int = 100
+
 # === ラウンド設定 ===
 
 ## ラウンド時間（秒）
 @export var round_time: float = 105.0
 
 ## 購入フェーズ時間（秒）
+## 注: 現在の3秒はデバッグ用の短縮値。本番では15-20秒程度が適切
 @export var buy_time: float = 3.0
 
 ## 戦略フェーズ時間（秒）
@@ -101,10 +105,15 @@ func calculate_loss_reward(loss_streak: int) -> int:
 
 ## 武器IDからキル報酬を取得
 func get_kill_reward(weapon_id: int) -> int:
-	# WeaponIdに対応するカテゴリを判定
-	# 実際の武器カテゴリは CharacterSetup.get_weapon_data() から取得するのが理想
-	# ここではデフォルト値を返す
-	return kill_reward_default
+	# CharacterSetupから武器タイプを取得して報酬を決定
+	var weapon_type = CharacterSetup.get_weapon_type_from_id(weapon_id)
+	match weapon_type:
+		CharacterSetup.WeaponType.RIFLE:
+			return kill_reward_rifle
+		CharacterSetup.WeaponType.PISTOL:
+			return kill_reward_pistol
+		_:
+			return kill_reward_default
 
 
 ## デフォルト設定を作成
