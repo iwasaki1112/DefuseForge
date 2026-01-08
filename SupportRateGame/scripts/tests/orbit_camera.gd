@@ -7,13 +7,16 @@ extends Camera3D
 @export var max_distance: float = 15.0
 @export var rotation_speed: float = 0.5
 @export var zoom_speed: float = 0.5
+@export var pan_speed: float = 0.01
 @export var vertical_angle_min: float = -80.0
 @export var vertical_angle_max: float = 80.0
 
 var _horizontal_angle: float = 0.0
 var _vertical_angle: float = 30.0
-var _is_dragging: bool = false
+var _is_rotating: bool = false  # 左クリックドラッグ
+var _is_panning: bool = false   # 中クリックドラッグ
 var _last_mouse_pos: Vector2 = Vector2.ZERO
+var _target_offset: Vector3 = Vector3.ZERO  # パン操作によるオフセット
 
 # Multi-touch for pinch zoom
 var _touch_points: Dictionary = {}  # touch_index -> position
@@ -26,11 +29,20 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# UIコントロール上の操作を無視
+	if _is_mouse_over_ui():
+		_is_rotating = false
+		_is_panning = false
+		return
+
 	# Mouse button events
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
-			_is_dragging = mb.pressed
+			_is_rotating = mb.pressed
+			_last_mouse_pos = mb.position
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			_is_panning = mb.pressed
 			_last_mouse_pos = mb.position
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			distance = clampf(distance - zoom_speed, min_distance, max_distance)
@@ -48,16 +60,24 @@ func _input(event: InputEvent) -> void:
 		_update_camera_position()
 
 	# Mouse motion events
-	if event is InputEventMouseMotion and _is_dragging:
+	if event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		var delta := mm.position - _last_mouse_pos
 		_last_mouse_pos = mm.position
 
-		_horizontal_angle -= delta.x * rotation_speed
-		_vertical_angle -= delta.y * rotation_speed
-		_vertical_angle = clampf(_vertical_angle, vertical_angle_min, vertical_angle_max)
-
-		_update_camera_position()
+		if _is_rotating:
+			# 左クリックドラッグ: 回転
+			_horizontal_angle -= delta.x * rotation_speed
+			_vertical_angle -= delta.y * rotation_speed
+			_vertical_angle = clampf(_vertical_angle, vertical_angle_min, vertical_angle_max)
+			_update_camera_position()
+		elif _is_panning:
+			# 中クリックドラッグ: パン（上下左右移動）
+			var right := global_transform.basis.x
+			var up := global_transform.basis.y
+			_target_offset -= right * delta.x * pan_speed * distance
+			_target_offset += up * delta.y * pan_speed * distance
+			_update_camera_position()
 
 	# Touch events for mobile
 	if event is InputEventScreenTouch:
@@ -100,6 +120,30 @@ func _input(event: InputEvent) -> void:
 				_update_camera_position()
 
 
+func _is_mouse_over_ui() -> bool:
+	## マウスがUI要素の上にあるかチェック
+	var viewport := get_viewport()
+	if not viewport:
+		return false
+
+	# フォーカスを持つGUIコントロールがあればUI操作中
+	var gui_control := viewport.gui_get_focus_owner()
+	if gui_control:
+		return true
+
+	# マウス位置がCanvasLayer内のコントロール上にあるかチェック
+	var mouse_pos := viewport.get_mouse_position()
+	var root := get_tree().current_scene
+	if root:
+		for child in root.get_children():
+			if child is CanvasLayer:
+				for ui_child in child.get_children():
+					if ui_child is Control and ui_child.visible:
+						if ui_child.get_global_rect().has_point(mouse_pos):
+							return true
+	return false
+
+
 func _update_camera_position() -> void:
 	if not target:
 		return
@@ -113,10 +157,18 @@ func _update_camera_position() -> void:
 		distance * cos(v_rad) * cos(h_rad)
 	)
 
-	global_position = target.global_position + offset
-	look_at(target.global_position, Vector3.UP)
+	var look_target := target.global_position + _target_offset
+	global_position = look_target + offset
+	look_at(look_target, Vector3.UP)
 
 
 func set_target(new_target: Node3D) -> void:
 	target = new_target
+	_target_offset = Vector3.ZERO  # ターゲット変更時はオフセットをリセット
+	_update_camera_position()
+
+
+func reset_pan() -> void:
+	## パンオフセットをリセット
+	_target_offset = Vector3.ZERO
 	_update_camera_position()
