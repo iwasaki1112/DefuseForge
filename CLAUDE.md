@@ -6,10 +6,23 @@
 - **言語**: GDScript
 
 ## スキル
+
+### プロジェクトスキル
 | スキル | 用途 |
 |--------|------|
-| `/add-weapon` | 武器追加ガイド（Blender操作含む） |
-| `/sakurai-review` | ゲーム設計レビュー |
+| `/add-weapon` | 武器追加ガイド（Blenderモデル準備→WeaponResource作成→左手IK調整） |
+| `/export-character` | BlenderからキャラクターをGLBエクスポート（NLAアニメーション含む）→Godotに配置 |
+| `/retarget-animation` | MixamoアニメーションをAuto-Rig Proでリターゲット→NLAトラックにPush Down |
+| `/sakurai-review` | 桜井政博氏の哲学に基づくゲーム設計レビュー（リスク/リターン、難易度曲線等） |
+| `/difficulty-design` | 難易度設計支援（デコボコ曲線、3分間の法則、救済システム） |
+| `/reward-design` | 報酬システム設計（報酬サイクル、数値報酬、コレクション要素） |
+| `/game-feel` | ゲームの手触りレビュー（ヒットストップ、攻撃モーション、ジャンプ設計）|
+
+### プラグインスキル
+| スキル | 用途 |
+|--------|------|
+| `/claude-mem:mem-search` | 過去セッションのメモリ検索（「前回どうやった？」等） |
+| `/claude-mem:troubleshoot` | claude-memのインストール問題診断・修正 |
 
 ## ドキュメント参照
 詳細な仕様は以下のドキュメントを参照すること：
