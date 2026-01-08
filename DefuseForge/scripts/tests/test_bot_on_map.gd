@@ -449,6 +449,9 @@ func _setup_bot() -> void:
 		push_warning("[TestBotOnMap] CharacterModel not found")
 		return
 
+	# マテリアル設定（明るさ補正を適用）
+	CharacterSetup.setup_materials(bot_model, "vanguard")
+
 	# Find AnimationPlayer
 	anim_player = _find_animation_player(bot_model)
 	if anim_player:

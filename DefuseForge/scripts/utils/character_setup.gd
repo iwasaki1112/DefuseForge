@@ -17,6 +17,9 @@ const TEXTURE_MAP := {
 	}
 }
 
+## キャラクターの明るさ補正（1.0=変更なし、1.3=30%明るく）
+const CHARACTER_BRIGHTNESS: float = 1.8
+
 ## 武器タイプ（アニメーションカテゴリ）
 enum WeaponType { NONE, RIFLE, PISTOL }
 
@@ -354,7 +357,7 @@ static func _setup_lit_materials_recursive(node: Node, debug_name: String) -> vo
 		_setup_lit_materials_recursive(child, debug_name)
 
 
-## メッシュにテクスチャを適用
+## メッシュにテクスチャを適用（または明るさ補正のみ適用）
 static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: String) -> void:
 	var mesh_name = mesh_instance.name.to_lower()
 	var albedo_path := ""
@@ -367,19 +370,15 @@ static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: S
 			normal_path = TEXTURE_MAP[key]["normal"]
 			break
 
-	if albedo_path.is_empty():
-		return
-
-	# テクスチャをロード
-	var albedo_tex = load(albedo_path) as Texture2D
-	if albedo_tex == null:
-		return
-
+	# テクスチャをロード（マッチした場合のみ）
+	var albedo_tex: Texture2D = null
 	var normal_tex: Texture2D = null
-	if not normal_path.is_empty():
-		normal_tex = load(normal_path) as Texture2D
+	if not albedo_path.is_empty():
+		albedo_tex = load(albedo_path) as Texture2D
+		if not normal_path.is_empty():
+			normal_tex = load(normal_path) as Texture2D
 
-	# 各サーフェスにマテリアルを適用
+	# 各サーフェスにマテリアルを適用（明るさ補正は常に適用）
 	if mesh_instance.mesh:
 		var surface_count = mesh_instance.mesh.get_surface_count()
 		for i in range(surface_count):
@@ -391,8 +390,13 @@ static func _apply_textures_to_mesh(mesh_instance: MeshInstance3D, debug_name: S
 			else:
 				new_mat = StandardMaterial3D.new()
 
-			new_mat.albedo_texture = albedo_tex
+			# テクスチャがある場合は適用
+			if albedo_tex:
+				new_mat.albedo_texture = albedo_tex
+
 			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+			# 明るさ補正を常に適用
+			new_mat.albedo_color = Color(CHARACTER_BRIGHTNESS, CHARACTER_BRIGHTNESS, CHARACTER_BRIGHTNESS, 1.0)
 
 			if normal_tex:
 				new_mat.normal_enabled = true

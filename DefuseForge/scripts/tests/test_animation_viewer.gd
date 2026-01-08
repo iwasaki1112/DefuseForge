@@ -550,6 +550,9 @@ func _change_character(character_id: String) -> void:
 	character_model.name = character_id.capitalize() + "Model"
 	character_body.add_child(character_model)
 
+	# マテリアル設定（明るさ補正を適用）
+	CharacterSetup.setup_materials(character_model, character_id)
+
 	# Setup the new character
 	_setup_character_internal()
 
@@ -658,6 +661,9 @@ func _setup_character() -> void:
 	if not character_model:
 		push_warning("[AnimViewer] Character model not found")
 		return
+
+	# マテリアル設定（明るさ補正を適用）
+	CharacterSetup.setup_materials(character_model, current_character_id)
 
 	_setup_character_internal()
 
