@@ -48,6 +48,12 @@ var is_shooting: bool = false
 var _shooting_blend: float = 0.0
 const SHOOTING_BLEND_SPEED: float = 10.0
 
+# 歩行シーケンス状態
+enum WalkSequenceState { NONE, START, LOOP, END }
+var walk_sequence_state: WalkSequenceState = WalkSequenceState.NONE
+var walk_sequence_base_name: String = ""  # "walk" or "sprint" など
+var _pending_walk_stop: bool = false  # 停止リクエストがあるか
+
 # 武器
 var weapon_attachment: Node3D = null
 var skeleton: Skeleton3D = null
@@ -90,6 +96,9 @@ func _setup_character() -> void:
 		anim_player = CharacterSetup.find_animation_player(model)
 		if anim_player:
 			CharacterSetup.load_animations(anim_player, model, name)
+			# 歩行シーケンス用のシグナル接続
+			if not anim_player.animation_finished.is_connected(_on_animation_finished):
+				anim_player.animation_finished.connect(_on_animation_finished)
 			# AnimationTreeをセットアップ（上半身ブレンド用）
 			# 初期アニメーションはAnimationTree内で設定される
 			_setup_animation_tree(model)
@@ -629,3 +638,127 @@ func _update_speed_from_weapon() -> void:
 ## 現在の速度倍率を取得
 func get_speed_modifier() -> float:
 	return CharacterSetup.WEAPON_SPEED_MODIFIER.get(current_weapon_type, 1.0)
+
+
+## ========================================
+## 歩行シーケンス API
+## walk_start -> walk_loop -> walk_end
+## ========================================
+
+## 歩行シーケンスを開始
+## @param base_name: "walk" や "sprint" などのベース名
+## @param blend_time: ブレンド時間
+func start_walk_sequence(base_name: String = "walk", blend_time: float = 0.3) -> void:
+	if not anim_player:
+		return
+
+	walk_sequence_base_name = base_name
+	_pending_walk_stop = false
+
+	# start アニメーションがあるかチェック
+	var start_anim = _get_walk_sequence_anim("start")
+	if anim_player.has_animation(start_anim):
+		walk_sequence_state = WalkSequenceState.START
+		_play_walk_sequence_anim("start", blend_time)
+	else:
+		# startがなければ直接loopへ
+		walk_sequence_state = WalkSequenceState.LOOP
+		_play_walk_sequence_anim("loop", blend_time)
+
+
+## 歩行シーケンスを停止（end アニメーションを再生）
+## @param blend_time: ブレンド時間
+func stop_walk_sequence(blend_time: float = 0.3) -> void:
+	if not anim_player or walk_sequence_state == WalkSequenceState.NONE:
+		return
+
+	# 現在START中なら、終了後にENDへ
+	if walk_sequence_state == WalkSequenceState.START:
+		_pending_walk_stop = true
+		return
+
+	# end アニメーションがあるかチェック
+	var end_anim = _get_walk_sequence_anim("end")
+	if anim_player.has_animation(end_anim):
+		walk_sequence_state = WalkSequenceState.END
+		_play_walk_sequence_anim("end", blend_time)
+	else:
+		# endがなければ直接シーケンス終了
+		_finish_walk_sequence()
+
+
+## 歩行シーケンスを強制終了（アニメーションなし）
+func cancel_walk_sequence() -> void:
+	walk_sequence_state = WalkSequenceState.NONE
+	walk_sequence_base_name = ""
+	_pending_walk_stop = false
+
+
+## 歩行シーケンスがアクティブか
+func is_walk_sequence_active() -> bool:
+	return walk_sequence_state != WalkSequenceState.NONE
+
+
+## アニメーション終了時のコールバック
+func _on_animation_finished(anim_name: String) -> void:
+	if walk_sequence_state == WalkSequenceState.NONE:
+		return
+
+	var expected_start = _get_walk_sequence_anim("start")
+	var expected_loop = _get_walk_sequence_anim("loop")
+	var expected_end = _get_walk_sequence_anim("end")
+
+	match walk_sequence_state:
+		WalkSequenceState.START:
+			if anim_name == expected_start:
+				if _pending_walk_stop:
+					_pending_walk_stop = false
+					stop_walk_sequence()
+				else:
+					walk_sequence_state = WalkSequenceState.LOOP
+					_play_walk_sequence_anim("loop", 0.1)
+
+		WalkSequenceState.END:
+			if anim_name == expected_end:
+				_finish_walk_sequence()
+
+
+## 歩行シーケンス用アニメーション名を取得
+func _get_walk_sequence_anim(phase: String) -> String:
+	# 例: rifle_walk_start, rifle_walk, rifle_walk_end
+	var weapon_prefix = CharacterSetup.get_weapon_prefix(current_weapon_type)
+
+	if phase == "loop":
+		# ループは武器プレフィックス + ベース名（例: rifle_walk）
+		return weapon_prefix + walk_sequence_base_name
+	else:
+		# start/end は武器プレフィックス + ベース名 + _phase（例: rifle_walk_start）
+		return weapon_prefix + walk_sequence_base_name + "_" + phase
+
+
+## 歩行シーケンスアニメーションを再生
+func _play_walk_sequence_anim(phase: String, blend_time: float) -> void:
+	var anim_name = _get_walk_sequence_anim(phase)
+
+	if not anim_player.has_animation(anim_name):
+		push_warning("[%s] Walk sequence animation not found: %s" % [name, anim_name])
+		return
+
+	# AnimationTreeが有効な場合
+	if anim_tree and anim_tree.active and anim_blend_tree:
+		var locomotion_node = anim_blend_tree.get_node("locomotion") as AnimationNodeAnimation
+		if locomotion_node:
+			locomotion_node.animation = anim_name
+	else:
+		anim_player.play(anim_name, blend_time)
+
+	print("[%s] Walk sequence: %s -> %s" % [name, phase, anim_name])
+
+
+## 歩行シーケンス終了処理
+func _finish_walk_sequence() -> void:
+	walk_sequence_state = WalkSequenceState.NONE
+	walk_sequence_base_name = ""
+	_pending_walk_stop = false
+	# idle に戻す
+	_play_current_animation()

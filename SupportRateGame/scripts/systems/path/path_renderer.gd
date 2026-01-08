@@ -8,6 +8,7 @@ const PathAnalyzerClass = preload("res://scripts/systems/path/path_analyzer.gd")
 @export_group("描画設定")
 @export var path_color_walk: Color = Color(0.0, 1.0, 0.0, 0.5)
 @export var path_color_run: Color = Color(1.0, 0.5, 0.0, 0.5)
+@export var path_color_blocked: Color = Color(1.0, 0.0, 0.0, 0.6)  # ブロック中の色（赤）
 @export var path_width: float = 0.15
 @export var path_height_offset: float = 0.05
 @export var smoothing_segments: int = 5
@@ -19,8 +20,10 @@ var character_base_color: Color = Color.GREEN
 # 描画用メッシュ
 var path_mesh_instance_walk: MeshInstance3D = null
 var path_mesh_instance_run: MeshInstance3D = null
+var path_mesh_instance_blocked: MeshInstance3D = null  # ブロック中表示用
 var immediate_mesh_walk: ImmediateMesh = null
 var immediate_mesh_run: ImmediateMesh = null
+var immediate_mesh_blocked: ImmediateMesh = null  # ブロック中表示用
 
 # パス解析器
 var analyzer: RefCounted = null
@@ -50,6 +53,15 @@ func _ready() -> void:
 	path_mesh_instance_run.material_override = _create_path_material(path_color_run, Color(1.0, 0.5, 0.0, 1.0))
 	path_mesh_instance_run.extra_cull_margin = cull_margin  # 適切なカリングマージン
 	add_child(path_mesh_instance_run)
+
+	# ブロック中表示用メッシュを作成
+	immediate_mesh_blocked = ImmediateMesh.new()
+	path_mesh_instance_blocked = MeshInstance3D.new()
+	path_mesh_instance_blocked.mesh = immediate_mesh_blocked
+	path_mesh_instance_blocked.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	path_mesh_instance_blocked.material_override = _create_path_material(path_color_blocked, Color(1.0, 0.0, 0.0, 1.0))
+	path_mesh_instance_blocked.extra_cull_margin = cull_margin
+	add_child(path_mesh_instance_blocked)
 
 
 ## キャラクターカラーを設定
@@ -110,6 +122,8 @@ func _is_path_changed(path: Array[Vector3], run_flags: Array[bool]) -> bool:
 func render(path: Array[Vector3], run_flags: Array[bool]) -> void:
 	# パスが変更されていない場合はスキップ
 	if not _is_path_changed(path, run_flags):
+		# ブロック中の線だけクリア（通常描画に戻ったとき）
+		immediate_mesh_blocked.clear_surfaces()
 		return
 
 	# キャッシュを更新
@@ -118,6 +132,7 @@ func render(path: Array[Vector3], run_flags: Array[bool]) -> void:
 
 	immediate_mesh_walk.clear_surfaces()
 	immediate_mesh_run.clear_surfaces()
+	immediate_mesh_blocked.clear_surfaces()  # ブロック中の線もクリア
 
 	if path.size() < 2:
 		return
@@ -150,8 +165,25 @@ func render(path: Array[Vector3], run_flags: Array[bool]) -> void:
 func clear() -> void:
 	immediate_mesh_walk.clear_surfaces()
 	immediate_mesh_run.clear_surfaces()
+	immediate_mesh_blocked.clear_surfaces()
 	_cached_path.clear()
 	_cached_run_flags.clear()
+
+
+## ブロック中のパスを描画
+## 有効なパス + ブロック中の線（赤）を表示
+func render_with_blocked(path: Array[Vector3], run_flags: Array[bool], last_valid: Vector3, current_blocked: Vector3) -> void:
+	# 通常のパスを描画
+	render(path, run_flags)
+
+	# ブロック中の線を描画（赤い線）
+	immediate_mesh_blocked.clear_surfaces()
+
+	if last_valid == Vector3.INF or current_blocked == Vector3.INF:
+		return
+
+	# 最後の有効ポイントから現在のブロック位置までの赤い線を描画
+	_draw_segment(immediate_mesh_blocked, last_valid, current_blocked)
 
 
 ## 1セグメントを描画

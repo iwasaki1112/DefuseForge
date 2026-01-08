@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 837ea4291d345e34bafda9c68c30fa63
+labels:
+- Controller
+- Animated
+- Combat
+- Rifle
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 15098
+  packageName: Rifle Animset Pro
+  packageVersion: 2.0
+  assetPath: Assets/RifleAnimsetPro/Mecanim/Animators Demo/ShooterTPP_PlayerController.controller
+  uploadId: 701303
