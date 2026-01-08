@@ -1,45 +1,55 @@
 extends Node3D
 
 ## 戦闘とリロードのテストシーン
-## - プレイヤーの前に敵を配置
+## - プレイヤーの前に敵を配置（正面・左斜め・右斜め）
 ## - 視界内の敵に自動射撃
 ## - 弾切れ時に自動リロード
+## - 上半身エイミング機能のテスト
 
 @onready var player: CharacterBody3D = $Player
 @onready var enemy: CharacterBody3D = $Enemy
+@onready var enemy_left: CharacterBody3D = $EnemyLeft
+@onready var enemy_right: CharacterBody3D = $EnemyRight
 @onready var ui_label: Label = $UI/AmmoLabel
 @onready var orbit_camera: Camera3D = $OrbitCamera
 
 var combat_component: Node = null
+var all_enemies: Array[CharacterBody3D] = []
 
 
 func _ready() -> void:
 	# プレイヤーにグループを追加
 	player.add_to_group("player")
-	# 敵にグループを追加
-	enemy.add_to_group("enemies")
+
+	# 敵リストを作成
+	all_enemies = [enemy, enemy_left, enemy_right]
+
+	# 敵の共通セットアップ
+	for e in all_enemies:
+		# グループ追加
+		e.add_to_group("enemies")
+
+		# 武器装備（攻撃させない）
+		if e.has_method("set_weapon"):
+			e.set_weapon(CharacterSetup.WeaponId.AK47)
+		var e_combat = e.get_node_or_null("CombatComponent")
+		if e_combat:
+			e_combat.auto_attack = false
+
+		# HP設定
+		e.health = 250.0
+
+		# 死亡シグナル接続
+		if e.has_signal("died"):
+			e.died.connect(_on_enemy_died)
 
 	# プレイヤーに武器を装備
 	if player.has_method("set_weapon"):
 		player.set_weapon(CharacterSetup.WeaponId.AK47)
 
-	# 敵に武器を装備（攻撃させない）
-	if enemy.has_method("set_weapon"):
-		enemy.set_weapon(CharacterSetup.WeaponId.AK47)
-	var enemy_combat = enemy.get_node_or_null("CombatComponent")
-	if enemy_combat:
-		enemy_combat.auto_attack = false  # リロード確認のため敵は攻撃しない
-
-	# 敵のHPを1回リロード後に死亡する程度に設定
-	# マガジン5発 × 2回 = 10発、AK47ダメージ36、命中率85%
-	# 期待ダメージ: 10 × 36 × 0.85 ≈ 306
-	enemy.health = 250.0
-
 	# 死亡シグナルを接続
 	if player.has_signal("died"):
 		player.died.connect(_on_player_died)
-	if enemy.has_signal("died"):
-		enemy.died.connect(_on_enemy_died)
 
 	# CombatComponentを取得
 	combat_component = player.get_node_or_null("CombatComponent")
@@ -60,9 +70,11 @@ func _ready() -> void:
 	if orbit_camera and orbit_camera.has_method("set_target"):
 		orbit_camera.set_target(player)
 
-	print("[TestCombatReload] Test scene ready")
+	print("[TestCombatReload] Test scene ready (Upper body aiming test)")
 	print("  Player position: %s" % player.global_position)
-	print("  Enemy position: %s" % enemy.global_position)
+	print("  Enemy (front): %s" % enemy.global_position)
+	print("  Enemy (left):  %s" % enemy_left.global_position)
+	print("  Enemy (right): %s" % enemy_right.global_position)
 	print("  Test ammo: 5 rounds (for quick reload test)")
 
 
@@ -111,12 +123,20 @@ func _update_ui() -> void:
 	if combat_component.current_target:
 		target_text = "\nTarget: %s" % combat_component.current_target.name
 
+	# エイミング角度を表示（公開API使用）
+	var aim_text = ""
+	if player.has_method("get_aim_rotation_degrees"):
+		var aim_deg = player.get_aim_rotation_degrees()
+		aim_text = "\nAim Angle: %.1f°" % aim_deg
+
 	var player_health_text = ""
 	if player and player.has_method("get_health"):
 		player_health_text = "\nPlayer HP: %.0f" % player.get_health()
 
-	var enemy_health_text = ""
-	if enemy and enemy.has_method("get_health"):
-		enemy_health_text = "\nEnemy HP: %.0f" % enemy.get_health()
+	# 全敵のHPを表示
+	var enemies_health_text = ""
+	for e in all_enemies:
+		if is_instance_valid(e) and e.has_method("get_health"):
+			enemies_health_text += "\n%s HP: %.0f" % [e.name, e.get_health()]
 
-	ui_label.text = ammo_text + state_text + target_text + player_health_text + enemy_health_text
+	ui_label.text = ammo_text + state_text + target_text + aim_text + player_health_text + enemies_health_text

@@ -462,3 +462,8 @@ func _finish_reload() -> void:
 	ammo_changed.emit(current_ammo, max_ammo)
 	reload_completed.emit()
 	print("[CombatComponent] %s reload completed, ammo=%d/%d" % [character.name, current_ammo, max_ammo])
+
+
+## 現在のターゲットを取得（CharacterBaseから参照用）
+func get_current_target() -> Node3D:
+	return current_target

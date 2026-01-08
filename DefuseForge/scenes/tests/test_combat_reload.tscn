@@ -51,6 +51,34 @@ shape = SubResource("CapsuleShape3D_char")
 [node name="CombatComponent" type="Node" parent="Enemy"]
 script = ExtResource("5_combat_component")
 
+[node name="EnemyLeft" type="CharacterBody3D" parent="." groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -4)
+collision_mask = 3
+script = ExtResource("4_character_base")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EnemyLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+shape = SubResource("CapsuleShape3D_char")
+
+[node name="CharacterModel" parent="EnemyLeft" instance=ExtResource("3_character")]
+
+[node name="CombatComponent" type="Node" parent="EnemyLeft"]
+script = ExtResource("5_combat_component")
+
+[node name="EnemyRight" type="CharacterBody3D" parent="." groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -4)
+collision_mask = 3
+script = ExtResource("4_character_base")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EnemyRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+shape = SubResource("CapsuleShape3D_char")
+
+[node name="CharacterModel" parent="EnemyRight" instance=ExtResource("3_character")]
+
+[node name="CombatComponent" type="Node" parent="EnemyRight"]
+script = ExtResource("5_combat_component")
+
 [node name="OrbitCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 3, 6)
 fov = 50.0

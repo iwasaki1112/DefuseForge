@@ -31,6 +31,11 @@ var run_speed: float = 6.0
 @export_group("物理設定")
 @export var gravity_value: float = -20.0
 
+@export_group("上半身エイミング")
+@export var upper_body_aim_enabled: bool = true  ## 上半身エイミングを有効にするか
+@export var aim_rotation_speed: float = 10.0  ## エイミング回転補間速度
+@export_range(0, 180, 1) var aim_max_angle_deg: float = 90.0  ## 最大回転角度（度）
+
 # 物理状態
 var vertical_velocity: float = 0.0
 
@@ -78,6 +83,11 @@ var _left_hand_ik_rotation: Vector3 = Vector3.ZERO
 var _weapon_resource: Resource = null  # WeaponResource
 var _ik_interpolation_tween: Tween = null  # IK補間用Tween
 
+# 上半身エイミング（内部状態）
+var _aim_spine_bone_idx: int = -1  # mixamorig_Spine1 のインデックス
+var _current_aim_rotation: float = 0.0  # 現在のエイミング角度（ラジアン）
+var _target_aim_rotation: float = 0.0  # 目標エイミング角度（ラジアン）
+
 # キャラクターリソース（武器オフセット等）
 var _character_resource: Resource = null  # CharacterResource
 var _weapon_position_offset: Vector3 = Vector3.ZERO  # キャラクター固有の武器位置オフセット
@@ -119,6 +129,9 @@ func _setup_character() -> void:
 			var y_offset = CharacterSetup.calculate_y_offset_from_skeleton(skeleton, model_scale, name)
 			if y_offset > 0:
 				model.position.y = y_offset
+
+			# エイミング用スパインボーンを検索
+			_find_aim_spine_bone()
 
 		# AnimationPlayerを取得してアニメーションをロード
 		anim_player = CharacterSetup.find_animation_player(model)
@@ -252,6 +265,9 @@ func _physics_process(delta: float) -> void:
 
 	# 射撃ブレンドを更新
 	_update_shooting_blend(delta)
+
+	# 上半身エイミングを更新
+	_update_upper_body_aim(delta)
 
 	# 左手IKターゲットを更新
 	_update_left_hand_ik_target()
@@ -387,6 +403,145 @@ func set_shooting(shooting: bool) -> void:
 	is_shooting = shooting
 	# 武器位置を更新（射撃状態に応じて位置が変わる場合があるため）
 	_update_weapon_position()
+
+
+## エイミング用スパインボーンを検索
+## mixamorig_Spine1 を使用（胸レベル、上半身回転に最適）
+func _find_aim_spine_bone() -> void:
+	if not skeleton:
+		return
+
+	var spine_names := ["mixamorig_Spine1", "mixamorig_Spine2", "mixamorig_Spine",
+						"Spine1", "Spine2", "Spine"]
+
+	for bone_name in spine_names:
+		var idx := skeleton.find_bone(bone_name)
+		if idx >= 0:
+			_aim_spine_bone_idx = idx
+			print("[CharacterBase] Found aim spine bone: %s (index: %d)" % [bone_name, idx])
+			return
+
+	push_warning("[CharacterBase] Aim spine bone not found")
+
+
+## 上半身エイミングの目標角度を計算
+func _update_upper_body_aim(delta: float) -> void:
+	# エイミング無効 or 射撃中でない or 走行中 → エイミング解除
+	if not upper_body_aim_enabled or not is_shooting or is_running:
+		_target_aim_rotation = 0.0
+		_current_aim_rotation = move_toward(_current_aim_rotation, 0.0, aim_rotation_speed * delta)
+		return
+
+	# CombatComponentからターゲットを取得
+	var combat = get_node_or_null("CombatComponent")
+	if not combat or not combat.has_method("get_current_target"):
+		_target_aim_rotation = 0.0
+		_current_aim_rotation = move_toward(_current_aim_rotation, 0.0, aim_rotation_speed * delta)
+		return
+
+	var target: Node3D = combat.get_current_target()
+	if not is_instance_valid(target):
+		_target_aim_rotation = 0.0
+		_current_aim_rotation = move_toward(_current_aim_rotation, 0.0, aim_rotation_speed * delta)
+		return
+
+	# ターゲット方向を計算（XZ平面上）
+	var to_target := target.global_position - global_position
+	to_target.y = 0
+
+	if to_target.length_squared() < 0.01:
+		_target_aim_rotation = 0.0
+		_current_aim_rotation = move_toward(_current_aim_rotation, 0.0, aim_rotation_speed * delta)
+		return
+
+	to_target = to_target.normalized()
+
+	# キャラクターの前方向（-Z軸、rotation.yを考慮）
+	var forward := Vector3(sin(rotation.y), 0, cos(rotation.y))
+
+	# 前方向とターゲット方向の角度差を計算（符号付き）
+	# cross product の Y 成分で符号を決定
+	var cross := forward.cross(to_target)
+	var dot := forward.dot(to_target)
+	var angle := atan2(cross.y, dot)
+
+	# 角度を制限
+	var max_angle_rad := deg_to_rad(aim_max_angle_deg)
+	_target_aim_rotation = clampf(angle, -max_angle_rad, max_angle_rad)
+
+	# 現在の角度を目標に向かって補間
+	_current_aim_rotation = lerp_angle(_current_aim_rotation, _target_aim_rotation, aim_rotation_speed * delta)
+
+
+## 上半身エイミング回転をボーンに適用
+## AnimationTree更新後に呼ばれる必要があるため、_process()で実行
+func _apply_upper_body_aim_rotation() -> void:
+	if not skeleton or _aim_spine_bone_idx < 0:
+		return
+
+	# 以前のオーバーライドをクリア
+	skeleton.clear_bones_global_pose_override()
+
+	# 回転が小さい場合はスキップ
+	if abs(_current_aim_rotation) < 0.01:
+		return
+
+	# 現在のボーングローバルトランスフォームを取得（アニメーションから）
+	var bone_global_transform := skeleton.get_bone_global_pose(_aim_spine_bone_idx)
+
+	# Y軸周りの回転を作成（水平方向のエイミング）
+	var aim_rotation := Quaternion(Vector3.UP, _current_aim_rotation)
+	var aim_basis := Basis(aim_rotation)
+
+	# ボーンの現在のbasisに回転を合成
+	var new_transform := Transform3D(bone_global_transform.basis * aim_basis, bone_global_transform.origin)
+
+	# ボーンのグローバルポーズをオーバーライド（amount=1.0で完全オーバーライド）
+	skeleton.set_bone_global_pose_override(_aim_spine_bone_idx, new_transform, 1.0, true)
+
+
+func _process(_delta: float) -> void:
+	_apply_upper_body_aim_rotation()
+
+
+# ========================================
+# 上半身エイミング 公開API
+# ========================================
+
+## 現在のエイミング角度を取得（ラジアン）
+func get_aim_rotation() -> float:
+	return _current_aim_rotation
+
+
+## 現在のエイミング角度を取得（度）
+func get_aim_rotation_degrees() -> float:
+	return rad_to_deg(_current_aim_rotation)
+
+
+## 目標エイミング角度を取得（ラジアン）
+func get_target_aim_rotation() -> float:
+	return _target_aim_rotation
+
+
+## 目標エイミング角度を取得（度）
+func get_target_aim_rotation_degrees() -> float:
+	return rad_to_deg(_target_aim_rotation)
+
+
+## 上半身エイミングの有効/無効を設定
+func set_upper_body_aim_enabled(enabled: bool) -> void:
+	upper_body_aim_enabled = enabled
+	if not enabled:
+		# 無効化時は即座にリセット
+		_current_aim_rotation = 0.0
+		_target_aim_rotation = 0.0
+		if skeleton and _aim_spine_bone_idx >= 0:
+			skeleton.clear_bones_global_pose_override()
+
+
+## 上半身エイミングが有効かどうかを取得
+func is_upper_body_aim_enabled() -> bool:
+	return upper_body_aim_enabled
 
 
 ## パス追従移動
