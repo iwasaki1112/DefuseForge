@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/tests/test_bot_on_map.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://dg2obkxmhp4v2" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
-[ext_resource type="PackedScene" uid="uid://doh1b0a6pmavp" path="res://assets/characters/counter_terrorist/counter_terrorist.glb" id="3_character"]
+[ext_resource type="PackedScene" path="res://assets/characters/vanguard/vanguard.glb" id="3_character"]
 [ext_resource type="PackedScene" path="res://resources/maps/map.glb" id="4_map"]
 
 [sub_resource type="Environment" id="Environment_1"]

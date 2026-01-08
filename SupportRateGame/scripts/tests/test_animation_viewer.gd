@@ -21,7 +21,7 @@ var bottom_panel: PanelContainer = null  # IK/オフセット調整
 # Character selection
 const CHARACTERS_DIR: String = "res://assets/characters/"
 var available_characters: Array[String] = []  # 利用可能なキャラクターIDリスト
-var current_character_id: String = "counter_terrorist"  # 現在選択中のキャラクターID
+var current_character_id: String = "vanguard"  # 現在選択中のキャラクターID
 var character_model: Node3D = null  # 現在のキャラクターモデルノード
 var character_option_button: OptionButton = null
 var character_resource: Resource = null  # キャラクターリソース (CharacterResource)

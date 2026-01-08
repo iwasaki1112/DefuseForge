@@ -10,8 +10,8 @@ extends Resource
 ## 3. 各パラメータを設定（特にweapon_offset）
 
 @export_group("基本情報")
-@export var character_id: String = ""  ## キャラクターの一意識別子（例: "counter_terrorist"）
-@export var character_name: String = ""  ## 表示名（例: "Counter Terrorist"）
+@export var character_id: String = ""  ## キャラクターの一意識別子（例: "vanguard"）
+@export var character_name: String = ""  ## 表示名（例: "Vanguard"）
 @export var model_path: String = ""  ## GLBモデルパス
 
 @export_group("武器装着位置調整")
