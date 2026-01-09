@@ -23,6 +23,12 @@ func _ready() -> void:
 	# 武器装備はCharacterAPIを使用
 	CharacterAPI.equip_weapon(bot, CharacterSetup.WeaponId.AK47)
 
+	# テストシーンでは直接AnimationPlayerを使用するためAnimationTreeを無効化
+	# これによりAnimationPlayerのブレンド機能が正しく動作する
+	bot.use_animation_tree = false
+	if bot.anim_tree:
+		bot.anim_tree.active = false
+
 	# CharacterBaseのシグナルに接続
 	bot.path_completed.connect(_on_bot_path_completed)
 	bot.waypoint_reached.connect(_on_bot_waypoint_reached)

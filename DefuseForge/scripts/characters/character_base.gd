@@ -45,6 +45,14 @@ var current_waypoint_index: int = 0
 var is_moving: bool = false
 var is_running: bool = false
 
+# 速度遷移（walk <-> sprint のスムーズな切り替え）
+var _current_speed: float = 0.0
+var _target_speed: float = 0.0
+var _speed_transition_timer: float = 0.0
+var _target_is_running: bool = false  # 目標の走行状態
+const SPEED_TRANSITION_TIME: float = 0.3  # ANIM_BLEND_TIMEと同期
+const ANIM_SWITCH_THRESHOLD: float = 0.5  # アニメーション切り替えのしきい値（遷移の50%で切り替え）
+
 # アクション状態管理
 var locomotion_state: int = ActionState.LocomotionState.IDLE
 var current_action: int = ActionState.ActionType.NONE
@@ -721,11 +729,44 @@ func _handle_path_movement(delta: float) -> void:
 	# パスがあるが移動していない場合、移動を開始
 	if not is_moving and waypoints.size() > 0 and current_waypoint_index < waypoints.size():
 		is_moving = true
+		# 最初のウェイポイントに応じて速度を初期化
+		var first_wp: Dictionary = waypoints[0]
+		var should_run: bool = first_wp.get("run", false)
+		is_running = should_run
+		_target_is_running = should_run
+		_target_speed = run_speed if should_run else walk_speed
+		_current_speed = _target_speed
+		_speed_transition_timer = SPEED_TRANSITION_TIME
 
 	if is_moving and waypoints.size() > 0 and current_waypoint_index < waypoints.size():
 		var waypoint: Dictionary = waypoints[current_waypoint_index]
 		var target: Vector3 = waypoint.position
-		is_running = waypoint.run
+		var should_run: bool = waypoint.get("run", false)
+
+		# 目標速度を決定（変更があれば遷移開始）
+		var new_target_speed := run_speed if should_run else walk_speed
+		if not is_equal_approx(new_target_speed, _target_speed):
+			print("[CharacterBase] Speed transition started: %s -> %s (run: %s -> %s)" % [
+				_target_speed, new_target_speed, is_running, should_run])
+			_target_speed = new_target_speed
+			_speed_transition_timer = 0.0
+			_target_is_running = should_run
+			# is_running はまだ更新しない（遷移途中で更新する）
+
+		# 速度を線形補間（アニメーションブレンド時間と同期）
+		if _speed_transition_timer < SPEED_TRANSITION_TIME:
+			_speed_transition_timer += delta
+			var t := clampf(_speed_transition_timer / SPEED_TRANSITION_TIME, 0.0, 1.0)
+			_current_speed = lerpf(_current_speed, _target_speed, t)
+
+			# 遷移がしきい値を超えたらアニメーションを切り替え
+			if t >= ANIM_SWITCH_THRESHOLD and is_running != _target_is_running:
+				print("[CharacterBase] Animation switch at t=%.2f: is_running %s -> %s" % [t, is_running, _target_is_running])
+				is_running = _target_is_running
+		else:
+			_current_speed = _target_speed
+			is_running = _target_is_running
+
 		# locomotion_state を同期
 		if is_running:
 			set_locomotion_state(ActionState.LocomotionState.SPRINT)
@@ -749,11 +790,10 @@ func _handle_path_movement(delta: float) -> void:
 			var target_rotation := atan2(direction.x, direction.z)
 			rotation.y = lerp_angle(rotation.y, target_rotation, rotation_speed * delta)
 
-		# 移動
-		var speed := run_speed if is_running else walk_speed
+		# 移動（補間された速度を使用）
 		var move_dir := direction.normalized()
-		velocity.x = move_dir.x * speed
-		velocity.z = move_dir.z * speed
+		velocity.x = move_dir.x * _current_speed
+		velocity.z = move_dir.z * _current_speed
 	else:
 		velocity.x = 0
 		velocity.z = 0
@@ -782,8 +822,12 @@ func set_path(new_waypoints: Array) -> void:
 func _stop_moving() -> void:
 	is_moving = false
 	is_running = false
+	_target_is_running = false
 	waypoints.clear()
 	current_waypoint_index = 0
+	_current_speed = 0.0
+	_target_speed = 0.0
+	_speed_transition_timer = 0.0
 	set_locomotion_state(ActionState.LocomotionState.IDLE)
 
 
@@ -835,6 +879,8 @@ func _update_animation() -> void:
 		new_state = 0
 
 	if new_state != current_move_state:
+		print("[CharacterBase] _update_animation: state change %d -> %d (is_moving=%s, is_running=%s)" % [
+			current_move_state, new_state, is_moving, is_running])
 		current_move_state = new_state
 		_play_current_animation()
 
@@ -869,22 +915,54 @@ func _play_current_animation() -> void:
 					anim_name = CharacterSetup.get_animation_name("walking", fallback_type)
 
 	if anim_player.has_animation(anim_name):
-		# AnimationTreeを再有効化（アクション後に無効化されている場合）
-		# use_animation_tree=falseの場合は再有効化しない
-		if use_animation_tree and anim_tree and not anim_tree.active and anim_blend_tree:
-			anim_tree.active = true
+		print("[CharacterBase] _play_current_animation: %s (use_tree=%s, tree_active=%s)" % [
+			anim_name, use_animation_tree, anim_tree.active if anim_tree else "null"])
 
-		# AnimationTreeが有効な場合は、locomotionノードのアニメーションを更新
+		# AnimationTreeが有効な場合、一時的に無効化してブレンド再生
 		if use_animation_tree and anim_tree and anim_tree.active and anim_blend_tree:
-			var locomotion_node = anim_blend_tree.get_node("locomotion") as AnimationNodeAnimation
-			if locomotion_node:
-				locomotion_node.animation = anim_name
+			print("[CharacterBase]   -> Disabling AnimationTree, playing with blend %.2f" % ANIM_BLEND_TIME)
+			# AnimationTreeを一時的に無効化（AnimationPlayerがブレンドを処理できるように）
+			anim_tree.active = false
+
+			# AnimationPlayerでブレンド再生
+			anim_player.play(anim_name, ANIM_BLEND_TIME)
+
+			# ブレンド完了後にAnimationTreeを再有効化
+			_schedule_animation_tree_reactivation(anim_name)
 		else:
+			print("[CharacterBase]   -> Playing directly with blend %.2f (tree_active=%s)" % [
+				ANIM_BLEND_TIME, anim_tree.active if anim_tree else "null"])
 			# AnimationTreeが無効な場合はAnimationPlayerを直接使用
 			anim_player.play(anim_name, ANIM_BLEND_TIME)
 
 		# IK状態を更新（移動アニメーションではIKを再有効化）
 		_update_left_hand_ik_enabled(anim_name)
+
+
+## AnimationTreeブレンド完了後に再有効化をスケジュール
+var _animation_tree_reactivation_tween: Tween = null
+
+func _schedule_animation_tree_reactivation(anim_name: String) -> void:
+	# 既存のTweenをキャンセル
+	if _animation_tree_reactivation_tween and _animation_tree_reactivation_tween.is_valid():
+		_animation_tree_reactivation_tween.kill()
+
+	# ブレンド時間後にAnimationTreeを再有効化
+	_animation_tree_reactivation_tween = create_tween()
+	_animation_tree_reactivation_tween.tween_callback(_reactivate_animation_tree.bind(anim_name)).set_delay(ANIM_BLEND_TIME)
+
+
+func _reactivate_animation_tree(anim_name: String) -> void:
+	if not use_animation_tree or not anim_tree or not anim_blend_tree:
+		return
+
+	# locomotionノードのアニメーションを更新
+	var locomotion_node = anim_blend_tree.get_node("locomotion") as AnimationNodeAnimation
+	if locomotion_node:
+		locomotion_node.animation = anim_name
+
+	# AnimationTreeを再有効化
+	anim_tree.active = true
 
 	# 武器位置を更新
 	_update_weapon_position()
