@@ -1,5 +1,6 @@
 extends Node3D
 ## Test scene: Bot on map with rifle_idle animation + Path Drawing
+## CharacterBase APIを使用したパス追従移動テスト
 
 const TestPathManagerClass = preload("res://scripts/tests/test_path_manager.gd")
 
@@ -7,50 +8,24 @@ const TestPathManagerClass = preload("res://scripts/tests/test_path_manager.gd")
 @onready var camera: Camera3D = $OrbitCamera
 @onready var map_node: Node3D = $Map
 
-const GRAVITY: float = 9.8
-
 # カメラ移動
 const CAMERA_MOVE_SPEED: float = 10.0
 var camera_target_pos: Vector3 = Vector3.ZERO
 
-
 # パス描画
 var path_manager: Node3D = null
 
-# ボット移動
-var current_waypoints: Array = []
-var current_waypoint_index: int = 0
-# is_moving/is_runningはbot（CharacterBase）の変数を直接使用
-const WALK_SPEED: float = 3.0
-const RUN_SPEED: float = 6.0
-const ARRIVAL_THRESHOLD: float = 0.3
-const ROTATION_SPEED: float = 10.0  # 回転速度（ラジアン/秒）
-const ANIMATION_BLEND_TIME: float = 0.25  # アニメーションブレンド時間（秒）
-var current_speed: float = 0.0  # 現在の移動速度
-var target_speed: float = 0.0  # 目標移動速度
-var speed_transition_timer: float = 0.0  # 速度遷移タイマー
-var speed_transition_start: float = 0.0  # 速度遷移開始時の速度
-
-# アニメーション基準速度（アニメーションが自然に見える移動速度）
-const ANIM_WALK_BASE_SPEED: float = 3.0  # walkアニメーションの基準速度
-const ANIM_RUN_BASE_SPEED: float = 6.0   # sprintアニメーションの基準速度
-
-# スタック検出
-const STUCK_TIME_THRESHOLD: float = 0.5  # この時間進めなかったらスタックと判定
-const STUCK_DISTANCE_THRESHOLD: float = 0.1  # この距離以下の移動はスタックと判定
-var stuck_timer: float = 0.0
-var last_position: Vector3 = Vector3.ZERO
 
 func _ready() -> void:
 	_apply_ct_spawn_position()
+
 	# CharacterBase._ready()でキャラクターセットアップが自動実行される
 	# 武器装備はCharacterAPIを使用
 	CharacterAPI.equip_weapon(bot, CharacterSetup.WeaponId.AK47)
 
-	# テストシーンでは直接AnimationPlayerを使用するためAnimationTreeを無効化
-	bot.use_animation_tree = false
-	if bot.anim_tree:
-		bot.anim_tree.active = false
+	# CharacterBaseのシグナルに接続
+	bot.path_completed.connect(_on_bot_path_completed)
+	bot.waypoint_reached.connect(_on_bot_waypoint_reached)
 
 	_generate_map_collisions()
 	# コリジョン生成完了後にパスシステムをセットアップ
@@ -162,22 +137,6 @@ func _setup_camera() -> void:
 
 func _process(delta: float) -> void:
 	_handle_camera_movement(delta)
-	_update_animation_speed()
-
-
-func _physics_process(delta: float) -> void:
-	if bot:
-		# 重力
-		if not bot.is_on_floor():
-			bot.velocity.y -= GRAVITY * delta
-		else:
-			bot.velocity.y = 0
-
-		# パス追従移動
-		if bot.is_moving and current_waypoints.size() > 0:
-			_move_along_path(delta)
-
-		bot.move_and_slide()
 
 
 ## パスシステムをセットアップ
@@ -203,179 +162,26 @@ func _setup_path_system() -> void:
 func _on_path_confirmed(waypoints: Array) -> void:
 	print("[TestBotOnMap] Path confirmed with %d waypoints" % waypoints.size())
 
-	current_waypoints = waypoints
-	current_waypoint_index = 0
-
-	# スタック検出をリセット
-	stuck_timer = 0.0
-	last_position = bot.global_position
-
-	if current_waypoints.size() > 0:
-		bot.is_moving = true
-		# 最初のウェイポイントに応じて初期速度とアニメーションを設定
-		var first_waypoint = current_waypoints[0]
-		var should_run: bool = first_waypoint.get("run", false)
-		bot.is_running = should_run
-		# 速度を即座に設定（開始時は遷移なし）
-		target_speed = RUN_SPEED if should_run else WALK_SPEED
-		current_speed = target_speed
-		speed_transition_timer = ANIMATION_BLEND_TIME  # 遷移完了状態
-		speed_transition_start = target_speed
-		# CharacterBase._update_animation()が自動でアニメーションを更新する
+	# CharacterBase APIを使用してパスを設定
+	# CharacterBaseが自動的にパス追従移動を処理する
+	bot.set_path(waypoints)
 
 
 ## パスクリア時のコールバック
 func _on_path_cleared() -> void:
 	print("[TestBotOnMap] Path cleared")
-	current_waypoints.clear()
-	current_waypoint_index = 0
-	bot.is_moving = false
-	bot.is_running = false
-	# CharacterBase._update_animation()が自動でidleに戻す
+	# CharacterBase APIを使用して移動を停止
+	bot.stop()
 
 
-## パスに沿って移動
-func _move_along_path(delta: float) -> void:
-	if current_waypoint_index >= current_waypoints.size():
-		_on_path_complete()
-		return
-
-	var waypoint = current_waypoints[current_waypoint_index]
-	var target_pos: Vector3 = waypoint["position"]
-	var should_run: bool = waypoint.get("run", false)
-
-	# 目標への方向
-	var direction := target_pos - bot.global_position
-	direction.y = 0  # Y軸は無視
-	var distance := direction.length()
-
-	# 到着判定
-	if distance < ARRIVAL_THRESHOLD:
-		_advance_to_next_waypoint(should_run)
-		return
-
-	# スタック検出
-	if _check_stuck(delta):
-		print("[TestBotOnMap] Stuck detected, skipping to next waypoint")
-		_advance_to_next_waypoint(should_run)
-		return
-
-	# 目標速度を決定し、アニメーションブレンドと同じ時間で遷移
-	var new_target_speed := RUN_SPEED if should_run else WALK_SPEED
-	if new_target_speed != target_speed:
-		# 目標速度が変わったら遷移開始
-		speed_transition_start = current_speed
-		target_speed = new_target_speed
-		speed_transition_timer = 0.0
-		# CharacterBaseの状態を更新
-		bot.is_running = should_run
-
-	# 速度を線形補間（アニメーションブレンド時間と同期）
-	if speed_transition_timer < ANIMATION_BLEND_TIME:
-		speed_transition_timer += delta
-		var t := clampf(speed_transition_timer / ANIMATION_BLEND_TIME, 0.0, 1.0)
-		current_speed = lerpf(speed_transition_start, target_speed, t)
-	else:
-		current_speed = target_speed
-
-	# 向きをスムーズに更新
-	if direction.length() > 0.01:
-		# 目標角度を計算（atan2でXZ平面上の角度を取得）
-		var target_angle := atan2(direction.x, direction.z)
-		# 現在の角度から目標角度へスムーズに補間
-		bot.rotation.y = lerp_angle(bot.rotation.y, target_angle, ROTATION_SPEED * delta)
-
-	# 移動
-	direction = direction.normalized()
-	bot.velocity.x = direction.x * current_speed
-	bot.velocity.z = direction.z * current_speed
+## CharacterBase: パス完了時のコールバック
+func _on_bot_path_completed() -> void:
+	print("[TestBotOnMap] Bot path complete")
 
 
-## スタック検出
-func _check_stuck(delta: float) -> bool:
-	var current_pos := bot.global_position
-	current_pos.y = 0  # Y軸は無視
-
-	var last_pos_flat := last_position
-	last_pos_flat.y = 0
-
-	var moved_distance := current_pos.distance_to(last_pos_flat)
-
-	if moved_distance < STUCK_DISTANCE_THRESHOLD:
-		stuck_timer += delta
-		if stuck_timer >= STUCK_TIME_THRESHOLD:
-			stuck_timer = 0.0
-			last_position = bot.global_position
-			return true
-	else:
-		stuck_timer = 0.0
-		last_position = bot.global_position
-
-	return false
-
-
-## 次のウェイポイントに進む
-func _advance_to_next_waypoint(current_should_run: bool) -> void:
-	current_waypoint_index += 1
-	stuck_timer = 0.0
-	last_position = bot.global_position
-
-	if current_waypoint_index < current_waypoints.size():
-		# 次のウェイポイントの走行状態を設定
-		var next_waypoint = current_waypoints[current_waypoint_index]
-		var next_run: bool = next_waypoint.get("run", false)
-		if next_run != current_should_run:
-			# CharacterBaseの状態を更新（アニメーションは自動更新される）
-			bot.is_running = next_run
-
-
-## パス完了
-func _on_path_complete() -> void:
-	bot.is_moving = false
-	bot.is_running = false
-	current_waypoints.clear()
-	current_waypoint_index = 0
-	current_speed = 0.0
-	target_speed = 0.0
-	speed_transition_timer = 0.0
-	speed_transition_start = 0.0
-	bot.velocity.x = 0
-	bot.velocity.z = 0
-	# CharacterBase._update_animation()が自動でidleに戻す
-	print("[TestBotOnMap] Path complete")
-
-
-## アニメーション再生速度を移動速度に合わせて調整
-func _update_animation_speed() -> void:
-	if not bot.anim_player or not bot.is_moving:
-		if bot.anim_player:
-			bot.anim_player.speed_scale = 1.0
-		return
-
-	var current_anim = bot.anim_player.current_animation
-	if current_anim.is_empty():
-		return
-
-	# 現在のアニメーションに応じて基準速度を決定
-	var base_speed: float = ANIM_WALK_BASE_SPEED
-	if current_anim == "running_rifle" or current_anim == "Rifle_SprintLoop":
-		base_speed = ANIM_RUN_BASE_SPEED
-	elif current_anim == "walking_rifle" or current_anim == "Rifle_WalkFwdLoop":
-		base_speed = ANIM_WALK_BASE_SPEED
-	else:
-		# idle等の場合は速度調整しない
-		bot.anim_player.speed_scale = 1.0
-		return
-
-	# 移動速度に応じてアニメーション速度をスケール
-	if base_speed > 0:
-		var speed_scale = current_speed / base_speed
-		# 極端な値を防ぐためクランプ
-		bot.anim_player.speed_scale = clampf(speed_scale, 0.5, 2.0)
-
-
-## 以下の手動アニメーション関数は不要（CharacterBase._update_animation()が自動処理）
-## 後方互換性のため残すがCharacterBaseのis_moving/is_runningを使用すること
+## CharacterBase: ウェイポイント到達時のコールバック
+func _on_bot_waypoint_reached(index: int) -> void:
+	print("[TestBotOnMap] Bot reached waypoint %d" % index)
 
 
 ## WASDでカメラを移動
@@ -447,5 +253,3 @@ func _print_map_children(node: Node, depth: int) -> void:
 	if depth < 3:
 		for child in node.get_children():
 			_print_map_children(child, depth + 1)
-
-
