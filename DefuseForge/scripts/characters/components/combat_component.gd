@@ -22,6 +22,8 @@ enum HitZone { MISS, BODY, HEAD }
 @export var auto_attack: bool = true  # 自動攻撃を有効にするか
 @export var headshot_chance: float = 0.15  # ヘッドショット確率（命中時）
 @export var walking_accuracy_modifier: float = 0.7  # 歩行中の命中率倍率
+@export var face_target_speed: float = 8.0  # ターゲットに向かう回転速度
+@export var min_facing_angle: float = 30.0  # この角度以内なら射撃可能（度）
 
 # 親キャラクター参照
 var character: CharacterBody3D = null
@@ -93,6 +95,10 @@ func _process(delta: float) -> void:
 	# ターゲット更新
 	_update_target()
 
+	# ターゲットがいる場合、その方向を向く
+	if current_target and is_instance_valid(current_target):
+		_rotate_toward_target(delta)
+
 	# アクション状態に基づく射撃可否チェック
 	if character.has_method("can_shoot") and not character.can_shoot():
 		return
@@ -104,6 +110,10 @@ func _process(delta: float) -> void:
 	# 弾切れチェック → 自動リロード
 	if current_ammo <= 0 and max_ammo > 0:
 		_start_reload()
+		return
+
+	# ターゲットの方向を向いていなければ射撃しない
+	if current_target and not _is_facing_target():
 		return
 
 	# 攻撃実行
@@ -119,6 +129,52 @@ func _update_shooting_state(delta: float) -> void:
 			# タイマー終了、射撃状態を解除
 			if character.has_method("set_shooting"):
 				character.set_shooting(false)
+
+
+## ターゲットの方向に回転
+func _rotate_toward_target(delta: float) -> void:
+	if not current_target or not is_instance_valid(current_target):
+		return
+
+	# ターゲットへの方向を計算（XZ平面上）
+	var to_target := current_target.global_position - character.global_position
+	to_target.y = 0
+
+	if to_target.length_squared() < 0.01:
+		return
+
+	# 目標回転角度を計算
+	var target_angle := atan2(to_target.x, to_target.z)
+
+	# 現在の回転角度から目標角度へ補間
+	character.rotation.y = lerp_angle(character.rotation.y, target_angle, face_target_speed * delta)
+
+
+## ターゲットの方向を向いているかチェック
+func _is_facing_target() -> bool:
+	if not current_target or not is_instance_valid(current_target):
+		return false
+
+	# ターゲットへの方向を計算
+	var to_target := current_target.global_position - character.global_position
+	to_target.y = 0
+
+	if to_target.length_squared() < 0.01:
+		return true
+
+	to_target = to_target.normalized()
+
+	# キャラクターの前方向（+Z）
+	var forward := character.global_transform.basis.z
+	forward.y = 0
+	forward = forward.normalized()
+
+	# 角度差を計算
+	var dot := forward.dot(to_target)
+	var angle_rad := acos(clampf(dot, -1.0, 1.0))
+	var angle_deg := rad_to_deg(angle_rad)
+
+	return angle_deg <= min_facing_angle
 
 
 ## 現在攻撃可能かどうか
@@ -294,6 +350,10 @@ func _execute_attack() -> void:
 	_shooting_state_timer = SHOOTING_STATE_DURATION
 	if character.has_method("set_shooting"):
 		character.set_shooting(true)
+
+	# リコイル適用
+	if character.has_method("apply_recoil"):
+		character.apply_recoil(1.0)
 
 	# マズルフラッシュを表示
 	_show_muzzle_flash()

@@ -12,7 +12,8 @@ static var _initialized: bool = false
 const WEAPON_PATHS := {
 	CharacterSetup.WeaponId.NONE: "",
 	CharacterSetup.WeaponId.AK47: "res://resources/weapons/ak47/ak47.tres",
-	CharacterSetup.WeaponId.USP: "res://resources/weapons/usp/usp.tres"
+	CharacterSetup.WeaponId.USP: "res://resources/weapons/usp/usp.tres",
+	CharacterSetup.WeaponId.M4A1: "res://resources/weapons/m4a1/m4a1.tres"
 }
 
 

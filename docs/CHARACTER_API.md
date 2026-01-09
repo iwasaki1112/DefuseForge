@@ -1012,6 +1012,55 @@ func setup_player(player: CharacterBase) -> void:
 
 ---
 
+## リコイルAPI
+
+射撃時のリコイル（反動）エフェクトを制御します。CombatComponentを使用している場合、リコイルは射撃時に自動的に適用されます。
+
+### apply_recoil
+リコイルを適用します。武器のキックバックと右腕の反動を同時に処理します。
+
+```gdscript
+# 通常のリコイル
+character.apply_recoil(1.0)
+
+# 軽いリコイル
+character.apply_recoil(0.5)
+```
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| intensity | float | リコイル強度（0.0-1.0）デフォルト: 1.0 |
+
+**戻り値:** `void`
+
+**処理内容:**
+- 武器モデルのキックバック（Z方向オフセット + 回転）
+- 右腕ボーンの反動回転
+- 自動的にスムーズに元の位置へ復帰
+
+### リコイル定数
+
+CharacterBaseで定義されているリコイル関連の定数:
+
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| `RECOIL_KICKBACK` | 0.02 | 武器のZ方向キックバック量 |
+| `RECOIL_ROTATION` | Vector3(-5, 0, 0) | 武器の回転（度） |
+| `ARM_RECOIL_ANGLE` | 8.0 | 右腕の反動角度（度） |
+| `RECOIL_RECOVERY_SPEED` | 10.0 | 元の位置への復帰速度 |
+
+### 自動リコイル
+
+CombatComponentを使用している場合、以下のタイミングでリコイルが自動適用されます:
+
+1. `_execute_attack()` で弾を発射した時
+2. `character.apply_recoil(1.0)` が内部で呼ばれる
+3. 毎フレーム `_recover_weapon_recoil()` でスムーズに復帰
+
+手動でリコイルを制御したい場合は、CombatComponentのauto_attackをfalseにして直接`apply_recoil()`を呼び出してください。
+
+---
+
 ## 関連ファイル
 
 | ファイル | 説明 |

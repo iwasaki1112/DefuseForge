@@ -58,6 +58,7 @@ var current_move_state: int = -1  # -1: uninitialized, 0: idle, 1: walk, 2: run
 var current_weapon_type: int = CharacterSetup.WeaponType.NONE
 var current_weapon_id: int = CharacterSetup.WeaponId.NONE
 const ANIM_BLEND_TIME: float = 0.3
+var use_animation_tree: bool = true  # falseにするとAnimationPlayerを直接使用（テスト用）
 
 # 射撃状態（上半身ブレンド用）
 var is_shooting: bool = false
@@ -84,14 +85,28 @@ var _weapon_resource: Resource = null  # WeaponResource
 var _ik_interpolation_tween: Tween = null  # IK補間用Tween
 
 # 上半身エイミング（内部状態）
-var _aim_spine_bone_idx: int = -1  # mixamorig_Spine1 のインデックス
+var _aim_spine_bone_idx: int = -1  # mixamorig_Spine2 のインデックス（リコイル用）
 var _current_aim_rotation: float = 0.0  # 現在のエイミング角度（ラジアン）
 var _target_aim_rotation: float = 0.0  # 目標エイミング角度（ラジアン）
+
+# 外部制御用（test_animation_viewer等）
+var _external_twist_degrees: float = 0.0  # 外部からの上半身ツイスト（度）
+
+# 武器リコイル（武器モデル + 右腕を動かす方式）
+var _weapon_recoil_offset: Vector3 = Vector3.ZERO  # 現在のリコイルオフセット（位置）
+var _weapon_recoil_rotation: Vector3 = Vector3.ZERO  # 現在のリコイル回転（度）
+var _arm_recoil_amount: float = 0.0  # 右腕リコイル量 (0.0-1.0)
+var _right_arm_bone_idx: int = -1  # 右腕ボーンインデックス
+const RECOIL_KICKBACK: float = 0.02  # キックバック量（Z方向）
+const RECOIL_ROTATION: Vector3 = Vector3(-5.0, 0.0, 0.0)  # 武器キック回転
+const ARM_RECOIL_ANGLE: float = 8.0  # 右腕リコイル角度（度）
+const RECOIL_RECOVERY_SPEED: float = 10.0  # 復帰速度
 
 # キャラクターリソース（武器オフセット等）
 var _character_resource: Resource = null  # CharacterResource
 var _weapon_position_offset: Vector3 = Vector3.ZERO  # キャラクター固有の武器位置オフセット
 var _weapon_rotation_offset: Vector3 = Vector3.ZERO  # キャラクター固有の武器回転オフセット
+var _explicit_character_id: String = ""  # 明示的に設定されたキャラクターID（動的ロード用）
 
 # ステータス
 var health: float = 100.0
@@ -132,6 +147,11 @@ func _setup_character() -> void:
 
 			# エイミング用スパインボーンを検索
 			_find_aim_spine_bone()
+			# 右腕ボーンを検索（リコイル用）
+			_find_right_arm_bone()
+			# skeleton_updatedシグナルに接続（ボーンオーバーライド用）
+			if not skeleton.skeleton_updated.is_connected(_on_skeleton_updated):
+				skeleton.skeleton_updated.connect(_on_skeleton_updated)
 
 		# AnimationPlayerを取得してアニメーションをロード
 		anim_player = CharacterSetup.find_animation_player(model)
@@ -406,13 +426,13 @@ func set_shooting(shooting: bool) -> void:
 
 
 ## エイミング用スパインボーンを検索
-## mixamorig_Spine1 を使用（胸レベル、上半身回転に最適）
+## mixamorig_Spine2 を使用（胸上部、リコイルに最適）
 func _find_aim_spine_bone() -> void:
 	if not skeleton:
 		return
 
-	var spine_names := ["mixamorig_Spine1", "mixamorig_Spine2", "mixamorig_Spine",
-						"Spine1", "Spine2", "Spine"]
+	var spine_names := ["mixamorig_Spine2", "mixamorig_Spine1", "mixamorig_Spine",
+						"Spine2", "Spine1", "Spine"]
 
 	for bone_name in spine_names:
 		var idx := skeleton.find_bone(bone_name)
@@ -422,6 +442,23 @@ func _find_aim_spine_bone() -> void:
 			return
 
 	push_warning("[CharacterBase] Aim spine bone not found")
+
+
+## 右腕ボーンを検索（リコイル用）
+func _find_right_arm_bone() -> void:
+	if not skeleton:
+		return
+
+	var arm_names := ["mixamorig_RightArm", "RightArm", "mixamorig_RightShoulder", "RightShoulder"]
+
+	for bone_name in arm_names:
+		var idx := skeleton.find_bone(bone_name)
+		if idx >= 0:
+			_right_arm_bone_idx = idx
+			print("[CharacterBase] Found right arm bone: %s (index: %d)" % [bone_name, idx])
+			return
+
+	push_warning("[CharacterBase] Right arm bone not found")
 
 
 ## 上半身エイミングの目標角度を計算
@@ -456,8 +493,11 @@ func _update_upper_body_aim(delta: float) -> void:
 
 	to_target = to_target.normalized()
 
-	# キャラクターの前方向（-Z軸、rotation.yを考慮）
-	var forward := Vector3(sin(rotation.y), 0, cos(rotation.y))
+	# キャラクターの前方向（ローカル+Z軸をワールド座標に変換）
+	# このプロジェクトのモデルは+Zが前方向（Blenderエクスポート設定による）
+	var forward := global_transform.basis.z
+	forward.y = 0
+	forward = forward.normalized()
 
 	# 前方向とターゲット方向の角度差を計算（符号付き）
 	# cross product の Y 成分で符号を決定
@@ -473,35 +513,107 @@ func _update_upper_body_aim(delta: float) -> void:
 	_current_aim_rotation = lerp_angle(_current_aim_rotation, _target_aim_rotation, aim_rotation_speed * delta)
 
 
-## 上半身エイミング回転をボーンに適用
-## AnimationTree更新後に呼ばれる必要があるため、_process()で実行
-func _apply_upper_body_aim_rotation() -> void:
+## skeleton_updatedシグナルのコールバック
+## アニメーション処理後、レンダリング前に呼ばれる
+func _on_skeleton_updated() -> void:
 	if not skeleton or _aim_spine_bone_idx < 0:
 		return
 
-	# 以前のオーバーライドをクリア
-	skeleton.clear_bones_global_pose_override()
+	# Y軸回転（エイミング + 外部ツイスト）
+	var total_y_rotation := _current_aim_rotation + deg_to_rad(_external_twist_degrees)
 
-	# 回転が小さい場合はスキップ
-	if abs(_current_aim_rotation) < 0.01:
+	# 回転が小さい場合はオーバーライドをクリアして終了
+	if abs(total_y_rotation) < 0.01:
+		skeleton.set_bone_global_pose_override(_aim_spine_bone_idx, Transform3D(), 0.0, false)
 		return
 
-	# 現在のボーングローバルトランスフォームを取得（アニメーションから）
+	# 特定のボーンのオーバーライドだけをクリア（全ボーンクリアは重すぎる）
+	skeleton.set_bone_global_pose_override(_aim_spine_bone_idx, Transform3D(), 0.0, false)
+
+	# アニメーションのポーズを取得
 	var bone_global_transform := skeleton.get_bone_global_pose(_aim_spine_bone_idx)
 
-	# Y軸周りの回転を作成（水平方向のエイミング）
-	var aim_rotation := Quaternion(Vector3.UP, _current_aim_rotation)
-	var aim_basis := Basis(aim_rotation)
+	# Y軸周りの回転
+	var twist_rotation := Quaternion(Vector3.UP, total_y_rotation)
+	var twist_basis := Basis(twist_rotation)
 
-	# ボーンの現在のbasisに回転を合成
-	var new_transform := Transform3D(bone_global_transform.basis * aim_basis, bone_global_transform.origin)
+	# ポストマルチプライ: ボーンのローカルY軸周りに回転
+	var new_transform := Transform3D(bone_global_transform.basis * twist_basis, bone_global_transform.origin)
 
-	# ボーンのグローバルポーズをオーバーライド（amount=1.0で完全オーバーライド）
+	# グローバルポーズをオーバーライド
 	skeleton.set_bone_global_pose_override(_aim_spine_bone_idx, new_transform, 1.0, true)
 
 
-func _process(_delta: float) -> void:
-	_apply_upper_body_aim_rotation()
+func _process(delta: float) -> void:
+	# 武器リコイルの復帰処理
+	_recover_weapon_recoil(delta)
+
+
+## 武器リコイルの復帰処理（毎フレーム呼ばれる）
+func _recover_weapon_recoil(delta: float) -> void:
+	var has_weapon_recoil := _weapon_recoil_offset != Vector3.ZERO or _weapon_recoil_rotation != Vector3.ZERO
+	var has_arm_recoil := _arm_recoil_amount > 0.001
+
+	if not has_weapon_recoil and not has_arm_recoil:
+		return
+
+	# 武器の復帰
+	if has_weapon_recoil:
+		_weapon_recoil_offset = _weapon_recoil_offset.lerp(Vector3.ZERO, RECOIL_RECOVERY_SPEED * delta)
+		_weapon_recoil_rotation = _weapon_recoil_rotation.lerp(Vector3.ZERO, RECOIL_RECOVERY_SPEED * delta)
+
+		if _weapon_recoil_offset.length() < 0.001:
+			_weapon_recoil_offset = Vector3.ZERO
+		if _weapon_recoil_rotation.length() < 0.01:
+			_weapon_recoil_rotation = Vector3.ZERO
+
+		_update_weapon_with_recoil()
+
+	# 右腕の復帰（実際の適用は_on_skeleton_updatedで行われる）
+	if has_arm_recoil:
+		_arm_recoil_amount = lerpf(_arm_recoil_amount, 0.0, RECOIL_RECOVERY_SPEED * delta)
+		if _arm_recoil_amount < 0.001:
+			_arm_recoil_amount = 0.0
+
+
+## 武器モデルにリコイルオフセットを適用
+func _update_weapon_with_recoil() -> void:
+	if not weapon_attachment:
+		return
+
+	# 武器モデルを取得
+	var weapon_model: Node3D = null
+	for child in weapon_attachment.get_children():
+		if child is Node3D:
+			weapon_model = child
+			break
+
+	if not weapon_model:
+		return
+
+	# 基本オフセット + リコイルオフセット
+	weapon_model.position = _weapon_position_offset + _weapon_recoil_offset
+	weapon_model.rotation_degrees = _weapon_rotation_offset + _weapon_recoil_rotation
+
+
+## 右腕にリコイル回転を適用
+func _apply_arm_recoil_internal(bone_global_transform: Transform3D) -> void:
+	if not skeleton or _right_arm_bone_idx < 0:
+		return
+
+	# リコイルがない場合はスキップ（オーバーライドは_on_skeleton_updatedでクリア済み）
+	if _arm_recoil_amount < 0.001:
+		return
+
+	# リコイル角度 - 左軸回転で奥行き方向へ
+	var recoil_angle := _arm_recoil_amount * ARM_RECOIL_ANGLE
+	var recoil_rotation := Quaternion(Vector3.LEFT, deg_to_rad(recoil_angle))
+
+	# ボーンに適用
+	var combined_basis := Basis(recoil_rotation)
+	var new_transform := Transform3D(bone_global_transform.basis * combined_basis, bone_global_transform.origin)
+
+	skeleton.set_bone_global_pose_override(_right_arm_bone_idx, new_transform, 1.0, true)
 
 
 # ========================================
@@ -542,6 +654,66 @@ func set_upper_body_aim_enabled(enabled: bool) -> void:
 ## 上半身エイミングが有効かどうかを取得
 func is_upper_body_aim_enabled() -> bool:
 	return upper_body_aim_enabled
+
+
+# ========================================
+# 外部制御API（test_animation_viewer等）
+# ========================================
+
+## リコイルを適用（発砲時に呼ぶ）
+## 武器モデル + 右腕を瞬時にキックバックさせる
+func apply_recoil(intensity: float = 1.0) -> void:
+	# 武器のキックバック
+	_weapon_recoil_offset.z += RECOIL_KICKBACK * intensity
+	_weapon_recoil_rotation += RECOIL_ROTATION * intensity
+	_update_weapon_with_recoil()
+	# 右腕のリコイル（実際の適用は_on_skeleton_updatedで行われる）
+	_arm_recoil_amount = clampf(_arm_recoil_amount + intensity, 0.0, 1.0)
+
+
+## リコイル量を設定 (0.0-1.0) - 後方互換性のため残す
+## 1.0で瞬時にリコイル適用
+func set_recoil_amount(amount: float) -> void:
+	if amount > 0.5:
+		apply_recoil(amount)
+
+
+## リコイル量を取得
+func get_recoil_amount() -> float:
+	return _weapon_recoil_offset.length()
+
+
+## 外部ツイスト角度を設定（度）
+## Upper Body Twistスライダー等から使用
+func set_external_twist_degrees(degrees: float) -> void:
+	_external_twist_degrees = degrees
+
+
+## 外部ツイスト角度を取得（度）
+func get_external_twist_degrees() -> float:
+	return _external_twist_degrees
+
+
+## 左手IKオフセット位置を設定
+func set_left_hand_ik_offset(offset: Vector3) -> void:
+	_left_hand_ik_offset = offset
+	_update_left_hand_ik_target()
+
+
+## 左手IKオフセット位置を取得
+func get_left_hand_ik_offset() -> Vector3:
+	return _left_hand_ik_offset
+
+
+## 左手IKオフセット回転を設定（度）
+func set_left_hand_ik_rotation(rotation_degrees: Vector3) -> void:
+	_left_hand_ik_rotation = rotation_degrees
+	_update_left_hand_ik_target()
+
+
+## 左手IKオフセット回転を取得（度）
+func get_left_hand_ik_rotation() -> Vector3:
+	return _left_hand_ik_rotation
 
 
 ## パス追従移動
@@ -698,11 +870,12 @@ func _play_current_animation() -> void:
 
 	if anim_player.has_animation(anim_name):
 		# AnimationTreeを再有効化（アクション後に無効化されている場合）
-		if anim_tree and not anim_tree.active and anim_blend_tree:
+		# use_animation_tree=falseの場合は再有効化しない
+		if use_animation_tree and anim_tree and not anim_tree.active and anim_blend_tree:
 			anim_tree.active = true
 
 		# AnimationTreeが有効な場合は、locomotionノードのアニメーションを更新
-		if anim_tree and anim_tree.active and anim_blend_tree:
+		if use_animation_tree and anim_tree and anim_tree.active and anim_blend_tree:
 			var locomotion_node = anim_blend_tree.get_node("locomotion") as AnimationNodeAnimation
 			if locomotion_node:
 				locomotion_node.animation = anim_name
@@ -778,6 +951,11 @@ func _load_character_resource() -> void:
 ## キャラクターIDを検出
 ## @return: キャラクターID、検出できない場合は空文字列
 func _detect_character_id() -> String:
+	# 0. 明示的に設定されたIDがあればそれを使用（動的ロード用）
+	if not _explicit_character_id.is_empty():
+		print("[CharacterBase] Using explicit character ID: %s" % _explicit_character_id)
+		return _explicit_character_id
+
 	# 1. CharacterModelのシーンパスからIDを取得（最も信頼性が高い）
 	var model = get_node_or_null("CharacterModel")
 	if model:
@@ -1010,11 +1188,9 @@ func _update_left_hand_ik_target() -> void:
 	if not left_hand_ik_target or not _left_hand_grip_source:
 		return
 
-	if not left_hand_ik or not left_hand_ik.is_running():
-		return
+	# Note: ターゲット位置は常に更新する（IKが有効になった時に正しい位置を使用するため）
 
 	# グリップのグローバル位置をオフセット付きでIKターゲットに反映
-	# (test_animation_viewer.gd の実装に合わせる)
 	var grip_transform := _left_hand_grip_source.global_transform
 
 	# 位置オフセットを適用（ローカル座標系）

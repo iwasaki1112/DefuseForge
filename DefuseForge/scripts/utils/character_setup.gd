@@ -24,7 +24,7 @@ const CHARACTER_BRIGHTNESS: float = 1.8
 enum WeaponType { NONE, RIFLE, PISTOL }
 
 ## 武器ID
-enum WeaponId { NONE, AK47, USP }
+enum WeaponId { NONE, AK47, USP, M4A1 }
 
 ## 武器データ定義
 ## accuracy: 基本命中率 (0.0-1.0)
@@ -76,6 +76,21 @@ const WEAPON_DATA := {
 		"reload_time": 1.8,
 		"scene_path": "",
 		"kill_reward": 300
+	},
+	WeaponId.M4A1: {
+		"name": "M4A1",
+		"type": WeaponType.RIFLE,
+		"price": 0,
+		"damage": 33,
+		"fire_rate": 0.09,
+		"accuracy": 0.88,
+		"range": 22.0,
+		"headshot_multiplier": 4.0,
+		"bodyshot_multiplier": 1.0,
+		"magazine_size": 30,
+		"reload_time": 2.3,
+		"scene_path": "res://scenes/weapons/m4a1.tscn",
+		"kill_reward": 300
 	}
 }
 
@@ -83,7 +98,8 @@ const WEAPON_DATA := {
 const WEAPON_ID_NAMES := {
 	WeaponId.NONE: "none",
 	WeaponId.AK47: "ak47",
-	WeaponId.USP: "usp"
+	WeaponId.USP: "usp",
+	WeaponId.M4A1: "m4a1"
 }
 
 ## Rifle Animset Pro FBXファイルパス
@@ -713,10 +729,15 @@ static func attach_weapon_to_character(character: Node, skeleton: Skeleton3D, we
 	if skeleton == null:
 		return null
 
-	# 既存の武器を削除
-	var existing = character.get_node_or_null("WeaponAttachment")
-	if existing:
-		existing.queue_free()
+	# 既存の武器を削除（スケルトンの子として探す）
+	# queue_free() ではなく即座に削除して、武器が重複表示されないようにする
+	var to_remove: Array[Node] = []
+	for child in skeleton.get_children():
+		if child is BoneAttachment3D and (child.name == "WeaponAttachment" or child.name.begins_with("@BoneAttachment3D")):
+			to_remove.append(child)
+	for node in to_remove:
+		skeleton.remove_child(node)
+		node.queue_free()
 	
 	# 武器なしの場合
 	if weapon_id == WeaponId.NONE:

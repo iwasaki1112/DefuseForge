@@ -1,8 +1,9 @@
-[gd_scene load_steps=8 format=3 uid="uid://test_bot_on_map"]
+[gd_scene load_steps=9 format=3 uid="uid://test_bot_on_map"]
 
 [ext_resource type="Script" path="res://scripts/tests/test_bot_on_map.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://dg2obkxmhp4v2" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
 [ext_resource type="PackedScene" path="res://assets/characters/vanguard/vanguard.glb" id="3_character"]
+[ext_resource type="Script" path="res://scripts/characters/character_base.gd" id="5_character_base"]
 [ext_resource type="PackedScene" path="res://resources/maps/map.glb" id="4_map"]
 
 [sub_resource type="Environment" id="Environment_1"]
@@ -25,6 +26,7 @@ script = ExtResource("1_script")
 [node name="Map" parent="." instance=ExtResource("4_map")]
 
 [node name="Bot" type="CharacterBody3D" parent="." groups=["bot"]]
+script = ExtResource("5_character_base")
 collision_layer = 1
 collision_mask = 3
 

@@ -30,8 +30,7 @@ func _ready() -> void:
 		e.add_to_group("enemies")
 
 		# 武器装備（攻撃させない）
-		if e.has_method("set_weapon"):
-			e.set_weapon(CharacterSetup.WeaponId.AK47)
+		CharacterAPI.equip_weapon(e, CharacterSetup.WeaponId.AK47)
 		var e_combat = e.get_node_or_null("CombatComponent")
 		if e_combat:
 			e_combat.auto_attack = false
@@ -44,8 +43,7 @@ func _ready() -> void:
 			e.died.connect(_on_enemy_died)
 
 	# プレイヤーに武器を装備
-	if player.has_method("set_weapon"):
-		player.set_weapon(CharacterSetup.WeaponId.AK47)
+	CharacterAPI.equip_weapon(player, CharacterSetup.WeaponId.AK47)
 
 	# 死亡シグナルを接続
 	if player.has_signal("died"):

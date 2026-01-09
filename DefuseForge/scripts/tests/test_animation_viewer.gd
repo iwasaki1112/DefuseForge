@@ -2,11 +2,9 @@ extends Node3D
 ## Animation viewer - simple animation testing for character models
 
 @onready var camera: Camera3D = $OrbitCamera
-@onready var character_body: CharacterBody3D = $CharacterBody
+@onready var character_body: CharacterBase = $CharacterBody
 @onready var canvas_layer: CanvasLayer = $CanvasLayer
 
-var anim_player: AnimationPlayer = null
-var skeleton: Skeleton3D = null
 var _animations: Array[String] = []
 const GRAVITY: float = 9.8
 const DEFAULT_BLEND_TIME: float = 0.3
@@ -49,18 +47,76 @@ var current_weapon_id: String = "ak47"  # 現在選択中の武器ID
 var weapon_resource: WeaponResource = null
 var weapon_option_button: OptionButton = null
 
-# Shooting / Recoil
+# Shooting
 var is_shooting: bool = false
-var recoil_amount: float = 0.0  # Current recoil (0.0 - 1.0)
-const RECOIL_MAX_ANGLE: float = 8.0  # Max recoil rotation in degrees
-const RECOIL_RECOVERY_SPEED: float = 15.0  # How fast recoil recovers
-var recoil_tween: Tween = null
 
 # Left hand IK - 値は weapon_resource から読み込み
 var left_hand_ik: SkeletonIK3D = null
 var left_hand_grip_target: Marker3D = null
 var left_hand_ik_offset: Vector3 = Vector3.ZERO
 var left_hand_ik_rotation: Vector3 = Vector3.ZERO
+
+
+## 武器ID文字列を整数に変換
+func _weapon_id_string_to_int(weapon_id: String) -> int:
+	match weapon_id.to_lower():
+		"ak47":
+			return CharacterSetup.WeaponId.AK47
+		"usp":
+			return CharacterSetup.WeaponId.USP
+		"m4a1":
+			return CharacterSetup.WeaponId.M4A1
+		_:
+			return CharacterSetup.WeaponId.NONE
+
+
+## 調整機能用に内部参照をキャッシュ
+func _cache_internal_references() -> void:
+	# CharacterBase から武器のアタッチメントを取得
+	weapon_attachment = character_body.weapon_attachment
+	print("[AnimViewer] Caching references: weapon_attachment=%s, skeleton=%s" % [
+		weapon_attachment != null,
+		character_body.skeleton != null
+	])
+
+	# 左手IK用の参照を取得
+	if character_body.skeleton:
+		left_hand_ik = character_body.skeleton.get_node_or_null("LeftHandIK") as SkeletonIK3D
+		left_hand_grip_target = character_body.skeleton.get_node_or_null("LeftHandIKTarget") as Marker3D
+		print("[AnimViewer] IK references: left_hand_ik=%s, left_hand_grip_target=%s" % [
+			left_hand_ik != null,
+			left_hand_grip_target != null
+		])
+
+	# Note: ボーン操作は CharacterBase._process() で行われるため、
+	# skeleton_updated シグナルへの接続は不要
+
+	# LeftHandGrip の参照を取得
+	if weapon_attachment:
+		for child in weapon_attachment.get_children():
+			if child is Node3D:
+				var model_node = child.get_node_or_null("Model")
+				if model_node:
+					var grip_name = "LeftHandGrip_%s" % current_weapon_id.to_upper()
+					_left_hand_grip_source = _find_node_by_name(model_node, grip_name)
+					if not _left_hand_grip_source:
+						_left_hand_grip_source = _find_node_by_name(model_node, "LeftHandGrip")
+				break
+
+	# MuzzleFlash の参照を取得
+	if weapon_attachment:
+		for child in weapon_attachment.get_children():
+			if child is Node3D:
+				muzzle_flash = child.find_child("MuzzleFlash", true, false)
+				break
+
+	# Spine ボーンのインデックスを取得
+	_find_spine_bone()
+	print("[AnimViewer] Final cache state: spine_bone_idx=%d, muzzle_flash=%s, _left_hand_grip_source=%s" % [
+		spine_bone_idx,
+		muzzle_flash != null,
+		_left_hand_grip_source != null
+	])
 
 
 func _ready() -> void:
@@ -72,10 +128,35 @@ func _ready() -> void:
 	# Create new UI layout
 	_create_ui_layout()
 
+	# シーンファイルで設定された初期キャラクターモデルへの参照を取得
+	# （キャラクター変更時に正しく削除するため）
+	character_model = character_body.get_node_or_null("CharacterModel")
+
 	# Scan available characters first
 	_scan_available_characters()
 
-	_setup_character()
+	# Scan available weapons and load current weapon resource
+	_scan_available_weapons()
+	_load_weapon_resource()
+
+	# Load character resource (for weapon offset)
+	_load_character_resource()
+
+	# CharacterBase._ready() でキャラクターセットアップが自動実行される
+	# 武器装備は CharacterAPI を使用
+	CharacterAPI.equip_weapon(character_body, _weapon_id_string_to_int(current_weapon_id))
+
+	# AnimationViewer では直接 AnimationPlayer を使用するため AnimationTree を無効化
+	# anim_blend_tree も null にして CharacterBase による自動再有効化を防ぐ
+	if character_body.anim_tree:
+		character_body.anim_tree.active = false
+		character_body.anim_blend_tree = null
+
+	# アニメーション一覧を収集
+	_collect_animations()
+
+	# 内部参照をキャッシュ（調整機能用）
+	_cache_internal_references()
 
 	if camera.has_method("set_target") and character_body:
 		camera.set_target(character_body)
@@ -83,7 +164,7 @@ func _ready() -> void:
 	_populate_ui()
 
 	# Play idle animation first
-	if anim_player and anim_player.has_animation("Rifle_Idle"):
+	if character_body.anim_player and character_body.anim_player.has_animation("Rifle_Idle"):
 		_play_animation("Rifle_Idle")
 	elif _animations.size() > 0:
 		_play_animation(_animations[0])
@@ -503,34 +584,28 @@ func _change_character(character_id: String) -> void:
 
 	print("[AnimViewer] Changing character to: %s" % character_id)
 
-	# Remove current character and IK
-	if left_hand_ik:
-		left_hand_ik.stop()
-		left_hand_ik.queue_free()
-		left_hand_ik = null
-
-	if left_hand_grip_target:
-		left_hand_grip_target.queue_free()
-		left_hand_grip_target = null
-
+	# 旧い参照をクリア
 	_left_hand_grip_source = null
 	muzzle_flash = null
-
-	if weapon_attachment:
-		weapon_attachment.queue_free()
-		weapon_attachment = null
-
-	# Remove current character model
-	if character_model:
-		character_model.queue_free()
-		character_model = null
-
-	# Reset state
-	anim_player = null
-	skeleton = null
+	left_hand_ik = null
+	left_hand_grip_target = null
+	weapon_attachment = null
 	spine_bone_idx = -1
 	right_hand_bone_idx = -1
 	_animations.clear()
+
+	# 古いモデルを削除（即座にツリーから外す）
+	if character_model:
+		character_body.remove_child(character_model)
+		character_model.queue_free()
+		character_model = null
+
+	# CharacterBase の内部状態をリセット
+	character_body.anim_player = null
+	character_body.skeleton = null
+	character_body.weapon_attachment = null
+	character_body.current_weapon_id = CharacterSetup.WeaponId.NONE  # 武器IDをリセット（再装備を強制）
+	character_body._explicit_character_id = ""  # 明示的IDをリセット
 
 	# Update current character ID
 	current_character_id = character_id
@@ -546,14 +621,35 @@ func _change_character(character_id: String) -> void:
 		return
 
 	character_model = character_scene.instantiate()
-	character_model.name = character_id.capitalize() + "Model"
+	character_model.name = "CharacterModel"  # CharacterBase が期待する名前
 	character_body.add_child(character_model)
 
-	# マテリアル設定（明るさ補正を適用）
-	CharacterSetup.setup_materials(character_model, character_id)
+	# 明示的にキャラクターIDを設定（動的ロードではscene_file_pathからの検出が失敗するため）
+	character_body._explicit_character_id = character_id
 
-	# Setup the new character
-	_setup_character_internal()
+	# CharacterBase._setup_character() を手動で再呼び出し
+	character_body._setup_character()
+
+	# AnimationViewer では直接 AnimationPlayer を使用するため AnimationTree を無効化
+	# anim_blend_tree も null にして CharacterBase による自動再有効化を防ぐ
+	if character_body.anim_tree:
+		character_body.anim_tree.active = false
+		character_body.anim_blend_tree = null
+
+	# 武器を再装備
+	var weapon_int_id = _weapon_id_string_to_int(current_weapon_id)
+	print("[AnimViewer] Equipping weapon: %s (id=%d), skeleton=%s, current_weapon_id=%d" % [
+		current_weapon_id, weapon_int_id,
+		character_body.skeleton != null,
+		character_body.current_weapon_id
+	])
+	CharacterAPI.equip_weapon(character_body, weapon_int_id)
+
+	# アニメーション一覧を収集
+	_collect_animations()
+
+	# 内部参照をキャッシュ
+	_cache_internal_references()
 
 	# Recreate UI (animation buttons and sliders)
 	_populate_ui()
@@ -562,7 +658,7 @@ func _change_character(character_id: String) -> void:
 	_apply_weapon_offset()
 
 	# Play idle animation
-	if anim_player and anim_player.has_animation("Rifle_Idle"):
+	if character_body.anim_player and character_body.anim_player.has_animation("Rifle_Idle"):
 		_play_animation("Rifle_Idle")
 	elif _animations.size() > 0:
 		_play_animation(_animations[0])
@@ -591,137 +687,22 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
-	_apply_upper_body_rotation()
+	# Note: _apply_upper_body_rotation is now called from skeleton_updated signal
+	# to ensure it runs after animation has been applied
+	pass
 
 
-func _apply_upper_body_rotation() -> void:
-	if not skeleton or spine_bone_idx < 0:
-		return
-
-	# Clear any previous override first
-	skeleton.clear_bones_global_pose_override()
-
-	# Check if any modification is needed
-	if abs(upper_body_rotation) < 0.01 and abs(recoil_amount) < 0.01:
-		return
-
-	# Get the current global bone transform (from animation)
-	var bone_global_transform := skeleton.get_bone_global_pose(spine_bone_idx)
-
-	# Start with identity rotation
-	var combined_rotation := Quaternion.IDENTITY
-
-	# Apply horizontal twist (Y axis) for aiming
-	if abs(upper_body_rotation) >= 0.01:
-		var twist_rotation := Quaternion(Vector3.UP, deg_to_rad(upper_body_rotation))
-		combined_rotation = combined_rotation * twist_rotation
-
-	# Apply recoil (X axis - backward pitch)
-	if abs(recoil_amount) >= 0.01:
-		var recoil_angle := recoil_amount * RECOIL_MAX_ANGLE
-		var recoil_rotation := Quaternion(Vector3.RIGHT, deg_to_rad(-recoil_angle))
-		combined_rotation = combined_rotation * recoil_rotation
-
-	# Apply combined rotation to the bone's global transform
-	var combined_basis := Basis(combined_rotation)
-	var new_transform := Transform3D(bone_global_transform.basis * combined_basis, bone_global_transform.origin)
-
-	# Use global pose override (amount 1.0 = full override)
-	skeleton.set_bone_global_pose_override(spine_bone_idx, new_transform, 1.0, true)
-
-
-func _setup_character() -> void:
-	# Scan available weapons and load current weapon resource
-	_scan_available_weapons()
-	_load_weapon_resource()
-
-	# Load character resource (for weapon offset)
-	_load_character_resource()
-
-	# Get existing character model from scene or load dynamically
-	character_model = character_body.get_node_or_null("CharacterModel")
-	if not character_model:
-		# Try to find any model node
-		for child in character_body.get_children():
-			if child is Node3D and not child is CollisionShape3D:
-				character_model = child
-				break
-
-	if not character_model:
-		# Load default character
-		var glb_path = CHARACTERS_DIR + current_character_id + "/" + current_character_id + ".glb"
-		if ResourceLoader.exists(glb_path):
-			var character_scene = load(glb_path)
-			if character_scene:
-				character_model = character_scene.instantiate()
-				character_model.name = current_character_id.capitalize() + "Model"
-				character_body.add_child(character_model)
-
-	if not character_model:
-		push_warning("[AnimViewer] Character model not found")
-		return
-
-	# マテリアル設定（明るさ補正を適用）
-	CharacterSetup.setup_materials(character_model, current_character_id)
-
-	_setup_character_internal()
-
-
-func _setup_character_internal() -> void:
-	if not character_model:
-		push_warning("[AnimViewer] Character model not found")
-		return
-
-	# Debug: Print model structure
-	print("[AnimViewer] Model structure:")
-	_print_node_tree(character_model, 0)
-
-	# Debug: Print model bounds
-	var aabb := _get_model_aabb(character_model)
-	print("[AnimViewer] Model AABB: ", aabb)
-	print("[AnimViewer] Model size: ", aabb.size)
-	print("[AnimViewer] Model position: ", character_model.global_position)
-	print("[AnimViewer] CharacterBody position: ", character_body.global_position)
-
-	# Find AnimationPlayer
-	anim_player = _find_animation_player(character_model)
-	if anim_player:
-		_collect_animations()
-		print("[AnimViewer] Found AnimationPlayer with %d animations" % _animations.size())
-	else:
-		push_warning("[AnimViewer] AnimationPlayer not found")
-
-	# Find Skeleton3D and spine bone
-	skeleton = _find_skeleton(character_model)
-	if skeleton:
-		print("[AnimViewer] Found Skeleton3D with %d bones" % skeleton.get_bone_count())
-		_print_bone_hierarchy(skeleton)
-		_find_spine_bone()
-		_attach_weapon()
-		# Apply weapon offset after weapon is attached
-		_apply_weapon_offset()
-	else:
-		push_warning("[AnimViewer] Skeleton3D not found")
-
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var result := _find_animation_player(child)
-		if result:
-			return result
-	return null
-
-
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if node is Skeleton3D:
-		return node
-	for child in node.get_children():
-		var result := _find_skeleton(child)
-		if result:
-			return result
-	return null
+func _input(event: InputEvent) -> void:
+	# Space key to shoot (for easy testing)
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE:
+			_shoot()
+		elif event.keycode == KEY_T:
+			# T key to toggle upper body rotation for testing
+			upper_body_rotation = 30.0 if upper_body_rotation < 1.0 else 0.0
+			# CharacterBase APIを使用
+			character_body.set_external_twist_degrees(upper_body_rotation)
+			print("[AnimViewer] Upper body rotation set to: %.1f" % upper_body_rotation)
 
 
 func _print_bone_hierarchy(skel: Skeleton3D) -> void:
@@ -734,7 +715,7 @@ func _print_bone_hierarchy(skel: Skeleton3D) -> void:
 
 
 func _find_spine_bone() -> void:
-	if not skeleton:
+	if not character_body.skeleton:
 		return
 
 	# Look for spine bone - common names for Mixamo and other rigs
@@ -744,13 +725,13 @@ func _find_spine_bone() -> void:
 						"mixamorig:Spine1", "mixamorig:Spine2", "mixamorig:Spine"]
 
 	for bone_name in spine_names:
-		var idx := skeleton.find_bone(bone_name)
+		var idx := character_body.skeleton.find_bone(bone_name)
 		if idx >= 0:
 			spine_bone_idx = idx
-			print("[BotViewer] Found spine bone: %s (index: %d)" % [bone_name, idx])
+			print("[AnimViewer] Found spine bone: %s (index: %d)" % [bone_name, idx])
 			return
 
-	push_warning("[BotViewer] Spine bone not found")
+	push_warning("[AnimViewer] Spine bone not found")
 
 
 func _scan_available_weapons() -> void:
@@ -783,31 +764,24 @@ func _change_weapon(weapon_id: String) -> void:
 	if weapon_id == current_weapon_id:
 		return
 
-	print("[BotViewer] Changing weapon to: %s" % weapon_id)
+	print("[AnimViewer] Changing weapon to: %s" % weapon_id)
 
-	# Remove current weapon and IK
-	if left_hand_ik:
-		left_hand_ik.stop()
-		left_hand_ik.queue_free()
-		left_hand_ik = null
-
-	if left_hand_grip_target:
-		left_hand_grip_target.queue_free()
-		left_hand_grip_target = null
-
+	# 旧い参照をクリア
 	_left_hand_grip_source = null
 	muzzle_flash = null
-
-	if weapon_attachment:
-		weapon_attachment.queue_free()
-		weapon_attachment = null
+	left_hand_ik = null
+	left_hand_grip_target = null
+	weapon_attachment = null
 
 	# Update current weapon ID and load new resource
 	current_weapon_id = weapon_id
 	_load_weapon_resource_by_id(weapon_id)
 
-	# Attach new weapon
-	_attach_weapon()
+	# CharacterAPI を使用して武器を装備
+	CharacterAPI.equip_weapon(character_body, _weapon_id_string_to_int(weapon_id))
+
+	# 内部参照を再キャッシュ
+	_cache_internal_references()
 
 	# Update IK sliders to reflect new weapon's values
 	_update_ik_sliders()
@@ -831,159 +805,6 @@ func _load_weapon_resource_by_id(weapon_id: String) -> void:
 		push_warning("[BotViewer] Weapon resource not found: %s" % resource_path)
 
 
-func _attach_weapon() -> void:
-	if not skeleton:
-		return
-
-	# Find right hand bone
-	var right_hand_names := ["mixamorig_RightHand", "RightHand", "right_hand",
-							"mixamorig:RightHand"]
-
-	for bone_name in right_hand_names:
-		var idx := skeleton.find_bone(bone_name)
-		if idx >= 0:
-			right_hand_bone_idx = idx
-			print("[BotViewer] Found right hand bone: %s (index: %d)" % [bone_name, idx])
-			break
-
-	if right_hand_bone_idx < 0:
-		push_warning("[BotViewer] Right hand bone not found")
-		return
-
-	# Create BoneAttachment3D
-	weapon_attachment = BoneAttachment3D.new()
-	weapon_attachment.name = "WeaponAttachment"
-	weapon_attachment.bone_idx = right_hand_bone_idx
-	skeleton.add_child(weapon_attachment)
-
-	# Load weapon scene from resource or fallback
-	var weapon_scene_path := ""
-	if weapon_resource:
-		weapon_scene_path = weapon_resource.scene_path
-	else:
-		weapon_scene_path = "res://scenes/weapons/ak47.tscn"  # fallback
-
-	var weapon_scene = load(weapon_scene_path)
-	if not weapon_scene:
-		push_warning("[BotViewer] Failed to load weapon scene: %s" % weapon_scene_path)
-		return
-
-	var weapon = weapon_scene.instantiate()
-	weapon.name = weapon_resource.weapon_id.to_upper() if weapon_resource else "Weapon"
-	weapon_attachment.add_child(weapon)
-
-	# Compensate for skeleton's global scale to ensure weapon renders at correct size
-	var skeleton_global_scale = skeleton.global_transform.basis.get_scale()
-	if skeleton_global_scale.x < 0.5:  # If skeleton is scaled down significantly
-		var compensation_scale = 1.0 / skeleton_global_scale.x
-		weapon.scale = Vector3(compensation_scale, compensation_scale, compensation_scale)
-		print("[BotViewer] Applied weapon scale compensation: %s" % compensation_scale)
-
-	# Get MuzzleFlash reference (find_childで再帰的に探す)
-	muzzle_flash = weapon.find_child("MuzzleFlash", true, false)
-	if muzzle_flash:
-		print("[BotViewer] Found MuzzleFlash")
-	else:
-		push_warning("[BotViewer] MuzzleFlash not found in weapon")
-
-	print("[BotViewer] Weapon attached to right hand")
-
-	# Setup left hand IK
-	_setup_left_hand_ik(weapon)
-
-
-func _setup_left_hand_ik(weapon: Node3D) -> void:
-	if not skeleton:
-		push_warning("[BotViewer] Cannot setup left hand IK: no skeleton")
-		return
-
-	# Find left hand bone
-	var left_hand_names := ["mixamorig_LeftHand", "LeftHand", "left_hand", "mixamorig:LeftHand"]
-	var left_hand_bone_idx: int = -1
-
-	for bone_name in left_hand_names:
-		var idx := skeleton.find_bone(bone_name)
-		if idx >= 0:
-			left_hand_bone_idx = idx
-			print("[BotViewer] Found left hand bone: %s (index: %d)" % [bone_name, idx])
-			break
-
-	if left_hand_bone_idx < 0:
-		push_warning("[BotViewer] Left hand bone not found")
-		return
-
-	# Find LeftHandGrip in weapon model
-	# The weapon scene has Model child which contains the GLB content
-	var model_node = weapon.get_node_or_null("Model")
-	if not model_node:
-		push_warning("[BotViewer] Model node not found in weapon")
-		return
-
-	# Search for LeftHandGrip_{WeaponID} node in the model hierarchy
-	# 命名規則: LeftHandGrip_{weapon_id.to_upper()} (例: LeftHandGrip_AK47, LeftHandGrip_M4A1)
-	var grip_name = "LeftHandGrip_%s" % current_weapon_id.to_upper()
-	var left_hand_grip = _find_node_by_name(model_node, grip_name)
-	if not left_hand_grip:
-		# Try searching in weapon root as well
-		left_hand_grip = _find_node_by_name(weapon, grip_name)
-	if not left_hand_grip:
-		# Fallback: 旧命名規則 "LeftHandGrip" も試す（後方互換性）
-		left_hand_grip = _find_node_by_name(model_node, "LeftHandGrip")
-		if not left_hand_grip:
-			left_hand_grip = _find_node_by_name(weapon, "LeftHandGrip")
-
-	if not left_hand_grip:
-		push_warning("[BotViewer] LeftHandGrip not found in weapon model (tried: %s)" % grip_name)
-		print("[BotViewer] Weapon model structure:")
-		_print_node_tree(weapon, 0)
-		return
-
-	print("[BotViewer] Found LeftHandGrip: %s" % left_hand_grip.get_path())
-
-	# Create a Marker3D as the actual IK target (child of skeleton for proper transform)
-	left_hand_grip_target = Marker3D.new()
-	left_hand_grip_target.name = "LeftHandIKTarget"
-	skeleton.add_child(left_hand_grip_target)
-
-	# Create SkeletonIK3D
-	left_hand_ik = SkeletonIK3D.new()
-	left_hand_ik.name = "LeftHandIK"
-
-	# Find the tip bone name for IK
-	var tip_bone_name := skeleton.get_bone_name(left_hand_bone_idx)
-	left_hand_ik.set_tip_bone(tip_bone_name)
-
-	# Find root bone for IK chain (left upper arm or shoulder)
-	var root_bone_names := ["mixamorig_LeftArm", "LeftArm", "left_arm", "mixamorig:LeftArm",
-						   "mixamorig_LeftShoulder", "LeftShoulder"]
-	var root_bone_name := ""
-	for bone_name in root_bone_names:
-		if skeleton.find_bone(bone_name) >= 0:
-			root_bone_name = bone_name
-			break
-
-	if root_bone_name.is_empty():
-		push_warning("[BotViewer] Left arm root bone not found")
-		return
-
-	left_hand_ik.set_root_bone(root_bone_name)
-	left_hand_ik.set_target_node(left_hand_grip_target.get_path())
-
-	# Configure IK settings
-	left_hand_ik.interpolation = 1.0  # Full IK influence
-	left_hand_ik.override_tip_basis = true  # Override hand rotation to match target
-
-	skeleton.add_child(left_hand_ik)
-
-	print("[BotViewer] Left hand IK setup: root=%s, tip=%s" % [root_bone_name, tip_bone_name])
-
-	# Start IK (will be updated in _process)
-	left_hand_ik.start()
-
-	# Store reference to original grip for position updates
-	_left_hand_grip_source = left_hand_grip
-
-
 var _left_hand_grip_source: Node3D = null
 
 
@@ -991,9 +812,8 @@ func _update_left_hand_ik_target() -> void:
 	if not left_hand_grip_target or not _left_hand_grip_source:
 		return
 
-	# IKが無効の場合はスキップ
-	if left_hand_ik and not left_hand_ik.is_running():
-		return
+	# Note: Always update target position even if IK is not running
+	# so that when IK starts, it uses the correct target position
 
 	# Update IK target to match LeftHandGrip global position with offset
 	# オフセットを適用して手のひらがターゲットに来るように調整
@@ -1025,46 +845,58 @@ func _find_node_by_name(root: Node, target_name: String) -> Node:
 
 
 func _collect_animations() -> void:
-	if not anim_player:
+	if not character_body.anim_player:
 		return
 
 	_animations.clear()
-	print("[BotViewer] Animation details:")
-	for anim_name in anim_player.get_animation_list():
+	print("[AnimViewer] Animation details:")
+	for anim_name in character_body.anim_player.get_animation_list():
 		if anim_name == "RESET":
 			continue
+		# CharacterSetupが生成した小文字のアニメーション（idle_rifle等）を除外
+		# オリジナルのGLBアニメーション（Rifle_Idle等）のみを表示
+		if anim_name[0] == anim_name[0].to_lower():
+			continue
 		_animations.append(anim_name)
-		var anim = anim_player.get_animation(anim_name)
+		var anim = character_body.anim_player.get_animation(anim_name)
 		if anim:
 			print("  - %s (loop_mode=%d, length=%.2fs)" % [anim_name, anim.loop_mode, anim.length])
 
 	_animations.sort()
-	print("[BotViewer] Animations: ", _animations)
+	print("[AnimViewer] Animations: ", _animations)
 
 
 func _on_ik_pos_x_changed(value: float) -> void:
 	left_hand_ik_offset.x = value
 	_update_slider_label("IKPosX", value, true)
+	# CharacterBase APIを使用してIKオフセットを適用
+	character_body.set_left_hand_ik_offset(left_hand_ik_offset)
 
 func _on_ik_pos_y_changed(value: float) -> void:
 	left_hand_ik_offset.y = value
 	_update_slider_label("IKPosY", value, true)
+	character_body.set_left_hand_ik_offset(left_hand_ik_offset)
 
 func _on_ik_pos_z_changed(value: float) -> void:
 	left_hand_ik_offset.z = value
 	_update_slider_label("IKPosZ", value, true)
+	character_body.set_left_hand_ik_offset(left_hand_ik_offset)
 
 func _on_ik_rot_x_changed(value: float) -> void:
 	left_hand_ik_rotation.x = value
 	_update_slider_label("IKRotX", value, false)
+	# CharacterBase APIを使用してIK回転オフセットを適用
+	character_body.set_left_hand_ik_rotation(left_hand_ik_rotation)
 
 func _on_ik_rot_y_changed(value: float) -> void:
 	left_hand_ik_rotation.y = value
 	_update_slider_label("IKRotY", value, false)
+	character_body.set_left_hand_ik_rotation(left_hand_ik_rotation)
 
 func _on_ik_rot_z_changed(value: float) -> void:
 	left_hand_ik_rotation.z = value
 	_update_slider_label("IKRotZ", value, false)
+	character_body.set_left_hand_ik_rotation(left_hand_ik_rotation)
 
 func _on_print_ik_values() -> void:
 	print("[BotViewer] Left Hand IK Values:")
@@ -1134,24 +966,24 @@ func _find_slider_in_node(node: Node, label_text: String) -> HSlider:
 
 
 func _play_animation(anim_name: String) -> void:
-	if not anim_player:
+	if not character_body.anim_player:
 		return
 
-	if anim_player.has_animation(anim_name):
+	if character_body.anim_player.has_animation(anim_name):
 		# ループアニメーションのloop_modeを強制設定
-		var anim = anim_player.get_animation(anim_name)
+		var anim = character_body.anim_player.get_animation(anim_name)
 		if anim and anim_name in ["Rifle_Idle", "Rifle_WalkFwdLoop", "Rifle_SprintLoop", "Rifle_CrouchLoop"]:
 			if anim.loop_mode != Animation.LOOP_LINEAR:
 				anim.loop_mode = Animation.LOOP_LINEAR
-				print("[BotViewer] Set loop_mode to LINEAR for: %s" % anim_name)
+				print("[AnimViewer] Set loop_mode to LINEAR for: %s" % anim_name)
 
-		anim_player.play(anim_name, blend_time)
-		print("[BotViewer] Playing: %s (blend: %.2fs)" % [anim_name, blend_time])
+		character_body.anim_player.play(anim_name, blend_time)
+		print("[AnimViewer] Playing: %s (blend: %.2fs)" % [anim_name, blend_time])
 
 		# 左手IKの有効/無効を切り替え
 		_update_left_hand_ik_enabled(anim_name)
 	else:
-		push_warning("[BotViewer] Animation not found: ", anim_name)
+		push_warning("[AnimViewer] Animation not found: ", anim_name)
 
 
 const IK_BLEND_DURATION: float = 0.25  # IK補間時間（秒）
@@ -1220,16 +1052,21 @@ func _on_animation_button_pressed(anim_name: String) -> void:
 
 
 func _on_stop_pressed() -> void:
-	if anim_player:
-		anim_player.stop()
+	if character_body.anim_player:
+		character_body.anim_player.stop()
+		# Reset speed scale in case it was paused
+		character_body.anim_player.speed_scale = 1.0
 
 
 func _on_pause_pressed() -> void:
-	if anim_player:
-		if anim_player.is_playing():
-			anim_player.pause()
+	if character_body.anim_player:
+		# Toggle pause using speed_scale (0 = paused, 1 = playing)
+		if character_body.anim_player.speed_scale > 0:
+			character_body.anim_player.speed_scale = 0.0
+			print("[AnimViewer] Animation paused")
 		else:
-			anim_player.play()
+			character_body.anim_player.speed_scale = 1.0
+			print("[AnimViewer] Animation resumed")
 
 
 func _on_blend_time_changed(value: float) -> void:
@@ -1240,12 +1077,16 @@ func _on_blend_time_changed(value: float) -> void:
 
 func _on_upper_body_rotation_changed(value: float) -> void:
 	upper_body_rotation = value
+	# CharacterBase APIを使用して上半身ツイストを適用
+	character_body.set_external_twist_degrees(value)
 	if upper_body_rotation_label:
 		upper_body_rotation_label.text = "%.0f°" % upper_body_rotation
 
 
 func _on_reset_rotation_pressed() -> void:
 	upper_body_rotation = 0.0
+	# CharacterBase APIを使用してリセット
+	character_body.set_external_twist_degrees(0.0)
 	if upper_body_rotation_label:
 		upper_body_rotation_label.text = "0°"
 	# Find and reset the slider using the new UI structure
@@ -1274,18 +1115,10 @@ func _shoot() -> void:
 
 
 func _apply_recoil() -> void:
-	# Cancel any existing recoil tween
-	if recoil_tween and recoil_tween.is_valid():
-		recoil_tween.kill()
-
-	# Create new recoil tween
-	recoil_tween = create_tween()
-
-	# Quick recoil up (0 -> 1)
-	recoil_tween.tween_property(self, "recoil_amount", 1.0, 0.05)
-
-	# Slower recovery (1 -> 0)
-	recoil_tween.tween_property(self, "recoil_amount", 0.0, 0.15).set_ease(Tween.EASE_OUT)
+	# CharacterBase.apply_recoil()を呼ぶだけ
+	# 復帰はCharacterBase._recover_weapon_recoil()で自動処理
+	character_body.apply_recoil(1.0)
+	print("[AnimViewer] Recoil applied (weapon kick)")
 
 
 func _on_auto_fire_pressed() -> void:

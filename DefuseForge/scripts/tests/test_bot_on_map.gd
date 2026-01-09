@@ -3,20 +3,16 @@ extends Node3D
 
 const TestPathManagerClass = preload("res://scripts/tests/test_path_manager.gd")
 
-@onready var bot: CharacterBody3D = $Bot
+@onready var bot: CharacterBase = $Bot
 @onready var camera: Camera3D = $OrbitCamera
 @onready var map_node: Node3D = $Map
 
-var anim_player: AnimationPlayer = null
-var skeleton: Skeleton3D = null
 const GRAVITY: float = 9.8
 
 # カメラ移動
 const CAMERA_MOVE_SPEED: float = 10.0
 var camera_target_pos: Vector3 = Vector3.ZERO
 
-# 武器装着
-const AK47_SCENE_PATH: String = "res://scenes/weapons/ak47.tscn"
 
 # パス描画
 var path_manager: Node3D = null
@@ -24,7 +20,7 @@ var path_manager: Node3D = null
 # ボット移動
 var current_waypoints: Array = []
 var current_waypoint_index: int = 0
-var is_moving: bool = false
+# is_moving/is_runningはbot（CharacterBase）の変数を直接使用
 const WALK_SPEED: float = 3.0
 const RUN_SPEED: float = 6.0
 const ARRIVAL_THRESHOLD: float = 0.3
@@ -46,9 +42,16 @@ var stuck_timer: float = 0.0
 var last_position: Vector3 = Vector3.ZERO
 
 func _ready() -> void:
-	_setup_bot()
 	_apply_ct_spawn_position()
-	_attach_weapon()
+	# CharacterBase._ready()でキャラクターセットアップが自動実行される
+	# 武器装備はCharacterAPIを使用
+	CharacterAPI.equip_weapon(bot, CharacterSetup.WeaponId.AK47)
+
+	# テストシーンでは直接AnimationPlayerを使用するためAnimationTreeを無効化
+	bot.use_animation_tree = false
+	if bot.anim_tree:
+		bot.anim_tree.active = false
+
 	_generate_map_collisions()
 	# コリジョン生成完了後にパスシステムをセットアップ
 	call_deferred("_setup_path_system_deferred")
@@ -171,7 +174,7 @@ func _physics_process(delta: float) -> void:
 			bot.velocity.y = 0
 
 		# パス追従移動
-		if is_moving and current_waypoints.size() > 0:
+		if bot.is_moving and current_waypoints.size() > 0:
 			_move_along_path(delta)
 
 		bot.move_and_slide()
@@ -208,19 +211,17 @@ func _on_path_confirmed(waypoints: Array) -> void:
 	last_position = bot.global_position
 
 	if current_waypoints.size() > 0:
-		is_moving = true
+		bot.is_moving = true
 		# 最初のウェイポイントに応じて初期速度とアニメーションを設定
 		var first_waypoint = current_waypoints[0]
 		var should_run: bool = first_waypoint.get("run", false)
+		bot.is_running = should_run
 		# 速度を即座に設定（開始時は遷移なし）
 		target_speed = RUN_SPEED if should_run else WALK_SPEED
 		current_speed = target_speed
 		speed_transition_timer = ANIMATION_BLEND_TIME  # 遷移完了状態
 		speed_transition_start = target_speed
-		if should_run:
-			_play_run_animation()
-		else:
-			_play_walk_animation()
+		# CharacterBase._update_animation()が自動でアニメーションを更新する
 
 
 ## パスクリア時のコールバック
@@ -228,8 +229,9 @@ func _on_path_cleared() -> void:
 	print("[TestBotOnMap] Path cleared")
 	current_waypoints.clear()
 	current_waypoint_index = 0
-	is_moving = false
-	_play_idle_animation()
+	bot.is_moving = false
+	bot.is_running = false
+	# CharacterBase._update_animation()が自動でidleに戻す
 
 
 ## パスに沿って移動
@@ -265,6 +267,8 @@ func _move_along_path(delta: float) -> void:
 		speed_transition_start = current_speed
 		target_speed = new_target_speed
 		speed_transition_timer = 0.0
+		# CharacterBaseの状態を更新
+		bot.is_running = should_run
 
 	# 速度を線形補間（アニメーションブレンド時間と同期）
 	if speed_transition_timer < ANIMATION_BLEND_TIME:
@@ -317,19 +321,18 @@ func _advance_to_next_waypoint(current_should_run: bool) -> void:
 	last_position = bot.global_position
 
 	if current_waypoint_index < current_waypoints.size():
-		# 次のウェイポイントのアニメーションを設定
+		# 次のウェイポイントの走行状態を設定
 		var next_waypoint = current_waypoints[current_waypoint_index]
 		var next_run: bool = next_waypoint.get("run", false)
 		if next_run != current_should_run:
-			if next_run:
-				_play_run_animation()
-			else:
-				_play_walk_animation()
+			# CharacterBaseの状態を更新（アニメーションは自動更新される）
+			bot.is_running = next_run
 
 
 ## パス完了
 func _on_path_complete() -> void:
-	is_moving = false
+	bot.is_moving = false
+	bot.is_running = false
 	current_waypoints.clear()
 	current_waypoint_index = 0
 	current_speed = 0.0
@@ -338,83 +341,41 @@ func _on_path_complete() -> void:
 	speed_transition_start = 0.0
 	bot.velocity.x = 0
 	bot.velocity.z = 0
-	_play_idle_animation()
+	# CharacterBase._update_animation()が自動でidleに戻す
 	print("[TestBotOnMap] Path complete")
 
 
 ## アニメーション再生速度を移動速度に合わせて調整
 func _update_animation_speed() -> void:
-	if not anim_player or not is_moving:
-		if anim_player:
-			anim_player.speed_scale = 1.0
+	if not bot.anim_player or not bot.is_moving:
+		if bot.anim_player:
+			bot.anim_player.speed_scale = 1.0
 		return
 
-	var current_anim = anim_player.current_animation
+	var current_anim = bot.anim_player.current_animation
 	if current_anim.is_empty():
 		return
 
 	# 現在のアニメーションに応じて基準速度を決定
 	var base_speed: float = ANIM_WALK_BASE_SPEED
-	if current_anim == "Rifle_SprintLoop":
+	if current_anim == "running_rifle" or current_anim == "Rifle_SprintLoop":
 		base_speed = ANIM_RUN_BASE_SPEED
-	elif current_anim == "Rifle_WalkFwdLoop":
+	elif current_anim == "walking_rifle" or current_anim == "Rifle_WalkFwdLoop":
 		base_speed = ANIM_WALK_BASE_SPEED
 	else:
 		# idle等の場合は速度調整しない
-		anim_player.speed_scale = 1.0
+		bot.anim_player.speed_scale = 1.0
 		return
 
 	# 移動速度に応じてアニメーション速度をスケール
 	if base_speed > 0:
 		var speed_scale = current_speed / base_speed
 		# 極端な値を防ぐためクランプ
-		anim_player.speed_scale = clampf(speed_scale, 0.5, 2.0)
+		bot.anim_player.speed_scale = clampf(speed_scale, 0.5, 2.0)
 
 
-## アニメーションのloop_modeを強制設定
-func _ensure_loop_mode(anim_name: String) -> void:
-	if not anim_player:
-		return
-	var anim = anim_player.get_animation(anim_name)
-	if anim and anim.loop_mode != Animation.LOOP_LINEAR:
-		anim.loop_mode = Animation.LOOP_LINEAR
-		print("[TestBotOnMap] Set loop_mode to LINEAR for: %s" % anim_name)
-
-
-## アイドルアニメーション再生
-func _play_idle_animation() -> void:
-	if not anim_player:
-		return
-	const ANIM_NAME = "Rifle_Idle"
-	if anim_player.has_animation(ANIM_NAME):
-		_ensure_loop_mode(ANIM_NAME)
-		if anim_player.current_animation != ANIM_NAME:
-			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
-
-
-## 歩行アニメーション再生
-func _play_walk_animation() -> void:
-	if not anim_player:
-		return
-	const ANIM_NAME = "Rifle_WalkFwdLoop"
-	if anim_player.has_animation(ANIM_NAME):
-		_ensure_loop_mode(ANIM_NAME)
-		if anim_player.current_animation != ANIM_NAME:
-			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
-
-
-## 走りアニメーション再生
-func _play_run_animation() -> void:
-	if not anim_player:
-		return
-	const ANIM_NAME = "Rifle_SprintLoop"
-	if anim_player.has_animation(ANIM_NAME):
-		_ensure_loop_mode(ANIM_NAME)
-		if anim_player.current_animation != ANIM_NAME:
-			anim_player.play(ANIM_NAME, ANIMATION_BLEND_TIME)
-	else:
-		# フォールバック: 歩行アニメーションを使用
-		_play_walk_animation()
+## 以下の手動アニメーション関数は不要（CharacterBase._update_animation()が自動処理）
+## 後方互換性のため残すがCharacterBaseのis_moving/is_runningを使用すること
 
 
 ## WASDでカメラを移動
@@ -441,106 +402,6 @@ func _handle_camera_movement(delta: float) -> void:
 		if camera.target:
 			camera.target.global_position = camera_target_pos
 			camera._update_camera_position()
-
-
-func _setup_bot() -> void:
-	var bot_model = bot.get_node_or_null("CharacterModel")
-	if not bot_model:
-		push_warning("[TestBotOnMap] CharacterModel not found")
-		return
-
-	# マテリアル設定（明るさ補正を適用）
-	CharacterSetup.setup_materials(bot_model, "vanguard")
-
-	# Find AnimationPlayer
-	anim_player = _find_animation_player(bot_model)
-	if anim_player:
-		print("[TestBotOnMap] Found AnimationPlayer")
-		_print_available_animations()  # アニメーション一覧とループ設定を表示
-		# Play Rifle_Idle animation
-		if anim_player.has_animation("Rifle_Idle"):
-			anim_player.play("Rifle_Idle")
-			print("[TestBotOnMap] Playing Rifle_Idle animation")
-		else:
-			push_warning("[TestBotOnMap] Rifle_Idle animation not found")
-	else:
-		push_warning("[TestBotOnMap] AnimationPlayer not found")
-
-	# Find Skeleton3D
-	skeleton = _find_skeleton(bot_model)
-	if skeleton:
-		print("[TestBotOnMap] Found Skeleton3D")
-	else:
-		push_warning("[TestBotOnMap] Skeleton3D not found")
-
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var result := _find_animation_player(child)
-		if result:
-			return result
-	return null
-
-
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if node is Skeleton3D:
-		return node
-	for child in node.get_children():
-		var result := _find_skeleton(child)
-		if result:
-			return result
-	return null
-
-
-## AK47を右手に装着
-func _attach_weapon() -> void:
-	if not skeleton:
-		push_warning("[TestBotOnMap] Cannot attach weapon - no skeleton")
-		return
-
-	# 右手のボーンを検索
-	var right_hand_names := ["mixamorig_RightHand", "RightHand", "right_hand", "mixamorig:RightHand"]
-	var right_hand_bone_idx: int = -1
-
-	for bone_name in right_hand_names:
-		var idx := skeleton.find_bone(bone_name)
-		if idx >= 0:
-			right_hand_bone_idx = idx
-			print("[TestBotOnMap] Found right hand bone: %s (index: %d)" % [bone_name, idx])
-			break
-
-	if right_hand_bone_idx < 0:
-		push_warning("[TestBotOnMap] Right hand bone not found")
-		return
-
-	# BoneAttachment3Dを作成
-	var weapon_attachment := BoneAttachment3D.new()
-	weapon_attachment.name = "WeaponAttachment"
-	weapon_attachment.bone_idx = right_hand_bone_idx
-	skeleton.add_child(weapon_attachment)
-
-	# AK47シーンを読み込んで装着
-	var ak47_scene = load(AK47_SCENE_PATH)
-	if not ak47_scene:
-		push_warning("[TestBotOnMap] Failed to load AK47 scene: %s" % AK47_SCENE_PATH)
-		return
-
-	var weapon = ak47_scene.instantiate()
-	weapon.name = "AK47"
-	weapon_attachment.add_child(weapon)
-
-	print("[TestBotOnMap] AK47 attached to right hand")
-
-
-func _print_available_animations() -> void:
-	if anim_player:
-		print("[TestBotOnMap] Available animations:")
-		for anim_name in anim_player.get_animation_list():
-			var anim = anim_player.get_animation(anim_name)
-			var loop_mode = anim.loop_mode if anim else -1
-			print("  - %s (loop_mode=%d)" % [anim_name, loop_mode])
 
 
 ## CTスポーン位置にbotを配置
