@@ -444,9 +444,9 @@ func _populate_bottom_panel() -> void:
 	_create_offset_slider(right_section, "IK Pos X", left_hand_ik_offset.x, -0.2, 0.2, _on_ik_pos_x_changed)
 	_create_offset_slider(right_section, "IK Pos Y", left_hand_ik_offset.y, -0.2, 0.2, _on_ik_pos_y_changed)
 	_create_offset_slider(right_section, "IK Pos Z", left_hand_ik_offset.z, -0.2, 0.2, _on_ik_pos_z_changed)
-	_create_offset_slider(right_section, "IK Rot X", left_hand_ik_rotation.x, -180, 180, _on_ik_rot_x_changed)
-	_create_offset_slider(right_section, "IK Rot Y", left_hand_ik_rotation.y, -180, 180, _on_ik_rot_y_changed)
-	_create_offset_slider(right_section, "IK Rot Z", left_hand_ik_rotation.z, -180, 180, _on_ik_rot_z_changed)
+	_create_offset_slider(right_section, "IK Rot X", left_hand_ik_rotation.x, -360, 360, _on_ik_rot_x_changed)
+	_create_offset_slider(right_section, "IK Rot Y", left_hand_ik_rotation.y, -360, 360, _on_ik_rot_y_changed)
+	_create_offset_slider(right_section, "IK Rot Z", left_hand_ik_rotation.z, -360, 360, _on_ik_rot_z_changed)
 
 	# Print values buttons
 	var btn_section = VBoxContainer.new()

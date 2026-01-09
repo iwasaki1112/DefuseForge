@@ -746,8 +746,6 @@ func _handle_path_movement(delta: float) -> void:
 		# 目標速度を決定（変更があれば遷移開始）
 		var new_target_speed := run_speed if should_run else walk_speed
 		if not is_equal_approx(new_target_speed, _target_speed):
-			print("[CharacterBase] Speed transition started: %s -> %s (run: %s -> %s)" % [
-				_target_speed, new_target_speed, is_running, should_run])
 			_target_speed = new_target_speed
 			_speed_transition_timer = 0.0
 			_target_is_running = should_run
@@ -761,7 +759,6 @@ func _handle_path_movement(delta: float) -> void:
 
 			# 遷移がしきい値を超えたらアニメーションを切り替え
 			if t >= ANIM_SWITCH_THRESHOLD and is_running != _target_is_running:
-				print("[CharacterBase] Animation switch at t=%.2f: is_running %s -> %s" % [t, is_running, _target_is_running])
 				is_running = _target_is_running
 		else:
 			_current_speed = _target_speed
@@ -879,8 +876,6 @@ func _update_animation() -> void:
 		new_state = 0
 
 	if new_state != current_move_state:
-		print("[CharacterBase] _update_animation: state change %d -> %d (is_moving=%s, is_running=%s)" % [
-			current_move_state, new_state, is_moving, is_running])
 		current_move_state = new_state
 		_play_current_animation()
 
@@ -915,12 +910,8 @@ func _play_current_animation() -> void:
 					anim_name = CharacterSetup.get_animation_name("walking", fallback_type)
 
 	if anim_player.has_animation(anim_name):
-		print("[CharacterBase] _play_current_animation: %s (use_tree=%s, tree_active=%s)" % [
-			anim_name, use_animation_tree, anim_tree.active if anim_tree else "null"])
-
 		# AnimationTreeが有効な場合、一時的に無効化してブレンド再生
 		if use_animation_tree and anim_tree and anim_tree.active and anim_blend_tree:
-			print("[CharacterBase]   -> Disabling AnimationTree, playing with blend %.2f" % ANIM_BLEND_TIME)
 			# AnimationTreeを一時的に無効化（AnimationPlayerがブレンドを処理できるように）
 			anim_tree.active = false
 
@@ -930,8 +921,6 @@ func _play_current_animation() -> void:
 			# ブレンド完了後にAnimationTreeを再有効化
 			_schedule_animation_tree_reactivation(anim_name)
 		else:
-			print("[CharacterBase]   -> Playing directly with blend %.2f (tree_active=%s)" % [
-				ANIM_BLEND_TIME, anim_tree.active if anim_tree else "null"])
 			# AnimationTreeが無効な場合はAnimationPlayerを直接使用
 			anim_player.play(anim_name, ANIM_BLEND_TIME)
 
