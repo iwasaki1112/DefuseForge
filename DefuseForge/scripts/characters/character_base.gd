@@ -163,6 +163,15 @@ func _setup_character() -> void:
 
 		# AnimationPlayerを取得してアニメーションをロード
 		anim_player = CharacterSetup.find_animation_player(model)
+		if not anim_player and skeleton:
+			# AnimationPlayerが存在しない場合は動的に作成
+			print("[CharacterBase] No AnimationPlayer found, creating one dynamically")
+			anim_player = AnimationPlayer.new()
+			anim_player.name = "AnimationPlayer"
+			skeleton.add_child(anim_player)
+			# デフォルトのAnimationLibraryを作成
+			var default_lib = AnimationLibrary.new()
+			anim_player.add_animation_library("", default_lib)
 		if anim_player:
 			CharacterSetup.load_animations(anim_player, model, name)
 			# 歩行シーケンス用のシグナル接続

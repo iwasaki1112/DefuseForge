@@ -50,6 +50,10 @@ var weapon_option_button: OptionButton = null
 # Shooting
 var is_shooting: bool = false
 
+# Animation Library - 共通アニメーションライブラリ
+const ANIMATION_LIBRARY_PATH: String = "res://assets/animations/mixamo_animation_library.glb"
+var animation_library_loaded: bool = false
+
 # Left hand IK - 値は weapon_resource から読み込み
 var left_hand_ik: SkeletonIK3D = null
 var left_hand_grip_target: Marker3D = null
@@ -181,9 +185,10 @@ func _scan_available_characters() -> void:
 	var folder_name = dir.get_next()
 	while folder_name != "":
 		if dir.current_is_dir() and not folder_name.begins_with("."):
-			# Check if glb file exists
+			# Check if glb or fbx file exists
 			var glb_path = CHARACTERS_DIR + folder_name + "/" + folder_name + ".glb"
-			if ResourceLoader.exists(glb_path):
+			var fbx_path = CHARACTERS_DIR + folder_name + "/" + folder_name + ".fbx"
+			if ResourceLoader.exists(glb_path) or ResourceLoader.exists(fbx_path):
 				available_characters.append(folder_name)
 				print("[AnimViewer] Found character: %s" % folder_name)
 		folder_name = dir.get_next()
@@ -613,11 +618,13 @@ func _change_character(character_id: String) -> void:
 	# Load character resource (for weapon offset)
 	_load_character_resource()
 
-	# Load and instantiate new character
+	# Load and instantiate new character (support both glb and fbx)
 	var glb_path = CHARACTERS_DIR + character_id + "/" + character_id + ".glb"
-	var character_scene = load(glb_path)
+	var fbx_path = CHARACTERS_DIR + character_id + "/" + character_id + ".fbx"
+	var character_path = glb_path if ResourceLoader.exists(glb_path) else fbx_path
+	var character_scene = load(character_path)
 	if not character_scene:
-		push_warning("[AnimViewer] Failed to load character: %s" % glb_path)
+		push_warning("[AnimViewer] Failed to load character: %s" % character_path)
 		return
 
 	character_model = character_scene.instantiate()
@@ -844,6 +851,17 @@ func _find_node_by_name(root: Node, target_name: String) -> Node:
 	return null
 
 
+## UIに表示する主要アニメーションのリスト
+const DISPLAY_ANIMATIONS: Array[String] = [
+	"Rifle_Idle",
+	"Rifle_WalkFwdLoop",
+	"Rifle_SprintLoop",
+	"Rifle_CrouchLoop",
+	"Rifle_Reload_2",
+	"Rifle_Death_3",
+]
+
+
 func _collect_animations() -> void:
 	if not character_body.anim_player:
 		return
@@ -857,13 +875,181 @@ func _collect_animations() -> void:
 		# オリジナルのGLBアニメーション（Rifle_Idle等）のみを表示
 		if anim_name[0] == anim_name[0].to_lower():
 			continue
+		# 主要アニメーションのみUIに表示
+		if anim_name not in DISPLAY_ANIMATIONS:
+			continue
 		_animations.append(anim_name)
 		var anim = character_body.anim_player.get_animation(anim_name)
 		if anim:
 			print("  - %s (loop_mode=%d, length=%.2fs)" % [anim_name, anim.loop_mode, anim.length])
 
+	# アニメーションがない、または実際のゲームアニメーションがない場合、AnimationLibraryからロード
+	# (T-poseやセットアップ用アニメーションのみの場合も対象)
+	var has_gameplay_anims := false
+	for anim in _animations:
+		if anim.begins_with("Rifle_") or anim.begins_with("Equip") or anim.begins_with("Holster"):
+			has_gameplay_anims = true
+			break
+
+	if not has_gameplay_anims:
+		print("[AnimViewer] No embedded animations, loading from AnimationLibrary...")
+		_load_animation_library()
+
 	_animations.sort()
 	print("[AnimViewer] Animations: ", _animations)
+
+
+func _load_animation_library() -> void:
+	## 共通AnimationLibraryをロードしてAnimationPlayerに追加
+	if not ResourceLoader.exists(ANIMATION_LIBRARY_PATH):
+		push_warning("[AnimViewer] Animation library not found: %s" % ANIMATION_LIBRARY_PATH)
+		return
+
+	var lib_scene = load(ANIMATION_LIBRARY_PATH)
+	if not lib_scene:
+		push_warning("[AnimViewer] Failed to load animation library")
+		return
+
+	var lib_instance = lib_scene.instantiate()
+
+	# AnimationPlayerを探す
+	var source_player: AnimationPlayer = null
+	if lib_instance is AnimationPlayer:
+		source_player = lib_instance
+	else:
+		source_player = lib_instance.get_node_or_null("AnimationPlayer")
+		if not source_player:
+			# 子ノードを再帰的に検索
+			source_player = _find_animation_player(lib_instance)
+
+	if not source_player:
+		push_warning("[AnimViewer] No AnimationPlayer found in animation library")
+		lib_instance.queue_free()
+		return
+
+	# ターゲットのスケルトンパスを取得
+	var target_skeleton_path = ""
+	if character_body.skeleton and character_body.anim_player:
+		# AnimationPlayerの親ノードからスケルトンへの相対パスを計算
+		var anim_player_parent = character_body.anim_player.get_parent()
+		if anim_player_parent:
+			var rel_path = anim_player_parent.get_path_to(character_body.skeleton)
+			target_skeleton_path = str(rel_path)
+			print("[AnimViewer] Target skeleton path: %s" % target_skeleton_path)
+
+	# AnimationLibraryを取得してコピー
+	var lib_names = source_player.get_animation_library_list()
+	print("[AnimViewer] Found animation libraries: ", lib_names)
+
+	for lib_name in lib_names:
+		var lib = source_player.get_animation_library(lib_name)
+		if lib:
+			var anim_names = lib.get_animation_list()
+			print("[AnimViewer] Library '%s' contains %d animations" % [lib_name, anim_names.size()])
+
+			# 各アニメーションをコピー（トラックパスをリマップ）
+			for anim_name in anim_names:
+				if anim_name == "RESET":
+					continue
+				var orig_anim = lib.get_animation(anim_name)
+				if orig_anim:
+					if not character_body.anim_player.has_animation(anim_name):
+						# アニメーションを複製してトラックパスをリマップ（In Place処理含む）
+						var remapped_anim = _remap_animation_tracks(orig_anim, target_skeleton_path, anim_name)
+						# デフォルトライブラリに追加
+						var default_lib = character_body.anim_player.get_animation_library("")
+						if default_lib:
+							default_lib.add_animation(anim_name, remapped_anim)
+							# 主要アニメーションのみUIリストに追加
+							if anim_name in DISPLAY_ANIMATIONS:
+								_animations.append(anim_name)
+								print("  + Added (display): %s" % anim_name)
+							else:
+								print("  + Added (hidden): %s" % anim_name)
+
+	lib_instance.queue_free()
+	animation_library_loaded = true
+	print("[AnimViewer] Animation library loaded successfully")
+
+
+## ルートモーションを除去してIn Place化するアニメーションのリスト
+const IN_PLACE_ANIMATIONS: Array[String] = [
+	"Rifle_WalkFwdLoop",
+	"Rifle_WalkBwdLoop",
+	"Rifle_SprintLoop",
+	"Rifle_RunFwdLoop",
+	"Rifle_RunBwdLoop",
+	"Rifle_StrafeLeftLoop",
+	"Rifle_StrafeRightLoop",
+	"Rifle_StrafeLeft45Loop",
+	"Rifle_StrafeRight45Loop",
+	"Rifle_StrafeLeft135Loop",
+	"Rifle_StrafeRight135Loop",
+	"Rifle_StrafeRunLeftLoop",
+	"Rifle_StrafeRunRightLoop",
+	"Rifle_StrafeRun45LeftLoop",
+	"Rifle_StrafeRun45RightLoop",
+	"Rifle_StrafeRun135LeftLoop",
+	"Rifle_StrafeRun135LeftLoop_003",
+]
+
+
+func _remap_animation_tracks(source_anim: Animation, target_skeleton_path: String, anim_name: String = "") -> Animation:
+	## アニメーションのトラックパスをターゲットスケルトンに合わせてリマップ
+	## In Place対象のアニメーションはルートモーションを除去
+	var new_anim = source_anim.duplicate(true)
+	var should_remove_root_motion = anim_name in IN_PLACE_ANIMATIONS
+
+	for i in range(new_anim.get_track_count()):
+		var track_path = new_anim.track_get_path(i)
+		var path_str = str(track_path)
+
+		# パスを解析: "NodePath/Skeleton3D:BoneName" 形式
+		# ソースパス（1_PHANTOM/Skeleton3D）をターゲットパスに置換
+		if ":mixamorig" in path_str:
+			# ボーン名を抽出
+			var colon_idx = path_str.find(":")
+			if colon_idx >= 0:
+				var bone_part = path_str.substr(colon_idx)  # ":mixamorig_Hips" など
+				var new_path = target_skeleton_path + bone_part
+				new_anim.track_set_path(i, NodePath(new_path))
+
+			# In Place処理: Hipsの位置トラックを平坦化
+			if should_remove_root_motion and ":mixamorig_Hips" in path_str:
+				if new_anim.track_get_type(i) == Animation.TYPE_POSITION_3D:
+					_flatten_position_track(new_anim, i)
+					print("    [In Place] Flattened root motion for: %s" % anim_name)
+
+	return new_anim
+
+
+func _flatten_position_track(anim: Animation, track_idx: int) -> void:
+	## 位置トラックを平坦化（最初のフレームの値で固定）
+	var key_count = anim.track_get_key_count(track_idx)
+	if key_count == 0:
+		return
+
+	# 最初のフレームの位置を取得
+	var base_position: Vector3 = anim.track_get_key_value(track_idx, 0)
+
+	# 全キーフレームを同じ位置に設定（上下の動きは維持、前後左右の移動を除去）
+	for i in range(key_count):
+		var current_pos: Vector3 = anim.track_get_key_value(track_idx, i)
+		# X（左右）とY（前後）を固定、Z（上下）は維持
+		# Note: Mixamoの座標系ではYが前後方向
+		var new_pos = Vector3(base_position.x, base_position.y, current_pos.z)
+		anim.track_set_key_value(track_idx, i, new_pos)
+
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	## ノードツリーからAnimationPlayerを探す
+	for child in node.get_children():
+		if child is AnimationPlayer:
+			return child
+		var found = _find_animation_player(child)
+		if found:
+			return found
+	return null
 
 
 func _on_ik_pos_x_changed(value: float) -> void:
