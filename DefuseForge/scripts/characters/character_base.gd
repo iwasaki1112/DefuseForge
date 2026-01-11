@@ -65,7 +65,7 @@ func _physics_process(delta: float) -> void:
 	if animation:
 		animation.update(delta)
 	if weapon:
-		weapon.update_ik()
+		weapon.update()
 
 	move_and_slide()
 
@@ -307,23 +307,14 @@ func start_action(action_type: int, duration: float) -> void:
 	_action_timer = duration
 	action_started.emit(action_type)
 
-	# IKを無効化（リロード時など）
-	if action_type == CharacterActionState.ActionType.RELOAD and weapon:
-		weapon.disable_ik()
-
 
 ## アクションをキャンセル
 func cancel_action() -> void:
 	if current_action == CharacterActionState.ActionType.NONE:
 		return
 
-	var cancelled_action = current_action
 	current_action = CharacterActionState.ActionType.NONE
 	_action_timer = 0.0
-
-	# IKを再有効化
-	if cancelled_action == CharacterActionState.ActionType.RELOAD and weapon:
-		weapon.enable_ik()
 
 
 ## アクション中かどうか
@@ -340,11 +331,6 @@ func _update_action_timer(delta: float) -> void:
 	if _action_timer <= 0:
 		var completed_action = current_action
 		current_action = CharacterActionState.ActionType.NONE
-
-		# IKを再有効化
-		if completed_action == CharacterActionState.ActionType.RELOAD and weapon:
-			weapon.enable_ik()
-
 		action_completed.emit(completed_action)
 
 

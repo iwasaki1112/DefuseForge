@@ -40,10 +40,6 @@ var weapon_option_button: OptionButton = null
 # Shooting
 var is_shooting: bool = false
 
-# IK adjustment values (for display/debugging)
-var left_hand_ik_offset: Vector3 = Vector3.ZERO
-var left_hand_ik_rotation: Vector3 = Vector3.ZERO
-
 
 func _weapon_id_string_to_int(weapon_id: String) -> int:
 	match weapon_id.to_lower():
@@ -135,9 +131,6 @@ func _load_weapon_resource() -> void:
 	var resource_path = WEAPONS_DIR + current_weapon_id + "/" + current_weapon_id + ".tres"
 	if ResourceLoader.exists(resource_path):
 		weapon_resource = load(resource_path) as WeaponResource
-		if weapon_resource:
-			left_hand_ik_offset = weapon_resource.left_hand_ik_position
-			left_hand_ik_rotation = weapon_resource.left_hand_ik_rotation
 
 
 func _create_ui_layout() -> void:
@@ -353,26 +346,6 @@ func _populate_bottom_panel() -> void:
 	rotation_slider.value_changed.connect(_on_upper_body_rotation_changed)
 	rotation_section.add_child(rotation_slider)
 
-	# IK info display (read-only, shows values from WeaponResource)
-	var ik_section = VBoxContainer.new()
-	ik_section.add_theme_constant_override("separation", 4)
-	hbox.add_child(ik_section)
-
-	var ik_label = Label.new()
-	ik_label.text = "Left Hand IK (from WeaponResource)"
-	ik_label.add_theme_font_size_override("font_size", 12)
-	ik_section.add_child(ik_label)
-
-	var ik_pos_label = Label.new()
-	ik_pos_label.text = "Pos: (%.2f, %.2f, %.2f)" % [left_hand_ik_offset.x, left_hand_ik_offset.y, left_hand_ik_offset.z]
-	ik_pos_label.name = "IKPosLabel"
-	ik_section.add_child(ik_pos_label)
-
-	var ik_rot_label = Label.new()
-	ik_rot_label.text = "Rot: (%.0f, %.0f, %.0f)" % [left_hand_ik_rotation.x, left_hand_ik_rotation.y, left_hand_ik_rotation.z]
-	ik_rot_label.name = "IKRotLabel"
-	ik_section.add_child(ik_rot_label)
-
 
 ## 表示するアニメーション名（完全一致、優先順）
 const PREFERRED_ANIMATIONS: Array[String] = [
@@ -543,22 +516,6 @@ func _change_weapon(weapon_id: String) -> void:
 
 	# Equip weapon using new API
 	character_body.set_weapon(_weapon_id_string_to_int(weapon_id))
-
-	# Update IK info display
-	_update_ik_info_display()
-
-
-func _update_ik_info_display() -> void:
-	if not bottom_panel:
-		return
-
-	var ik_pos_label = bottom_panel.find_child("IKPosLabel", true, false) as Label
-	var ik_rot_label = bottom_panel.find_child("IKRotLabel", true, false) as Label
-
-	if ik_pos_label:
-		ik_pos_label.text = "Pos: (%.2f, %.2f, %.2f)" % [left_hand_ik_offset.x, left_hand_ik_offset.y, left_hand_ik_offset.z]
-	if ik_rot_label:
-		ik_rot_label.text = "Rot: (%.0f, %.0f, %.0f)" % [left_hand_ik_rotation.x, left_hand_ik_rotation.y, left_hand_ik_rotation.z]
 
 
 func _play_animation(anim_name: String) -> void:

@@ -40,13 +40,6 @@ extends Resource
 @export var attach_position: Vector3 = Vector3.ZERO  ## 右手ボーンからの相対位置
 @export var attach_rotation: Vector3 = Vector3.ZERO  ## 右手ボーンからの相対回転（度数）
 
-@export_group("左手IK設定")
-@export var left_hand_ik_enabled: bool = true  ## 左手IKを使用するか
-@export var left_hand_ik_position: Vector3 = Vector3.ZERO  ## 左手IKの位置オフセット
-@export var left_hand_ik_rotation: Vector3 = Vector3.ZERO  ## 左手IKの回転オフセット（度数）
-## NOTE: IK無効アニメーションはCharacterBase._should_disable_ik_for_animation()で
-## パターンマッチングにより自動判定（Convention over Configuration）
-
 @export_group("アニメーション設定")
 ## アニメーション状態ごとの位置・回転オフセット
 ## 構造: { AnimState(int): { "position": Vector3, "rotation": Vector3 (degrees) } }
@@ -71,11 +64,6 @@ func validate() -> Dictionary:
 		errors.append("scene_path is empty")
 	elif not ResourceLoader.exists(scene_path):
 		errors.append("scene_path does not exist: %s" % scene_path)
-
-	# IK設定の一貫性チェック
-	if left_hand_ik_enabled:
-		if left_hand_ik_position == Vector3.ZERO and left_hand_ik_rotation == Vector3.ZERO:
-			errors.append("IK enabled but both position and rotation are zero (probably not configured)")
 
 	# 武器タイプのチェック
 	if weapon_type < TYPE_NONE or weapon_type > TYPE_PISTOL:
@@ -114,9 +102,6 @@ func to_dict() -> Dictionary:
 		"kill_reward": kill_reward,
 		"attach_position": attach_position,
 		"attach_rotation": attach_rotation,
-		"left_hand_ik_enabled": left_hand_ik_enabled,
-		"left_hand_ik_position": left_hand_ik_position,
-		"left_hand_ik_rotation": left_hand_ik_rotation,
 		"animation_offsets": animation_offsets
 	}
 
@@ -140,9 +125,6 @@ static func from_dict(data: Dictionary, id: String = "") -> WeaponResource:
 	res.kill_reward = data.get("kill_reward", 300)
 	res.attach_position = data.get("attach_position", Vector3.ZERO)
 	res.attach_rotation = data.get("attach_rotation", Vector3.ZERO)
-	res.left_hand_ik_enabled = data.get("left_hand_ik_enabled", true)
-	res.left_hand_ik_position = data.get("left_hand_ik_position", Vector3.ZERO)
-	res.left_hand_ik_rotation = data.get("left_hand_ik_rotation", Vector3.ZERO)
 	res.animation_offsets = data.get("animation_offsets", {})
 	return res
 

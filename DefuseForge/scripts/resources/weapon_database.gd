@@ -107,10 +107,6 @@ func update_weapon(weapon_id: String, updates: Dictionary) -> bool:
 		weapon.price = updates.price
 	if updates.has("kill_reward"):
 		weapon.kill_reward = updates.kill_reward
-	if updates.has("left_hand_ik_position"):
-		weapon.left_hand_ik_position = updates.left_hand_ik_position
-	if updates.has("left_hand_ik_rotation"):
-		weapon.left_hand_ik_rotation = updates.left_hand_ik_rotation
 
 	return true
 
