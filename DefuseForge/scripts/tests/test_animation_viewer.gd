@@ -47,7 +47,7 @@ var left_hand_y_label: Label = null
 var left_hand_z_label: Label = null
 
 # Weapon selection
-const WEAPONS_DIR: String = "res://resources/weapons/"
+const WEAPONS_DIR: String = "res://assets/weapons/"
 var available_weapons: Array[String] = []
 var current_weapon_id: String = "ak47"
 var weapon_resource: WeaponResource = null

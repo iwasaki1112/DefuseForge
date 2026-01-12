@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://br72xwiohuuco"
-path.s3tc="res://.godot/imported/ak47_Image_0.png-8e0a945fdee38c0481a1b0a48c083504.s3tc.ctex"
-path.etc2="res://.godot/imported/ak47_Image_0.png-8e0a945fdee38c0481a1b0a48c083504.etc2.ctex"
+uid="uid://3ay6rp8oct65"
+path.s3tc="res://.godot/imported/map_map_grid_floor_texture.png-70d4c5433ea3b5ab3f7413885833df87.s3tc.ctex"
+path.etc2="res://.godot/imported/map_map_grid_floor_texture.png-70d4c5433ea3b5ab3f7413885833df87.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://resources/weapons/ak47/ak47_Image_0.png"
-dest_files=["res://.godot/imported/ak47_Image_0.png-8e0a945fdee38c0481a1b0a48c083504.s3tc.ctex", "res://.godot/imported/ak47_Image_0.png-8e0a945fdee38c0481a1b0a48c083504.etc2.ctex"]
+source_file="res://assets/maps/map_map_grid_floor_texture.png"
+dest_files=["res://.godot/imported/map_map_grid_floor_texture.png-70d4c5433ea3b5ab3f7413885833df87.s3tc.ctex", "res://.godot/imported/map_map_grid_floor_texture.png-70d4c5433ea3b5ab3f7413885833df87.etc2.ctex"]
 
 [params]
 

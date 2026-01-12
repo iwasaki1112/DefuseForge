@@ -2,21 +2,18 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ck8hagircffhh"
-path.s3tc="res://.godot/imported/m4a1_Image_0.png-5e03583a3091d89c3fab36a86d221588.s3tc.ctex"
-path.etc2="res://.godot/imported/m4a1_Image_0.png-5e03583a3091d89c3fab36a86d221588.etc2.ctex"
+uid="uid://b0x261y7w0r3n"
+path.s3tc="res://.godot/imported/m4a1_Image_2.png-5e1e70727f69d976e5cec7eb5b358b0e.s3tc.ctex"
+path.etc2="res://.godot/imported/m4a1_Image_2.png-5e1e70727f69d976e5cec7eb5b358b0e.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "f2e61e17d803eb73e69315f68c694e24"
-}
 
 [deps]
 
-source_file="res://resources/weapons/m4a1/m4a1_Image_0.png"
-dest_files=["res://.godot/imported/m4a1_Image_0.png-5e03583a3091d89c3fab36a86d221588.s3tc.ctex", "res://.godot/imported/m4a1_Image_0.png-5e03583a3091d89c3fab36a86d221588.etc2.ctex"]
+source_file="res://assets/weapons/m4a1/m4a1_Image_2.png"
+dest_files=["res://.godot/imported/m4a1_Image_2.png-5e1e70727f69d976e5cec7eb5b358b0e.s3tc.ctex", "res://.godot/imported/m4a1_Image_2.png-5e1e70727f69d976e5cec7eb5b358b0e.etc2.ctex"]
 
 [params]
 
@@ -26,12 +23,12 @@ compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
-roughness/mode=0
-roughness/src_normal=""
+roughness/mode=1
+roughness/src_normal="res://assets/weapons/m4a1/m4a1_Image_2.png"
 process/channel_remap/red=0
 process/channel_remap/green=1
 process/channel_remap/blue=2

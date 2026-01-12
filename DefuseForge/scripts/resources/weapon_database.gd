@@ -15,7 +15,7 @@ extends Resource
 var _id_to_index: Dictionary = {}
 
 ## デフォルトの武器リソースディレクトリ
-const DEFAULT_WEAPONS_DIR: String = "res://resources/weapons/"
+const DEFAULT_WEAPONS_DIR: String = "res://assets/weapons/"
 
 
 ## 初期化（ロード後に呼び出す）
@@ -125,7 +125,7 @@ func update_weapon_by_int_id(weapon_id: int, updates: Dictionary) -> bool:
 
 
 ## 指定ディレクトリから武器リソースを読み込み
-## @param dir_path: 武器リソースディレクトリ（デフォルト: res://resources/weapons/）
+## @param dir_path: 武器リソースディレクトリ（デフォルト: res://assets/weapons/）
 ## @return: 読み込んだ武器数
 func load_from_directory(dir_path: String = DEFAULT_WEAPONS_DIR) -> int:
 	var dir = DirAccess.open(dir_path)
@@ -183,7 +183,7 @@ static var _instance: WeaponDatabase = null
 static func get_instance() -> WeaponDatabase:
 	if _instance == null:
 		# デフォルトパスから読み込みを試みる
-		var default_path = "res://resources/weapon_database.tres"
+		var default_path = "res://assets/weapon_database.tres"
 		if ResourceLoader.exists(default_path):
 			_instance = load(default_path) as WeaponDatabase
 		if _instance == null:

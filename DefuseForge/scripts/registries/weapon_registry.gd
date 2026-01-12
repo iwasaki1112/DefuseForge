@@ -24,8 +24,8 @@ static var _cache: Dictionary = {}
 ## 新しい武器を追加する場合はここに登録
 const WEAPON_PATHS := {
 	WeaponId.NONE: "",
-	WeaponId.AK47: "res://resources/weapons/ak47/ak47.tres",
-	WeaponId.M4A1: "res://resources/weapons/m4a1/m4a1.tres"
+	WeaponId.AK47: "res://assets/weapons/ak47/ak47.tres",
+	WeaponId.M4A1: "res://assets/weapons/m4a1/m4a1.tres"
 }
 
 

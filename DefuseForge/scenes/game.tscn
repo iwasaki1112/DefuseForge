@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://cenemy" path="res://scenes/characters/enemy.tscn" id="2_enemy"]
 [ext_resource type="Script" path="res://scripts/ui/game_ui.gd" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/scenes/game_scene.gd" id="5_game"]
-[ext_resource type="PackedScene" path="res://resources/maps/map.glb" id="6_map"]
+[ext_resource type="PackedScene" uid="uid://bsd3ukp33enjj" path="res://assets/maps/map.glb" id="6_map"]
 [ext_resource type="Script" path="res://scripts/wall_collision_generator.gd" id="8_wall_col"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]

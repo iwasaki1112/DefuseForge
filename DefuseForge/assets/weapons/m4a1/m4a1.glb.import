@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bbbala3xvuj4s"
-path="res://.godot/imported/m4a1.glb-799a2a99fe6d7cedf382701bdc111f05.scn"
+uid="uid://d0p72bkf2qjka"
+path="res://.godot/imported/m4a1.glb-466a77d7814e149ec7e0eff3f8abed31.scn"
 
 [deps]
 
-source_file="res://resources/weapons/m4a1/m4a1.glb"
-dest_files=["res://.godot/imported/m4a1.glb-799a2a99fe6d7cedf382701bdc111f05.scn"]
+source_file="res://assets/weapons/m4a1/m4a1.glb"
+dest_files=["res://.godot/imported/m4a1.glb-466a77d7814e149ec7e0eff3f8abed31.scn"]
 
 [params]
 
