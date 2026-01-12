@@ -26,6 +26,10 @@ var left_hand_ik: TwoBoneIK3D
 var _ik_enabled: bool = false
 var _left_hand_original_position: Vector3 = Vector3.ZERO
 
+## キャラクターごとのIKオフセット
+var _character_hand_ik_offset: Vector3 = Vector3.ZERO
+var _character_elbow_pole_offset: Vector3 = Vector3.ZERO
+
 
 func _ready() -> void:
 	pass
@@ -286,8 +290,10 @@ func _create_elbow_pole() -> Marker3D:
 
 ## ポール位置を更新（リアルタイム調整用）
 func update_elbow_pole_position(x: float, y: float, z: float) -> void:
+	# 武器の値 + キャラクターオフセット を適用
+	var final_pos = Vector3(x, y, z) + _character_elbow_pole_offset
 	if left_elbow_pole:
-		left_elbow_pole.position = Vector3(x, y, z)
+		left_elbow_pole.position = final_pos
 	if weapon_resource:
 		weapon_resource.left_elbow_pole_x = x
 		weapon_resource.left_elbow_pole_y = y
@@ -298,9 +304,17 @@ func update_elbow_pole_position(x: float, y: float, z: float) -> void:
 func update_left_hand_position(x: float, y: float, z: float) -> void:
 	if weapon_resource:
 		weapon_resource.left_hand_ik_position = Vector3(x, y, z)
-	# LeftHandGripマーカーの位置を調整（元の位置＋オフセット）
+	# LeftHandGripマーカーの位置を調整（元の位置 + 武器オフセット + キャラクターオフセット）
 	if left_hand_target:
-		left_hand_target.position = _left_hand_original_position + Vector3(x, y, z)
+		var final_offset = Vector3(x, y, z) + _character_hand_ik_offset
+		left_hand_target.position = _left_hand_original_position + final_offset
+
+
+## キャラクターごとのIKオフセットを設定
+func set_character_ik_offset(hand_offset: Vector3, elbow_offset: Vector3) -> void:
+	_character_hand_ik_offset = hand_offset
+	_character_elbow_pole_offset = elbow_offset
+	print("[WeaponComponent] Character IK offset set - Hand: %s, Elbow: %s" % [hand_offset, elbow_offset])
 
 
 ## 左手IKターゲットを更新（毎フレーム呼び出し）- TwoBoneIK3Dが自動処理

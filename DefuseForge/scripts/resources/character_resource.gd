@@ -22,6 +22,10 @@ extends Resource
 @export var shoulder_offset: Vector3 = Vector3.ZERO  ## 肩ボーンのオフセット（X=外側に広げる）
 @export var upper_arm_offset: Vector3 = Vector3.ZERO  ## 上腕ボーンのオフセット
 
+@export_group("左手IKオフセット")
+@export var left_hand_ik_offset: Vector3 = Vector3.ZERO  ## 左手IK位置のオフセット
+@export var left_elbow_pole_offset: Vector3 = Vector3.ZERO  ## 肘ポールのオフセット
+
 @export_group("ステータス")
 @export var base_health: float = 100.0  ## 基本HP
 @export var base_walk_speed: float = 3.0  ## 歩行速度
@@ -38,6 +42,8 @@ func to_dict() -> Dictionary:
 		"weapon_rotation_offset": weapon_rotation_offset,
 		"shoulder_offset": shoulder_offset,
 		"upper_arm_offset": upper_arm_offset,
+		"left_hand_ik_offset": left_hand_ik_offset,
+		"left_elbow_pole_offset": left_elbow_pole_offset,
 		"base_health": base_health,
 		"base_walk_speed": base_walk_speed,
 		"base_run_speed": base_run_speed
@@ -54,6 +60,8 @@ static func from_dict(data: Dictionary) -> CharacterResource:
 	res.weapon_rotation_offset = data.get("weapon_rotation_offset", Vector3.ZERO)
 	res.shoulder_offset = data.get("shoulder_offset", Vector3.ZERO)
 	res.upper_arm_offset = data.get("upper_arm_offset", Vector3.ZERO)
+	res.left_hand_ik_offset = data.get("left_hand_ik_offset", Vector3.ZERO)
+	res.left_elbow_pole_offset = data.get("left_elbow_pole_offset", Vector3.ZERO)
 	res.base_health = data.get("base_health", 100.0)
 	res.base_walk_speed = data.get("base_walk_speed", 3.0)
 	res.base_run_speed = data.get("base_run_speed", 6.0)

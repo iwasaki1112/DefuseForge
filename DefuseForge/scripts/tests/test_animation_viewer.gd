@@ -57,6 +57,9 @@ var current_weapon_id: String = "ak47"
 var weapon_resource: WeaponResource = null
 var weapon_option_button: OptionButton = null
 
+# Character resource for IK offset
+var character_resource: CharacterResource = null
+
 # Shooting
 var is_shooting: bool = false
 
@@ -87,12 +90,16 @@ func _ready() -> void:
 	_scan_available_characters()
 	_scan_available_weapons()
 	_load_weapon_resource()
+	_load_character_resource(current_character_id)
 
 	# Wait for CharacterBase to setup
 	await get_tree().process_frame
 
 	# Equip weapon
 	character_body.set_weapon(_weapon_id_string_to_int(current_weapon_id))
+
+	# Apply character IK offset
+	_apply_character_ik_offset()
 
 	# Apply loaded IK values after weapon is equipped
 	await get_tree().process_frame
@@ -172,7 +179,7 @@ func _create_ui_layout() -> void:
 	left_panel.name = "LeftPanel"
 	left_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	left_panel.offset_right = 200
-	left_panel.offset_bottom = 280
+	left_panel.offset_bottom = 420
 	left_panel.offset_left = 10
 	left_panel.offset_top = 10
 	canvas_layer.add_child(left_panel)
@@ -280,6 +287,50 @@ func _populate_left_panel() -> void:
 	pause_btn.text = "Pause/Resume"
 	pause_btn.pressed.connect(_on_pause_pressed)
 	vbox.add_child(pause_btn)
+
+	vbox.add_child(HSeparator.new())
+
+	# Camera view buttons
+	var camera_label = Label.new()
+	camera_label.text = "Camera View"
+	vbox.add_child(camera_label)
+
+	var camera_hbox1 = HBoxContainer.new()
+	camera_hbox1.add_theme_constant_override("separation", 4)
+	vbox.add_child(camera_hbox1)
+
+	var front_btn = Button.new()
+	front_btn.text = "Front"
+	front_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	front_btn.pressed.connect(_on_camera_front)
+	camera_hbox1.add_child(front_btn)
+
+	var back_btn = Button.new()
+	back_btn.text = "Back"
+	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	back_btn.pressed.connect(_on_camera_back)
+	camera_hbox1.add_child(back_btn)
+
+	var camera_hbox2 = HBoxContainer.new()
+	camera_hbox2.add_theme_constant_override("separation", 4)
+	vbox.add_child(camera_hbox2)
+
+	var left_btn = Button.new()
+	left_btn.text = "Left"
+	left_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_btn.pressed.connect(_on_camera_left)
+	camera_hbox2.add_child(left_btn)
+
+	var right_btn = Button.new()
+	right_btn.text = "Right"
+	right_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_btn.pressed.connect(_on_camera_right)
+	camera_hbox2.add_child(right_btn)
+
+	var top_btn = Button.new()
+	top_btn.text = "Top"
+	top_btn.pressed.connect(_on_camera_top)
+	vbox.add_child(top_btn)
 
 
 func _populate_right_panel() -> void:
@@ -635,8 +686,14 @@ func _change_character(character_id: String) -> void:
 	character_body._setup_components()
 	character_body._connect_signals()
 
+	# Load CharacterResource for IK offset
+	_load_character_resource(character_id)
+
 	# Equip weapon
 	character_body.set_weapon(_weapon_id_string_to_int(current_weapon_id))
+
+	# Apply character IK offset
+	_apply_character_ik_offset()
 
 	# Setup animations using CharacterAPI (handles animation sharing automatically)
 	CharacterAPIScript.setup_animations(character_body, character_id)
@@ -646,6 +703,11 @@ func _change_character(character_id: String) -> void:
 
 	# Refresh UI
 	_populate_ui()
+
+	# Apply IK values after everything is set up
+	await get_tree().process_frame
+	_update_elbow_pole()
+	_update_left_hand_position()
 
 	# Play first animation
 	if _animations.size() > 0:
@@ -663,6 +725,9 @@ func _change_weapon(weapon_id: String) -> void:
 
 	# Equip weapon using new API
 	character_body.set_weapon(_weapon_id_string_to_int(weapon_id))
+
+	# Apply character IK offset
+	_apply_character_ik_offset()
 
 	# Apply loaded IK values after weapon is equipped
 	await get_tree().process_frame
@@ -778,3 +843,48 @@ func _start_auto_fire() -> void:
 		return
 	_shoot()
 	get_tree().create_timer(0.1).timeout.connect(_start_auto_fire)
+
+
+# Character resource loading
+func _load_character_resource(character_id: String) -> void:
+	character_resource = CharacterRegistry.get_character(character_id)
+	if character_resource:
+		print("[AnimViewer] Loaded CharacterResource for: %s" % character_id)
+	else:
+		print("[AnimViewer] No CharacterResource found for: %s (using defaults)" % character_id)
+
+
+func _apply_character_ik_offset() -> void:
+	if character_body and character_body.weapon:
+		var hand_offset = Vector3.ZERO
+		var elbow_offset = Vector3.ZERO
+		if character_resource:
+			hand_offset = character_resource.left_hand_ik_offset
+			elbow_offset = character_resource.left_elbow_pole_offset
+		character_body.weapon.set_character_ik_offset(hand_offset, elbow_offset)
+
+
+# Camera view callbacks
+func _on_camera_front() -> void:
+	if camera:
+		camera.set_front_view()
+
+
+func _on_camera_back() -> void:
+	if camera:
+		camera.set_back_view()
+
+
+func _on_camera_left() -> void:
+	if camera:
+		camera.set_left_view()
+
+
+func _on_camera_right() -> void:
+	if camera:
+		camera.set_right_view()
+
+
+func _on_camera_top() -> void:
+	if camera:
+		camera.set_top_view()
