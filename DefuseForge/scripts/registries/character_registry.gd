@@ -10,7 +10,8 @@ static var _cache: Dictionary = {}
 ## 新しいキャラクターを追加する場合はここに登録
 const CHARACTER_PATHS := {
 	"shade": "res://assets/characters/shade/shade.tres",
-	"phantom": "res://assets/characters/phantom/phantom.tres"
+	"phantom": "res://assets/characters/phantom/phantom.tres",
+	"vanguard": "res://assets/characters/vanguard/vanguard.tres"
 }
 
 

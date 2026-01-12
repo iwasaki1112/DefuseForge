@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/character_resource.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "vanguard"
+character_name = "Vanguard"
+model_path = "res://assets/characters/vanguard/vanguard.glb"
+weapon_position_offset = Vector3(0.0, 0.0, 0.0)
+weapon_rotation_offset = Vector3(0, 0, 0)
+shoulder_offset = Vector3(0.02, 0, 0)
+upper_arm_offset = Vector3(0.01, 0, 0)
+left_hand_ik_offset = Vector3(0, 0, 0)
+left_elbow_pole_offset = Vector3(0, 0, 0)
+base_health = 100.0
+base_walk_speed = 3.0
+base_run_speed = 6.0

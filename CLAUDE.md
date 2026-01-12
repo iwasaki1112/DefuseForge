@@ -18,7 +18,7 @@
 | `/add-weapon` | 武器追加ガイド（Blenderモデル準備→WeaponResource作成→左手IK調整） |
 | `/export-character` | BlenderからキャラクターをGLBエクスポート（NLAアニメーション含む）→Godotに配置 |
 | `/organize-arp-collection` | ARPでRig&Bind後のコレクション構造を整理。character1→キャラクター名にリネーム、csコレクションを非表示に設定。 |
-| `/retarget-animation` | MixamoアニメーションをAuto-Rig Proでリターゲット→NLAトラックにPush Down |
+| `/retarget-animation` | 外部アニメーションをAuto-Rig Proでリターゲット→NLAトラックにPush Down |
 | `/sakurai-review` | 桜井政博氏の哲学に基づくゲーム設計レビュー（リスク/リターン、難易度曲線等） |
 | `/difficulty-design` | 難易度設計支援（デコボコ曲線、3分間の法則、救済システム） |
 | `/reward-design` | 報酬システム設計（報酬サイクル、数値報酬、コレクション要素） |
@@ -70,9 +70,52 @@ scripts/
 ## キャラクターアセット
 ```
 assets/characters/
-├── shade/shade.glb     # メインキャラクター
-└── phantom/phantom.glb # shadeとアニメーション共有
+├── shade/shade.glb     # メインキャラクター（アニメーション元）
+├── phantom/phantom.glb # shadeとアニメーション共有
+└── vanguard/vanguard.glb # shadeとアニメーション共有
 ```
+
+## キャラクター追加手順
+
+全キャラクターは同じARPリグを使用。shadeがアニメーション元となり、他キャラクターはアニメーションを共有。
+
+### 1. GLBファイル配置
+```
+assets/characters/{character_id}/{character_id}.glb
+```
+
+### 2. CharacterResource作成
+`assets/characters/{character_id}/{character_id}.tres`を作成：
+```gdresource
+[gd_resource type="Resource" script_class="CharacterResource" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/resources/character_resource.gd" id="1_script"]
+[resource]
+script = ExtResource("1_script")
+character_id = "{character_id}"
+character_name = "{表示名}"
+model_path = "res://assets/characters/{character_id}/{character_id}.glb"
+```
+
+### 3. CharacterRegistry登録
+`scripts/registries/character_registry.gd`の`CHARACTER_PATHS`に追加：
+```gdscript
+const CHARACTER_PATHS := {
+    "shade": "res://assets/characters/shade/shade.tres",
+    "{character_id}": "res://assets/characters/{character_id}/{character_id}.tres"
+}
+```
+
+### 4. アニメーション共有設定
+`scripts/api/character_api.gd`の`ANIMATION_SOURCE`に追加：
+```gdscript
+const ANIMATION_SOURCE := {
+    "phantom": "shade",
+    "{character_id}": "shade"  # shadeのアニメーションを使用
+}
+```
+
+### 5. IK調整（必要に応じて）
+キャラクターの腕の長さが異なる場合、`.tres`の`left_hand_ik_offset`を調整
 
 ## Tool Priority
 1. **Godot MCP** (優先) - シーン作成・編集・プロジェクト実行
