@@ -12,17 +12,9 @@ config_version=5
 
 config/name="DefuseForge"
 config/description="CS1.6 meets Door Kickers 2 - トップダウンタクティカルシューター"
-run/main_scene="res://scenes/title.tscn"
+run/main_scene="res://scenes/tests/test_animation_viewer.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
-
-[autoload]
-
-GameEvents="*res://scripts/autoload/game_events.gd"
-GameManager="*res://scripts/autoload/game_manager.gd"
-InputManager="*res://scripts/autoload/input_manager.gd"
-NakamaClient="*res://scripts/autoload/nakama_client.gd"
-ResourceValidator="*res://scripts/autoload/resource_validator.gd"
 
 [display]
 

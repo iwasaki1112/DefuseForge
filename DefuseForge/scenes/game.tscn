@@ -1,7 +1,5 @@
-[gd_scene load_steps=11 format=3 uid="uid://cgame"]
+[gd_scene load_steps=9 format=3 uid="uid://dynlritytaty5"]
 
-[ext_resource type="PackedScene" uid="uid://cplayer" path="res://scenes/characters/player.tscn" id="1_player"]
-[ext_resource type="PackedScene" uid="uid://cenemy" path="res://scenes/characters/enemy.tscn" id="2_enemy"]
 [ext_resource type="Script" path="res://scripts/ui/game_ui.gd" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/scenes/game_scene.gd" id="5_game"]
 [ext_resource type="PackedScene" uid="uid://bsd3ukp33enjj" path="res://assets/maps/map.glb" id="6_map"]
@@ -34,16 +32,13 @@ environment = SubResource("Environment_env")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 10, 0)
-light_color = Color(1.0, 0.95, 0.85, 1)
+light_color = Color(1, 0.95, 0.85, 1)
 light_energy = 1.2
 shadow_enabled = true
-shadow_bias = 0.1
-shadow_normal_bias = 2.0
 shadow_blur = 0.5
-directional_shadow_max_distance = 50.0
 directional_shadow_mode = 1
 directional_shadow_split_1 = 0.3
-directional_shadow_blend_splits = false
+directional_shadow_max_distance = 50.0
 
 [node name="Floor" type="Node3D" parent="."]
 

@@ -8,26 +8,18 @@ extends RefCounted
 # Constants
 # ======================
 
-## キャラクタープリセット
+## キャラクタープリセット（現在は未使用）
 enum Preset {
 	PLAYER,
 	ENEMY,
 	ALLY
 }
 
-## プリセットシーンパス
-const PRESET_PATHS := {
-	Preset.PLAYER: "res://scenes/characters/player_base.tscn",
-	Preset.ENEMY: "res://scenes/characters/enemy_base.tscn",
-	Preset.ALLY: "res://scenes/characters/player_base.tscn"
-}
+## プリセットシーンパス（シーン削除済み - 現在は未使用）
+const PRESET_PATHS := {}
 
-## プリセット別チーム
-const PRESET_TEAMS := {
-	Preset.PLAYER: "player",
-	Preset.ENEMY: "enemies",
-	Preset.ALLY: "player"
-}
+## プリセット別チーム（現在は未使用）
+const PRESET_TEAMS := {}
 
 ## アニメーション共有マッピング（同じリグを使用するキャラクター）
 ## phantom uses shade's animations (same ARP rig)
