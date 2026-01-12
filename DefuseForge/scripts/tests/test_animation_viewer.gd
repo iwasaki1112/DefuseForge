@@ -21,6 +21,11 @@ var bottom_panel: PanelContainer = null
 const CHARACTERS_DIR: String = "res://assets/characters/"
 var available_characters: Array[String] = []
 var current_character_id: String = "shade"
+
+# Animation sharing - characters without animations use another character's animations
+const ANIMATION_SOURCE: Dictionary = {
+	"phantom": "shade"  # phantom uses shade's animations (same ARP rig)
+}
 var character_model: Node3D = null
 var character_option_button: OptionButton = null
 
@@ -585,6 +590,72 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 	return null
 
 
+## Copy animations from source character (for characters sharing the same ARP rig)
+func _copy_animations_from_source(source_character_id: String) -> void:
+	print("[AnimViewer] Copying animations from: %s" % source_character_id)
+
+	# Load source character GLB
+	var glb_path = CHARACTERS_DIR + source_character_id + "/" + source_character_id + ".glb"
+	var fbx_path = CHARACTERS_DIR + source_character_id + "/" + source_character_id + ".fbx"
+	var source_path = glb_path if ResourceLoader.exists(glb_path) else fbx_path
+
+	if not ResourceLoader.exists(source_path):
+		push_warning("[AnimViewer] Source character not found: %s" % source_path)
+		return
+
+	var source_scene = load(source_path)
+	if not source_scene:
+		push_warning("[AnimViewer] Failed to load source character: %s" % source_path)
+		return
+
+	var source_instance = source_scene.instantiate()
+	var source_anim_player = _find_animation_player(source_instance)
+
+	if not source_anim_player:
+		push_warning("[AnimViewer] No AnimationPlayer found in source character")
+		source_instance.queue_free()
+		return
+
+	# Get target AnimationPlayer
+	var target_anim_player = _find_animation_player(character_model)
+	if not target_anim_player:
+		# Create AnimationPlayer if not exists
+		target_anim_player = AnimationPlayer.new()
+		target_anim_player.name = "AnimationPlayer"
+		character_model.add_child(target_anim_player)
+
+	# Copy animations from source to target
+	var anim_list = source_anim_player.get_animation_list()
+	print("[AnimViewer] Found %d animations in source" % anim_list.size())
+
+	for anim_name in anim_list:
+		if anim_name == "RESET":
+			continue
+		var anim = source_anim_player.get_animation(anim_name)
+		if anim:
+			# Create a duplicate of the animation
+			var anim_copy = anim.duplicate()
+
+			# Check if animation library exists
+			var lib_name = ""  # Default library
+			if not target_anim_player.has_animation_library(lib_name):
+				target_anim_player.add_animation_library(lib_name, AnimationLibrary.new())
+
+			var lib = target_anim_player.get_animation_library(lib_name)
+			if lib.has_animation(anim_name):
+				lib.remove_animation(anim_name)
+			lib.add_animation(anim_name, anim_copy)
+
+	print("[AnimViewer] Copied %d animations" % (anim_list.size() - 1))  # -1 for RESET
+
+	# Clean up source instance
+	source_instance.queue_free()
+
+	# Re-setup animation component with new animations
+	if character_body.animation:
+		character_body.animation.setup(character_model, character_body.skeleton)
+
+
 func _physics_process(delta: float) -> void:
 	if character_body:
 		if not character_body.is_on_floor():
@@ -702,6 +773,12 @@ func _change_character(character_id: String) -> void:
 
 	# Collect animations
 	_collect_animations()
+
+	# If no animations found and character has animation source mapping, copy from source
+	if _animations.is_empty() and ANIMATION_SOURCE.has(character_id):
+		var source_id = ANIMATION_SOURCE[character_id]
+		_copy_animations_from_source(source_id)
+		_collect_animations()  # Re-collect after copying
 
 	# Refresh UI
 	_populate_ui()
