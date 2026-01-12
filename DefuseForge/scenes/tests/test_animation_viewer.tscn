@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dwm58yf7niht0" path="res://scripts/tests/test_animation_viewer.gd" id="1_viewer"]
 [ext_resource type="Script" uid="uid://dg2obkxmhp4v2" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
-[ext_resource type="PackedScene" uid="uid://cnita1khplv4c" path="res://assets/characters/shade/shade.glb" id="3_character"]
+[ext_resource type="PackedScene" uid="uid://t1s233n41g0f" path="res://assets/characters/shade/shade.glb" id="3_character"]
 [ext_resource type="Script" uid="uid://dg33nhpmacdpl" path="res://scripts/characters/character_base.gd" id="4_character_base"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_char"]

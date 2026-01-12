@@ -66,6 +66,7 @@ func _physics_process(delta: float) -> void:
 		animation.update(delta)
 	if weapon:
 		weapon.update()
+		weapon.update_ik()
 
 	move_and_slide()
 
@@ -362,3 +363,6 @@ func _on_damaged(amount: float, attacker: Node3D, is_headshot: bool) -> void:
 func _on_skeleton_updated() -> void:
 	if animation:
 		animation.on_skeleton_updated()
+	# Apply IK after animation is processed
+	if weapon:
+		weapon.apply_ik_after_animation()

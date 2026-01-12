@@ -30,6 +30,22 @@ var upper_body_rotation_label: Label = null
 const UPPER_BODY_ROTATION_MIN: float = -45.0
 const UPPER_BODY_ROTATION_MAX: float = 45.0
 
+# Elbow pole adjustment
+var elbow_pole_x: float = 0.3
+var elbow_pole_y: float = -0.3
+var elbow_pole_z: float = 0.0
+var elbow_pole_x_label: Label = null
+var elbow_pole_y_label: Label = null
+var elbow_pole_z_label: Label = null
+
+# Left hand position adjustment
+var left_hand_x: float = 0.0
+var left_hand_y: float = 0.0
+var left_hand_z: float = 0.0
+var left_hand_x_label: Label = null
+var left_hand_y_label: Label = null
+var left_hand_z_label: Label = null
+
 # Weapon selection
 const WEAPONS_DIR: String = "res://resources/weapons/"
 var available_weapons: Array[String] = []
@@ -73,6 +89,11 @@ func _ready() -> void:
 
 	# Equip weapon
 	character_body.set_weapon(_weapon_id_string_to_int(current_weapon_id))
+
+	# Apply loaded IK values after weapon is equipped
+	await get_tree().process_frame
+	_update_elbow_pole()
+	_update_left_hand_position()
 
 	# Collect animations
 	_collect_animations()
@@ -131,6 +152,14 @@ func _load_weapon_resource() -> void:
 	var resource_path = WEAPONS_DIR + current_weapon_id + "/" + current_weapon_id + ".tres"
 	if ResourceLoader.exists(resource_path):
 		weapon_resource = load(resource_path) as WeaponResource
+		# Load elbow pole values from weapon resource
+		if weapon_resource:
+			elbow_pole_x = weapon_resource.left_elbow_pole_x
+			elbow_pole_y = weapon_resource.left_elbow_pole_y
+			elbow_pole_z = weapon_resource.left_elbow_pole_z
+			left_hand_x = weapon_resource.left_hand_ik_position.x
+			left_hand_y = weapon_resource.left_hand_ik_position.y
+			left_hand_z = weapon_resource.left_hand_ik_position.z
 
 
 func _create_ui_layout() -> void:
@@ -346,6 +375,142 @@ func _populate_bottom_panel() -> void:
 	rotation_slider.value_changed.connect(_on_upper_body_rotation_changed)
 	rotation_section.add_child(rotation_slider)
 
+	# Elbow Pole X
+	var pole_x_section = VBoxContainer.new()
+	pole_x_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(pole_x_section)
+
+	var pole_x_title = Label.new()
+	pole_x_title.text = "Elbow X"
+	pole_x_section.add_child(pole_x_title)
+
+	elbow_pole_x_label = Label.new()
+	elbow_pole_x_label.text = "%.2f" % elbow_pole_x
+	pole_x_section.add_child(elbow_pole_x_label)
+
+	var pole_x_slider = HSlider.new()
+	pole_x_slider.min_value = -20.0
+	pole_x_slider.max_value = 20.0
+	pole_x_slider.step = 0.5
+	pole_x_slider.value = elbow_pole_x
+	pole_x_slider.custom_minimum_size.x = 80
+	pole_x_slider.value_changed.connect(_on_elbow_pole_x_changed)
+	pole_x_section.add_child(pole_x_slider)
+
+	# Elbow Pole Y
+	var pole_y_section = VBoxContainer.new()
+	pole_y_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(pole_y_section)
+
+	var pole_y_title = Label.new()
+	pole_y_title.text = "Elbow Y"
+	pole_y_section.add_child(pole_y_title)
+
+	elbow_pole_y_label = Label.new()
+	elbow_pole_y_label.text = "%.2f" % elbow_pole_y
+	pole_y_section.add_child(elbow_pole_y_label)
+
+	var pole_y_slider = HSlider.new()
+	pole_y_slider.min_value = -20.0
+	pole_y_slider.max_value = 20.0
+	pole_y_slider.step = 0.5
+	pole_y_slider.value = elbow_pole_y
+	pole_y_slider.custom_minimum_size.x = 80
+	pole_y_slider.value_changed.connect(_on_elbow_pole_y_changed)
+	pole_y_section.add_child(pole_y_slider)
+
+	# Elbow Pole Z
+	var pole_z_section = VBoxContainer.new()
+	pole_z_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(pole_z_section)
+
+	var pole_z_title = Label.new()
+	pole_z_title.text = "Elbow Z"
+	pole_z_section.add_child(pole_z_title)
+
+	elbow_pole_z_label = Label.new()
+	elbow_pole_z_label.text = "%.2f" % elbow_pole_z
+	pole_z_section.add_child(elbow_pole_z_label)
+
+	var pole_z_slider = HSlider.new()
+	pole_z_slider.min_value = -20.0
+	pole_z_slider.max_value = 20.0
+	pole_z_slider.step = 0.5
+	pole_z_slider.value = elbow_pole_z
+	pole_z_slider.custom_minimum_size.x = 80
+	pole_z_slider.value_changed.connect(_on_elbow_pole_z_changed)
+	pole_z_section.add_child(pole_z_slider)
+
+	# Separator
+	var sep = VSeparator.new()
+	hbox.add_child(sep)
+
+	# Left Hand X
+	var hand_x_section = VBoxContainer.new()
+	hand_x_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(hand_x_section)
+
+	var hand_x_title = Label.new()
+	hand_x_title.text = "Hand X"
+	hand_x_section.add_child(hand_x_title)
+
+	left_hand_x_label = Label.new()
+	left_hand_x_label.text = "%.2f" % left_hand_x
+	hand_x_section.add_child(left_hand_x_label)
+
+	var hand_x_slider = HSlider.new()
+	hand_x_slider.min_value = -0.5
+	hand_x_slider.max_value = 0.5
+	hand_x_slider.step = 0.01
+	hand_x_slider.value = left_hand_x
+	hand_x_slider.custom_minimum_size.x = 80
+	hand_x_slider.value_changed.connect(_on_left_hand_x_changed)
+	hand_x_section.add_child(hand_x_slider)
+
+	# Left Hand Y
+	var hand_y_section = VBoxContainer.new()
+	hand_y_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(hand_y_section)
+
+	var hand_y_title = Label.new()
+	hand_y_title.text = "Hand Y"
+	hand_y_section.add_child(hand_y_title)
+
+	left_hand_y_label = Label.new()
+	left_hand_y_label.text = "%.2f" % left_hand_y
+	hand_y_section.add_child(left_hand_y_label)
+
+	var hand_y_slider = HSlider.new()
+	hand_y_slider.min_value = -0.5
+	hand_y_slider.max_value = 0.5
+	hand_y_slider.step = 0.01
+	hand_y_slider.value = left_hand_y
+	hand_y_slider.custom_minimum_size.x = 80
+	hand_y_slider.value_changed.connect(_on_left_hand_y_changed)
+	hand_y_section.add_child(hand_y_slider)
+
+	# Left Hand Z
+	var hand_z_section = VBoxContainer.new()
+	hand_z_section.add_theme_constant_override("separation", 2)
+	hbox.add_child(hand_z_section)
+
+	var hand_z_title = Label.new()
+	hand_z_title.text = "Hand Z"
+	hand_z_section.add_child(hand_z_title)
+
+	left_hand_z_label = Label.new()
+	left_hand_z_label.text = "%.2f" % left_hand_z
+	hand_z_section.add_child(left_hand_z_label)
+
+	var hand_z_slider = HSlider.new()
+	hand_z_slider.min_value = -0.5
+	hand_z_slider.max_value = 0.5
+	hand_z_slider.step = 0.01
+	hand_z_slider.value = left_hand_z
+	hand_z_slider.custom_minimum_size.x = 80
+	hand_z_slider.value_changed.connect(_on_left_hand_z_changed)
+	hand_z_section.add_child(hand_z_slider)
+
 
 ## 表示するアニメーション名（完全一致、優先順）
 const PREFERRED_ANIMATIONS: Array[String] = [
@@ -429,6 +594,9 @@ func _physics_process(delta: float) -> void:
 		character_body.move_and_slide()
 
 
+var _test_arm_rotation: float = 0.0
+var _test_arm_enabled: bool = false
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE:
@@ -436,6 +604,44 @@ func _input(event: InputEvent) -> void:
 		elif event.keycode == KEY_T:
 			upper_body_rotation = 30.0 if upper_body_rotation < 1.0 else 0.0
 			character_body.set_upper_body_rotation(upper_body_rotation)
+		elif event.keycode == KEY_I:
+			# Toggle continuous arm rotation test + STOP animation
+			_test_arm_enabled = not _test_arm_enabled
+			_test_arm_rotation = 90.0
+			# Stop all animation
+			if _test_arm_enabled and character_body.animation:
+				var anim_player = character_body.model.get_node_or_null("AnimationPlayer")
+				var anim_tree = character_body.model.get_node_or_null("AnimationTree")
+				if anim_tree:
+					anim_tree.active = false
+					print("[TEST] AnimationTree disabled")
+				if anim_player:
+					anim_player.stop()
+					print("[TEST] AnimationPlayer stopped")
+			print("[TEST] Arm rotation test: %s (rotation=%.0f)" % ["ENABLED" if _test_arm_enabled else "DISABLED", _test_arm_rotation])
+		elif event.keycode == KEY_O:
+			# Increase rotation
+			_test_arm_rotation += 30.0
+			print("[TEST] Arm rotation set to %.0f degrees" % _test_arm_rotation)
+
+
+func _process(_delta: float) -> void:
+	# Apply arm rotation EVERY FRAME to override animation
+	if _test_arm_enabled:
+		_rotate_arm_directly(_test_arm_rotation)
+
+
+func _rotate_arm_directly(degrees: float) -> void:
+	if character_body.skeleton == null:
+		return
+
+	var bone_idx = character_body.skeleton.find_bone("arm.l")
+	if bone_idx < 0:
+		return
+
+	# Apply rotation every frame
+	var new_rotation = Quaternion.from_euler(Vector3(deg_to_rad(degrees), 0, 0))
+	character_body.skeleton.set_bone_pose_rotation(bone_idx, new_rotation)
 
 
 func _on_character_selected(index: int) -> void:
@@ -517,6 +723,12 @@ func _change_weapon(weapon_id: String) -> void:
 	# Equip weapon using new API
 	character_body.set_weapon(_weapon_id_string_to_int(weapon_id))
 
+	# Apply loaded IK values after weapon is equipped
+	await get_tree().process_frame
+	_update_elbow_pole()
+	_update_left_hand_position()
+	_populate_ui()  # Refresh UI sliders
+
 
 func _play_animation(anim_name: String) -> void:
 	character_body.play_animation(anim_name, blend_time)
@@ -548,6 +760,60 @@ func _on_upper_body_rotation_changed(value: float) -> void:
 	character_body.set_upper_body_rotation(value)
 	if upper_body_rotation_label:
 		upper_body_rotation_label.text = "%.0f deg" % upper_body_rotation
+
+
+func _on_elbow_pole_x_changed(value: float) -> void:
+	elbow_pole_x = value
+	if elbow_pole_x_label:
+		elbow_pole_x_label.text = "%.2f" % elbow_pole_x
+	_update_elbow_pole()
+
+
+func _on_elbow_pole_y_changed(value: float) -> void:
+	elbow_pole_y = value
+	if elbow_pole_y_label:
+		elbow_pole_y_label.text = "%.2f" % elbow_pole_y
+	_update_elbow_pole()
+
+
+func _on_elbow_pole_z_changed(value: float) -> void:
+	elbow_pole_z = value
+	if elbow_pole_z_label:
+		elbow_pole_z_label.text = "%.2f" % elbow_pole_z
+	_update_elbow_pole()
+
+
+func _update_elbow_pole() -> void:
+	if character_body and character_body.weapon:
+		character_body.weapon.update_elbow_pole_position(elbow_pole_x, elbow_pole_y, elbow_pole_z)
+		print("[AnimViewer] Elbow pole: (%.2f, %.2f, %.2f)" % [elbow_pole_x, elbow_pole_y, elbow_pole_z])
+
+
+func _on_left_hand_x_changed(value: float) -> void:
+	left_hand_x = value
+	if left_hand_x_label:
+		left_hand_x_label.text = "%.2f" % left_hand_x
+	_update_left_hand_position()
+
+
+func _on_left_hand_y_changed(value: float) -> void:
+	left_hand_y = value
+	if left_hand_y_label:
+		left_hand_y_label.text = "%.2f" % left_hand_y
+	_update_left_hand_position()
+
+
+func _on_left_hand_z_changed(value: float) -> void:
+	left_hand_z = value
+	if left_hand_z_label:
+		left_hand_z_label.text = "%.2f" % left_hand_z
+	_update_left_hand_position()
+
+
+func _update_left_hand_position() -> void:
+	if character_body and character_body.weapon:
+		character_body.weapon.update_left_hand_position(left_hand_x, left_hand_y, left_hand_z)
+		print("[AnimViewer] Left hand pos: (%.2f, %.2f, %.2f)" % [left_hand_x, left_hand_y, left_hand_z])
 
 
 func _on_shoot_pressed() -> void:

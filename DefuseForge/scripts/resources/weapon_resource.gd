@@ -46,6 +46,14 @@ extends Resource
 ## AnimState: 0=IDLE, 1=WALKING, 2=RUNNING, 3=FIRE
 @export var animation_offsets: Dictionary = {}
 
+@export_group("左手IK設定")
+@export var left_hand_ik_enabled: bool = true  ## 左手IKを有効にするか
+@export var left_hand_ik_position: Vector3 = Vector3.ZERO  ## 微調整用位置オフセット
+@export var left_hand_ik_rotation: Vector3 = Vector3.ZERO  ## 微調整用回転オフセット（度数）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_x: float = 0.0  ## 肘ポールX（+で外側）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_y: float = -0.3  ## 肘ポールY（-で下）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_z: float = 0.0  ## 肘ポールZ（+で前）
+
 
 ## リソースのバリデーション
 ## @return: { "valid": bool, "errors": Array[String] }
@@ -102,7 +110,10 @@ func to_dict() -> Dictionary:
 		"kill_reward": kill_reward,
 		"attach_position": attach_position,
 		"attach_rotation": attach_rotation,
-		"animation_offsets": animation_offsets
+		"animation_offsets": animation_offsets,
+		"left_hand_ik_enabled": left_hand_ik_enabled,
+		"left_hand_ik_position": left_hand_ik_position,
+		"left_hand_ik_rotation": left_hand_ik_rotation
 	}
 
 
@@ -126,6 +137,9 @@ static func from_dict(data: Dictionary, id: String = "") -> WeaponResource:
 	res.attach_position = data.get("attach_position", Vector3.ZERO)
 	res.attach_rotation = data.get("attach_rotation", Vector3.ZERO)
 	res.animation_offsets = data.get("animation_offsets", {})
+	res.left_hand_ik_enabled = data.get("left_hand_ik_enabled", true)
+	res.left_hand_ik_position = data.get("left_hand_ik_position", Vector3.ZERO)
+	res.left_hand_ik_rotation = data.get("left_hand_ik_rotation", Vector3.ZERO)
 	return res
 
 
