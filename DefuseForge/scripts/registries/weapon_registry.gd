@@ -4,15 +4,28 @@ extends RefCounted
 ## 武器ID → WeaponResourceの明示的マッピング
 ## パス推測を排除し、明確なエラーメッセージを提供
 
+## 武器ID定数（CharacterSetupから移動）
+enum WeaponId {
+	NONE = 0,
+	AK47 = 1,
+	M4A1 = 2
+}
+
+## 武器タイプ定数
+enum WeaponType {
+	NONE = 0,
+	RIFLE = 1,
+	PISTOL = 2
+}
+
 static var _cache: Dictionary = {}
-static var _initialized: bool = false
 
 ## 武器ID → リソースパスのマッピング
 ## 新しい武器を追加する場合はここに登録
 const WEAPON_PATHS := {
-	CharacterSetup.WeaponId.NONE: "",
-	CharacterSetup.WeaponId.AK47: "res://resources/weapons/ak47/ak47.tres",
-	CharacterSetup.WeaponId.USP: "res://resources/weapons/usp/usp.tres"
+	WeaponId.NONE: "",
+	WeaponId.AK47: "res://assets/weapons/ak47/ak47.tres",
+	WeaponId.M4A1: "res://assets/weapons/m4a1/m4a1.tres"
 }
 
 
@@ -21,7 +34,7 @@ const WEAPON_PATHS := {
 ## @return: WeaponResource、見つからない場合はnull
 static func get_weapon(weapon_id: int) -> WeaponResource:
 	# NONEの場合はnullを返す（エラーではない）
-	if weapon_id == CharacterSetup.WeaponId.NONE:
+	if weapon_id == WeaponId.NONE:
 		return null
 
 	# キャッシュをチェック
@@ -68,7 +81,7 @@ static func _get_resource_path(weapon_id: int) -> String:
 static func get_all_weapon_ids() -> Array[int]:
 	var ids: Array[int] = []
 	for id in WEAPON_PATHS.keys():
-		if id != CharacterSetup.WeaponId.NONE:
+		if id != WeaponId.NONE:
 			ids.append(id)
 	return ids
 
@@ -77,7 +90,7 @@ static func get_all_weapon_ids() -> Array[int]:
 ## @param weapon_id: WeaponId enum値
 ## @return: 登録されていればtrue
 static func has_weapon(weapon_id: int) -> bool:
-	if weapon_id == CharacterSetup.WeaponId.NONE:
+	if weapon_id == WeaponId.NONE:
 		return true  # NONEは常に有効
 	return WEAPON_PATHS.has(weapon_id) and not WEAPON_PATHS[weapon_id].is_empty()
 

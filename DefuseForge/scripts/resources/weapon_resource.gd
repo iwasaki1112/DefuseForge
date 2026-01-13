@@ -29,6 +29,10 @@ extends Resource
 @export var headshot_multiplier: float = 4.0  ## ヘッドショット倍率
 @export var bodyshot_multiplier: float = 1.0  ## ボディショット倍率
 
+@export_group("弾薬")
+@export var magazine_size: int = 30  ## マガジン容量
+@export var reload_time: float = 2.5  ## リロード時間（秒）
+
 @export_group("リソース")
 @export var scene_path: String = ""  ## 武器シーンパス（例: "res://scenes/weapons/ak47.tscn"）
 
@@ -36,18 +40,19 @@ extends Resource
 @export var attach_position: Vector3 = Vector3.ZERO  ## 右手ボーンからの相対位置
 @export var attach_rotation: Vector3 = Vector3.ZERO  ## 右手ボーンからの相対回転（度数）
 
-@export_group("左手IK設定")
-@export var left_hand_ik_enabled: bool = true  ## 左手IKを使用するか
-@export var left_hand_ik_position: Vector3 = Vector3.ZERO  ## 左手IKの位置オフセット
-@export var left_hand_ik_rotation: Vector3 = Vector3.ZERO  ## 左手IKの回転オフセット（度数）
-## NOTE: IK無効アニメーションはCharacterBase._should_disable_ik_for_animation()で
-## パターンマッチングにより自動判定（Convention over Configuration）
-
 @export_group("アニメーション設定")
 ## アニメーション状態ごとの位置・回転オフセット
 ## 構造: { AnimState(int): { "position": Vector3, "rotation": Vector3 (degrees) } }
 ## AnimState: 0=IDLE, 1=WALKING, 2=RUNNING, 3=FIRE
 @export var animation_offsets: Dictionary = {}
+
+@export_group("左手IK設定")
+@export var left_hand_ik_enabled: bool = true  ## 左手IKを有効にするか
+@export var left_hand_ik_position: Vector3 = Vector3.ZERO  ## 微調整用位置オフセット
+@export var left_hand_ik_rotation: Vector3 = Vector3.ZERO  ## 微調整用回転オフセット（度数）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_x: float = 0.0  ## 肘ポールX（+で外側）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_y: float = -0.3  ## 肘ポールY（-で下）
+@export_range(-1.0, 1.0, 0.01) var left_elbow_pole_z: float = 0.0  ## 肘ポールZ（+で前）
 
 
 ## リソースのバリデーション
@@ -67,11 +72,6 @@ func validate() -> Dictionary:
 		errors.append("scene_path is empty")
 	elif not ResourceLoader.exists(scene_path):
 		errors.append("scene_path does not exist: %s" % scene_path)
-
-	# IK設定の一貫性チェック
-	if left_hand_ik_enabled:
-		if left_hand_ik_position == Vector3.ZERO and left_hand_ik_rotation == Vector3.ZERO:
-			errors.append("IK enabled but both position and rotation are zero (probably not configured)")
 
 	# 武器タイプのチェック
 	if weapon_type < TYPE_NONE or weapon_type > TYPE_PISTOL:
@@ -104,14 +104,16 @@ func to_dict() -> Dictionary:
 		"range": effective_range,
 		"headshot_multiplier": headshot_multiplier,
 		"bodyshot_multiplier": bodyshot_multiplier,
+		"magazine_size": magazine_size,
+		"reload_time": reload_time,
 		"scene_path": scene_path,
 		"kill_reward": kill_reward,
 		"attach_position": attach_position,
 		"attach_rotation": attach_rotation,
+		"animation_offsets": animation_offsets,
 		"left_hand_ik_enabled": left_hand_ik_enabled,
 		"left_hand_ik_position": left_hand_ik_position,
-		"left_hand_ik_rotation": left_hand_ik_rotation,
-		"animation_offsets": animation_offsets
+		"left_hand_ik_rotation": left_hand_ik_rotation
 	}
 
 
@@ -128,14 +130,16 @@ static func from_dict(data: Dictionary, id: String = "") -> WeaponResource:
 	res.effective_range = data.get("range", 0.0)
 	res.headshot_multiplier = data.get("headshot_multiplier", 4.0)
 	res.bodyshot_multiplier = data.get("bodyshot_multiplier", 1.0)
+	res.magazine_size = data.get("magazine_size", 30)
+	res.reload_time = data.get("reload_time", 2.5)
 	res.scene_path = data.get("scene_path", "")
 	res.kill_reward = data.get("kill_reward", 300)
 	res.attach_position = data.get("attach_position", Vector3.ZERO)
 	res.attach_rotation = data.get("attach_rotation", Vector3.ZERO)
+	res.animation_offsets = data.get("animation_offsets", {})
 	res.left_hand_ik_enabled = data.get("left_hand_ik_enabled", true)
 	res.left_hand_ik_position = data.get("left_hand_ik_position", Vector3.ZERO)
 	res.left_hand_ik_rotation = data.get("left_hand_ik_rotation", Vector3.ZERO)
-	res.animation_offsets = data.get("animation_offsets", {})
 	return res
 
 

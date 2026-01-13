@@ -171,3 +171,36 @@ func reset_pan() -> void:
 	## パンオフセットをリセット
 	_target_offset = Vector3.ZERO
 	_update_camera_position()
+
+
+func set_view(horizontal: float, vertical: float) -> void:
+	## カメラの角度を直接設定
+	_horizontal_angle = horizontal
+	_vertical_angle = clampf(vertical, vertical_angle_min, vertical_angle_max)
+	_target_offset = Vector3.ZERO
+	_update_camera_position()
+
+
+func set_front_view() -> void:
+	## 正面ビュー
+	set_view(0.0, 0.0)
+
+
+func set_back_view() -> void:
+	## 背面ビュー
+	set_view(180.0, 0.0)
+
+
+func set_left_view() -> void:
+	## 左側面ビュー
+	set_view(90.0, 0.0)
+
+
+func set_right_view() -> void:
+	## 右側面ビュー
+	set_view(-90.0, 0.0)
+
+
+func set_top_view() -> void:
+	## 真上ビュー
+	set_view(0.0, 80.0)

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponResource" load_steps=2 format=3 uid="uid://j1bil3q0u5f6"]
+
+[ext_resource type="Script" uid="uid://dk1ohavfw4rrv" path="res://scripts/resources/weapon_resource.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+weapon_id = "ak47"
+weapon_name = "AK-47"
+weapon_type = 1
+price = 2700
+damage = 36.0
+fire_rate = 0.1
+accuracy = 0.85
+effective_range = 20.0
+scene_path = "res://scenes/weapons/ak47.tscn"
+left_hand_ik_position = Vector3(-0.2, 0.02, -0.09)
+left_hand_ik_rotation = Vector3(0, 0, 0)
+left_elbow_pole_x = 17.5
+left_elbow_pole_y = -11.5
+left_elbow_pole_z = -3.0

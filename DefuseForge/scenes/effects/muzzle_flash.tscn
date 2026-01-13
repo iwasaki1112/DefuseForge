@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3 uid="uid://muzzle_flash"]
+[gd_scene load_steps=4 format=3 uid="uid://bm2zflash001xy"]
 
 [ext_resource type="Script" path="res://scripts/effects/muzzle_flash.gd" id="1_script"]
 
