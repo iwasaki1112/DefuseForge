@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dgjmjyycaqwn4"]
 
 [ext_resource type="PackedScene" uid="uid://d0p72bkf2qjka" path="res://assets/weapons/m4a1/m4a1.glb" id="1_m4a1"]
-[ext_resource type="PackedScene" path="res://scenes/effects/muzzle_flash.tscn" id="2_muzzle_flash"]
+[ext_resource type="PackedScene" uid="uid://bm2zflash001xy" path="res://scenes/effects/muzzle_flash.tscn" id="2_muzzle_flash"]
 
 [node name="M4A1" type="Node3D"]
 

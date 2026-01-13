@@ -4,7 +4,6 @@ extends Node
 ## アニメーション管理コンポーネント
 ## AnimationTree、上半身/下半身ブレンド、上半身エイミングを担当
 
-signal animation_changed(anim_name: String)
 signal animation_finished(anim_name: String)
 
 ## 移動状態
