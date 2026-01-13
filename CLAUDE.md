@@ -135,3 +135,7 @@ const ANIMATION_SOURCE := {
 - シーンが読み込めない → UIDを確認
 - スクリプトエラー → Godotコンソール確認（`get_debug_output`）
 - 影が表示されない → マテリアルがPBR（shading_mode=1）か確認
+
+## 技術ドキュメント
+詳細な実装パターンは `docs/` を参照：
+- `docs/godot/skeleton-modifier-patterns.md` - SkeletonModifier3D、上半身回転、IK実行順序

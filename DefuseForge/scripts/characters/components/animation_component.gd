@@ -25,6 +25,9 @@ var anim_player: AnimationPlayer
 var anim_tree: AnimationTree
 var _blend_tree: AnimationNodeBlendTree
 var skeleton: Skeleton3D
+var _upper_body_modifier: Node  # UpperBodyRotationModifier
+
+const UpperBodyRotationModifierClass = preload("res://scripts/utils/upper_body_rotation_modifier.gd")
 
 ## 状態
 var locomotion_state: LocomotionState = LocomotionState.IDLE
@@ -32,8 +35,8 @@ var weapon_type: int = 0  # WeaponRegistry.WeaponType
 var is_shooting: bool = false
 var _shooting_blend: float = 0.0
 
-## 上半身エイミング
-var _aim_spine_bone_idx: int = -1
+## 上半身エイミング（複数ボーンを回転）
+var _upper_body_bone_indices: Array[int] = []
 var _current_aim_rotation: float = 0.0
 var _target_aim_rotation: float = 0.0
 
@@ -60,6 +63,9 @@ func setup(model: Node3D, skel: Skeleton3D) -> void:
 	# アニメーション終了シグナルを接続
 	if not anim_player.animation_finished.is_connected(_on_animation_finished):
 		anim_player.animation_finished.connect(_on_animation_finished)
+
+	# 上半身回転モディファイアを作成（SkeletonModifier3Dベース）
+	_setup_upper_body_modifier()
 
 	# 移動系アニメーションをループに設定
 	_setup_animation_loops()
@@ -108,7 +114,6 @@ func apply_spine_rotation(degrees: float) -> void:
 ## @param anim_name: アニメーション名
 ## @param blend_time: ブレンド時間
 func play_animation(anim_name: String, blend_time: float = ANIM_BLEND_TIME) -> void:
-	print("[AnimationComponent] play_animation called: %s" % anim_name)
 	if anim_player == null:
 		push_warning("[AnimationComponent] anim_player is null!")
 		return
@@ -116,8 +121,6 @@ func play_animation(anim_name: String, blend_time: float = ANIM_BLEND_TIME) -> v
 	if not anim_player.has_animation(anim_name):
 		push_warning("[AnimationComponent] Animation not found: %s (available: %s)" % [anim_name, anim_player.get_animation_list()])
 		return
-
-	print("[AnimationComponent] Playing animation: %s" % anim_name)
 	# AnimationTree使用時は一時停止してAnimationPlayerで再生
 	if anim_tree and anim_tree.active:
 		anim_tree.active = false
@@ -146,14 +149,9 @@ func get_animation_list() -> PackedStringArray:
 
 ## スケルトン更新時に呼ばれる（CharacterBaseから）
 func on_skeleton_updated() -> void:
-	if skeleton == null or _aim_spine_bone_idx < 0:
-		return
-
-	# 上半身回転を適用
-	if abs(_current_aim_rotation) > 0.001:
-		var current_pose = skeleton.get_bone_pose_rotation(_aim_spine_bone_idx)
-		var twist = Quaternion(Vector3.UP, _current_aim_rotation)
-		skeleton.set_bone_pose_rotation(_aim_spine_bone_idx, current_pose * twist)
+	# SkeletonModifier3Dを使用しているため、ここでは何もしない
+	# 上半身回転はUpperBodyRotationModifierが処理する
+	pass
 
 
 ## アニメーション名を取得
@@ -311,32 +309,38 @@ func _update_shooting_blend(delta: float) -> void:
 
 ## 上半身エイミング角度を更新
 func _update_upper_body_aim(delta: float) -> void:
-	if _aim_spine_bone_idx < 0:
-		return
-
 	# 目標角度に向けて補間
 	_current_aim_rotation = lerp(_current_aim_rotation, _target_aim_rotation, aim_rotation_speed * delta)
+
+	# SkeletonModifier3Dに回転値を設定
+	if _upper_body_modifier:
+		_upper_body_modifier.rotation_angle = _current_aim_rotation
 
 
 ## 上半身エイミング用のスパインボーンを検索
 func _find_aim_spine_bone() -> void:
 	if skeleton == null:
+		push_warning("[AnimationComponent] _find_aim_spine_bone: skeleton is null")
 		return
 
-	# 優先順位付きで検索
-	var candidates = ["c_spine_02.x", "spine_02", "spine.002", "Spine2", "spine2"]
+	_upper_body_bone_indices.clear()
+
+	# c_spine_01.x または Spine ボーンを検索（ARPリグの腰骨）
+	var candidates = ["c_spine_01.x", "Spine", "spine", "spine_01"]
 	for candidate in candidates:
 		var idx = skeleton.find_bone(candidate)
 		if idx >= 0:
-			_aim_spine_bone_idx = idx
+			_upper_body_bone_indices.append(idx)
 			return
 
 	# 見つからなければ spine を含むボーンを検索
 	for i in range(skeleton.get_bone_count()):
 		var bone_name = skeleton.get_bone_name(i)
-		if "spine" in bone_name.to_lower() and "02" in bone_name:
-			_aim_spine_bone_idx = i
+		if "spine" in bone_name.to_lower():
+			_upper_body_bone_indices.append(i)
 			return
+
+	push_warning("[AnimationComponent] No spine bone found for upper body twist!")
 
 
 ## アニメーション終了時
@@ -361,5 +365,24 @@ func _setup_animation_loops() -> void:
 		for pattern in loop_patterns:
 			if pattern in lower_name:
 				anim.loop_mode = Animation.LOOP_LINEAR
-				print("[AnimationComponent] Set loop for: %s (loop_mode=%d)" % [anim_name, anim.loop_mode])
 				break
+
+
+## 上半身回転モディファイアをセットアップ
+func _setup_upper_body_modifier() -> void:
+	if skeleton == null:
+		return
+
+	# 既存のモディファイアを削除
+	var existing = skeleton.get_node_or_null("UpperBodyRotationModifier")
+	if existing:
+		existing.queue_free()
+
+	# 新しいモディファイアを作成
+	_upper_body_modifier = UpperBodyRotationModifierClass.new()
+	_upper_body_modifier.name = "UpperBodyRotationModifier"
+	_upper_body_modifier.influence = 1.0
+	_upper_body_modifier.active = true
+
+	# Skeleton3Dの子として追加
+	skeleton.add_child(_upper_body_modifier)

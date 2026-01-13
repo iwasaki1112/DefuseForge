@@ -237,6 +237,7 @@ func _setup_left_hand_ik() -> void:
 	# ターゲット設定
 	left_hand_ik.target_node = left_hand_target
 	left_hand_ik.influence = 1.0
+	# 自動実行を有効化（SkeletonModifier3Dとして上半身回転後に自動実行）
 	left_hand_ik.active = true
 
 	# ポールターゲット（肘の向き）を作成
@@ -322,9 +323,10 @@ func update_ik() -> void:
 	pass  # TwoBoneIK3D handles this automatically
 
 
-## アニメーション処理後にIKを適用 - TwoBoneIK3Dが自動処理
+## アニメーション処理後にIKを適用（上半身回転後に呼び出す）
 func apply_ik_after_animation() -> void:
-	pass  # TwoBoneIK3D handles this automatically via _process_modification()
+	if _ik_enabled and left_hand_ik:
+		left_hand_ik.solve_ik_manual()
 
 
 ## 左手IKを有効化

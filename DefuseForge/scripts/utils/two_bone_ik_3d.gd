@@ -25,7 +25,6 @@ var _root_parent_idx: int = -1
 var _upper_length: float = 0.0
 var _lower_length: float = 0.0
 var _initialized: bool = false
-var _debug_counter: int = 0
 var _frame_count: int = 0  # フレームカウント（最初のフレームをスキップ）
 
 
@@ -36,6 +35,21 @@ func _process_modification() -> void:
 	if _frame_count < 3:
 		return
 
+	if not _initialized:
+		_initialize()
+
+	if not _initialized or target_node == null:
+		return
+
+	var skeleton := get_skeleton()
+	if skeleton == null:
+		return
+
+	_solve_two_bone_ik(skeleton)
+
+
+## 手動でIKを実行（上半身回転後に呼び出す用）
+func solve_ik_manual() -> void:
 	if not _initialized:
 		_initialize()
 
@@ -87,14 +101,6 @@ func _initialize() -> void:
 		push_warning("[TwoBoneIK3D] Invalid bone lengths: upper=%f, lower=%f" % [_upper_length, _lower_length])
 		return
 
-	print("[TwoBoneIK3D] Init: %s -> %s -> %s" % [
-		skeleton.get_bone_name(_root_idx),
-		skeleton.get_bone_name(_middle_idx),
-		skeleton.get_bone_name(_tip_idx)
-	])
-	print("[TwoBoneIK3D] Lengths: upper=%.4f, lower=%.4f, total=%.4f" % [_upper_length, _lower_length, _upper_length + _lower_length])
-	print("[TwoBoneIK3D] Skeleton scale: %s" % skeleton.global_transform.basis.get_scale())
-
 	_initialized = true
 
 
@@ -120,7 +126,7 @@ func _solve_two_bone_ik(skeleton: Skeleton3D) -> void:
 
 	var root_pos := root_global.origin
 	var middle_pos := middle_global.origin
-	var tip_pos := tip_global.origin
+	var _tip_pos := tip_global.origin  # Used for reference calculations
 
 	# Vector from root to target
 	var to_target := target_local - root_pos
@@ -228,22 +234,6 @@ func _solve_two_bone_ik(skeleton: Skeleton3D) -> void:
 
 	# Apply rotation only (keep original position)
 	skeleton.set_bone_pose_rotation(_middle_idx, blended_middle_rotation)
-
-	# Debug output
-	_debug_counter += 1
-	if _debug_counter % 120 == 1:
-		var final_tip := skeleton.get_bone_global_pose(_tip_idx).origin
-		var final_elbow := skeleton.get_bone_global_pose(_middle_idx).origin
-		print("[TwoBoneIK3D] DEBUG ===")
-		print("  Target (local): %s, Dist: %.3f (max: %.3f)" % [target_local, target_dist, max_reach])
-		print("  Target (world): %s" % target_world)
-		print("  Root (local): %s" % root_pos)
-		var root_world := skel_transform * root_global.origin
-		print("  Root (world): %s" % root_world)
-		print("  World distance: %.4f" % (target_world - root_world).length())
-		print("  Elbow: %s -> %s (final: %s)" % [middle_pos, new_elbow_pos, final_elbow])
-		print("  Tip: %s -> final: %s" % [tip_pos, final_tip])
-		print("  Final tip->target: %.4f" % (target_local - final_tip).length())
 
 
 ## Create quaternion that rotates from one direction to another
