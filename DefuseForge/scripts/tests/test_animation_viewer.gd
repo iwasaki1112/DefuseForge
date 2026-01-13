@@ -70,9 +70,9 @@ var fog_of_war_system: Node3D = null
 var test_walls: Array[StaticBody3D] = []
 var wall_shader_material: ShaderMaterial = null
 
-# Character rotation control (click on character + drag)
-var _is_holding_character: bool = false
-var _ground_plane: Plane = Plane(Vector3.UP, 0.0)
+# Input rotation component (click on character + drag)
+const InputRotationComponentScript = preload("res://scripts/characters/components/input_rotation_component.gd")
+var _input_rotation: Node
 
 
 func _weapon_id_string_to_int(weapon_id: String) -> int:
@@ -127,6 +127,9 @@ func _ready() -> void:
 	if camera.has_method("set_target") and character_body:
 		camera.set_target(character_body)
 
+	# Setup input rotation component
+	_setup_input_rotation()
+
 	# Play idle animation
 	if _animations.size() > 0:
 		_play_animation(_animations[0])
@@ -136,82 +139,13 @@ func _ready() -> void:
 	_create_test_walls()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	# 左クリックでキャラクターをクリックしたかチェック
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				# クリック時にキャラクターに当たったかチェック
-				_is_holding_character = _is_clicking_on_character(mouse_event.position)
-				if _is_holding_character and camera:
-					# カメラの入力を無効化
-					camera.input_disabled = true
-			else:
-				_is_holding_character = false
-				if camera:
-					# カメラの入力を再有効化
-					camera.input_disabled = false
-
-	# キャラクターを長押し中にドラッグで回転
-	if event is InputEventMouseMotion and _is_holding_character:
-		_rotate_character_to_mouse(event.position)
-
-
-func _is_clicking_on_character(mouse_pos: Vector2) -> bool:
-	if not camera or not character_body:
-		return false
-
-	# マウス位置からレイを作成
-	var ray_origin = camera.project_ray_origin(mouse_pos)
-	var ray_direction = camera.project_ray_normal(mouse_pos)
-	var ray_end = ray_origin + ray_direction * 100.0
-
-	# レイキャストでキャラクターに当たるかチェック
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-	query.collision_mask = 1  # Layer 1 = キャラクター
-	var result = space_state.intersect_ray(query)
-
-	if result and result.collider == character_body:
-		return true
-
-	# キャラクター付近をクリックした場合も許容（半径1.5m以内）
-	var intersection = _ground_plane.intersects_ray(ray_origin, ray_direction)
-	if intersection:
-		var click_pos = intersection as Vector3
-		var char_pos = character_body.global_position
-		if click_pos.distance_to(char_pos) < 1.5:
-			return true
-
-	return false
-
-
-func _rotate_character_to_mouse(mouse_pos: Vector2) -> void:
-	if not character_body or not camera:
-		return
-
-	# マウス位置からレイを作成
-	var ray_origin = camera.project_ray_origin(mouse_pos)
-	var ray_direction = camera.project_ray_normal(mouse_pos)
-
-	# 地面との交点を計算
-	var intersection = _ground_plane.intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
-		return
-
-	# キャラクターからマウス位置への方向を計算
-	var char_pos = character_body.global_position
-	var target_pos = intersection as Vector3
-	var direction = target_pos - char_pos
-	direction.y = 0  # 水平方向のみ
-
-	if direction.length_squared() < 0.01:
-		return
-
-	# キャラクターを回転
-	var target_angle = atan2(direction.x, direction.z)
-	character_body.rotation.y = target_angle
+func _setup_input_rotation() -> void:
+	_input_rotation = InputRotationComponentScript.new()
+	_input_rotation.name = "InputRotationComponent"
+	character_body.add_child(_input_rotation)
+	_input_rotation.setup(camera)
+	_input_rotation.rotation_started.connect(func(): camera.input_disabled = true)
+	_input_rotation.rotation_ended.connect(func(): camera.input_disabled = false)
 
 
 func _setup_fog_of_war() -> void:

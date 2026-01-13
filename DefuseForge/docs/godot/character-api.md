@@ -144,6 +144,74 @@ character.add_child(new_model)
 character.reload_model(new_model)
 ```
 
+## Input Rotation Component
+
+マウスでキャラクターをクリック＆ドラッグして回転させるコンポーネント。
+
+**ファイル:** `scripts/characters/components/input_rotation_component.gd`
+
+### セットアップ
+
+```gdscript
+const InputRotationComponentScript = preload("res://scripts/characters/components/input_rotation_component.gd")
+
+func _ready():
+    var rotation = InputRotationComponentScript.new()
+    rotation.name = "InputRotationComponent"
+    character_body.add_child(rotation)
+    rotation.setup(camera)  # Raycast用カメラ参照
+
+    # シグナル接続（任意）
+    rotation.rotation_started.connect(_on_rotation_started)
+    rotation.rotation_ended.connect(_on_rotation_ended)
+```
+
+### プロパティ
+
+| プロパティ | 型 | デフォルト | 説明 |
+|------------|-----|----------|------|
+| `click_radius` | float | 1.5 | クリック判定の近接半径（メートル） |
+| `character_collision_mask` | int | 1 | Raycast用の衝突マスク |
+| `ground_plane_height` | float | 0.0 | 地面の高さ（Y座標） |
+| `hold_duration` | float | 0.2 | 長押し判定時間（秒） |
+
+### メソッド
+
+#### setup
+```gdscript
+func setup(camera: Camera3D) -> void
+```
+Raycast用のカメラ参照を設定。マウス2D座標→3Dワールド座標変換に使用。
+
+#### is_rotating
+```gdscript
+func is_rotating() -> bool
+```
+現在回転操作中かどうかを返す。
+
+### シグナル
+
+| シグナル | 発火タイミング |
+|----------|----------------|
+| `rotation_started` | キャラクター付近をクリックした時 |
+| `rotation_ended` | マウスボタンを離した時 |
+
+### 動作フロー
+
+1. **クリック判定**: 左クリック時にRaycastでキャラクターに当たるか判定
+2. **近接フォールバック**: Raycastが外れても `click_radius` 以内ならOK
+3. **長押し待機**: `hold_duration` 秒間押し続けると回転モード開始
+4. **回転**: ドラッグ中、マウス位置と地面の交点に向けてキャラクターを回転
+5. **終了**: マウスボタンを離すと `rotation_ended` 発火
+
+### 使用例：カメラ連携
+
+```gdscript
+# 回転中はカメラ操作を無効化
+rotation.rotation_started.connect(func(): camera.input_disabled = true)
+rotation.rotation_ended.connect(func(): camera.input_disabled = false)
+```
+
 ## 設計原則
 
 1. **CharacterAPIを経由**: 直接`character.weapon.xxx()`を呼ばず、CharacterAPIを使用
