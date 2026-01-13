@@ -160,3 +160,10 @@ func set_fog_color(color: Color) -> void:
 	fog_color = color
 	if _fog_material:
 		_fog_material.set_shader_parameter("fog_color", fog_color)
+
+
+## 可視性テクスチャを取得（壁の照明などに使用）
+func get_visibility_texture() -> ViewportTexture:
+	if _visibility_viewport:
+		return _visibility_viewport.get_texture()
+	return null

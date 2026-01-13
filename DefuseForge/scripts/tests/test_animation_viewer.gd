@@ -68,6 +68,7 @@ var is_shooting: bool = false
 # Fog of War
 var fog_of_war_system: Node3D = null
 var test_walls: Array[StaticBody3D] = []
+var wall_shader_material: ShaderMaterial = null
 
 # Character rotation control (click on character + drag)
 var _is_holding_character: bool = false
@@ -227,6 +228,9 @@ func _setup_fog_of_war() -> void:
 
 
 func _create_test_walls() -> void:
+	# 壁用シェーダーマテリアルを作成
+	_create_wall_shader_material()
+
 	# テスト用の壁を配置（Layer 2に設定）
 	var wall_configs = [
 		{"pos": Vector3(5, 0, 0), "size": Vector3(0.3, 3, 4), "rot": 0},
@@ -239,6 +243,45 @@ func _create_test_walls() -> void:
 		var wall = _create_wall(config.size, config.pos, config.rot)
 		test_walls.append(wall)
 		add_child(wall)
+
+
+func _create_wall_shader_material() -> void:
+	var shader_code = """
+shader_type spatial;
+
+uniform vec4 base_color : source_color = vec4(0.4, 0.4, 0.45, 1.0);
+uniform vec4 lit_color : source_color = vec4(0.8, 0.75, 0.6, 1.0);
+uniform sampler2D visibility_texture : filter_linear, hint_default_black;
+uniform vec2 map_min = vec2(-20.0, -20.0);
+uniform vec2 map_max = vec2(20.0, 20.0);
+uniform float light_intensity = 0.6;
+
+void fragment() {
+	// ワールド座標を取得
+	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec2 world_xz = world_pos.xz;
+
+	// ワールド座標をUV座標に変換
+	vec2 uv = (world_xz - map_min) / (map_max - map_min);
+
+	// テクスチャから可視性を取得
+	float visibility = texture(visibility_texture, uv).r;
+
+	// 視界内は明るく、視界外は暗く
+	vec3 final_color = mix(base_color.rgb, lit_color.rgb, visibility * light_intensity);
+
+	ALBEDO = final_color;
+}
+"""
+	var shader = Shader.new()
+	shader.code = shader_code
+
+	wall_shader_material = ShaderMaterial.new()
+	wall_shader_material.shader = shader
+	wall_shader_material.set_shader_parameter("base_color", Color(0.25, 0.25, 0.3))
+	wall_shader_material.set_shader_parameter("lit_color", Color(0.7, 0.65, 0.5))
+	wall_shader_material.set_shader_parameter("map_min", Vector2(-20, -20))
+	wall_shader_material.set_shader_parameter("map_max", Vector2(20, 20))
 
 
 func _create_wall(size: Vector3, pos: Vector3, rot_degrees: float) -> StaticBody3D:
@@ -254,10 +297,9 @@ func _create_wall(size: Vector3, pos: Vector3, rot_degrees: float) -> StaticBody
 	mesh_instance.mesh = box_mesh
 	mesh_instance.position.y = size.y / 2
 
-	# マテリアル
-	var material = StandardMaterial3D.new()
-	material.albedo_color = Color(0.4, 0.4, 0.45)
-	mesh_instance.material_override = material
+	# シェーダーマテリアルを適用（視界に応じて明るさが変わる）
+	if wall_shader_material:
+		mesh_instance.material_override = wall_shader_material
 
 	# コリジョン
 	var collision = CollisionShape3D.new()
@@ -756,6 +798,14 @@ func _physics_process(delta: float) -> void:
 		else:
 			character_body.velocity.y = 0
 		character_body.move_and_slide()
+
+
+func _process(_delta: float) -> void:
+	# 壁シェーダーに可視性テクスチャを渡す
+	if wall_shader_material and fog_of_war_system:
+		var visibility_tex = fog_of_war_system.get_visibility_texture()
+		if visibility_tex:
+			wall_shader_material.set_shader_parameter("visibility_texture", visibility_tex)
 
 
 func _input(event: InputEvent) -> void:
