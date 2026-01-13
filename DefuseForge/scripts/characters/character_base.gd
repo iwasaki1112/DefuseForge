@@ -172,6 +172,27 @@ func _connect_signals() -> void:
 
 
 ## ========================================
+## モデル管理 API
+## ========================================
+
+## モデルをリロードし、全コンポーネントを再初期化
+## CharacterModelノードを入れ替えた後に呼び出す
+func reload_model(new_model: Node3D = null) -> void:
+	# 既存のシグナル接続を切断
+	if skeleton and skeleton.skeleton_updated.is_connected(_on_skeleton_updated):
+		skeleton.skeleton_updated.disconnect(_on_skeleton_updated)
+
+	# モデル参照を更新
+	if new_model:
+		model = new_model
+
+	# 再初期化
+	_find_model_and_skeleton()
+	_setup_components()
+	_connect_signals()
+
+
+## ========================================
 ## 移動 API
 ## ========================================
 

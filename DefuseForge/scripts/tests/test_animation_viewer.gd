@@ -612,49 +612,18 @@ func _change_character(character_id: String) -> void:
 	# Clear old references
 	_animations.clear()
 
-	# Remove old model
-	if character_model:
-		character_body.remove_child(character_model)
-		character_model.queue_free()
-		character_model = null
-
-	# Reset CharacterBase internal state
-	character_body.skeleton = null
-	character_body.model = null
-	character_body.set_weapon(WeaponRegistry.WeaponId.NONE)
-
 	# Update current character ID
 	current_character_id = character_id
 
-	# Load new character model
-	var glb_path = CHARACTERS_DIR + character_id + "/" + character_id + ".glb"
-	var fbx_path = CHARACTERS_DIR + character_id + "/" + character_id + ".fbx"
-	var character_path = glb_path if ResourceLoader.exists(glb_path) else fbx_path
-	var character_scene = load(character_path)
-	if not character_scene:
-		push_warning("[AnimViewer] Failed to load character: %s" % character_path)
-		return
+	# Use CharacterAPI to switch model (handles model swap, components, animations, weapon)
+	var weapon_id := _weapon_id_string_to_int(current_weapon_id)
+	CharacterAPIScript.switch_character_model(character_body, character_id, weapon_id)
 
-	character_model = character_scene.instantiate()
-	character_model.name = "CharacterModel"
-	character_body.add_child(character_model)
+	# Update model reference
+	character_model = character_body.model
 
-	# Re-setup CharacterBase
-	character_body._find_model_and_skeleton()
-	character_body._setup_components()
-	character_body._connect_signals()
-
-	# Load CharacterResource for IK offset
+	# Load CharacterResource for UI display
 	_load_character_resource(character_id)
-
-	# Equip weapon
-	character_body.set_weapon(_weapon_id_string_to_int(current_weapon_id))
-
-	# Apply character IK offset
-	_apply_character_ik_offset()
-
-	# Setup animations using CharacterAPI (handles animation sharing automatically)
-	CharacterAPIScript.setup_animations(character_body, character_id)
 
 	# Collect animations
 	_collect_animations()
@@ -748,9 +717,8 @@ func _on_elbow_pole_z_changed(value: float) -> void:
 
 
 func _update_elbow_pole() -> void:
-	if character_body and character_body.weapon:
-		character_body.weapon.update_elbow_pole_position(elbow_pole_x, elbow_pole_y, elbow_pole_z)
-		print("[AnimViewer] Elbow pole: (%.2f, %.2f, %.2f)" % [elbow_pole_x, elbow_pole_y, elbow_pole_z])
+	CharacterAPIScript.update_elbow_pole_position(character_body, elbow_pole_x, elbow_pole_y, elbow_pole_z)
+	print("[AnimViewer] Elbow pole: (%.2f, %.2f, %.2f)" % [elbow_pole_x, elbow_pole_y, elbow_pole_z])
 
 
 func _on_left_hand_x_changed(value: float) -> void:
@@ -775,9 +743,8 @@ func _on_left_hand_z_changed(value: float) -> void:
 
 
 func _update_left_hand_position() -> void:
-	if character_body and character_body.weapon:
-		character_body.weapon.update_left_hand_position(left_hand_x, left_hand_y, left_hand_z)
-		print("[AnimViewer] Left hand pos: (%.2f, %.2f, %.2f)" % [left_hand_x, left_hand_y, left_hand_z])
+	CharacterAPIScript.update_left_hand_position(character_body, left_hand_x, left_hand_y, left_hand_z)
+	print("[AnimViewer] Left hand pos: (%.2f, %.2f, %.2f)" % [left_hand_x, left_hand_y, left_hand_z])
 
 
 func _on_shoot_pressed() -> void:
@@ -813,13 +780,7 @@ func _load_character_resource(character_id: String) -> void:
 
 
 func _apply_character_ik_offset() -> void:
-	if character_body and character_body.weapon:
-		var hand_offset = Vector3.ZERO
-		var elbow_offset = Vector3.ZERO
-		if character_resource:
-			hand_offset = character_resource.left_hand_ik_offset
-			elbow_offset = character_resource.left_elbow_pole_offset
-		character_body.weapon.set_character_ik_offset(hand_offset, elbow_offset)
+	CharacterAPIScript.apply_character_ik_from_resource(character_body, current_character_id)
 
 
 # Camera view callbacks
@@ -849,6 +810,5 @@ func _on_camera_top() -> void:
 
 
 func _toggle_laser() -> void:
-	if character_body and character_body.weapon:
-		character_body.weapon.toggle_laser()
-		print("[AnimViewer] Laser toggled")
+	CharacterAPIScript.toggle_laser(character_body)
+	print("[AnimViewer] Laser toggled")

@@ -288,6 +288,153 @@ static func setup_animations(character: CharacterBase, character_id: String) -> 
 
 
 # ======================
+# Model Switching API
+# ======================
+
+## キャラクターモデルを切り替える
+## 古いモデル削除→新モデル読み込み→コンポーネント再初期化→武器再装備
+## @param character: 対象キャラクター
+## @param character_id: 新しいキャラクターID（例: "shade", "phantom", "vanguard"）
+## @param weapon_id: 切り替え後に装備する武器ID（-1で現在の武器を維持）
+## @return: 成功時true
+static func switch_character_model(
+	character: CharacterBase,
+	character_id: String,
+	weapon_id: int = -1
+) -> bool:
+	if character == null:
+		push_error("[CharacterAPI] Cannot switch model: character is null")
+		return false
+
+	# モデルパスを取得
+	var model_path := _get_model_path(character_id)
+	if model_path.is_empty():
+		push_error("[CharacterAPI] Character model not found: %s" % character_id)
+		return false
+
+	# 現在の武器を保存
+	var current_weapon_id := character.get_weapon_id() if weapon_id == -1 else weapon_id
+
+	# 武器を解除
+	character.set_weapon(WeaponRegistry.WeaponId.NONE)
+
+	# 古いモデルを削除
+	var old_model := character.model
+	if old_model:
+		character.remove_child(old_model)
+		old_model.queue_free()
+
+	# 内部参照をリセット
+	character.skeleton = null
+	character.model = null
+
+	# 新しいモデルをロード
+	var scene = load(model_path)
+	if scene == null:
+		push_error("[CharacterAPI] Failed to load model: %s" % model_path)
+		return false
+
+	var new_model = scene.instantiate()
+	new_model.name = "CharacterModel"
+	character.add_child(new_model)
+
+	# コンポーネントを再初期化
+	character.reload_model(new_model)
+
+	# アニメーションをセットアップ
+	setup_animations(character, character_id)
+
+	# 武器を再装備
+	if current_weapon_id != WeaponRegistry.WeaponId.NONE:
+		character.set_weapon(current_weapon_id)
+
+	# キャラクター固有のIKオフセットを適用
+	apply_character_ik_from_resource(character, character_id)
+
+	return true
+
+
+# ======================
+# Weapon IK Tuning API
+# ======================
+
+## 肘ポール位置を更新（左手IK用）
+## @param character: 対象キャラクター
+## @param x: X軸オフセット
+## @param y: Y軸オフセット
+## @param z: Z軸オフセット
+static func update_elbow_pole_position(character: CharacterBase, x: float, y: float, z: float) -> void:
+	if character == null or character.weapon == null:
+		push_warning("[CharacterAPI] Cannot update elbow pole: character or weapon is null")
+		return
+	character.weapon.update_elbow_pole_position(x, y, z)
+
+
+## 左手IKターゲット位置を更新
+## @param character: 対象キャラクター
+## @param x: X軸オフセット
+## @param y: Y軸オフセット
+## @param z: Z軸オフセット
+static func update_left_hand_position(character: CharacterBase, x: float, y: float, z: float) -> void:
+	if character == null or character.weapon == null:
+		push_warning("[CharacterAPI] Cannot update left hand position: character or weapon is null")
+		return
+	character.weapon.update_left_hand_position(x, y, z)
+
+
+## キャラクター固有のIKオフセットを設定（腕の長さ補正）
+## @param character: 対象キャラクター
+## @param hand_offset: 左手IK位置オフセット
+## @param elbow_offset: 肘ポール位置オフセット
+static func set_character_ik_offset(character: CharacterBase, hand_offset: Vector3, elbow_offset: Vector3) -> void:
+	if character == null or character.weapon == null:
+		push_warning("[CharacterAPI] Cannot set IK offset: character or weapon is null")
+		return
+	character.weapon.set_character_ik_offset(hand_offset, elbow_offset)
+
+
+## CharacterResourceからIKオフセットを自動適用
+## @param character: 対象キャラクター
+## @param character_id: キャラクターID
+static func apply_character_ik_from_resource(character: CharacterBase, character_id: String) -> void:
+	if character == null or character.weapon == null:
+		return
+
+	var char_resource := CharacterRegistry.get_character(character_id)
+	var hand_offset := Vector3.ZERO
+	var elbow_offset := Vector3.ZERO
+
+	if char_resource:
+		hand_offset = char_resource.left_hand_ik_offset
+		elbow_offset = char_resource.left_elbow_pole_offset
+
+	character.weapon.set_character_ik_offset(hand_offset, elbow_offset)
+
+
+# ======================
+# Laser Pointer API
+# ======================
+
+## レーザーポインターをトグル
+## @param character: 対象キャラクター
+static func toggle_laser(character: CharacterBase) -> void:
+	if character == null or character.weapon == null:
+		push_warning("[CharacterAPI] Cannot toggle laser: character or weapon is null")
+		return
+	character.weapon.toggle_laser()
+
+
+## レーザーポインターの状態を設定
+## @param character: 対象キャラクター
+## @param active: true=有効、false=無効
+static func set_laser_active(character: CharacterBase, active: bool) -> void:
+	if character == null or character.weapon == null:
+		push_warning("[CharacterAPI] Cannot set laser: character or weapon is null")
+		return
+	character.weapon.set_laser_active(active)
+
+
+# ======================
 # Internal Helpers
 # ======================
 
@@ -387,10 +534,8 @@ static func _replace_model(character: CharacterBase, model_path: String) -> void
 	new_model.name = "CharacterModel"
 	character.add_child(new_model)
 
-	# CharacterBaseを再セットアップ
-	character.model = new_model
-	character._find_model_and_skeleton()
-	character._setup_components()
+	# reload_model()を使用して再初期化
+	character.reload_model(new_model)
 
 	# キャラクターIDを検出してアニメーションをセットアップ
 	var character_id := CharacterRegistry.detect_character_id_from_scene_path(model_path)
