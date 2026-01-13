@@ -80,14 +80,27 @@ func _calculate_shadow_cast_vision() -> void:
 			ray_angles.append(corner_angle)
 			ray_angles.append(corner_angle + 0.001)
 
-	# 角度でソート
-	ray_angles.sort()
+	# キャラクターの向きを基準に相対角度でソート（±PI境界問題を回避）
+	var angle_data: Array[Dictionary] = []
+	for angle in ray_angles:
+		var relative = _wrap_angle(angle - char_rotation)
+		angle_data.append({"absolute": angle, "relative": relative})
+
+	# 相対角度でソート
+	angle_data.sort_custom(func(a, b): return a.relative < b.relative)
 
 	# 重複を除去
 	var unique_angles: Array[float] = []
-	for angle in ray_angles:
-		if unique_angles.is_empty() or abs(angle - unique_angles[-1]) > 0.0001:
+	for data in angle_data:
+		var angle = data.absolute
+		if unique_angles.is_empty():
 			unique_angles.append(angle)
+		else:
+			# 相対角度で比較して重複チェック
+			var last_relative = _wrap_angle(unique_angles[-1] - char_rotation)
+			var current_relative = data.relative
+			if abs(current_relative - last_relative) > 0.0001:
+				unique_angles.append(angle)
 
 	# 各角度にレイを発射
 	_visible_polygon.clear()
