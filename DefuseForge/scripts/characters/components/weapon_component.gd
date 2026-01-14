@@ -36,6 +36,9 @@ var laser_pointer: Node3D  # LaserPointer instance
 ## MuzzleFlash参照
 var _muzzle_flash: Node3D = null  # MuzzleFlash instance
 
+## TracerEffect参照
+var _tracer_effect: Node3D = null  # TracerEffect instance
+
 
 func _ready() -> void:
 	pass
@@ -95,6 +98,10 @@ func apply_recoil(intensity: float) -> void:
 	# MuzzleFlashを発火
 	if _muzzle_flash:
 		_muzzle_flash.flash()
+
+	# TracerEffectを発火
+	if _tracer_effect:
+		_tracer_effect.fire()
 
 
 ## 毎フレーム更新（リコイル回復）
@@ -157,6 +164,9 @@ func _attach_weapon() -> void:
 	# MuzzleFlashを検索
 	_find_muzzle_flash()
 
+	# TracerEffectを検索
+	_find_tracer_effect()
+
 
 ## リコイルを回復
 func _recover_recoil() -> void:
@@ -173,6 +183,7 @@ func _cleanup_weapon() -> void:
 	_cleanup_left_hand_ik()
 	laser_pointer = null
 	_muzzle_flash = null
+	_tracer_effect = null
 
 	if weapon_attachment:
 		weapon_attachment.queue_free()
@@ -393,6 +404,17 @@ func _find_muzzle_flash() -> void:
 	var muzzle_point = current_weapon.find_child("MuzzlePoint", true, false)
 	if muzzle_point:
 		_muzzle_flash = muzzle_point.find_child("MuzzleFlash", false, false)
+
+
+## 武器からTracerEffectを検索
+func _find_tracer_effect() -> void:
+	if current_weapon == null:
+		return
+
+	# MuzzlePoint/TracerEffect を検索
+	var muzzle_point = current_weapon.find_child("MuzzlePoint", true, false)
+	if muzzle_point:
+		_tracer_effect = muzzle_point.find_child("TracerEffect", false, false)
 
 
 ## レーザーポインターをトグル

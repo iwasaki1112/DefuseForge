@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://t677871huo1d"]
+[gd_scene load_steps=5 format=3 uid="uid://t677871huo1d"]
 
 [ext_resource type="PackedScene" uid="uid://dr65r78cu8v4m" path="res://assets/weapons/ak47/ak47.glb" id="1_ak47"]
 [ext_resource type="PackedScene" uid="uid://o3yilrg8ljus" path="res://scenes/effects/muzzle_flash.tscn" id="2_muzzle_flash"]
 [ext_resource type="PackedScene" uid="uid://cqv8xw2jk7ysp" path="res://scenes/effects/laser_pointer.tscn" id="3_laser_pointer"]
+[ext_resource type="PackedScene" uid="uid://bmt8v5y2wq6pn" path="res://scenes/effects/tracer_effect.tscn" id="4_tracer_effect"]
 
 [node name="AK47" type="Node3D"]
 
@@ -15,6 +16,9 @@ transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0.43495423, 0.080329575, 0)
 
 [node name="LaserPointer" parent="Model/MuzzlePoint" instance=ExtResource("3_laser_pointer")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0.08, -0.01)
+
+[node name="TracerEffect" parent="Model/MuzzlePoint" instance=ExtResource("4_tracer_effect")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0.08, -0.01)
 
 [node name="LeftHandGrip_AK47" type="Marker3D" parent="Model"]

@@ -519,10 +519,45 @@ func _shoot() -> void:
 |------------|------|------------|------|
 | flash_duration | float | 0.05 | フラッシュ表示時間（秒） |
 
+### TracerEffect
+
+弾道トレーサーエフェクト。発砲時にマズルから着弾点まで伸び縮みする白い弾道ラインを表示。
+
+#### 動作
+1. **伸張フェーズ**: マズルから着弾点まで先端が伸びる
+2. **縮小フェーズ**: 尾部が着弾点に向かって縮む
+3. **消滅**: アニメーション完了後に非表示
+
+#### 構造
+- **コア**: 細くて明るい中心ライン（発光強度3.0）
+- **グロー**: 太くて半透明のぼかし外周（発光強度1.5、透明度25%）
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| tracer_color | Color | (1.0, 1.0, 0.9, 0.9) | トレーサーの色 |
+| core_radius | float | 0.003 | コアの半径 |
+| glow_radius | float | 0.012 | グローの半径 |
+| max_range | float | 100.0 | 最大射程（m） |
+| extend_time | float | 0.03 | 伸張時間（秒） |
+| shrink_time | float | 0.08 | 縮小時間（秒） |
+
+#### 武器シーン構成
+
+```
+AK47 (Node3D)
+├─ Model
+│  ├─ MuzzlePoint
+│  │  ├─ MuzzleFlash
+│  │  ├─ LaserPointer
+│  │  └─ TracerEffect  ← 弾道トレーサー
+```
+
 ### 関連ファイル
 
 - `scripts/effects/muzzle_flash.gd` - MuzzleFlashスクリプト
 - `scenes/effects/muzzle_flash.tscn` - MuzzleFlashシーン
+- `scripts/effects/tracer_effect.gd` - TracerEffectスクリプト
+- `scenes/effects/tracer_effect.tscn` - TracerEffectシーン
 
 ---
 

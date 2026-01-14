@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bmt8v5y2wq6pn"]
+
+[ext_resource type="Script" path="res://scripts/effects/tracer_effect.gd" id="1_tracer"]
+
+[node name="TracerEffect" type="Node3D"]
+script = ExtResource("1_tracer")

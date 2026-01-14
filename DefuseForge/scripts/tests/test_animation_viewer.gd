@@ -917,8 +917,9 @@ func _on_shoot_pressed() -> void:
 
 
 func _shoot() -> void:
-	character_body.apply_recoil(1.0)
-	print("[AnimViewer] Shot fired!")
+	if controlled_character:
+		controlled_character.apply_recoil(1.0)
+		print("[AnimViewer] Shot fired!")
 
 
 func _on_auto_fire_pressed() -> void:
