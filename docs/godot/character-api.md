@@ -331,6 +331,33 @@ var resource: WeaponResource = character.get_weapon_resource()
 character.apply_recoil(intensity: float = 1.0)
 ```
 
+### リコイル動作
+
+`apply_recoil()` は以下の動作を実行:
+
+1. **武器オフセット**: 武器を後方に跳ねさせる（Y+0.02, Z+0.05 × intensity）
+2. **MuzzleFlash発火**: 銃口のフラッシュエフェクトを表示（50ms）
+3. **上半身リコイル**: Spineボーンを後方に傾ける（~4.5度）→ 滑らかに回復
+
+```gdscript
+# 射撃時に呼び出し（test_animation_viewer.gd参照）
+func _shoot() -> void:
+    character.apply_recoil(1.0)
+```
+
+### MuzzleFlash
+
+武器シーン（ak47.tscn等）に含まれる銃口フラッシュエフェクト。
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| flash_duration | float | 0.05 | フラッシュ表示時間（秒） |
+
+### 関連ファイル
+
+- `scripts/effects/muzzle_flash.gd` - MuzzleFlashスクリプト
+- `scenes/effects/muzzle_flash.tscn` - MuzzleFlashシーン
+
 ---
 
 ## レーザーポインター

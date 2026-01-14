@@ -33,6 +33,9 @@ var _character_elbow_pole_offset: Vector3 = Vector3.ZERO
 ## レーザーポインター
 var laser_pointer: Node3D  # LaserPointer instance
 
+## MuzzleFlash参照
+var _muzzle_flash: Node3D = null  # MuzzleFlash instance
+
 
 func _ready() -> void:
 	pass
@@ -88,6 +91,10 @@ func get_weapon_resource() -> WeaponResource:
 func apply_recoil(intensity: float) -> void:
 	# 武器を後ろに跳ねさせる
 	_weapon_recoil_offset = Vector3(0, 0.02, 0.05) * intensity
+
+	# MuzzleFlashを発火
+	if _muzzle_flash:
+		_muzzle_flash.flash()
 
 
 ## 毎フレーム更新（リコイル回復）
@@ -147,6 +154,9 @@ func _attach_weapon() -> void:
 	# レーザーポインターを検索
 	_find_laser_pointer()
 
+	# MuzzleFlashを検索
+	_find_muzzle_flash()
+
 
 ## リコイルを回復
 func _recover_recoil() -> void:
@@ -162,6 +172,7 @@ func _recover_recoil() -> void:
 func _cleanup_weapon() -> void:
 	_cleanup_left_hand_ik()
 	laser_pointer = null
+	_muzzle_flash = null
 
 	if weapon_attachment:
 		weapon_attachment.queue_free()
@@ -371,6 +382,17 @@ func _find_laser_pointer() -> void:
 	var muzzle_point = current_weapon.find_child("MuzzlePoint", true, false)
 	if muzzle_point:
 		laser_pointer = muzzle_point.find_child("LaserPointer", false, false)
+
+
+## 武器からMuzzleFlashを検索
+func _find_muzzle_flash() -> void:
+	if current_weapon == null:
+		return
+
+	# MuzzlePoint/MuzzleFlash を検索
+	var muzzle_point = current_weapon.find_child("MuzzlePoint", true, false)
+	if muzzle_point:
+		_muzzle_flash = muzzle_point.find_child("MuzzleFlash", false, false)
 
 
 ## レーザーポインターをトグル

@@ -5,8 +5,11 @@ extends SkeletonModifier3D
 ## 上半身回転モディファイア
 ## アニメーション処理後に複数のSpineボーンを回転させる
 
-## 回転角度（ラジアン）
+## 回転角度（ラジアン）- 左右
 var rotation_angle: float = 0.0
+
+## リコイル角度（ラジアン）- 後ろへの傾き
+var recoil_angle: float = 0.0
 
 ## 内部
 var _spine_bone_indices: Array[int] = []
@@ -20,7 +23,8 @@ func _process_modification() -> void:
 	if not _initialized:
 		return
 
-	if abs(rotation_angle) < 0.001:
+	# 回転もリコイルも無ければスキップ
+	if abs(rotation_angle) < 0.001 and abs(recoil_angle) < 0.001:
 		return
 
 	var skeleton := get_skeleton()
@@ -29,11 +33,13 @@ func _process_modification() -> void:
 
 	# 各スパインボーンに回転を適用（分散させる）
 	var per_bone_angle = rotation_angle / max(_spine_bone_indices.size(), 1)
+	var per_bone_recoil = recoil_angle / max(_spine_bone_indices.size(), 1)
+
 	for bone_idx in _spine_bone_indices:
 		var current_rotation = skeleton.get_bone_pose_rotation(bone_idx)
-		var twist = Quaternion(Vector3.UP, per_bone_angle)
-		var new_rotation = current_rotation * twist
-		skeleton.set_bone_pose_rotation(bone_idx, new_rotation)
+		var twist = Quaternion(Vector3.UP, per_bone_angle)  # 左右回転
+		var kick = Quaternion(Vector3.RIGHT, -per_bone_recoil)  # 後ろへ傾く
+		skeleton.set_bone_pose_rotation(bone_idx, current_rotation * twist * kick)
 
 
 func _initialize() -> void:

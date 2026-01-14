@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://dr65r78cu8v4m" path="res://assets/weapons/ak47/ak47.glb" id="1_ak47"]
 [ext_resource type="PackedScene" uid="uid://o3yilrg8ljus" path="res://scenes/effects/muzzle_flash.tscn" id="2_muzzle_flash"]
-[ext_resource type="PackedScene" path="res://scenes/effects/laser_pointer.tscn" id="3_laser_pointer"]
+[ext_resource type="PackedScene" uid="uid://cqv8xw2jk7ysp" path="res://scenes/effects/laser_pointer.tscn" id="3_laser_pointer"]
 
 [node name="AK47" type="Node3D"]
 
@@ -12,6 +12,7 @@ transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0
 [node name="MuzzlePoint" type="Node3D" parent="Model"]
 
 [node name="MuzzleFlash" parent="Model/MuzzlePoint" instance=ExtResource("2_muzzle_flash")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0.43495423, 0.080329575, 0)
 
 [node name="LaserPointer" parent="Model/MuzzlePoint" instance=ExtResource("3_laser_pointer")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0.08, -0.01)

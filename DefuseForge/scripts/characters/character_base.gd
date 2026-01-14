@@ -281,6 +281,8 @@ func get_weapon_resource() -> WeaponResource:
 func apply_recoil(intensity: float = 1.0) -> void:
 	if weapon:
 		weapon.apply_recoil(intensity)
+	if animation:
+		animation.apply_upper_body_recoil(intensity)
 
 
 ## ========================================

@@ -35,6 +35,11 @@ var weapon_type: int = 0  # WeaponRegistry.WeaponType
 var is_shooting: bool = false
 var _shooting_blend: float = 0.0
 
+## 上半身リコイル
+var _upper_body_recoil: float = 0.0
+const RECOIL_KICK_ANGLE: float = 0.08  # ~4.5度
+const UPPER_BODY_RECOIL_RECOVERY_SPEED: float = 12.0
+
 ## 上半身エイミング（複数ボーンを回転）
 var _upper_body_bone_indices: Array[int] = []
 var _current_aim_rotation: float = 0.0
@@ -104,6 +109,12 @@ func set_shooting(shooting: bool) -> void:
 	is_shooting = shooting
 
 
+## 上半身リコイルを適用
+## @param intensity: リコイル強度（0.0 - 1.0）
+func apply_upper_body_recoil(intensity: float) -> void:
+	_upper_body_recoil = RECOIL_KICK_ANGLE * intensity
+
+
 ## 上半身エイミング角度を設定
 ## @param degrees: エイミング角度（度）
 func apply_spine_rotation(degrees: float) -> void:
@@ -138,6 +149,7 @@ func play_animation(anim_name: String, blend_time: float = ANIM_BLEND_TIME) -> v
 func update(delta: float) -> void:
 	_update_shooting_blend(delta)
 	_update_upper_body_aim(delta)
+	_recover_upper_body_recoil(delta)
 
 
 ## AnimationPlayerの全アニメーションリストを取得
@@ -315,6 +327,18 @@ func _update_upper_body_aim(delta: float) -> void:
 	# SkeletonModifier3Dに回転値を設定
 	if _upper_body_modifier:
 		_upper_body_modifier.rotation_angle = _current_aim_rotation
+
+
+## 上半身リコイルを回復
+func _recover_upper_body_recoil(delta: float) -> void:
+	if _upper_body_recoil > 0.001:
+		_upper_body_recoil = lerpf(_upper_body_recoil, 0.0, UPPER_BODY_RECOIL_RECOVERY_SPEED * delta)
+	else:
+		_upper_body_recoil = 0.0
+
+	# SkeletonModifier3Dにリコイル値を設定
+	if _upper_body_modifier:
+		_upper_body_modifier.recoil_angle = _upper_body_recoil
 
 
 ## 上半身エイミング用のスパインボーンを検索
