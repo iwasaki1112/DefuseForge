@@ -1,0 +1,92 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/tests/test_path_drawer.gd" id="1_test"]
+[ext_resource type="Script" path="res://scripts/tests/orbit_camera.gd" id="2_orbit_camera"]
+[ext_resource type="Script" path="res://scripts/effects/path_drawer.gd" id="3_path_drawer"]
+[ext_resource type="PackedScene" uid="uid://dakdk5rygse1w" path="res://assets/characters/vanguard/vanguard.glb" id="4_character"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.08, 0.08, 0.12, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.3, 0.35, 0.5, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+tonemap_exposure = 1.1
+tonemap_white = 6.0
+glow_enabled = true
+glow_intensity = 0.5
+glow_strength = 1.2
+glow_bloom = 0.1
+glow_hdr_threshold = 0.8
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.15, 0.15, 0.18, 1)
+metallic = 0.1
+roughness = 0.7
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(20, 0.1, 20)
+
+[node name="TestPathDrawer" type="Node3D"]
+script = ExtResource("1_test")
+
+[node name="Character" parent="." instance=ExtResource("4_character")]
+
+[node name="OrbitCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 8, 6)
+fov = 50.0
+script = ExtResource("2_orbit_camera")
+distance = 10.0
+initial_vertical_angle = 55.0
+
+[node name="PathDrawer" type="Node3D" parent="."]
+script = ExtResource("3_path_drawer")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 8, 0)
+shadow_enabled = true
+shadow_normal_bias = 2.0
+directional_shadow_max_distance = 30.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="Floor" type="StaticBody3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="UI" type="VBoxContainer" parent="CanvasLayer"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 220.0
+offset_bottom = 120.0
+
+[node name="TitleLabel" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Path Drawer Test"
+
+[node name="InstructionLabel" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 2
+text = "Left-click and drag to draw a path"
+
+[node name="ClearButton" type="Button" parent="CanvasLayer/UI"]
+layout_mode = 2
+text = "Clear Path"
+
+[node name="PointCountLabel" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 2
+text = "Points: 0"
