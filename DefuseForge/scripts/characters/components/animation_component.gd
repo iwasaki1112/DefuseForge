@@ -20,6 +20,7 @@ const WEAPON_TYPE_NAMES := {
 ## 上半身エイミング設定
 @export var aim_rotation_speed: float = 10.0
 @export_range(0, 180, 1) var aim_max_angle_deg: float = 90.0
+@export_range(-90, 90, 1) var aim_max_pitch_deg: float = 30.0
 
 ## 内部参照
 var anim_player: AnimationPlayer
@@ -41,9 +42,11 @@ var _upper_body_recoil: float = 0.0
 const RECOIL_KICK_ANGLE: float = 0.08  # ~4.5度
 const UPPER_BODY_RECOIL_RECOVERY_SPEED: float = 12.0
 
-## 上半身エイミング
+## 上半身エイミング（ヨー・ピッチ）
 var _current_aim_rotation: float = 0.0
 var _target_aim_rotation: float = 0.0
+var _current_pitch_rotation: float = 0.0
+var _target_pitch_rotation: float = 0.0
 
 const SHOOTING_BLEND_SPEED: float = 10.0
 const ANIM_BLEND_TIME: float = 0.3
@@ -119,10 +122,12 @@ func apply_upper_body_recoil(intensity: float) -> void:
 	_upper_body_recoil = RECOIL_KICK_ANGLE * intensity
 
 
-## 上半身エイミング角度を設定
-## @param degrees: エイミング角度（度）
-func apply_spine_rotation(degrees: float) -> void:
-	_target_aim_rotation = deg_to_rad(clamp(degrees, -aim_max_angle_deg, aim_max_angle_deg))
+## 上半身エイミング角度を設定（ヨー + ピッチ）
+## @param yaw_degrees: 水平角度（度）
+## @param pitch_degrees: 垂直角度（度）- デフォルト0.0で後方互換
+func apply_spine_rotation(yaw_degrees: float, pitch_degrees: float = 0.0) -> void:
+	_target_aim_rotation = deg_to_rad(clamp(yaw_degrees, -aim_max_angle_deg, aim_max_angle_deg))
+	_target_pitch_rotation = deg_to_rad(clamp(pitch_degrees, -aim_max_pitch_deg, aim_max_pitch_deg))
 
 
 ## アニメーションを直接再生（主にテスト用）
@@ -370,14 +375,17 @@ func _update_shooting_blend(delta: float) -> void:
 	anim_tree.set("parameters/upper_blend/blend_amount", _shooting_blend)
 
 
-## 上半身エイミング角度を更新
+## 上半身エイミング角度を更新（ヨー + ピッチ）
 func _update_upper_body_aim(delta: float) -> void:
-	# 目標角度に向けて補間
+	# 目標角度に向けて補間（ヨー）
 	_current_aim_rotation = lerp(_current_aim_rotation, _target_aim_rotation, aim_rotation_speed * delta)
+	# 目標角度に向けて補間（ピッチ）
+	_current_pitch_rotation = lerp(_current_pitch_rotation, _target_pitch_rotation, aim_rotation_speed * delta)
 
 	# SkeletonModifier3Dに回転値を設定
 	if _upper_body_modifier:
 		_upper_body_modifier.rotation_angle = _current_aim_rotation
+		_upper_body_modifier.pitch_angle = _current_pitch_rotation
 
 
 ## 上半身リコイルを回復

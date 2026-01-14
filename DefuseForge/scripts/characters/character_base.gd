@@ -332,9 +332,9 @@ func set_shooting(shooting: bool) -> void:
 
 
 ## 上半身回転を設定
-func set_upper_body_rotation(degrees: float) -> void:
+func set_upper_body_rotation(yaw_degrees: float, pitch_degrees: float = 0.0) -> void:
 	if animation:
-		animation.apply_spine_rotation(degrees)
+		animation.apply_spine_rotation(yaw_degrees, pitch_degrees)
 
 
 ## アニメーションリストを取得
@@ -427,6 +427,16 @@ func _update_action_timer(delta: float) -> void:
 ## 自動照準（内部処理）
 ## ========================================
 
+## 銃口のグローバル位置を取得
+func _get_muzzle_position() -> Vector3:
+	if weapon and weapon.current_weapon:
+		var muzzle = weapon.current_weapon.find_child("MuzzlePoint", true, false)
+		if muzzle:
+			return muzzle.global_position
+	# フォールバック: キャラクター位置 + 目の高さ + 前方オフセット
+	return global_position + Vector3(0, 1.5, 0) + global_transform.basis.z * 0.3
+
+
 ## 自動照準の更新処理
 func _update_auto_aim() -> void:
 	if not auto_aim_enabled or not is_alive:
@@ -436,23 +446,30 @@ func _update_auto_aim() -> void:
 	_current_target = enemy
 
 	if enemy:
-		# 敵への方向ベクトル（XZ平面）
-		var to_enemy = enemy.global_position - global_position
-		to_enemy.y = 0
+		# 銃口位置から敵の腹部への方向ベクトル
+		var muzzle_pos = _get_muzzle_position()
+		var target_pos = enemy.global_position + Vector3(0, 0.7, 0)  # 腹部
+		var to_enemy_3d = target_pos - muzzle_pos
 
-		# キャラクターの前方ベクトル（+Zが前方）
+		# ヨー角度（水平）- XZ平面で計算
+		var to_enemy_xz = Vector3(to_enemy_3d.x, 0, to_enemy_3d.z)
 		var forward = global_transform.basis.z
 		forward.y = 0
+		var yaw_angle = rad_to_deg(forward.signed_angle_to(to_enemy_xz, Vector3.UP))
+		var clamped_yaw = clamp(yaw_angle, -45.0, 45.0)
 
-		# 前方ベクトルと敵方向の角度差を計算
-		var angle_to_enemy = rad_to_deg(forward.signed_angle_to(to_enemy, Vector3.UP))
+		# ピッチ角度（垂直）- 水平距離と高低差から計算
+		# 符号を逆にしてボーン座標系に合わせる
+		var horizontal_dist = to_enemy_xz.length()
+		var vertical_diff = to_enemy_3d.y
+		var pitch_angle = -rad_to_deg(atan2(vertical_diff, horizontal_dist))
+		var clamped_pitch = clamp(pitch_angle, -30.0, 30.0)
 
-		# 上半身回転の範囲内にクランプして適用
-		var clamped_angle = clamp(angle_to_enemy, -45.0, 45.0)
-		set_upper_body_rotation(clamped_angle)
+		# 上半身回転の範囲内にクランプして適用（ヨー + ピッチ）
+		set_upper_body_rotation(clamped_yaw, clamped_pitch)
 	else:
 		# 敵がいない場合は上半身回転をリセット
-		set_upper_body_rotation(0.0)
+		set_upper_body_rotation(0.0, 0.0)
 
 
 ## 視界内の敵を検出（FOV + 距離 + レイキャスト方式）

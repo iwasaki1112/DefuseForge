@@ -817,8 +817,8 @@ character.play_animation(anim_name: String, blend_time: float = 0.3)
 # 射撃状態を設定
 character.set_shooting(shooting: bool)
 
-# 上半身回転を設定
-character.set_upper_body_rotation(degrees: float)
+# 上半身回転を設定（ヨー + ピッチ）
+character.set_upper_body_rotation(yaw_degrees: float, pitch_degrees: float = 0.0)
 
 # アニメーションリストを取得
 var list: PackedStringArray = character.get_animation_list()
@@ -969,6 +969,52 @@ character.cancel_action()
 # アクション中かどうか
 var in_action: bool = character.is_in_action()
 ```
+
+## 自動照準（Auto Aim）
+
+敵が視界内に入ると、上半身が自動的に敵の方向を向く機能。
+
+### エクスポート設定
+
+```gdscript
+@export var auto_aim_enabled: bool = true  # 自動照準の有効/無効
+```
+
+### 動作仕様
+
+1. **敵検出**: 視界内で最も近い敵キャラクターをターゲット
+2. **ヨー（水平）照準**: 上半身を左右に回転（±45度制限）
+3. **ピッチ（垂直）照準**: 上半身を上下に傾け、銃口を敵に向ける（±30度制限）
+
+### ターゲット位置
+
+銃口から敵の腹部（`global_position + 0.7m`）への方向ベクトルを計算し、照準角度を決定。
+
+### 関連API
+
+```gdscript
+# 上半身回転を手動で設定（自動照準無効時に使用）
+character.set_upper_body_rotation(yaw_degrees: float, pitch_degrees: float = 0.0)
+
+# AnimationComponent経由
+character.animation.apply_spine_rotation(yaw_degrees: float, pitch_degrees: float = 0.0)
+```
+
+### AnimationComponent設定
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| aim_rotation_speed | float | 10.0 | 照準補間速度 |
+| aim_max_angle_deg | float | 90.0 | 最大ヨー角度 |
+| aim_max_pitch_deg | float | 30.0 | 最大ピッチ角度 |
+
+### 関連ファイル
+
+- `scripts/characters/character_base.gd` - 自動照準ロジック（`_update_auto_aim()`）
+- `scripts/characters/components/animation_component.gd` - 上半身回転補間
+- `scripts/utils/upper_body_rotation_modifier.gd` - スケルトンボーン回転
+
+---
 
 ## 視界
 
