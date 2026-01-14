@@ -83,6 +83,9 @@ var _input_rotations: Array[Node] = []  # 各キャラクター用
 var _selection_manager: Node
 var _highlight_checkbox: CheckButton
 
+# Team selection
+var _team_option_button: OptionButton
+
 # Context menu and interaction
 var _interaction_manager: Node
 var _context_menu: Control
@@ -107,30 +110,32 @@ func _ready() -> void:
 	# Create UI layout
 	_create_ui_layout()
 
-	# 複数キャラクターを配列に追加（味方2体、敵2体）
+	# 複数キャラクターを配列に追加（CT側2体、T側2体）
 	var char1 = get_node_or_null("CharacterBody") as CharacterBase
 	var char2 = get_node_or_null("CharacterBody2") as CharacterBase
 	var char3 = get_node_or_null("CharacterBody3") as CharacterBase
 	var char4 = get_node_or_null("CharacterBody4") as CharacterBase
-	# 味方チーム
+	# カウンターテロリストチーム（vanguard = 敵側）
 	if char1:
 		characters.append(char1)
-		char1.team = CharacterBase.Team.PLAYER
+		char1.team = CharacterBase.Team.COUNTER_TERRORIST
 	if char2:
 		characters.append(char2)
-		char2.team = CharacterBase.Team.PLAYER
-	# 敵チーム
+		char2.team = CharacterBase.Team.COUNTER_TERRORIST
+	# テロリストチーム（phantom = 操作側）
 	if char3:
 		characters.append(char3)
-		char3.team = CharacterBase.Team.ENEMY
+		char3.team = CharacterBase.Team.TERRORIST
 	if char4:
 		characters.append(char4)
-		char4.team = CharacterBase.Team.ENEMY
+		char4.team = CharacterBase.Team.TERRORIST
 
-	# デフォルトは1体目を操作
-	if characters.size() > 0:
-		controlled_character = characters[0]
-		character_body = characters[0]  # 後方互換性
+	# デフォルトはプレイヤーチームの最初のキャラクターを操作
+	for character in characters:
+		if PlayerManager.is_player_team(character.team):
+			controlled_character = character
+			character_body = character  # 後方互換性
+			break
 
 	# Get reference to character model
 	character_model = character_body.get_node_or_null("CharacterModel") if character_body else null
@@ -143,6 +148,15 @@ func _ready() -> void:
 
 	# Wait for CharacterBase to setup
 	await get_tree().process_frame
+
+	# phantomモデルのアニメーションをセットアップ（vanguardからコピー）- 先に実行
+	print("[AnimViewer] Setting up animations for phantom characters")
+	for i in range(characters.size()):
+		var character = characters[i]
+		# phantomモデルを使用しているキャラクター（CharacterBody3, CharacterBody4）
+		if character.name in ["CharacterBody3", "CharacterBody4"]:
+			print("[AnimViewer] Calling setup_animations for character %d: %s" % [i, character.name])
+			CharacterAPIScript.setup_animations(character, "phantom")
 
 	# Equip weapon
 	character_body.set_weapon(_weapon_id_string_to_int(current_weapon_id))
@@ -169,17 +183,10 @@ func _ready() -> void:
 	for character in characters:
 		character.setup_outline_camera(camera)
 
-	# phantomモデル（敵キャラ）のアニメーションをセットアップ（vanguardからコピー）
-	print("[AnimViewer] Setting up animations for enemy characters")
-	for i in range(characters.size()):
-		var character = characters[i]
-		if character.team == CharacterBase.Team.ENEMY:
-			print("[AnimViewer] Calling setup_animations for character %d: %s" % [i, character.name])
-			CharacterAPIScript.setup_animations(character, "phantom")
-
-	# 全キャラクターに武器を装備してIKオフセットを適用（1体目以外）
-	for i in range(1, characters.size()):
-		var character = characters[i]
+	# 全キャラクターに武器を装備してIKオフセットを適用
+	for character in characters:
+		if character == character_body:
+			continue  # 操作キャラクターは既に設定済み
 		character.set_weapon(_weapon_id_string_to_int(current_weapon_id))
 		CharacterAPIScript.apply_character_ik_from_resource(character, "vanguard")
 		# 武器タイプに合わせてアニメーションを更新
@@ -191,9 +198,11 @@ func _ready() -> void:
 
 	# 全キャラクターのIK値を更新（1フレーム待ってから）
 	await get_tree().process_frame
-	for i in range(1, characters.size()):
-		CharacterAPIScript.update_elbow_pole_position(characters[i], elbow_pole_x, elbow_pole_y, elbow_pole_z)
-		CharacterAPIScript.update_left_hand_position(characters[i], left_hand_x, left_hand_y, left_hand_z)
+	for character in characters:
+		if character == character_body:
+			continue
+		CharacterAPIScript.update_elbow_pole_position(character, elbow_pole_x, elbow_pole_y, elbow_pole_z)
+		CharacterAPIScript.update_left_hand_position(character, left_hand_x, left_hand_y, left_hand_z)
 
 	# Setup selection manager
 	_selection_manager = SelectionManagerScript.new()
@@ -276,10 +285,10 @@ func _setup_fog_of_war() -> void:
 	fog_of_war_system.name = "FogOfWarSystem"
 	add_child(fog_of_war_system)
 
-	# プレイヤーチームのキャラクターのみ視界を登録（敵はFoGに表示しない）
+	# 操作チームのキャラクターのみ視界を登録（敵はFoWに表示しない）
 	await get_tree().process_frame
 	for character in characters:
-		if character and character.vision and character.team == CharacterBase.Team.PLAYER:
+		if character and character.vision and PlayerManager.is_player_team(character.team):
 			fog_of_war_system.register_vision(character.vision)
 
 
@@ -494,6 +503,24 @@ func _populate_left_panel() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 18)
 	vbox.add_child(title)
+
+	vbox.add_child(HSeparator.new())
+
+	# Team selection
+	var team_label = Label.new()
+	team_label.text = "Play as"
+	vbox.add_child(team_label)
+
+	_team_option_button = OptionButton.new()
+	_team_option_button.add_item("TERRORIST", 0)
+	_team_option_button.add_item("COUNTER-TERRORIST", 1)
+	# 現在のチームを選択
+	if PlayerManager.player_team == CharacterBase.Team.TERRORIST:
+		_team_option_button.select(0)
+	else:
+		_team_option_button.select(1)
+	_team_option_button.item_selected.connect(_on_team_selected)
+	vbox.add_child(_team_option_button)
 
 	vbox.add_child(HSeparator.new())
 
@@ -981,6 +1008,22 @@ func _on_selection_toggled(toggled_on: bool) -> void:
 		_selection_manager.select(character_body)
 	else:
 		_selection_manager.deselect()
+
+
+func _on_team_selected(index: int) -> void:
+	var new_team: CharacterBase.Team
+	if index == 0:
+		new_team = CharacterBase.Team.TERRORIST
+	else:
+		new_team = CharacterBase.Team.COUNTER_TERRORIST
+
+	if new_team == PlayerManager.player_team:
+		return
+
+	# チームを変更してシーンをリロード
+	PlayerManager.player_team = new_team
+	print("[AnimViewer] Team changed to: %s" % ("TERRORIST" if index == 0 else "COUNTER_TERRORIST"))
+	get_tree().reload_current_scene()
 
 
 func _on_selection_changed(character: CharacterBody3D) -> void:

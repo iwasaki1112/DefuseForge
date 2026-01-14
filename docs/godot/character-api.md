@@ -815,10 +815,10 @@ var list: PackedStringArray = character.get_animation_list()
 | 値 | 定数 | 説明 |
 |----|------|------|
 | 0 | NONE | チームなし（中立） |
-| 1 | PLAYER | プレイヤーチーム |
-| 2 | ENEMY | 敵チーム |
+| 1 | COUNTER_TERRORIST | カウンターテロリストチーム |
+| 2 | TERRORIST | テロリストチーム |
 
-### API
+### CharacterBase API
 
 ```gdscript
 # エクスポートプロパティとして設定
@@ -832,13 +832,65 @@ var is_enemy: bool = character.is_enemy_of(other_character)
 
 ```gdscript
 # チーム設定
-character1.team = CharacterBase.Team.PLAYER
-character2.team = CharacterBase.Team.ENEMY
+character1.team = CharacterBase.Team.COUNTER_TERRORIST
+character2.team = CharacterBase.Team.TERRORIST
 
 # 敵判定（射撃時に自動で使用される）
 if character1.is_enemy_of(character2):
     # character2 は敵 → ダメージを与える
 ```
+
+---
+
+## PlayerManager
+
+プレイヤーの操作チームを一元管理するAutoloadシングルトン。
+チーム切替が1行で完了し、全システム（視界、選択、FoW等）に自動反映される。
+
+### 基本API
+
+```gdscript
+# 操作チームを設定（デフォルト: TERRORIST）
+PlayerManager.player_team = CharacterBase.Team.TERRORIST
+PlayerManager.player_team = CharacterBase.Team.COUNTER_TERRORIST
+
+# 指定チームがプレイヤーチームかどうか
+var is_mine: bool = PlayerManager.is_player_team(character.team)
+
+# 指定チームが敵チームかどうか
+var is_enemy: bool = PlayerManager.is_enemy_team(character.team)
+```
+
+### 使用例
+
+```gdscript
+# チームを切り替える（これだけで全システムに反映）
+PlayerManager.player_team = CharacterBase.Team.COUNTER_TERRORIST
+
+# キャラクター選択時に敵をブロック
+if PlayerManager.is_enemy_team(character.team):
+    return  # 選択不可
+
+# FoW視界登録をプレイヤーチームのみに限定
+if PlayerManager.is_player_team(character.team):
+    fog_system.register_vision(character.vision)
+```
+
+### 影響範囲
+
+PlayerManagerを参照しているシステム:
+
+| システム | 用途 |
+|----------|------|
+| CharacterBase | 敵の可視性更新判定 |
+| CharacterInteractionManager | 敵チーム選択ブロック |
+| FogOfWarSystem | プレイヤーチームのみ視界登録 |
+| テストシーン | 操作対象キャラクター決定 |
+
+### 関連ファイル
+
+- `scripts/managers/player_manager.gd` - PlayerManagerシングルトン
+- `project.godot` - Autoload登録
 
 ---
 

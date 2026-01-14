@@ -5,7 +5,7 @@ extends CharacterBody3D
 ## コンポーネントを統合し、シンプルなAPIを提供
 
 ## チーム定義
-enum Team { NONE = 0, PLAYER = 1, ENEMY = 2 }
+enum Team { NONE = 0, COUNTER_TERRORIST = 1, TERRORIST = 2 }
 
 const CharacterActionState = preload("res://scripts/resources/action_state.gd")
 const MovementComponentScript = preload("res://scripts/characters/components/movement_component.gd")
@@ -616,7 +616,7 @@ func get_wall_hit_points() -> PackedVector3Array:
 ## 敵視認性 API
 ## ========================================
 
-## 対象がプレイヤーチームの誰かの視界内にいるかチェック
+## 対象が操作チーム（TERRORIST）の誰かの視界内にいるかチェック
 ## @param target: チェック対象のキャラクター
 ## @return: 誰かの視界内ならtrue
 static func is_visible_to_player_team(target: CharacterBase) -> bool:
@@ -628,16 +628,16 @@ static func is_visible_to_player_team(target: CharacterBase) -> bool:
 		var character = node as CharacterBase
 		if character == null or character == target:
 			continue
-		if character.team != Team.PLAYER or not character.is_alive:
+		if not PlayerManager.is_player_team(character.team) or not character.is_alive:
 			continue
 		if character._is_in_field_of_view(target):
 			return true
 	return false
 
 
-## 敵キャラクターの可視性を更新（敵のみ対象）
+## 敵キャラクターの可視性を更新
 func update_enemy_visibility() -> void:
-	if team != Team.ENEMY:
+	if not PlayerManager.is_enemy_team(team):
 		return
 	if model:
 		model.visible = CharacterBase.is_visible_to_player_team(self)

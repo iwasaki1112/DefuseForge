@@ -67,7 +67,7 @@ func register_input_rotation(input_rotation: Node, character: CharacterBody3D) -
 ## 特定キャラクタークリック時（register_input_rotation経由）
 func _on_character_clicked_for(character: CharacterBody3D, input_rotation: Node) -> void:
 	# 敵チームは選択不可
-	if character is CharacterBase and character.team == CharacterBase.Team.ENEMY:
+	if character is CharacterBase and PlayerManager.is_enemy_team(character.team):
 		return
 
 	_input_rotation = input_rotation  # 現在のInputRotationを記録
@@ -126,7 +126,7 @@ func _on_character_clicked() -> void:
 		return
 
 	# 敵チームは選択不可
-	if character is CharacterBase and character.team == CharacterBase.Team.ENEMY:
+	if character is CharacterBase and PlayerManager.is_enemy_team(character.team):
 		return
 
 	# 現在のInputRotationを更新

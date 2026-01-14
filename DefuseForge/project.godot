@@ -16,6 +16,10 @@ run/main_scene="res://scenes/tests/test_animation_viewer.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
+[autoload]
+
+PlayerManager="*res://scripts/managers/player_manager.gd"
+
 [display]
 
 window/size/viewport_width=1280

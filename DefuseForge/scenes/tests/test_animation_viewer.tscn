@@ -40,7 +40,7 @@ size = Vector3(20, 0.1, 20)
 script = ExtResource("1_viewer")
 
 [node name="CharacterBody" type="CharacterBody3D" parent="."]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 0.025, 2)
+transform = Transform3D(0.99913955, 0, -0.041474514, 0, 1, 0, 0.041474514, 0, 0.99913955, -2, 0.025, 2)
 collision_mask = 3
 script = ExtResource("4_character_base")
 team = 1
@@ -52,7 +52,7 @@ shape = SubResource("CapsuleShape3D_char")
 [node name="CharacterModel" parent="CharacterBody" instance=ExtResource("3_character")]
 
 [node name="CharacterBody2" type="CharacterBody3D" parent="."]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2, 0.025, 2)
+transform = Transform3D(0.99914604, 0, -0.04131753, 0, 1, 0, 0.04131753, 0, 0.99914604, 2, 0.025, 2)
 collision_mask = 3
 script = ExtResource("4_character_base")
 team = 1
@@ -64,7 +64,7 @@ shape = SubResource("CapsuleShape3D_char")
 [node name="CharacterModel" parent="CharacterBody2" instance=ExtResource("3_character")]
 
 [node name="CharacterBody3" type="CharacterBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.025, -4)
+transform = Transform3D(-0.9997237, 0, 0.023507487, 0, 1, 0, -0.023507487, 0, -0.9997237, -2, 0.025, -4)
 collision_mask = 3
 script = ExtResource("4_character_base")
 team = 2
@@ -76,7 +76,7 @@ shape = SubResource("CapsuleShape3D_char")
 [node name="CharacterModel" parent="CharacterBody3" instance=ExtResource("5_phantom")]
 
 [node name="CharacterBody4" type="CharacterBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.025, -4)
+transform = Transform3D(-0.9953088, 0, 0.09674904, 0, 1, 0, -0.09674904, 0, -0.9953088, 2, 0.025, -4)
 collision_mask = 3
 script = ExtResource("4_character_base")
 team = 2

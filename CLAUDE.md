@@ -11,7 +11,7 @@
 
 ## ドキュメント（必要時に参照）
 `docs/godot/` 配下：
-- `character-api.md` - CharacterBase/CharacterAPI（選択、回転、移動、武器、アニメーション、IK、レーザー、視界、FogOfWar、レジストリ）
+- `character-api.md` - CharacterBase/CharacterAPI（選択、回転、移動、武器、アニメーション、IK、レーザー、視界、FogOfWar、レジストリ、**PlayerManager**）
 - `skeleton-modifier-patterns.md` - SkeletonModifier3D、上半身回転、IK実行順序
 
 **重要**: 仕様追加・変更があった場合は `docs/godot/character-api.md` に定義を追記すること。
