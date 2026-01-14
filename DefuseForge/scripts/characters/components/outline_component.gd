@@ -224,6 +224,9 @@ func _find_mesh_instances_recursive(node: Node, result: Array[MeshInstance3D]) -
 	# LaserPointerとその子は除外
 	if node.name == "LaserPointer" or node.name.begins_with("Laser"):
 		return
+	# MuzzleFlashとその子は除外
+	if node.name == "MuzzleFlash" or node.name.begins_with("Muzzle"):
+		return
 
 	if node is MeshInstance3D:
 		result.append(node)

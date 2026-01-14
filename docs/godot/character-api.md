@@ -52,7 +52,7 @@ character.set_outline_width(3.0)
 ### 注意事項
 
 - `setup_outline_camera()` はカメラ取得後に必ず呼び出す
-- LaserPointer など特定ノードはアウトライン対象外
+- LaserPointer、MuzzleFlash など特定ノードはアウトライン対象外
 - レイヤー20をマスク用に使用（メインカメラから自動除外）
 
 ### 関連ファイル
@@ -298,8 +298,19 @@ func _ready():
 
 ## 移動
 
+MovementComponentは2つの移動モードをサポート:
+
+| モード | 用途 | メソッド |
+|--------|------|----------|
+| パス追従 | ドロワーパス、AI移動 | `set_path()`, `move_to()` |
+| リアルタイム入力 | WASD、ジョイスティック | `set_input_direction()` |
+
+両モードとも同じ `locomotion_changed` シグナルを発火し、アニメーション自動切り替えが動作する。
+
+### パス追従モード（ドロワーパス対応）
+
 ```gdscript
-# パスを設定して移動開始
+# パスを設定して移動開始（ドロワーパスの座標配列を渡す）
 character.set_path(points: Array[Vector3], run: bool = false)
 
 # 単一目標地点に移動
@@ -314,6 +325,80 @@ character.set_running(running: bool)
 # 移動中かどうか
 var moving: bool = character.is_moving()
 ```
+
+### リアルタイム入力モード
+
+```gdscript
+# 直接入力で移動（WASD等のリアルタイム入力用）
+# direction: 移動方向ベクトル（正規化済み、長さ0で停止）
+# run: trueで走り、falseで歩き
+character.movement.set_input_direction(direction: Vector3, run: bool = false)
+```
+
+使用例（WASD移動）:
+```gdscript
+func _physics_process(_delta: float) -> void:
+    var input_dir = Vector3.ZERO
+    if Input.is_key_pressed(KEY_W): input_dir.z -= 1
+    if Input.is_key_pressed(KEY_S): input_dir.z += 1
+    if Input.is_key_pressed(KEY_A): input_dir.x -= 1
+    if Input.is_key_pressed(KEY_D): input_dir.x += 1
+
+    if input_dir.length_squared() > 0:
+        input_dir = input_dir.normalized()
+
+    var is_running = Input.is_key_pressed(KEY_SHIFT)
+    character.movement.set_input_direction(input_dir, is_running)
+```
+
+### ドロワーパス実装ガイド
+
+ドロワーパスシステムを実装する場合、描画したパスの座標配列を `set_path()` に渡すだけで動作する:
+
+```gdscript
+# ドロワーパス描画完了時
+func _on_path_drawn(path_points: Array[Vector3]) -> void:
+    character.set_path(path_points, false)  # 歩き
+    # または
+    character.set_path(path_points, true)   # 走り
+```
+
+アニメーション連携は自動で行われる:
+```
+set_path() / set_input_direction()
+    ↓
+MovementComponent (locomotion_changed シグナル)
+    ↓
+CharacterBase._on_locomotion_changed()
+    ↓
+AnimationComponent.set_locomotion()
+    ↓
+rifle_idle / rifle_walking / rifle_sprint 自動切り替え
+```
+
+### MovementComponentエクスポート設定
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| walk_speed | float | 3.0 | 歩行速度 |
+| run_speed | float | 6.0 | 走行速度 |
+| rotation_speed | float | 10.0 | 回転速度 |
+| waypoint_threshold | float | 0.3 | ウェイポイント到達判定距離 |
+
+### シグナル
+
+```gdscript
+signal waypoint_reached(index: int)  # ウェイポイント到達時
+signal path_completed               # パス移動完了時
+signal locomotion_changed(state: int)  # 移動状態変化時 (0=IDLE, 1=WALK, 2=RUN)
+```
+
+### 関連ファイル
+
+- `scripts/characters/components/movement_component.gd` - 移動コンポーネント
+- `scripts/characters/components/animation_component.gd` - アニメーション管理
+
+---
 
 ## 武器
 

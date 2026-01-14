@@ -25,6 +25,10 @@ var locomotion_state: LocomotionState = LocomotionState.IDLE
 ## キャラクター参照
 var _character: CharacterBody3D
 
+## リアルタイム入力モード用
+var _input_direction: Vector3 = Vector3.ZERO
+var _use_input_mode: bool = false
+
 
 func _ready() -> void:
 	# 親がCharacterBody3Dであることを期待
@@ -72,11 +76,30 @@ func set_running(running: bool) -> void:
 		_update_locomotion_state()
 
 
+## 直接入力による移動（WASD等のリアルタイム入力用）
+## @param direction: 移動方向（正規化済み、長さ0で停止）
+## @param run: 走るかどうか
+func set_input_direction(direction: Vector3, run: bool = false) -> void:
+	_input_direction = direction
+	is_running = run
+	is_moving = direction.length_squared() > 0.001
+	_use_input_mode = true
+	_update_locomotion_state()
+
+
 ## 毎フレーム更新（CharacterBaseから呼ばれる）
 ## @param delta: フレーム時間
 ## @return: velocity
 func update(delta: float) -> Vector3:
-	if _character == null or not is_moving or waypoints.is_empty():
+	if _character == null:
+		return Vector3.ZERO
+
+	# リアルタイム入力モードの場合
+	if _use_input_mode:
+		return _update_input_mode(delta)
+
+	# パス追従モードの場合
+	if not is_moving or waypoints.is_empty():
 		return Vector3.ZERO
 
 	var current_target = waypoints[current_waypoint_index]
@@ -150,3 +173,21 @@ func _update_locomotion_state() -> void:
 	if new_state != locomotion_state:
 		locomotion_state = new_state
 		locomotion_changed.emit(int(locomotion_state))
+
+
+## リアルタイム入力モードの更新処理
+func _update_input_mode(delta: float) -> Vector3:
+	var speed = run_speed if is_running else walk_speed
+	var velocity = _input_direction * speed
+
+	# 移動方向に回転
+	if _input_direction.length_squared() > 0.001:
+		_rotate_toward(_input_direction, delta)
+
+	# 重力を適用
+	if not _character.is_on_floor():
+		velocity.y = _character.velocity.y - 9.8 * delta
+	else:
+		velocity.y = 0
+
+	return velocity

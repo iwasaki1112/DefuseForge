@@ -772,8 +772,8 @@ func _collect_animations() -> void:
 	print("[AnimViewer] Collected %d animations via CharacterAPI" % _animations.size())
 
 
-func _physics_process(delta: float) -> void:
-	if character_body:
+func _physics_process(_delta: float) -> void:
+	if character_body and character_body.movement:
 		# WASD移動入力
 		var input_dir = Vector3.ZERO
 		if Input.is_key_pressed(KEY_W):
@@ -785,21 +785,14 @@ func _physics_process(delta: float) -> void:
 		if Input.is_key_pressed(KEY_D):
 			input_dir.x += 1
 
-		# 正規化して速度を適用
+		# 正規化してMovementComponentに渡す
 		if input_dir.length_squared() > 0:
 			input_dir = input_dir.normalized()
-			character_body.velocity.x = input_dir.x * MOVE_SPEED
-			character_body.velocity.z = input_dir.z * MOVE_SPEED
-		else:
-			character_body.velocity.x = 0
-			character_body.velocity.z = 0
 
-		# 重力
-		if not character_body.is_on_floor():
-			character_body.velocity.y -= GRAVITY * delta
-		else:
-			character_body.velocity.y = 0
-		character_body.move_and_slide()
+		# Shiftで走る
+		var is_running = Input.is_key_pressed(KEY_SHIFT)
+		character_body.movement.set_input_direction(input_dir, is_running)
+		# CharacterBase._physics_process()がmove_and_slide()を呼ぶ
 
 
 func _process(_delta: float) -> void:

@@ -83,12 +83,18 @@ func setup(model: Node3D, skel: Skeleton3D) -> void:
 
 
 ## 移動状態を設定
-## @param state: LocomotionState
-func set_locomotion(state: LocomotionState) -> void:
-	if locomotion_state == state:
+## @param state: 0=IDLE, 1=WALK, 2=RUN
+func set_locomotion(state: int) -> void:
+	var new_state := state as LocomotionState
+	if locomotion_state == new_state:
 		return
 
-	locomotion_state = state
+	locomotion_state = new_state
+
+	# AnimationTreeを有効化（play_animationでループアニメーション再生中の場合に必要）
+	if anim_tree and not anim_tree.active:
+		anim_tree.active = true
+
 	_update_locomotion_animation()
 
 
@@ -269,7 +275,6 @@ func _update_locomotion_animation() -> void:
 
 	# アニメーションが存在しない場合はフォールバック
 	if not anim_player.has_animation(anim_name):
-		# idle→walkingにフォールバック（idleアニメーションがない場合）
 		anim_name = get_animation_name("walking")
 		if not anim_player.has_animation(anim_name):
 			anim_name = "rifle_walking"
