@@ -118,8 +118,6 @@ func _find_model_and_skeleton() -> void:
 
 	if skeleton == null:
 		push_warning("[CharacterBase] %s: Skeleton3D not found" % name)
-	else:
-		print("[CharacterBase] %s: Found skeleton at %s" % [name, skeleton.get_path()])
 
 
 ## スケルトンを再帰検索
@@ -165,10 +163,7 @@ func _setup_components() -> void:
 		add_child(animation)
 
 	if skeleton and model:
-		print("[CharacterBase] %s: Calling animation.setup()" % name)
 		animation.setup(model, skeleton)
-	else:
-		print("[CharacterBase] %s: Skipping animation.setup() - skeleton=%s, model=%s" % [name, skeleton != null, model != null])
 
 	# WeaponComponent
 	weapon = get_node_or_null("WeaponComponent")
@@ -315,7 +310,6 @@ func apply_recoil(intensity: float = 1.0) -> void:
 
 ## アニメーションを再生
 func play_animation(anim_name: String, blend_time: float = 0.3) -> void:
-	print("[CharacterBase] play_animation: %s (animation=%s)" % [anim_name, animation])
 	if animation:
 		animation.play_animation(anim_name, blend_time)
 	else:
@@ -446,7 +440,6 @@ func _update_auto_aim() -> void:
 
 		# 上半身回転の範囲内にクランプして適用
 		var clamped_angle = clamp(angle_to_enemy, -45.0, 45.0)
-		print("[AutoAim] %s -> %s: angle=%.2f, clamped=%.2f" % [name, enemy.name, angle_to_enemy, clamped_angle])
 		set_upper_body_rotation(clamped_angle)
 	else:
 		# 敵がいない場合は上半身回転をリセット
@@ -456,7 +449,6 @@ func _update_auto_aim() -> void:
 ## 視界内の敵を検出（FOV + 距離 + レイキャスト方式）
 func _find_enemy_in_vision() -> CharacterBase:
 	if not vision:
-		print("[AutoAim] %s: No vision component" % name)
 		return null
 
 	# "characters"グループから全キャラクターを取得
@@ -471,14 +463,12 @@ func _find_enemy_in_vision() -> CharacterBase:
 
 		var is_enemy = is_enemy_of(character)
 		if not is_enemy:
-			print("[AutoAim] %s: %s is not enemy (my team=%d, their team=%d)" % [name, character.name, team, character.team])
 			continue
 		if not character.is_alive:
 			continue
 
 		# 視界内かチェック
 		var in_fov = _is_in_field_of_view(character)
-		print("[AutoAim] %s: %s in_fov=%s" % [name, character.name, in_fov])
 		if in_fov:
 			var dist = global_position.distance_to(character.global_position)
 			if dist < closest_distance:
@@ -500,7 +490,6 @@ func _is_in_field_of_view(target: CharacterBase) -> bool:
 	var to_target = target.global_position - global_position
 	var distance = to_target.length()
 	if distance > view_distance:
-		print("[FOV] %s -> %s: distance %.2f > view_distance %.2f" % [name, target.name, distance, view_distance])
 		return false
 
 	# FOVチェック（XZ平面）
@@ -513,7 +502,6 @@ func _is_in_field_of_view(target: CharacterBase) -> bool:
 
 	var angle = rad_to_deg(forward.angle_to(to_target))
 	if angle > fov_degrees / 2.0:
-		print("[FOV] %s -> %s: angle %.2f > half_fov %.2f" % [name, target.name, angle, fov_degrees / 2.0])
 		return false
 
 	# レイキャストで遮蔽物チェック
@@ -526,7 +514,6 @@ func _is_in_field_of_view(target: CharacterBase) -> bool:
 	var result = space_state.intersect_ray(query)
 
 	if not result.is_empty():
-		print("[FOV] %s -> %s: raycast blocked by %s" % [name, target.name, result.collider.name if result.collider else "unknown"])
 		return false
 
 	# 壁に当たらなければ視界内

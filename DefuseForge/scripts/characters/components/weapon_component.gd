@@ -363,7 +363,6 @@ func update_left_hand_position(x: float, y: float, z: float) -> void:
 func set_character_ik_offset(hand_offset: Vector3, elbow_offset: Vector3) -> void:
 	_character_hand_ik_offset = hand_offset
 	_character_elbow_pole_offset = elbow_offset
-	print("[WeaponComponent] Character IK offset set - Hand: %s, Elbow: %s" % [hand_offset, elbow_offset])
 
 
 ## 左手IKターゲットを更新（毎フレーム呼び出し）- TwoBoneIK3Dが自動処理
@@ -478,38 +477,26 @@ func _setup_damage_raycast() -> void:
 ## 射撃によるダメージ判定
 func fire() -> void:
 	if _damage_raycast == null:
-		print("[WeaponComponent] fire(): _damage_raycast is null")
 		return
 	if _owner_character == null:
-		print("[WeaponComponent] fire(): _owner_character is null")
 		return
 
 	_damage_raycast.force_raycast_update()
 
-	# デバッグ: RayCastの位置と方向を出力
-	var ray_origin = _damage_raycast.global_position
-	var ray_dir = _damage_raycast.global_transform.basis * _damage_raycast.target_position
-	print("[WeaponComponent] fire(): RayCast origin=%s, direction=%s" % [ray_origin, ray_dir.normalized()])
-
 	if not _damage_raycast.is_colliding():
-		print("[WeaponComponent] fire(): No collision detected")
 		return
 
 	var collider = _damage_raycast.get_collider()
 	var hit_point = _damage_raycast.get_collision_point()
-	print("[WeaponComponent] fire(): Collider = %s" % collider.name)
 
 	# CharacterBaseかどうかチェック
 	if not (collider is CharacterBody3D and collider.has_method("is_enemy_of")):
-		print("[WeaponComponent] fire(): Collider is not CharacterBase")
 		return
 
 	var target = collider
 
 	# チーム判定
-	print("[WeaponComponent] fire(): Owner team = %d, Target team = %d" % [_owner_character.team, target.team])
 	if not _owner_character.is_enemy_of(target):
-		print("[WeaponComponent] fire(): Not enemy, skipping")
 		return
 
 	# ヘッドショット判定
@@ -523,8 +510,6 @@ func fire() -> void:
 
 	# シグナル発火
 	hit_detected.emit(target, hit_point, is_headshot)
-
-	print("[WeaponComponent] Hit: %s, Damage: %.1f, Headshot: %s" % [target.name, damage, is_headshot])
 
 
 ## ヘッドショット判定

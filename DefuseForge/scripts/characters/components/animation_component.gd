@@ -59,14 +59,12 @@ func _ready() -> void:
 ## @param skel: Skeleton3D
 func setup(model: Node3D, skel: Skeleton3D) -> void:
 	skeleton = skel
-	print("[AnimComp] setup() called with model=%s, skeleton=%s" % [model.name if model else "null", skel.name if skel else "null"])
 
 	# AnimationPlayerを取得
 	anim_player = model.get_node_or_null("AnimationPlayer")
 	if anim_player == null:
 		push_error("[AnimationComponent] AnimationPlayer not found in model: %s" % model.name)
 		return
-	print("[AnimComp] AnimationPlayer found: %s" % anim_player.get_path())
 
 	# アニメーション終了シグナルを接続
 	if not anim_player.animation_finished.is_connected(_on_animation_finished):
@@ -243,7 +241,6 @@ func _setup_animation_tree(model: Node3D) -> void:
 
 	# 有効化
 	anim_tree.active = true
-	print("[AnimComp] AnimationTree activated for model, weapon_type=%d" % weapon_type)
 
 
 ## 上半身ボーンフィルターを設定
@@ -286,7 +283,6 @@ func _update_locomotion_animation() -> void:
 	var idle_name = _get_locomotion_anim_name(LocomotionState.IDLE)
 	var walk_name = _get_locomotion_anim_name(LocomotionState.WALK)
 	var run_name = _get_locomotion_anim_name(LocomotionState.RUN)
-	print("[AnimComp] _update_locomotion_animation: idle=%s, walk=%s, run=%s, weapon_type=%d" % [idle_name, walk_name, run_name, weapon_type])
 
 	# 各ノードにアニメーションを設定
 	var idle_node = _blend_tree.get_node("locomotion_idle") as AnimationNodeAnimation
@@ -310,7 +306,6 @@ func _update_locomotion_animation() -> void:
 			transition_name = "run"
 
 	anim_tree.set("parameters/locomotion_transition/transition_request", transition_name)
-	print("[AnimComp] Set transition_request: %s" % transition_name)
 
 
 ## 移動状態に応じたアニメーション名を取得（フォールバック付き）
@@ -383,10 +378,6 @@ func _update_upper_body_aim(delta: float) -> void:
 	# SkeletonModifier3Dに回転値を設定
 	if _upper_body_modifier:
 		_upper_body_modifier.rotation_angle = _current_aim_rotation
-		if Engine.get_process_frames() % 60 == 0 and abs(_current_aim_rotation) > 0.01:
-			print("[AnimComp:%d] Set modifier(id=%d).rotation_angle=%.2f rad (%.1f deg)" % [get_instance_id(), _upper_body_modifier.get_instance_id(), _current_aim_rotation, rad_to_deg(_current_aim_rotation)])
-	elif Engine.get_process_frames() % 60 == 0:
-		print("[AnimComp:%d] _upper_body_modifier is null! (skeleton=%s)" % [get_instance_id(), skeleton.name if skeleton else "null"])
 
 
 ## 上半身リコイルを回復
@@ -428,7 +419,6 @@ func _setup_animation_loops() -> void:
 
 ## 上半身回転モディファイアをセットアップ
 func _setup_upper_body_modifier() -> void:
-	print("[AnimComp:%d] _setup_upper_body_modifier() called, skeleton=%s" % [get_instance_id(), skeleton.name if skeleton else "null"])
 	if skeleton == null:
 		return
 
@@ -445,7 +435,6 @@ func _setup_upper_body_modifier() -> void:
 
 	# Skeleton3Dの子として追加
 	skeleton.add_child(_upper_body_modifier)
-	print("[AnimComp:%d] Created _upper_body_modifier (id=%d), added to skeleton" % [get_instance_id(), _upper_body_modifier.get_instance_id()])
 
 
 ## 死亡アニメーションを再生
@@ -468,9 +457,6 @@ func play_death_animation(weapon_type_param: int = 1) -> void:
 			break
 
 	if found_anim.is_empty():
-		# デバッグ: 利用可能なアニメーションを表示
-		var available_anims = anim_player.get_animation_list()
-		print("[AnimationComponent] Available animations: %s" % str(available_anims))
 		push_warning("[AnimationComponent] No death animation found")
 		death_animation_finished.emit()
 		return
@@ -490,8 +476,6 @@ func play_death_animation(weapon_type_param: int = 1) -> void:
 
 	# 再生
 	anim_player.play(found_anim, 0.1)  # 短めのブレンド
-
-	print("[AnimationComponent] Playing death animation: %s" % found_anim)
 
 	# 終了を待機
 	await anim_player.animation_finished

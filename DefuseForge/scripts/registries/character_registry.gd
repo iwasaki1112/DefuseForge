@@ -52,7 +52,6 @@ static func get_character(character_id: String) -> CharacterResource:
 
 	# キャッシュに保存
 	_cache[character_id] = resource
-	print("[CharacterRegistry] Loaded: %s" % path)
 	return resource
 
 
@@ -101,7 +100,6 @@ static func has_character(character_id: String) -> bool:
 ## キャッシュをクリア（主にテスト用）
 static func clear_cache() -> void:
 	_cache.clear()
-	print("[CharacterRegistry] Cache cleared")
 
 
 ## 全キャラクターリソースをバリデート

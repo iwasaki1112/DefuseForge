@@ -65,7 +65,6 @@ static func get_weapon(weapon_id: int) -> WeaponResource:
 
 	# キャッシュに保存
 	_cache[weapon_id] = resource
-	print("[WeaponRegistry] Loaded: %s (weapon_id=%d)" % [path, weapon_id])
 	return resource
 
 
@@ -98,7 +97,6 @@ static func has_weapon(weapon_id: int) -> bool:
 ## キャッシュをクリア（主にテスト用）
 static func clear_cache() -> void:
 	_cache.clear()
-	print("[WeaponRegistry] Cache cleared")
 
 
 ## 全武器リソースをバリデート

@@ -156,7 +156,7 @@ func is_selected() -> bool:
 
 func _apply_outline() -> void:
 	if _mask_material == null or _edge_material == null:
-		print("[OutlineComponent] ERROR: materials not ready")
+		push_warning("[OutlineComponent] Materials not ready")
 		return
 
 	# カメラを同期してから表示（チラつき防止）
@@ -175,8 +175,6 @@ func _apply_outline() -> void:
 
 	if _edge_canvas_layer:
 		_edge_canvas_layer.visible = true
-
-	print("[OutlineComponent] Outline applied (SubViewport mask)")
 
 
 func _remove_outline() -> void:
