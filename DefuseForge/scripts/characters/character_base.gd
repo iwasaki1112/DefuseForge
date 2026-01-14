@@ -36,6 +36,9 @@ signal action_completed(action_type: int)
 @export_group("チーム設定")
 @export var team: Team = Team.NONE
 
+@export_group("自動照準設定")
+@export var auto_aim_enabled: bool = true
+
 ## コンポーネント参照
 var movement: Node  # MovementComponent
 var animation: Node  # AnimationComponent
@@ -55,8 +58,12 @@ var _action_timer: float = 0.0
 ## 生存状態
 var is_alive: bool = true
 
+## 自動照準ターゲット
+var _current_target: CharacterBase = null
+
 
 func _ready() -> void:
+	add_to_group("characters")
 	_find_model_and_skeleton()
 	_setup_components()
 	_connect_signals()
@@ -80,6 +87,9 @@ func _physics_process(delta: float) -> void:
 	if vision:
 		vision.update(delta)
 
+	# 自動照準更新
+	_update_auto_aim()
+
 	move_and_slide()
 
 
@@ -95,7 +105,7 @@ func _find_model_and_skeleton() -> void:
 				break
 
 	if model == null:
-		push_warning("[CharacterBase] CharacterModel not found")
+		push_warning("[CharacterBase] %s: CharacterModel not found" % name)
 		return
 
 	# スケルトンを検索
@@ -104,7 +114,9 @@ func _find_model_and_skeleton() -> void:
 		skeleton = _find_skeleton_recursive(model)
 
 	if skeleton == null:
-		push_warning("[CharacterBase] Skeleton3D not found")
+		push_warning("[CharacterBase] %s: Skeleton3D not found" % name)
+	else:
+		print("[CharacterBase] %s: Found skeleton at %s" % [name, skeleton.get_path()])
 
 
 ## スケルトンを再帰検索
@@ -150,7 +162,10 @@ func _setup_components() -> void:
 		add_child(animation)
 
 	if skeleton and model:
+		print("[CharacterBase] %s: Calling animation.setup()" % name)
 		animation.setup(model, skeleton)
+	else:
+		print("[CharacterBase] %s: Skipping animation.setup() - skeleton=%s, model=%s" % [name, skeleton != null, model != null])
 
 	# WeaponComponent
 	weapon = get_node_or_null("WeaponComponent")
@@ -400,6 +415,119 @@ func _update_action_timer(delta: float) -> void:
 		var completed_action = current_action
 		current_action = CharacterActionState.ActionType.NONE
 		action_completed.emit(completed_action)
+
+
+## ========================================
+## 自動照準（内部処理）
+## ========================================
+
+## 自動照準の更新処理
+func _update_auto_aim() -> void:
+	if not auto_aim_enabled or not is_alive:
+		return
+
+	var enemy = _find_enemy_in_vision()
+	_current_target = enemy
+
+	if enemy:
+		# 敵への方向ベクトル（XZ平面）
+		var to_enemy = enemy.global_position - global_position
+		to_enemy.y = 0
+
+		# キャラクターの前方ベクトル（+Zが前方）
+		var forward = global_transform.basis.z
+		forward.y = 0
+
+		# 前方ベクトルと敵方向の角度差を計算
+		var angle_to_enemy = rad_to_deg(forward.signed_angle_to(to_enemy, Vector3.UP))
+
+		# 上半身回転の範囲内にクランプして適用
+		var clamped_angle = clamp(angle_to_enemy, -45.0, 45.0)
+		print("[AutoAim] %s -> %s: angle=%.2f, clamped=%.2f" % [name, enemy.name, angle_to_enemy, clamped_angle])
+		set_upper_body_rotation(clamped_angle)
+	else:
+		# 敵がいない場合は上半身回転をリセット
+		set_upper_body_rotation(0.0)
+
+
+## 視界内の敵を検出（FOV + 距離 + レイキャスト方式）
+func _find_enemy_in_vision() -> CharacterBase:
+	if not vision:
+		print("[AutoAim] %s: No vision component" % name)
+		return null
+
+	# "characters"グループから全キャラクターを取得
+	var all_characters = get_tree().get_nodes_in_group("characters")
+	var closest_enemy: CharacterBase = null
+	var closest_distance: float = INF
+
+	for node in all_characters:
+		var character = node as CharacterBase
+		if character == null or character == self:
+			continue
+
+		var is_enemy = is_enemy_of(character)
+		if not is_enemy:
+			print("[AutoAim] %s: %s is not enemy (my team=%d, their team=%d)" % [name, character.name, team, character.team])
+			continue
+		if not character.is_alive:
+			continue
+
+		# 視界内かチェック
+		var in_fov = _is_in_field_of_view(character)
+		print("[AutoAim] %s: %s in_fov=%s" % [name, character.name, in_fov])
+		if in_fov:
+			var dist = global_position.distance_to(character.global_position)
+			if dist < closest_distance:
+				closest_distance = dist
+				closest_enemy = character
+
+	return closest_enemy
+
+
+## 対象が視界内にいるかチェック（FOV + 距離 + 遮蔽物）
+func _is_in_field_of_view(target: CharacterBase) -> bool:
+	if not vision:
+		return false
+
+	var view_distance = vision.view_distance
+	var fov_degrees = vision.fov_degrees
+
+	# 距離チェック
+	var to_target = target.global_position - global_position
+	var distance = to_target.length()
+	if distance > view_distance:
+		print("[FOV] %s -> %s: distance %.2f > view_distance %.2f" % [name, target.name, distance, view_distance])
+		return false
+
+	# FOVチェック（XZ平面）
+	to_target.y = 0
+	var forward = global_transform.basis.z  # +Zが前方
+	forward.y = 0
+
+	if to_target.length() < 0.01 or forward.length() < 0.01:
+		return true  # ほぼ同じ位置
+
+	var angle = rad_to_deg(forward.angle_to(to_target))
+	if angle > fov_degrees / 2.0:
+		print("[FOV] %s -> %s: angle %.2f > half_fov %.2f" % [name, target.name, angle, fov_degrees / 2.0])
+		return false
+
+	# レイキャストで遮蔽物チェック
+	var space_state = get_world_3d().direct_space_state
+	var eye_pos = global_position + Vector3(0, vision.eye_height, 0)
+	var target_pos = target.global_position + Vector3(0, 1.0, 0)  # 対象の胴体あたり
+
+	var query = PhysicsRayQueryParameters3D.create(eye_pos, target_pos, vision.wall_collision_mask)
+	query.exclude = [get_rid(), target.get_rid()]
+	var result = space_state.intersect_ray(query)
+
+	if not result.is_empty():
+		print("[FOV] %s -> %s: raycast blocked by %s" % [name, target.name, result.collider.name if result.collider else "unknown"])
+		return false
+
+	# 壁に当たらなければ視界内
+	return true
 
 
 ## ========================================

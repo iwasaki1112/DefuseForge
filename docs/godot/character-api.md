@@ -2,6 +2,22 @@
 
 CharacterBase のパブリック API リファレンス。
 
+## 座標規約
+
+**重要: このプロジェクトでは `+Z` がキャラクターの前方です。**
+
+```gdscript
+# 前方ベクトルの取得
+var forward = global_transform.basis.z  # +Z が前方
+
+# 回転角度の計算（movement_component.gd と同じ方式）
+var target_angle = atan2(direction.x, direction.z)
+```
+
+Godotのデフォルト（`-Z` が前方）とは異なるため、視界判定・自動照準・移動回転など、向きを扱うコードでは必ずこの規約に従うこと。
+
+---
+
 ## アウトライン（選択ハイライト）
 
 キャラクター選択時にシルエットのみ発光するアウトラインエフェクト。

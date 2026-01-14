@@ -41,8 +41,7 @@ var _upper_body_recoil: float = 0.0
 const RECOIL_KICK_ANGLE: float = 0.08  # ~4.5度
 const UPPER_BODY_RECOIL_RECOVERY_SPEED: float = 12.0
 
-## 上半身エイミング（複数ボーンを回転）
-var _upper_body_bone_indices: Array[int] = []
+## 上半身エイミング
 var _current_aim_rotation: float = 0.0
 var _target_aim_rotation: float = 0.0
 
@@ -60,12 +59,14 @@ func _ready() -> void:
 ## @param skel: Skeleton3D
 func setup(model: Node3D, skel: Skeleton3D) -> void:
 	skeleton = skel
+	print("[AnimComp] setup() called with model=%s, skeleton=%s" % [model.name if model else "null", skel.name if skel else "null"])
 
 	# AnimationPlayerを取得
 	anim_player = model.get_node_or_null("AnimationPlayer")
 	if anim_player == null:
-		push_error("[AnimationComponent] AnimationPlayer not found in model")
+		push_error("[AnimationComponent] AnimationPlayer not found in model: %s" % model.name)
 		return
+	print("[AnimComp] AnimationPlayer found: %s" % anim_player.get_path())
 
 	# アニメーション終了シグナルを接続
 	if not anim_player.animation_finished.is_connected(_on_animation_finished):
@@ -76,9 +77,6 @@ func setup(model: Node3D, skel: Skeleton3D) -> void:
 
 	# 移動系アニメーションをループに設定
 	_setup_animation_loops()
-
-	# 上半身ボーンを検索
-	_find_aim_spine_bone()
 
 	# AnimationTreeを設定
 	_setup_animation_tree(model)
@@ -169,8 +167,8 @@ func get_animation_list() -> PackedStringArray:
 
 ## スケルトン更新時に呼ばれる（CharacterBaseから）
 func on_skeleton_updated() -> void:
-	# SkeletonModifier3Dを使用しているため、ここでは何もしない
-	# 上半身回転はUpperBodyRotationModifierが処理する
+	# UpperBodyRotationModifier (SkeletonModifier3D) が回転を担当するため、
+	# ここでは追加の回転処理は行わない
 	pass
 
 
@@ -382,6 +380,10 @@ func _update_upper_body_aim(delta: float) -> void:
 	# SkeletonModifier3Dに回転値を設定
 	if _upper_body_modifier:
 		_upper_body_modifier.rotation_angle = _current_aim_rotation
+		if Engine.get_process_frames() % 60 == 0 and abs(_current_aim_rotation) > 0.01:
+			print("[AnimComp:%d] Set modifier(id=%d).rotation_angle=%.2f rad (%.1f deg)" % [get_instance_id(), _upper_body_modifier.get_instance_id(), _current_aim_rotation, rad_to_deg(_current_aim_rotation)])
+	elif Engine.get_process_frames() % 60 == 0:
+		print("[AnimComp:%d] _upper_body_modifier is null! (skeleton=%s)" % [get_instance_id(), skeleton.name if skeleton else "null"])
 
 
 ## 上半身リコイルを回復
@@ -394,32 +396,6 @@ func _recover_upper_body_recoil(delta: float) -> void:
 	# SkeletonModifier3Dにリコイル値を設定
 	if _upper_body_modifier:
 		_upper_body_modifier.recoil_angle = _upper_body_recoil
-
-
-## 上半身エイミング用のスパインボーンを検索
-func _find_aim_spine_bone() -> void:
-	if skeleton == null:
-		push_warning("[AnimationComponent] _find_aim_spine_bone: skeleton is null")
-		return
-
-	_upper_body_bone_indices.clear()
-
-	# c_spine_01.x または Spine ボーンを検索（ARPリグの腰骨）
-	var candidates = ["c_spine_01.x", "Spine", "spine", "spine_01"]
-	for candidate in candidates:
-		var idx = skeleton.find_bone(candidate)
-		if idx >= 0:
-			_upper_body_bone_indices.append(idx)
-			return
-
-	# 見つからなければ spine を含むボーンを検索
-	for i in range(skeleton.get_bone_count()):
-		var bone_name = skeleton.get_bone_name(i)
-		if "spine" in bone_name.to_lower():
-			_upper_body_bone_indices.append(i)
-			return
-
-	push_warning("[AnimationComponent] No spine bone found for upper body twist!")
 
 
 ## アニメーション終了時
@@ -449,6 +425,7 @@ func _setup_animation_loops() -> void:
 
 ## 上半身回転モディファイアをセットアップ
 func _setup_upper_body_modifier() -> void:
+	print("[AnimComp:%d] _setup_upper_body_modifier() called, skeleton=%s" % [get_instance_id(), skeleton.name if skeleton else "null"])
 	if skeleton == null:
 		return
 
@@ -465,6 +442,7 @@ func _setup_upper_body_modifier() -> void:
 
 	# Skeleton3Dの子として追加
 	skeleton.add_child(_upper_body_modifier)
+	print("[AnimComp:%d] Created _upper_body_modifier (id=%d), added to skeleton" % [get_instance_id(), _upper_body_modifier.get_instance_id()])
 
 
 ## 死亡アニメーションを再生
