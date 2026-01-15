@@ -130,6 +130,12 @@ func apply_spine_rotation(yaw_degrees: float, pitch_degrees: float = 0.0) -> voi
 	_target_pitch_rotation = deg_to_rad(clamp(pitch_degrees, -aim_max_pitch_deg, aim_max_pitch_deg))
 
 
+## 現在の上半身回転角度を取得（ラジアン）
+## @return: Vector2(yaw, pitch) - 現在の補間後の回転角度
+func get_current_aim_rotation() -> Vector2:
+	return Vector2(_current_aim_rotation, _current_pitch_rotation)
+
+
 ## アニメーションを直接再生（主にテスト用）
 ## @param anim_name: アニメーション名
 ## @param blend_time: ブレンド時間

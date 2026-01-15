@@ -46,9 +46,12 @@ func _calculate_shadow_cast_vision() -> void:
 
 	var space_state = _character.get_world_3d().direct_space_state
 	var origin = _character.global_position + Vector3(0, eye_height, 0)
-	# キャラクターの前方ベクトルから角度を計算
-	var forward = _character.global_transform.basis.z  # basis.zは後ろ方向
-	var char_rotation = atan2(forward.x, -forward.z)  # 180度反転
+
+	# 視線方向を決定（視線ポイント優先、なければキャラクターの向き）
+	var look_direction: Vector3 = _get_effective_look_direction()
+
+	# 視線方向から角度を計算（Godotでは-Zが前方なので符号反転）
+	var char_rotation = atan2(look_direction.x, -look_direction.z)
 	var half_fov = deg_to_rad(fov_degrees / 2.0)
 
 	# FOVの境界角度
@@ -183,6 +186,28 @@ func _wrap_angle(angle: float) -> float:
 	while angle < -PI:
 		angle += TAU
 	return angle
+
+
+## 視線方向を取得（AnimationComponentの回転を反映）
+func _get_effective_look_direction() -> Vector3:
+	# AnimationComponentの現在の回転角度を取得
+	var animation = _character.get("animation") if _character else null
+
+	# キャラクターの基本向き（body forward）
+	var forward = _character.global_transform.basis.z
+	forward.y = 0
+	forward = forward.normalized()
+
+	if animation and animation.has_method("get_current_aim_rotation"):
+		var aim_rotation: Vector2 = animation.get_current_aim_rotation()
+		var yaw = aim_rotation.x  # ラジアン
+
+		# 基本向きに上半身回転を適用
+		# forwardはbasis.z（後ろ方向）なので、回転を適用
+		var rotated = forward.rotated(Vector3.UP, yaw)
+		return rotated
+
+	return forward
 
 
 ## 視界ポリゴンを取得

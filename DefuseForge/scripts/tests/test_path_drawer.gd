@@ -9,6 +9,7 @@ const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
 const InputRotationScript = preload("res://scripts/characters/components/input_rotation_component.gd")
 const InteractionManagerScript = preload("res://scripts/managers/character_interaction_manager.gd")
 const ContextMenuItemScript = preload("res://scripts/resources/context_menu_item.gd")
+const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
 
 ## テスト状態
 enum TestState { IDLE, DRAWING_MOVEMENT, SETTING_VISION, READY_TO_EXECUTE }
@@ -35,6 +36,9 @@ var _vision_count_label: Label
 ## 動的メニュー項目（パス描画後に表示）
 var _add_vision_item: Resource = null
 var _clear_move_item: Resource = null
+
+## Fog of War
+var fog_of_war_system: Node3D = null
 
 
 func _ready() -> void:
@@ -72,6 +76,9 @@ func _ready() -> void:
 
 	# 視線ポイント用UIをセットアップ
 	_setup_vision_ui()
+
+	# FoWシステムをセットアップ
+	_setup_fog_of_war()
 
 	# シグナル接続
 	path_drawer.drawing_started.connect(_on_drawing_started)
@@ -148,6 +155,20 @@ func _setup_vision_ui() -> void:
 	_done_vision_button.disabled = true
 	_done_vision_button.pressed.connect(_on_done_vision_pressed)
 	ui_container.add_child(_done_vision_button)
+
+
+func _setup_fog_of_war() -> void:
+	# FogOfWarSystemを作成
+	fog_of_war_system = Node3D.new()
+	fog_of_war_system.set_script(FogOfWarSystemScript)
+	fog_of_war_system.name = "FogOfWarSystem"
+	add_child(fog_of_war_system)
+
+	# キャラクターの視界を登録（1フレーム待つ）
+	await get_tree().process_frame
+	if character and character.vision and PlayerManager.is_player_team(character.team):
+		fog_of_war_system.register_vision(character.vision)
+		print("[TestPathDrawer] Vision registered with FoW system")
 
 
 func _set_state(new_state: TestState) -> void:

@@ -212,6 +212,126 @@ rotation.rotation_started.connect(func(): camera.input_disabled = true)
 rotation.rotation_ended.connect(func(): camera.input_disabled = false)
 ```
 
+## Animation Component
+
+キャラクターのアニメーション管理コンポーネント。
+
+**ファイル:** `scripts/characters/components/animation_component.gd`
+
+### 上半身回転API
+
+#### apply_spine_rotation
+```gdscript
+func apply_spine_rotation(yaw_degrees: float, pitch_degrees: float = 0.0) -> void
+```
+上半身の目標回転角度を設定。内部でlerp補間される。
+
+#### get_current_aim_rotation
+```gdscript
+func get_current_aim_rotation() -> Vector2
+```
+現在の補間後の上半身回転角度を取得（ラジアン）。
+- `x`: ヨー（水平回転）
+- `y`: ピッチ（垂直回転）
+
+VisionComponentがFoW視界方向の計算に使用。
+
+---
+
+## Vision Component
+
+キャラクターの視界（FOV）を管理するコンポーネント。シャドウキャスト方式で壁の遮蔽を計算し、Fog of Warシステムと連携。
+
+**ファイル:** `scripts/characters/components/vision_component.gd`
+
+### プロパティ
+
+| プロパティ | 型 | デフォルト | 説明 |
+|------------|-----|----------|------|
+| `fov_degrees` | float | 90.0 | 視野角（度） |
+| `view_distance` | float | 15.0 | 視界距離（メートル） |
+| `edge_ray_count` | int | 30 | FOV境界のレイ数 |
+| `update_interval` | float | 0.033 | 更新間隔（秒） |
+| `eye_height` | float | 1.5 | 目の高さ |
+| `wall_collision_mask` | int | 2 | 壁検出用コリジョンマスク |
+
+### メソッド
+
+#### get_visible_polygon
+```gdscript
+func get_visible_polygon() -> PackedVector3Array
+```
+現在の視界ポリゴン（頂点配列）を取得。FogOfWarSystemが使用。
+
+#### force_update
+```gdscript
+func force_update() -> void
+```
+即座に視界を再計算。
+
+#### set_fov / set_view_distance
+```gdscript
+func set_fov(degrees: float) -> void
+func set_view_distance(distance: float) -> void
+```
+視野角・視界距離を変更。
+
+#### disable / enable
+```gdscript
+func disable() -> void
+func enable() -> void
+```
+視界の無効化/有効化（死亡時など）。disable時は空のポリゴンをemitする。
+
+### シグナル
+
+| シグナル | パラメータ | 説明 |
+|----------|------------|------|
+| `vision_updated` | `visible_points: PackedVector3Array` | 視界ポリゴン更新時 |
+| `wall_hit_updated` | `hit_points: PackedVector3Array` | 壁衝突点更新時 |
+
+### 視界方向の計算（AnimationComponent連携）
+
+VisionComponentはAnimationComponentの`get_current_aim_rotation()`を使用して視界方向を計算する。これにより**頭部の向きとFoWの視界が完全に同期**する。
+
+```
+視界方向 = キャラクター基本向き(basis.z) + 上半身回転(AnimationComponent)
+```
+
+**内部動作:**
+1. `_get_effective_look_direction()`でAnimationComponentの回転を取得
+2. キャラクターの基本向き（basis.z）に回転を適用
+3. `atan2(direction.x, -direction.z)`で角度計算（Godotは-Zが前方）
+
+---
+
+## Fog of War システム統合
+
+### シーンへの統合方法
+
+```gdscript
+const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
+
+func _setup_fog_of_war() -> void:
+    fog_of_war_system = Node3D.new()
+    fog_of_war_system.set_script(FogOfWarSystemScript)
+    fog_of_war_system.name = "FogOfWarSystem"
+    add_child(fog_of_war_system)
+
+    await get_tree().process_frame
+    # PlayerManagerはAutoload（preload不要）
+    if character and character.vision and PlayerManager.is_player_team(character.team):
+        fog_of_war_system.register_vision(character.vision)
+```
+
+### 注意点
+
+1. **PlayerManagerはAutoload**: `preload`ではなく直接`PlayerManager.xxx()`で参照
+2. **視界方向の座標系**: Godotは-Zが前方。`atan2(x, -z)`で角度計算
+3. **回転の符号**: `forward.rotated(Vector3.UP, yaw)` - 符号に注意
+
+---
+
 ## 設計原則
 
 1. **CharacterAPIを経由**: 直接`character.weapon.xxx()`を呼ばず、CharacterAPIを使用
