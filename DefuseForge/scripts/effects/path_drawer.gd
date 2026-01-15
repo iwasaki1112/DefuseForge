@@ -69,9 +69,11 @@ func _unhandled_input(event: InputEvent) -> void:
 						return
 					start_pos = ground_pos
 				_start_drawing(start_pos)
+				get_viewport().set_input_as_handled()
 			else:
 				if _is_drawing:
 					_finish_drawing()
+					get_viewport().set_input_as_handled()
 
 	if event is InputEventMouseMotion:
 		if _is_drawing:
