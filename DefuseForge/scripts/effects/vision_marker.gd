@@ -30,6 +30,7 @@ func _setup_mesh() -> void:
 	_circle_material.albedo_color = circle_color
 	_circle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_circle_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_circle_material.render_priority = 10  # フォグより上にレンダリング
 
 	# 矢印のマテリアル
 	_arrow_material = StandardMaterial3D.new()
@@ -40,6 +41,7 @@ func _setup_mesh() -> void:
 	_arrow_material.emission_energy_multiplier = 1.2
 	_arrow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_arrow_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_arrow_material.render_priority = 10  # フォグより上にレンダリング
 
 	_build_mesh()
 
