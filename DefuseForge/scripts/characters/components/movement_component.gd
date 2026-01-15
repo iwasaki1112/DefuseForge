@@ -34,6 +34,10 @@ var _character: CharacterBody3D
 var _input_direction: Vector3 = Vector3.ZERO
 var _use_input_mode: bool = false
 
+## ストレイフモード（視線と移動を分離）
+var strafe_mode: bool = false
+var _facing_direction: Vector3 = Vector3.FORWARD  # 視線方向（ストレイフ時に固定）
+
 ## 視線ポイント（Slice the Pie）用
 ## 各ポイント: { "path_ratio": float, "anchor": Vector3, "direction": Vector3 }
 var _vision_points: Array[Dictionary] = []
@@ -172,6 +176,55 @@ func set_input_direction(direction: Vector3, run: bool = false) -> void:
 	_update_locomotion_state()
 
 
+## ストレイフモードを有効化
+## @param facing_dir: 視線方向（ワールド座標）
+func enable_strafe_mode(facing_dir: Vector3) -> void:
+	strafe_mode = true
+	_facing_direction = facing_dir.normalized()
+	_facing_direction.y = 0
+
+
+## ストレイフモードを無効化
+func disable_strafe_mode() -> void:
+	strafe_mode = false
+
+
+## ストレイフブレンド座標を計算（キャラクターのローカル座標に投影）
+## @return: Vector2(x, y) - x: 左右成分, y: 前後成分
+func get_strafe_blend() -> Vector2:
+	if not is_moving or _input_direction.length_squared() < 0.001:
+		return Vector2(0, 1)  # デフォルトは前進
+
+	if _character == null:
+		return Vector2(0, 1)
+
+	# キャラクターのローカル座標系を取得
+	# このプロジェクトでは +Z が前方（ドキュメント参照）
+	var char_forward = _character.global_transform.basis.z  # 前方向（+Z）
+	char_forward.y = 0
+	if char_forward.length_squared() > 0.001:
+		char_forward = char_forward.normalized()
+	else:
+		char_forward = Vector3.FORWARD
+
+	var char_right = _character.global_transform.basis.x  # 右方向（+X）
+	char_right.y = 0
+	if char_right.length_squared() > 0.001:
+		char_right = char_right.normalized()
+	else:
+		char_right = Vector3.RIGHT
+
+	# 移動方向（ワールド座標）
+	var move_dir = _input_direction.normalized()
+	move_dir.y = 0
+
+	# 移動方向をキャラクターのローカル座標に投影
+	var forward_component = move_dir.dot(char_forward)  # 前後成分
+	var right_component = move_dir.dot(char_right)      # 左右成分
+
+	return Vector2(right_component, forward_component)
+
+
 ## 毎フレーム更新（CharacterBaseから呼ばれる）
 ## @param delta: フレーム時間
 ## @return: velocity
@@ -276,8 +329,8 @@ func _update_input_mode(delta: float) -> Vector3:
 	var speed = run_speed if is_running else walk_speed
 	var velocity = _input_direction * speed
 
-	# 移動方向に回転
-	if _input_direction.length_squared() > 0.001:
+	# ストレイフモードでなければ移動方向に回転
+	if _input_direction.length_squared() > 0.001 and not strafe_mode:
 		_rotate_toward(_input_direction, delta)
 
 	# 重力を適用

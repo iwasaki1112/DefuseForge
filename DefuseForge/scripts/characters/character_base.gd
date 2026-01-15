@@ -93,6 +93,12 @@ func _physics_process(delta: float) -> void:
 	# コンポーネント更新
 	if movement:
 		velocity = movement.update(delta)
+		# ストレイフブレンド座標を更新
+		_update_strafe_blend()
+		# アニメーション速度を移動速度に合わせる
+		if animation:
+			var current_speed = velocity.length()
+			animation.set_animation_speed(current_speed, movement.is_running)
 	if animation:
 		animation.update(delta)
 	if weapon:
@@ -440,6 +446,41 @@ func _update_action_timer(delta: float) -> void:
 
 
 ## ========================================
+## ストレイフ（8方向移動）
+## ========================================
+
+## ストレイフブレンド座標を更新
+func _update_strafe_blend() -> void:
+	if not movement or not animation:
+		return
+
+	# ストレイフモード時のみブレンド座標を更新
+	if movement.strafe_mode and movement.is_moving:
+		var blend = movement.get_strafe_blend()
+		animation.set_strafe_blend(blend.x, blend.y)
+	else:
+		animation.disable_strafe()
+
+
+## ストレイフモードを有効化
+## @param facing_direction: 視線方向（ワールド座標）
+func enable_strafe(facing_direction: Vector3 = Vector3.ZERO) -> void:
+	if movement:
+		if facing_direction == Vector3.ZERO:
+			# デフォルトは現在の向き
+			facing_direction = -global_transform.basis.z
+		movement.enable_strafe_mode(facing_direction)
+
+
+## ストレイフモードを無効化
+func disable_strafe() -> void:
+	if movement:
+		movement.disable_strafe_mode()
+	if animation:
+		animation.disable_strafe()
+
+
+## ========================================
 ## 自動照準（内部処理）
 ## ========================================
 
@@ -488,33 +529,35 @@ func _update_auto_aim() -> void:
 		set_upper_body_rotation(0.0, 0.0)
 
 
-## 視線ポイントに基づく上半身回転の更新（Slice the Pie）
+## 視線ポイントに基づく回転の更新（Slice the Pie + ストレイフ）
 func _update_vision_point_rotation() -> void:
 	if not movement or not animation:
 		return
 
 	var vision_direction = movement.get_current_vision_direction()
 	if vision_direction == Vector3.ZERO:
+		# 視線ポイントがない場合はストレイフを無効化して上半身リセット
+		if movement.strafe_mode:
+			disable_strafe()
 		set_upper_body_rotation(0.0, 0.0)
 		return
-
-	# キャラクターの前方向（auto_aimと同じ座標系）
-	var forward = global_transform.basis.z
-	forward.y = 0
-	forward = forward.normalized()
 
 	# 視線方向を正規化
 	vision_direction.y = 0
 	vision_direction = vision_direction.normalized()
 
-	# 視線方向とのヨー角度差を計算
-	var yaw_angle = rad_to_deg(forward.signed_angle_to(vision_direction, Vector3.UP))
+	# ストレイフモードを有効化（視線方向に全身を向ける）
+	if not movement.strafe_mode:
+		movement.enable_strafe_mode(vision_direction)
 
-	# ±90度にクランプ（後ろは向けない）
-	var clamped_yaw = clamp(yaw_angle, -90.0, 90.0)
+	# キャラクターを視線方向に向ける
+	rotation.y = atan2(vision_direction.x, vision_direction.z)
 
-	# 上半身回転を適用（ピッチは0）
-	set_upper_body_rotation(clamped_yaw, 0.0)
+	# 視線方向を更新（MovementComponentに伝える）
+	movement._facing_direction = vision_direction
+
+	# 上半身回転は0（全身が視線方向を向いているため）
+	set_upper_body_rotation(0.0, 0.0)
 
 
 ## 視界内の敵を検出（FOV + 距離 + レイキャスト方式）

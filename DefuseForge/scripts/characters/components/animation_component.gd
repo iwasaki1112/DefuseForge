@@ -22,6 +22,11 @@ const WEAPON_TYPE_NAMES := {
 @export_range(0, 180, 1) var aim_max_angle_deg: float = 90.0
 @export_range(-90, 90, 1) var aim_max_pitch_deg: float = 30.0
 
+## アニメーション速度設定
+## アニメーションが想定している移動速度（m/s）
+@export var anim_base_walk_speed: float = 1.5  ## 歩行アニメーションの基準速度
+@export var anim_base_run_speed: float = 4.0   ## 走行アニメーションの基準速度
+
 ## 内部参照
 var anim_player: AnimationPlayer
 var anim_tree: AnimationTree
@@ -38,6 +43,11 @@ var locomotion_state: LocomotionState = LocomotionState.IDLE
 var weapon_type: int = 2  # WeaponRegistry.WeaponType (default: PISTOL)
 var is_shooting: bool = false
 var _shooting_blend: float = 0.0
+
+## ストレイフ（8方向移動）
+var _strafe_blend_x: float = 0.0  # -1 = 左, 0 = 前後, +1 = 右
+var _strafe_blend_y: float = 1.0  # -1 = 後退, 0 = 停止, +1 = 前進
+var _strafe_enabled: bool = false
 
 ## 上半身リコイル
 var _upper_body_recoil: float = 0.0
@@ -108,8 +118,24 @@ func set_weapon_type(type: int) -> void:
 		return
 
 	weapon_type = type
+	_rebuild_walk_blend_space()
 	_update_locomotion_animation()
 	_update_shoot_animation()
+
+
+## BlendSpace2D（歩行ストレイフ）を再構築
+func _rebuild_walk_blend_space() -> void:
+	if _blend_tree == null:
+		return
+
+	var walk_node = _blend_tree.get_node("locomotion_walk") as AnimationNodeBlendSpace2D
+	if walk_node == null:
+		return
+
+	# BlendSpace2Dをクリアして再設定
+	while walk_node.get_blend_point_count() > 0:
+		walk_node.remove_blend_point(0)
+	_setup_walk_blend_space(walk_node)
 
 
 ## 射撃状態を設定
@@ -122,6 +148,45 @@ func set_shooting(shooting: bool) -> void:
 ## @param intensity: リコイル強度（0.0 - 1.0）
 func apply_upper_body_recoil(intensity: float) -> void:
 	_upper_body_recoil = RECOIL_KICK_ANGLE * intensity
+
+
+## ストレイフブレンドを設定（8方向移動用）
+## @param x: 左右成分（-1 = 左, 0 = 前後, +1 = 右）
+## @param y: 前後成分（-1 = 後退, 0 = 停止, +1 = 前進）
+func set_strafe_blend(x: float, y: float) -> void:
+	_strafe_blend_x = clamp(x, -1.0, 1.0)
+	_strafe_blend_y = clamp(y, -1.0, 1.0)
+	_strafe_enabled = true
+
+
+## ストレイフを無効化（通常の前進歩行に戻す）
+func disable_strafe() -> void:
+	_strafe_enabled = false
+	_strafe_blend_x = 0.0
+	_strafe_blend_y = 1.0
+
+
+## ストレイフが有効かどうか
+func is_strafe_enabled() -> bool:
+	return _strafe_enabled
+
+
+## 移動速度に基づいてアニメーション速度を設定
+## @param current_speed: 現在の移動速度（m/s）
+## @param is_running: 走っているかどうか
+func set_animation_speed(current_speed: float, is_running: bool) -> void:
+	if anim_tree == null or not anim_tree.active:
+		return
+
+	var base_speed = anim_base_run_speed if is_running else anim_base_walk_speed
+	var time_scale = 1.0
+
+	if base_speed > 0.01 and current_speed > 0.01:
+		time_scale = current_speed / base_speed
+		# 極端な値を制限
+		time_scale = clampf(time_scale, 0.5, 2.0)
+
+	anim_tree.set("parameters/time_scale/scale", time_scale)
 
 
 ## 上半身エイミング角度を設定（ヨー + ピッチ）
@@ -167,6 +232,7 @@ func update(delta: float) -> void:
 	_update_shooting_blend(delta)
 	_update_upper_body_aim(delta)
 	_recover_upper_body_recoil(delta)
+	_update_strafe_blend()
 
 
 ## AnimationPlayerの全アニメーションリストを取得
@@ -211,13 +277,21 @@ func _setup_animation_tree(model: Node3D) -> void:
 	_blend_tree = AnimationNodeBlendTree.new()
 	anim_tree.tree_root = _blend_tree
 
-	# locomotion用の3つのAnimationNodeAnimationを作成（idle, walk, run）
+	# locomotion用のノードを作成
 	var locomotion_idle = AnimationNodeAnimation.new()
-	var locomotion_walk = AnimationNodeAnimation.new()
 	var locomotion_run = AnimationNodeAnimation.new()
-	_blend_tree.add_node("locomotion_idle", locomotion_idle, Vector2(-200, -100))
-	_blend_tree.add_node("locomotion_walk", locomotion_walk, Vector2(-200, 0))
-	_blend_tree.add_node("locomotion_run", locomotion_run, Vector2(-200, 100))
+	_blend_tree.add_node("locomotion_idle", locomotion_idle, Vector2(-300, -100))
+	_blend_tree.add_node("locomotion_run", locomotion_run, Vector2(-300, 100))
+
+	# BlendSpace2D（ストレイフ用）を作成
+	var walk_blend_space = AnimationNodeBlendSpace2D.new()
+	walk_blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
+	walk_blend_space.set_min_space(Vector2(-1, -1))
+	walk_blend_space.set_max_space(Vector2(1, 1))
+	_blend_tree.add_node("locomotion_walk", walk_blend_space, Vector2(-300, 0))
+
+	# BlendSpace2Dにアニメーションポイントを追加（4方向）
+	_setup_walk_blend_space(walk_blend_space)
 
 	# AnimationNodeTransitionを作成（クロスフェード付き遷移）
 	var transition = AnimationNodeTransition.new()
@@ -232,28 +306,103 @@ func _setup_animation_tree(model: Node3D) -> void:
 	_blend_tree.connect_node("locomotion_transition", 1, "locomotion_walk")
 	_blend_tree.connect_node("locomotion_transition", 2, "locomotion_run")
 
-	# shootアニメーション（上半身用）
-	var shoot_anim = AnimationNodeAnimation.new()
-	_blend_tree.add_node("shoot", shoot_anim, Vector2(0, 200))
-
-	# Blend2ノード（上半身のみブレンド）
-	var blend2 = AnimationNodeBlend2.new()
-	_blend_tree.add_node("upper_blend", blend2, Vector2(300, 100))
-
-	# 接続: locomotion_transition → upper_blend → output
-	_blend_tree.connect_node("upper_blend", 0, "locomotion_transition")
-	_blend_tree.connect_node("upper_blend", 1, "shoot")
-	_blend_tree.connect_node("output", 0, "upper_blend")
-
-	# 上半身ボーンフィルターを設定
-	_setup_upper_body_filter(blend2)
+	# TimeScaleノードを追加（アニメーション速度調整用）
+	var time_scale = AnimationNodeTimeScale.new()
+	_blend_tree.add_node("time_scale", time_scale, Vector2(150, 0))
+	_blend_tree.connect_node("time_scale", 0, "locomotion_transition")
+	_blend_tree.connect_node("output", 0, "time_scale")
 
 	# 初期アニメーションを設定
 	_update_locomotion_animation()
-	_update_shoot_animation()
+	# _update_shoot_animation()  # テスト中: upper_blendをバイパスしているため無効化
 
-	# 有効化
+	# AnimationTreeを有効化
 	anim_tree.active = true
+
+	# デバッグ出力
+	print("[AnimationComponent] Setup complete")
+	print("[AnimationComponent] Available animations: %s" % str(anim_player.get_animation_list()))
+	print("[AnimationComponent] AnimationTree active: %s" % anim_tree.active)
+	print("[AnimationComponent] tree_root: %s" % anim_tree.tree_root)
+
+
+## BlendSpace2D（歩行ストレイフ）をセットアップ
+func _setup_walk_blend_space(blend_space: AnimationNodeBlendSpace2D) -> void:
+	if anim_player == null:
+		return
+
+	# 前進アニメーション（新形式 "forward" または旧形式 "pistol_walking" を探す）
+	var forward_name = _find_animation(["forward", get_animation_name("walking"), "rifle_walking"])
+	var has_forward = not forward_name.is_empty()
+	if has_forward:
+		var forward_anim = AnimationNodeAnimation.new()
+		forward_anim.animation = forward_name
+		blend_space.add_blend_point(forward_anim, Vector2(0, 1))
+	else:
+		push_warning("[AnimationComponent] Forward animation not found")
+
+	# 後退アニメーション（新形式 "backward" または旧形式 "pistol_retreat"）
+	var back_name = _find_animation(["backward", get_animation_name("retreat"), "rifle_retreat"])
+	var has_back = not back_name.is_empty()
+	if has_back:
+		var back_anim = AnimationNodeAnimation.new()
+		back_anim.animation = back_name
+		blend_space.add_blend_point(back_anim, Vector2(0, -1))
+	else:
+		push_warning("[AnimationComponent] Backward animation not found")
+
+	# 左ストレイフアニメーション（新形式 "left_strafe" または旧形式 "pistol_strafe_left"）
+	# 座標系調整: 左右を入れ替え
+	var left_name = _find_animation(["left_strafe", get_animation_name("strafe_left")])
+	var has_left = not left_name.is_empty()
+	if has_left:
+		var left_anim = AnimationNodeAnimation.new()
+		left_anim.animation = left_name
+		blend_space.add_blend_point(left_anim, Vector2(1, 0))  # 左→+X
+
+	# 右ストレイフ（新形式 "right_strafe" または旧形式 "pistol_strafe_right"）
+	var right_name = _find_animation(["right_strafe", get_animation_name("strafe_right")])
+	var has_right = not right_name.is_empty()
+	if has_right:
+		var right_anim = AnimationNodeAnimation.new()
+		right_anim.animation = right_name
+		blend_space.add_blend_point(right_anim, Vector2(-1, 0))  # 右→-X
+	elif has_left:
+		# 右ストレイフがない場合は左を代用
+		var right_anim = AnimationNodeAnimation.new()
+		right_anim.animation = left_name
+		blend_space.add_blend_point(right_anim, Vector2(-1, 0))
+		push_warning("[AnimationComponent] Missing right_strafe - using left as fallback")
+
+	# 斜め方向のブレンドポイントを追加（左右入れ替え）
+	# 前左斜め
+	if has_forward and has_left:
+		var fl_anim = AnimationNodeAnimation.new()
+		fl_anim.animation = forward_name
+		blend_space.add_blend_point(fl_anim, Vector2(0.7, 0.7))
+	# 前右斜め
+	if has_forward and (has_right or has_left):
+		var fr_anim = AnimationNodeAnimation.new()
+		fr_anim.animation = forward_name
+		blend_space.add_blend_point(fr_anim, Vector2(-0.7, 0.7))
+	# 後左斜め
+	if has_back and has_left:
+		var bl_anim = AnimationNodeAnimation.new()
+		bl_anim.animation = back_name
+		blend_space.add_blend_point(bl_anim, Vector2(0.7, -0.7))
+	# 後右斜め
+	if has_back and (has_right or has_left):
+		var br_anim = AnimationNodeAnimation.new()
+		br_anim.animation = back_name
+		blend_space.add_blend_point(br_anim, Vector2(-0.7, -0.7))
+
+
+## アニメーション名リストから最初に見つかったものを返す
+func _find_animation(candidates: Array) -> String:
+	for name in candidates:
+		if anim_player.has_animation(name):
+			return name
+	return ""
 
 
 ## 上半身ボーンフィルターを設定
@@ -280,23 +429,26 @@ func _setup_upper_body_filter(blend_node: AnimationNodeBlend2) -> void:
 ## 移動アニメーションを更新
 func _update_locomotion_animation() -> void:
 	if _blend_tree == null or anim_tree == null:
+		print("[AnimationComponent] _update_locomotion_animation: blend_tree or anim_tree is null")
 		return
 
 	# 各状態のアニメーション名を取得
 	var idle_name = _get_locomotion_anim_name(LocomotionState.IDLE)
-	var walk_name = _get_locomotion_anim_name(LocomotionState.WALK)
 	var run_name = _get_locomotion_anim_name(LocomotionState.RUN)
+	print("[AnimationComponent] idle_name: %s, run_name: %s" % [idle_name, run_name])
 
-	# 各ノードにアニメーションを設定
+	# idle と run ノードにアニメーションを設定
 	var idle_node = _blend_tree.get_node("locomotion_idle") as AnimationNodeAnimation
-	var walk_node = _blend_tree.get_node("locomotion_walk") as AnimationNodeAnimation
 	var run_node = _blend_tree.get_node("locomotion_run") as AnimationNodeAnimation
 	if idle_node:
 		idle_node.animation = idle_name
-	if walk_node:
-		walk_node.animation = walk_name
+		print("[AnimationComponent] Set idle_node.animation = %s" % idle_name)
 	if run_node:
 		run_node.animation = run_name
+		print("[AnimationComponent] Set run_node.animation = %s" % run_name)
+
+	# locomotion_walk は BlendSpace2D なので _setup_walk_blend_space() で設定済み
+	# 武器タイプ変更時は _rebuild_walk_blend_space() を呼ぶ
 
 	# Transitionの状態を切り替え（クロスフェード付き）
 	var transition_name: String
@@ -308,31 +460,51 @@ func _update_locomotion_animation() -> void:
 		LocomotionState.RUN:
 			transition_name = "run"
 
+	print("[AnimationComponent] Setting transition to: %s" % transition_name)
 	anim_tree.set("parameters/locomotion_transition/transition_request", transition_name)
 
 
 ## 移動状態に応じたアニメーション名を取得（フォールバック付き）
 func _get_locomotion_anim_name(state: LocomotionState) -> String:
-	var base_name: String
+	var candidates: Array
 	match state:
 		LocomotionState.IDLE:
-			base_name = "idle"
+			# 新形式 "idle" を優先
+			candidates = [
+				"idle",  # 新形式
+				get_animation_name("idle"),  # pistol_idle
+				"forward",
+			]
 		LocomotionState.WALK:
-			base_name = "walking"
+			# 新形式 "forward" を優先
+			candidates = [
+				"forward",  # 新形式
+				get_animation_name("walking"),  # pistol_walking
+				"rifle_walking",
+			]
 		LocomotionState.RUN:
-			base_name = "sprint"
+			# sprint → forward をフォールバック
+			candidates = [
+				"sprint",  # 新形式
+				get_animation_name("sprint"),  # pistol_sprint
+				"forward",
+			]
 
-	var anim_name = get_animation_name(base_name)
+	return _find_animation(candidates)
 
-	# アニメーションが存在しない場合はフォールバック
-	if not anim_player.has_animation(anim_name):
-		anim_name = get_animation_name("walking")
-		if not anim_player.has_animation(anim_name):
-			anim_name = "rifle_walking"
-			if not anim_player.has_animation(anim_name):
-				anim_name = "idle_none"
 
-	return anim_name
+## ストレイフブレンド座標を更新
+func _update_strafe_blend() -> void:
+	if anim_tree == null or not anim_tree.active:
+		return
+
+	# WALK状態でストレイフが有効な場合のみ更新
+	if locomotion_state == LocomotionState.WALK and _strafe_enabled:
+		var blend_pos = Vector2(_strafe_blend_x, _strafe_blend_y)
+		anim_tree.set("parameters/locomotion_walk/blend_position", blend_pos)
+		# デバッグ出力（必要時のみ有効化）
+		#if Engine.get_process_frames() % 60 == 0:
+		#	print("[Anim] blend: (%.2f, %.2f)" % [blend_pos.x, blend_pos.y])
 
 
 ## 射撃アニメーションを更新
@@ -409,7 +581,7 @@ func _setup_animation_loops() -> void:
 		return
 
 	# ループにするアニメーションのパターン
-	var loop_patterns = ["walk", "run", "idle", "sprint"]
+	var loop_patterns = ["walk", "run", "idle", "sprint", "retreat", "strafe", "forward", "backward"]
 
 	for anim_name in anim_player.get_animation_list():
 		var anim = anim_player.get_animation(anim_name)
