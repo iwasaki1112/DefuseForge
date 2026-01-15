@@ -489,7 +489,43 @@ rifle_idle / rifle_walking / rifle_sprint 自動切り替え
 signal waypoint_reached(index: int)  # ウェイポイント到達時
 signal path_completed               # パス移動完了時
 signal locomotion_changed(state: int)  # 移動状態変化時 (0=IDLE, 1=WALK, 2=RUN)
+signal vision_target_changed(target_position: Vector3)  # 視線ターゲット変更時
 ```
+
+### 視線ポイント付き移動（Slice the Pie）
+
+移動パスと視線ポイント配列を同時に設定し、移動中に上半身を特定の方向に向ける。
+
+```gdscript
+# 視線ポイント付きで移動開始
+# vision_points: [{ "path_ratio": float, "anchor": Vector3, "direction": Vector3 }, ...]
+character.set_path_with_vision_points(
+    movement_points: Array[Vector3],  # 移動パス
+    vision_points: Array,             # 視線ポイント配列（Dictionary）
+    run: bool = false
+)
+
+# 視線ポイントがアクティブかどうか
+var has_vision: bool = character.movement.has_vision_points()
+
+# 現在の視線方向を取得
+var direction: Vector3 = character.movement.get_current_vision_direction()
+```
+
+**視線ポイントの構造:**
+```gdscript
+{
+    "path_ratio": float,   # パス上の位置（0.0〜1.0）
+    "anchor": Vector3,     # 視線の起点（パス上の座標）
+    "direction": Vector3   # 視線の方向ベクトル（正規化済み）
+}
+```
+
+**動作仕様:**
+- 視線の切り替えは移動パスの距離進行率（path_ratio）に同期
+- 上半身（胴体）のみが視線方向に回転、下半身は移動方向を向く
+- 視線角度は±90度にクランプ
+- 視線ポイント中は自動照準より優先される
 
 ### 移動マーカー
 
@@ -627,10 +663,134 @@ func _on_path_execution_completed(character: CharacterBody3D) -> void:
     print("移動完了: %s" % character.name)
 ```
 
+### Slice the Pie（視線ポイント）
+
+移動パス上に視線ポイントを設定し、移動中にキャラクターが特定の方向を見ながら歩く機能。
+Door Kickers 2の「Slice the Pie」モードに相当。
+
+#### フロー
+
+```
+1. キャラクター選択 → "Move" アクション
+2. 移動パス描画（白色）→ 描画完了
+3. "Add Vision" → 視線ポイント設定モード
+4. パス上をクリック＆ドラッグで視線方向を設定（複数可）
+5. "Done" → 設定完了
+6. "Execute" → 実行開始
+```
+
+#### 視線ポイントAPI
+
+```gdscript
+# 視線ポイント設定モードに切り替え（移動パス設定済みの場合のみ有効）
+var success: bool = path_drawer.start_vision_mode()
+
+# 移動パス描画モードに戻る
+path_drawer.start_movement_mode()
+
+# 視線ポイントがあるか
+var has_vision: bool = path_drawer.has_vision_points()
+
+# 視線ポイント数を取得
+var count: int = path_drawer.get_vision_point_count()
+
+# 視線ポイント配列を取得
+# 各要素: { "path_ratio": float, "anchor": Vector3, "direction": Vector3 }
+var points: Array[Dictionary] = path_drawer.get_vision_points()
+
+# 最後の視線ポイントを削除
+path_drawer.remove_last_vision_point()
+
+# 視線ポイント付きで実行
+var success: bool = path_drawer.execute_with_vision(run: bool = false)
+
+# 現在の描画モードを取得
+var mode: PathDrawer.DrawingMode = path_drawer.get_drawing_mode()
+```
+
+#### 視線ポイント用シグナル
+
+```gdscript
+signal vision_point_added(anchor: Vector3, direction: Vector3)
+signal vision_point_drawing(anchor: Vector3, direction: Vector3)  # ドラッグ中
+signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT
+```
+
+#### 視線ポイント用エクスポート
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| vision_line_color | Color | (0.7, 0.3, 0.9, 0.9) | 視線マーカーの色（紫） |
+| vision_line_length | float | 2.0 | 視線ラインの長さ |
+| path_click_threshold | float | 0.5 | パスクリック判定距離 |
+
+#### 動作仕様
+
+- **上半身のみ回転**: 下半身は移動方向を向き、上半身（胴体）が視線ポイント方向を向く
+- **距離同期**: 視線の切り替えは移動パスの距離進行率（path_ratio）に同期
+- **角度制限**: 視線回転は±90度にクランプ（後ろは向けない）
+- **優先度**: 視線ポイントがアクティブな場合、自動照準より優先される
+- **複数ポイント**: path_ratio順にソートされ、順次適用される
+
+#### 統合例
+
+```gdscript
+# 視線ポイント対応の使用例
+func _on_drawing_finished(points: PackedVector3Array) -> void:
+    path_drawer.disable()
+    if path_drawer.has_pending_path():
+        add_vision_button.disabled = false
+
+func _on_add_vision_pressed() -> void:
+    if path_drawer.start_vision_mode():
+        print("パス上をクリック＆ドラッグで視線方向を設定")
+
+func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
+    print("視線ポイント追加: %d個" % path_drawer.get_vision_point_count())
+
+func _on_done_pressed() -> void:
+    path_drawer.disable()
+    execute_button.disabled = false
+
+func _on_execute_pressed() -> void:
+    path_drawer.execute_with_vision(false)  # 視線ポイント付きで歩き移動
+```
+
+### VisionMarker
+
+視線ポイントの位置と方向を示すビジュアルマーカー。円形の背景に矢印で方向を表示。
+
+```gdscript
+# 通常はPathDrawer内部で自動作成される
+# 手動で使用する場合:
+var marker = MeshInstance3D.new()
+marker.set_script(preload("res://scripts/effects/vision_marker.gd"))
+add_child(marker)
+
+# 位置と方向を設定
+marker.set_position_and_direction(anchor: Vector3, direction: Vector3)
+
+# 色を変更
+marker.set_colors(bg_color: Color, fg_color: Color)
+```
+
+#### エクスポート設定
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|------|------------|------|
+| circle_radius | float | 0.3 | 円の半径 |
+| circle_color | Color | (0.1, 0.1, 0.1, 0.95) | 円の背景色（暗い色） |
+| arrow_color | Color | (1.0, 1.0, 1.0, 1.0) | 矢印の色（白） |
+| arrow_thickness | float | 0.04 | 矢印の太さ |
+| height_offset | float | 0.03 | 地面からの高さ |
+| segments | int | 32 | 円のセグメント数 |
+
 ### 関連ファイル
 
 - `scripts/effects/path_drawer.gd` - パス描画・実行管理
 - `scripts/effects/path_line_mesh.gd` - パス線描画（ArrayMesh）
+- `scripts/effects/vision_marker.gd` - 視線ポイントマーカー
+- `scripts/characters/components/movement_component.gd` - 視線ポイント追跡
 
 ---
 

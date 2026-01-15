@@ -96,8 +96,12 @@ func _physics_process(delta: float) -> void:
 	if vision:
 		vision.update(delta)
 
-	# 自動照準更新
-	_update_auto_aim()
+	# 視線ポイント回転更新（Slice the Pie）- 自動照準より優先
+	if movement and movement.has_vision_points():
+		_update_vision_point_rotation()
+	else:
+		# 自動照準更新
+		_update_auto_aim()
 
 	# 敵の可視性を更新（プレイヤーの視界内にいるときのみ表示）
 	update_enemy_visibility()
@@ -251,6 +255,13 @@ func reload_model(new_model: Node3D = null) -> void:
 func set_path(points: Array[Vector3], run: bool = false) -> void:
 	if movement:
 		movement.set_path(points, run)
+
+
+## 視線ポイント付きでパスを設定（Slice the Pie）
+## @param vision_pts: 視線ポイント配列 [{ path_ratio, anchor, direction }, ...]
+func set_path_with_vision_points(movement_points: Array[Vector3], vision_pts: Array, run: bool = false) -> void:
+	if movement:
+		movement.set_path_with_vision_points(movement_points, vision_pts, run)
 
 
 ## 単一の目標地点に移動
@@ -470,6 +481,35 @@ func _update_auto_aim() -> void:
 	else:
 		# 敵がいない場合は上半身回転をリセット
 		set_upper_body_rotation(0.0, 0.0)
+
+
+## 視線ポイントに基づく上半身回転の更新（Slice the Pie）
+func _update_vision_point_rotation() -> void:
+	if not movement or not animation:
+		return
+
+	var vision_direction = movement.get_current_vision_direction()
+	if vision_direction == Vector3.ZERO:
+		set_upper_body_rotation(0.0, 0.0)
+		return
+
+	# キャラクターの前方向（auto_aimと同じ座標系）
+	var forward = global_transform.basis.z
+	forward.y = 0
+	forward = forward.normalized()
+
+	# 視線方向を正規化
+	vision_direction.y = 0
+	vision_direction = vision_direction.normalized()
+
+	# 視線方向とのヨー角度差を計算
+	var yaw_angle = rad_to_deg(forward.signed_angle_to(vision_direction, Vector3.UP))
+
+	# ±90度にクランプ（後ろは向けない）
+	var clamped_yaw = clamp(yaw_angle, -90.0, 90.0)
+
+	# 上半身回転を適用（ピッチは0）
+	set_upper_body_rotation(clamped_yaw, 0.0)
 
 
 ## 視界内の敵を検出（FOV + 距離 + レイキャスト方式）

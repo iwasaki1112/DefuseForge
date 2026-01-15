@@ -3,10 +3,12 @@ extends Node
 
 ## 移動管理コンポーネント
 ## パス追従、速度管理、移動マーカー表示を担当
+## Slice the Pie: 視線ポイントに基づく上半身回転
 
 signal waypoint_reached(index: int)
 signal path_completed
 signal locomotion_changed(state: int)  # 0=idle, 1=walk, 2=run
+signal vision_direction_changed(direction: Vector3)  # 視線方向変更時
 
 const MovementMarkerScript = preload("res://scripts/effects/movement_marker.gd")
 
@@ -31,6 +33,14 @@ var _character: CharacterBody3D
 ## リアルタイム入力モード用
 var _input_direction: Vector3 = Vector3.ZERO
 var _use_input_mode: bool = false
+
+## 視線ポイント（Slice the Pie）用
+## 各ポイント: { "path_ratio": float, "anchor": Vector3, "direction": Vector3 }
+var _vision_points: Array[Dictionary] = []
+var _total_path_length: float = 0.0
+var _current_distance_traveled: float = 0.0
+var _has_vision_points: bool = false
+var _current_vision_direction: Vector3 = Vector3.ZERO
 
 ## 移動マーカー
 var _movement_marker: MeshInstance3D = null
@@ -74,9 +84,49 @@ func set_path(points: Array[Vector3], run: bool = false) -> void:
 	current_waypoint_index = 0
 	is_running = run
 	is_moving = true
+	_total_path_length = _calculate_path_length(points)
+	_current_distance_traveled = 0.0
+	_has_vision_points = false
+	_vision_points.clear()
+	_current_vision_direction = Vector3.ZERO
 	_update_locomotion_state()
 
 	# 移動マーカーを表示
+	_show_movement_marker()
+
+
+## 視線ポイント付きでパスを設定（Slice the Pie）
+## @param movement_points: 移動先のポイント配列
+## @param vision_pts: 視線ポイント配列 [{ path_ratio, anchor, direction }, ...]
+## @param run: 走るかどうか
+func set_path_with_vision_points(movement_points: Array[Vector3], vision_pts: Array, run: bool = false) -> void:
+	if movement_points.is_empty():
+		stop()
+		return
+
+	# 移動パスを設定
+	waypoints = movement_points.duplicate()
+	current_waypoint_index = 0
+	is_running = run
+	is_moving = true
+	_total_path_length = _calculate_path_length(movement_points)
+	_current_distance_traveled = 0.0
+
+	# 視線ポイントを設定
+	_vision_points.clear()
+	for pt in vision_pts:
+		_vision_points.append(pt.duplicate())
+
+	if _vision_points.size() > 0:
+		_has_vision_points = true
+		# 最初の視線方向は前方（または最初のポイントが0なら最初のポイントの方向）
+		_current_vision_direction = Vector3.ZERO
+		print("[MovementComponent] Vision points set: %d points" % _vision_points.size())
+	else:
+		_has_vision_points = false
+		_current_vision_direction = Vector3.ZERO
+
+	_update_locomotion_state()
 	_show_movement_marker()
 
 
@@ -94,6 +144,10 @@ func stop() -> void:
 	current_waypoint_index = 0
 	is_moving = false
 	is_running = false
+	_has_vision_points = false
+	_vision_points.clear()
+	_current_distance_traveled = 0.0
+	_current_vision_direction = Vector3.ZERO
 	_update_locomotion_state()
 
 	# 移動マーカーを非表示
@@ -165,6 +219,14 @@ func update(delta: float) -> Vector3:
 	# 速度計算
 	var speed = run_speed if is_running else walk_speed
 	var velocity = direction * speed
+
+	# 移動距離を追跡（視線ポイント用）
+	var frame_distance = speed * delta
+	_current_distance_traveled += frame_distance
+
+	# 視線方向を更新
+	if _has_vision_points:
+		_update_vision_direction()
 
 	# 重力を適用
 	if not _character.is_on_floor():
@@ -247,3 +309,82 @@ func _hide_movement_marker() -> void:
 func _update_movement_marker() -> void:
 	if _movement_marker and _character and is_moving:
 		_movement_marker.update_position(_character.global_position)
+
+
+## ========================================
+## 視線ポイント（Slice the Pie）API
+## ========================================
+
+## 視線ポイントがあるかどうか
+func has_vision_points() -> bool:
+	return _has_vision_points
+
+
+## 現在の視線方向を取得（正規化済み、Vector3.ZEROなら視線指定なし）
+func get_current_vision_direction() -> Vector3:
+	return _current_vision_direction
+
+
+## 視線ポイントをクリア
+func clear_vision_points() -> void:
+	_vision_points.clear()
+	_has_vision_points = false
+	_current_distance_traveled = 0.0
+	_current_vision_direction = Vector3.ZERO
+
+
+## パスの総距離を計算
+func _calculate_path_length(points: Array[Vector3]) -> float:
+	if points.size() < 2:
+		return 0.0
+
+	var total_length: float = 0.0
+	for i in range(1, points.size()):
+		var p1 = Vector3(points[i - 1].x, 0, points[i - 1].z)
+		var p2 = Vector3(points[i].x, 0, points[i].z)
+		total_length += p1.distance_to(p2)
+
+	return total_length
+
+
+## 視線方向を更新（移動進行率に基づく）
+func _update_vision_direction() -> void:
+	if not _has_vision_points or _vision_points.is_empty():
+		_current_vision_direction = Vector3.ZERO
+		return
+
+	# 移動パスの進行率を計算
+	var progress_ratio: float = 0.0
+	if _total_path_length > 0.001:
+		progress_ratio = _current_distance_traveled / _total_path_length
+		progress_ratio = clampf(progress_ratio, 0.0, 1.0)
+
+	# 現在の進行率に対応する視線方向を取得
+	var new_direction = _get_vision_direction_at_ratio(progress_ratio)
+
+	# 方向が変更された場合のみシグナルを発行
+	if _current_vision_direction.distance_squared_to(new_direction) > 0.001:
+		_current_vision_direction = new_direction
+		vision_direction_changed.emit(_current_vision_direction)
+
+
+## 指定した進行率での視線方向を取得
+## 進行率がポイントを超えたら、そのポイントの方向を適用
+func _get_vision_direction_at_ratio(ratio: float) -> Vector3:
+	if _vision_points.is_empty():
+		return Vector3.ZERO
+
+	# 最初の視線ポイント前なら視線なし
+	if ratio < _vision_points[0].path_ratio:
+		return Vector3.ZERO
+
+	# 現在の進行率に対応するポイントを探す
+	var active_direction: Vector3 = Vector3.ZERO
+
+	for point in _vision_points:
+		if ratio >= point.path_ratio:
+			active_direction = point.direction
+		else:
+			break
+
+	return active_direction

@@ -185,10 +185,14 @@ func get_current_character() -> CharacterBody3D:
 
 ## ボタンを再構築
 func _rebuild_buttons() -> void:
-	# 既存ボタンをクリア
+	# 既存ボタンをクリア（即座に削除してサイズを正しく計算）
 	for button in _buttons:
+		_vbox.remove_child(button)
 		button.queue_free()
 	_buttons.clear()
+
+	# VBoxContainerのサイズをリセット
+	_vbox.reset_size()
 
 	# 新規ボタンを作成
 	for item in _items:
@@ -208,6 +212,9 @@ func _rebuild_buttons() -> void:
 
 		_vbox.add_child(button)
 		_buttons.append(button)
+
+	# パネルサイズをリセット
+	_panel.reset_size()
 
 
 ## ボタン押下時
