@@ -33,6 +33,7 @@ var is_alive: bool = true
 # ============================================
 var anim_ctrl: Node = null  # CharacterAnimationController
 var vision: VisionComponent = null  # VisionComponent for FoW
+var combat_awareness: Node = null  # CombatAwarenessComponent for enemy tracking
 
 # ============================================
 # Lifecycle
@@ -146,6 +147,26 @@ func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent
 	return vision
 
 # ============================================
+# Combat Awareness API
+# ============================================
+
+## Setup combat awareness component (auto-create if not exists)
+func setup_combat_awareness() -> Node:
+	if combat_awareness == null:
+		var CombatAwarenessScript = preload("res://scripts/characters/combat_awareness_component.gd")
+		combat_awareness = Node.new()
+		combat_awareness.set_script(CombatAwarenessScript)
+		combat_awareness.name = "CombatAwarenessComponent"
+		add_child(combat_awareness)
+		combat_awareness.setup(self)
+	return combat_awareness
+
+
+## Get CombatAwarenessComponent
+func get_combat_awareness() -> Node:
+	return combat_awareness
+
+# ============================================
 # Death Processing
 # ============================================
 
@@ -160,6 +181,10 @@ func _die(killer: Node3D = null, is_headshot: bool = false) -> void:
 	# Disable vision on death
 	if vision:
 		vision.disable()
+
+	# Clear combat awareness target on death
+	if combat_awareness and combat_awareness.has_method("clear_target"):
+		combat_awareness.clear_target()
 
 	# Disable collision
 	_disable_collision()

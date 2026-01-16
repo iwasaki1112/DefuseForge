@@ -25,6 +25,7 @@ var _vision_points: Array[Dictionary] = []
 var _vision_index: int = 0
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
+var _combat_awareness: Node = null  # CombatAwarenessComponent
 
 ## スタック検出用
 var _last_position: Vector3 = Vector3.ZERO
@@ -34,6 +35,11 @@ var _stuck_time: float = 0.0
 ## セットアップ
 func setup(character: CharacterBody3D) -> void:
 	_character = character
+
+
+## Set combat awareness component for automatic enemy aiming
+func set_combat_awareness(component: Node) -> void:
+	_combat_awareness = component
 
 
 ## パス追従を開始
@@ -161,9 +167,23 @@ func process(delta: float) -> void:
 	# 視線方向を更新
 	_update_vision_direction()
 
-	# アニメーション更新
+	# Combat awarenessを処理
+	if _combat_awareness and _combat_awareness.has_method("process"):
+		_combat_awareness.process(delta)
+
+	# アニメーション更新（優先順位: 敵視認 > 視線ポイント > 移動方向）
 	if anim_ctrl:
-		var look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else move_dir
+		var look_dir: Vector3 = Vector3.ZERO
+
+		# 1. 敵視認チェック（最優先）
+		if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+			if _combat_awareness.is_tracking_enemy():
+				look_dir = _combat_awareness.get_override_look_direction()
+
+		# 2. 視線ポイント or 移動方向
+		if look_dir.length_squared() < 0.1:
+			look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else move_dir
+
 		anim_ctrl.update_animation(move_dir, look_dir, _is_running, delta)
 
 	# 物理移動
@@ -229,10 +249,21 @@ func _finish() -> void:
 		_character.velocity = Vector3.ZERO
 
 	# 完了時に最後の向きを維持してアイドル状態に
+	# 優先順位: 敵視認 > 視線ポイント > 移動方向
 	if _character:
 		var anim_ctrl = _character.get_anim_controller()
 		if anim_ctrl:
-			var final_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _last_move_direction
+			var final_dir: Vector3 = Vector3.ZERO
+
+			# 敵を追跡中なら敵方向を維持
+			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+				if _combat_awareness.is_tracking_enemy():
+					final_dir = _combat_awareness.get_override_look_direction()
+
+			# 視線ポイント or 移動方向
+			if final_dir.length_squared() < 0.1:
+				final_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _last_move_direction
+
 			if final_dir.length_squared() < 0.1:
 				final_dir = Vector3.FORWARD
 			# アイドル状態に遷移（移動方向をゼロに）

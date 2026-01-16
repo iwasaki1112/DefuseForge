@@ -93,7 +93,11 @@ func _setup_controllers() -> void:
 func _get_or_create_path_controller(character: Node) -> Node:
 	var char_id = character.get_instance_id()
 	if path_following_controllers.has(char_id):
-		return path_following_controllers[char_id]
+		var existing = path_following_controllers[char_id]
+		# Ensure combat awareness is connected
+		if character.combat_awareness and existing.has_method("set_combat_awareness"):
+			existing.set_combat_awareness(character.combat_awareness)
+		return existing
 
 	var controller = Node.new()
 	controller.set_script(PathFollowingCtrl)
@@ -101,6 +105,11 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	add_child(controller)
 	controller.path_completed.connect(_on_path_following_completed.bind(character))
 	controller.path_cancelled.connect(_on_path_following_cancelled.bind(character))
+
+	# Connect combat awareness for automatic enemy aiming during movement
+	if character.combat_awareness:
+		controller.set_combat_awareness(character.combat_awareness)
+
 	path_following_controllers[char_id] = controller
 	return controller
 
@@ -267,6 +276,12 @@ func _on_rotate_cancel_pressed() -> void:
 func _on_rotation_confirmed(_final_direction: Vector3) -> void:
 	rotate_panel.visible = false
 	_update_mode_info("")
+
+	# Dismiss enemy tracking for the rotating character
+	var rotating_character = rotation_controller.get_character()
+	if rotating_character and rotating_character.combat_awareness:
+		rotating_character.combat_awareness.dismiss_current_target()
+
 	print("[RotateMode] Confirmed")
 
 
@@ -405,6 +420,16 @@ func _setup_character_vision_for(character: Node) -> void:
 	if enemy_visibility_system:
 		enemy_visibility_system.register_character(character)
 
+	# Setup combat awareness for automatic enemy aiming
+	character.setup_combat_awareness()
+	if character.combat_awareness:
+		character.combat_awareness.enemy_spotted.connect(
+			func(enemy): print("[Combat] %s spotted %s" % [character.name, enemy.name])
+		)
+		character.combat_awareness.enemy_lost.connect(
+			func(enemy): print("[Combat] %s lost sight of %s" % [character.name, enemy.name])
+		)
+
 	# Apply current vision state
 	if not is_vision_enabled and vision:
 		vision.disable()
@@ -515,9 +540,23 @@ func _update_idle_characters(delta: float) -> void:
 		if not character.is_alive:
 			continue
 
+		# Combat awarenessを処理（アイドル中も敵を追跡）
+		if character.combat_awareness and character.combat_awareness.has_method("process"):
+			character.combat_awareness.process(delta)
+
 		var anim_ctrl = character.get_anim_controller()
 		if anim_ctrl:
-			var look_dir = anim_ctrl.get_look_direction()
+			var look_dir: Vector3 = Vector3.ZERO
+
+			# 敵視認チェック（最優先）
+			if character.combat_awareness and character.combat_awareness.has_method("is_tracking_enemy"):
+				if character.combat_awareness.is_tracking_enemy():
+					look_dir = character.combat_awareness.get_override_look_direction()
+
+			# デフォルト: 現在の向きを維持
+			if look_dir.length_squared() < 0.1:
+				look_dir = anim_ctrl.get_look_direction()
+
 			anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
 
 
@@ -771,11 +810,24 @@ func _physics_process(delta: float) -> void:
 		anim_ctrl.update_animation(Vector3.ZERO, current_look_dir, false, delta)
 		return
 
-	# デバッグ操作が無効の場合は入力を無視（現在の向きを維持）
+	# デバッグ操作が無効の場合は入力を無視（敵追跡は有効）
 	if not is_debug_control_enabled:
-		# アニメーションコントローラーの現在の向きを維持
-		var current_look_dir = anim_ctrl.get_look_direction()
-		anim_ctrl.update_animation(Vector3.ZERO, current_look_dir, false, delta)
+		# Combat awarenessを処理
+		if selected_character.combat_awareness and selected_character.combat_awareness.has_method("process"):
+			selected_character.combat_awareness.process(delta)
+
+		var look_dir: Vector3 = Vector3.ZERO
+
+		# 敵視認チェック（最優先）
+		if selected_character.combat_awareness and selected_character.combat_awareness.has_method("is_tracking_enemy"):
+			if selected_character.combat_awareness.is_tracking_enemy():
+				look_dir = selected_character.combat_awareness.get_override_look_direction()
+
+		# デフォルト: 現在の向きを維持
+		if look_dir.length_squared() < 0.1:
+			look_dir = anim_ctrl.get_look_direction()
+
+		anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
 		selected_character.velocity.x = 0
 		selected_character.velocity.z = 0
 		if not selected_character.is_on_floor():

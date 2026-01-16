@@ -26,6 +26,7 @@
 | Animation | RecoilModifier | SkeletonModifier3Dで発射時の反動を適用 |
 | Character | GameCharacter | HP・チーム・死亡処理を管理するCharacterBody3D |
 | Character | VisionComponent | シャドウキャスト法でFoW用の可視ポリゴンを計算 |
+| Character | CombatAwarenessComponent | 敵検出・自動照準を管理するコンポーネント |
 | Character | PathFollowingController | パス追従＋視線ポイント＋スタック検出を行う再利用可能コントローラー |
 | Character | CharacterRotationController | 視線方向変更のスムーズな回転制御 |
 | Effect | PathDrawer | マウスドラッグでパス描画＋視線ポイント設定 |

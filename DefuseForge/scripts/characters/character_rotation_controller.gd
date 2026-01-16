@@ -77,6 +77,11 @@ func is_rotation_active() -> bool:
 	return _is_active
 
 
+## 回転対象キャラクターを取得
+func get_character() -> CharacterBody3D:
+	return _character
+
+
 ## 入力処理（スクリーン座標からワールド座標を計算して回転方向を設定）
 func handle_input(screen_pos: Vector2) -> void:
 	if not _is_active or not _character or not _camera:
