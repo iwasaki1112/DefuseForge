@@ -3,25 +3,26 @@ shader_type canvas_item;
 // Silhouette edge detection shader
 // Based on Fake Stencil approach by Sithoid/Leafshade/Mark Raynsford
 
-uniform float line_width : hint_range(1.0, 10.0) = 2.0;
+uniform float line_width : hint_range(1.0, 20.0) = 4.0;
 uniform vec4 outline_color : source_color = vec4(0.0, 0.8, 1.0, 1.0);
-uniform float emission_energy : hint_range(0.0, 10.0) = 1.0;
+uniform float emission_energy : hint_range(0.0, 10.0) = 3.0;
 uniform sampler2D mask_texture : hint_default_black;
 
 void fragment() {
-	float dx = SCREEN_PIXEL_SIZE.x * line_width;
-	float dy = SCREEN_PIXEL_SIZE.y * line_width;
+	vec2 tex_size = vec2(textureSize(mask_texture, 0));
+	float dx = line_width / tex_size.x;
+	float dy = line_width / tex_size.y;
 
 	// Sample mask at current and neighboring pixels
-	float center = texture(mask_texture, SCREEN_UV).r;
-	float top = texture(mask_texture, SCREEN_UV + vec2(0.0, -dy)).r;
-	float bottom = texture(mask_texture, SCREEN_UV + vec2(0.0, dy)).r;
-	float left = texture(mask_texture, SCREEN_UV + vec2(-dx, 0.0)).r;
-	float right = texture(mask_texture, SCREEN_UV + vec2(dx, 0.0)).r;
-	float top_left = texture(mask_texture, SCREEN_UV + vec2(-dx, -dy)).r;
-	float top_right = texture(mask_texture, SCREEN_UV + vec2(dx, -dy)).r;
-	float bottom_left = texture(mask_texture, SCREEN_UV + vec2(-dx, dy)).r;
-	float bottom_right = texture(mask_texture, SCREEN_UV + vec2(dx, dy)).r;
+	float center = texture(mask_texture, UV).r;
+	float top = texture(mask_texture, UV + vec2(0.0, -dy)).r;
+	float bottom = texture(mask_texture, UV + vec2(0.0, dy)).r;
+	float left = texture(mask_texture, UV + vec2(-dx, 0.0)).r;
+	float right = texture(mask_texture, UV + vec2(dx, 0.0)).r;
+	float top_left = texture(mask_texture, UV + vec2(-dx, -dy)).r;
+	float top_right = texture(mask_texture, UV + vec2(dx, -dy)).r;
+	float bottom_left = texture(mask_texture, UV + vec2(-dx, dy)).r;
+	float bottom_right = texture(mask_texture, UV + vec2(dx, dy)).r;
 
 	// Sobel edge detection
 	float edge_h = abs(top_left - bottom_left) + 2.0 * abs(top - bottom) + abs(top_right - bottom_right);
