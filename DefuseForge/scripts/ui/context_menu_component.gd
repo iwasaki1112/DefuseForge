@@ -14,7 +14,7 @@ const ContextMenuItemScript = preload("res://scripts/resources/context_menu_item
 const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 	{"id": "move", "name": "Move", "order": 0},
 	{"id": "rotate", "name": "Rotate", "order": 1},
-	{"id": "control", "name": "Control", "order": 2},
+	{"id": "crouch", "name": "Crouch", "order": 2},
 ]
 
 @export_group("外観設定")
@@ -76,6 +76,9 @@ func open(screen_position: Vector2, character: CharacterBody3D) -> void:
 
 	_current_character = character
 	_is_open = true
+
+	# キャラクター状態に応じてラベルを更新
+	_update_dynamic_labels(character)
 
 	# ボタンを再構築
 	_rebuild_buttons()
@@ -149,6 +152,14 @@ func set_item_enabled(action_id: String, enabled: bool) -> void:
 	for item in _items:
 		if item.action_id == action_id:
 			item.enabled = enabled
+			break
+
+
+## メニュー項目の表示名を設定
+func set_item_display_name(action_id: String, display_name: String) -> void:
+	for item in _items:
+		if item.action_id == action_id:
+			item.display_name = display_name
 			break
 
 
@@ -233,3 +244,10 @@ func _gui_input(event: InputEvent) -> void:
 			if not panel_rect.has_point(local_pos):
 				close()
 				get_viewport().set_input_as_handled()
+
+
+## キャラクター状態に応じて動的ラベルを更新
+func _update_dynamic_labels(character: CharacterBody3D) -> void:
+	if character and character.has_method("is_crouching"):
+		var is_crouching = character.is_crouching()
+		set_item_display_name("crouch", "Stand" if is_crouching else "Crouch")

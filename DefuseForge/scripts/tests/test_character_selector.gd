@@ -522,8 +522,8 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 			_start_move_mode(character)
 		"rotate":
 			_start_rotate_mode(character)
-		"control":
-			_start_control_mode(character)
+		"crouch":
+			_toggle_crouch(character)
 
 
 ## 移動モード開始
@@ -543,14 +543,11 @@ func _start_rotate_mode(character: Node) -> void:
 	_update_mode_info("Rotate Mode: Tap to set direction")
 
 
-## 操作モード開始
-func _start_control_mode(character: Node) -> void:
-	print("[ContextMenu] Control mode for: ", character.name)
-	selected_character = character
-	current_character = character
-	var preset_id = _get_character_preset_id(character)
-	if preset_id:
-		_update_info_label(preset_id)
+## しゃがむ/立つ切り替え
+func _toggle_crouch(character: Node) -> void:
+	if character.has_method("toggle_crouch"):
+		character.toggle_crouch()
+		print("[ContextMenu] Toggled crouch: ", character.name)
 
 func _physics_process(delta: float) -> void:
 	# パス追従中はコントローラーに処理を委譲

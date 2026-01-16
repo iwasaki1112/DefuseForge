@@ -100,6 +100,29 @@ func get_anim_controller() -> Node:
 	return anim_ctrl
 
 # ============================================
+# Stance API
+# ============================================
+
+## Check if character is crouching
+func is_crouching() -> bool:
+	if anim_ctrl and anim_ctrl.has_method("get_stance"):
+		return anim_ctrl.get_stance() == 1  # Stance.CROUCH
+	return false
+
+
+## Toggle crouch state
+func toggle_crouch() -> void:
+	if not anim_ctrl:
+		return
+	if not anim_ctrl.has_method("set_stance") or not anim_ctrl.has_method("get_stance"):
+		return
+
+	var current = anim_ctrl.get_stance()
+	# Stance.STAND = 0, Stance.CROUCH = 1
+	anim_ctrl.set_stance(0 if current == 1 else 1)
+
+
+# ============================================
 # Vision Component API
 # ============================================
 

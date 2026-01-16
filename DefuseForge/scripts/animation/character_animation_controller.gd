@@ -134,6 +134,12 @@ func update_animation(
 func set_stance(stance: Stance) -> void:
 	_stance = stance
 
+
+## Get current stance
+func get_stance() -> Stance:
+	return _stance
+
+
 ## Set weapon type
 func set_weapon(weapon: Weapon) -> void:
 	_weapon = weapon
