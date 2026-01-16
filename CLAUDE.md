@@ -12,14 +12,7 @@
 - `scenes/tests/test_simple_mixamo.tscn` - Mixamoキャラクター＋MixamoCharacter＋StrafeAnimationController確認用
 
 ## ドキュメント
-`docs/godot/` 配下：
-- `character-registry.md` - CharacterPreset/CharacterRegistry（キャラクター定義、チーム別管理、ファクトリー）
-- `mixamo-character.md` - MixamoCharacter API（HP、死亡、チーム管理）
-- `strafe-animation-controller.md` - StrafeAnimationController API（8方向ストレイフ、エイム、武器切替、死亡、汎用アクション）
-
-**重要**:
-- 実装前に関連ドキュメントを読むこと（特に `mixamo-character.md` と `strafe-animation-controller.md`）
-- 仕様追加・変更があった場合は該当ドキュメントに定義を追記すること
+`docs/godot/api`　配下にこのプロジェクトで実装済みの機能ドキュメントがあります。
 
 ## コマンド
 ```bash

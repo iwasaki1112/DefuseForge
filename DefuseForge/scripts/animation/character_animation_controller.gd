@@ -51,6 +51,7 @@ var _is_running := false
 var _is_dead := false
 var _is_playing_action := false
 var _current_action := ""
+var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 
 # Death animation mapping
 const DEATH_ANIMS := {
@@ -105,6 +106,10 @@ func update_animation(
 ) -> void:
 	if _is_dead:
 		return
+
+	# エイム方向を保存（視界計算用）
+	if aim_direction.length_squared() > 0.001:
+		_aim_direction = aim_direction.normalized()
 
 	_is_running = is_running and _stance != Stance.CROUCH and not _is_aiming
 
@@ -171,11 +176,9 @@ func get_current_speed() -> float:
 func is_dead() -> bool:
 	return _is_dead
 
-## Get current look direction (model's forward direction)
+## Get current aim direction (for vision calculation)
 func get_look_direction() -> Vector3:
-	if not _model:
-		return Vector3.FORWARD
-	return _model.global_transform.basis.z
+	return _aim_direction
 
 ## Play death animation
 ## hit_direction: Direction the hit came FROM (e.g., FRONT means shot from front, falls backward)
