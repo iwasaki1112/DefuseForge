@@ -32,8 +32,8 @@
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `max_health` | `float` | `100.0` | 最大HP |
-| `walk_speed` | `float` | `2.5` | 歩行速度 |
-| `run_speed` | `float` | `5.0` | 走行速度 |
+
+> **Note:** 移動速度（`walk_speed`, `run_speed`）は`CharacterAnimationController`で一元管理される。
 
 ### UI
 | プロパティ | 型 | デフォルト | 説明 |
@@ -52,8 +52,6 @@ preset.description = "Explosive specialist"
 preset.team = GameCharacter.Team.TERRORIST
 preset.model_scene = preload("res://assets/characters/bomber.glb")
 preset.max_health = 100.0
-preset.walk_speed = 2.5
-preset.run_speed = 5.0
 ```
 
 ### .tresファイル（エディタで作成）

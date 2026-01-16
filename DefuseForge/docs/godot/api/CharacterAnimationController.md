@@ -43,18 +43,13 @@
 ### Movement Speed
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `walk_speed` | `float` | `2.5` | 歩行速度 |
+| `walk_speed` | `float` | `1.5` | 歩行速度 |
 | `run_speed` | `float` | `5.0` | 走行速度 |
 | `crouch_speed` | `float` | `1.5` | しゃがみ移動速度 |
 | `aim_walk_speed` | `float` | `2.0` | エイム中の歩行速度 |
 | `rotation_speed` | `float` | `15.0` | 回転速度 |
 
-### Animation Speed Sync
-| プロパティ | 型 | デフォルト | 説明 |
-|-----------|-----|----------|------|
-| `anim_walk_speed` | `float` | `1.4` | 歩行アニメーション基準速度 |
-| `anim_run_speed` | `float` | `5.5` | 走行アニメーション基準速度 |
-| `anim_crouch_speed` | `float` | `1.2` | しゃがみアニメーション基準速度 |
+> **Note:** アニメーション基準速度（`ANIM_REF_WALK`, `ANIM_REF_RUN`, `ANIM_REF_CROUCH`）は内部定数として管理され、足滑り防止のためのスケーリングに使用される。
 
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |

@@ -18,11 +18,6 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 @export var aim_walk_speed := 2.0
 @export var rotation_speed := 15.0
 
-@export_group("Animation Speed Sync")
-@export var anim_walk_speed := 1.5
-@export var anim_run_speed := 5.5
-@export var anim_crouch_speed := 1.2
-
 @export_group("Recoil")
 @export var rifle_recoil_strength := 0.08
 @export var pistol_recoil_strength := 0.12
@@ -48,6 +43,11 @@ var _is_aiming := false
 var _is_running := false
 var _is_dead := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
+
+# Animation reference speeds (Mixamo animation inherent speeds - do not change)
+const ANIM_REF_WALK := 1.39  # Mixamo walk animation ~1.39 m/s
+const ANIM_REF_RUN := 5.5    # Mixamo run animation ~5.5 m/s
+const ANIM_REF_CROUCH := 1.2 # Mixamo crouch walk ~1.2 m/s
 
 # Death animation mapping
 const DEATH_ANIMS := {
@@ -512,11 +512,11 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/RunBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/CrouchWalkBlend/blend_position", _input_dir)
 
-	# Update animation speed
-	var current_speed := get_current_speed()
-	var walk_scale := current_speed / anim_walk_speed if anim_walk_speed > 0 else 1.0
-	var run_scale := current_speed / anim_run_speed if anim_run_speed > 0 else 1.0
-	var crouch_scale := current_speed / anim_crouch_speed if anim_crouch_speed > 0 else 1.0
+	# Update animation speed (scale based on movement speed to prevent foot sliding)
+	# Formula: animation_scale = actual_movement_speed / animation_reference_speed
+	var walk_scale := walk_speed / ANIM_REF_WALK
+	var run_scale := run_speed / ANIM_REF_RUN
+	var crouch_scale := crouch_speed / ANIM_REF_CROUCH
 
 	walk_scale = clamp(walk_scale, 0.5, 2.0)
 	run_scale = clamp(run_scale, 0.5, 2.0)

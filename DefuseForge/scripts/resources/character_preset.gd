@@ -30,8 +30,6 @@ const GameCharacterScript = preload("res://scripts/characters/game_character.gd"
 # ============================================
 @export_group("Stats")
 @export var max_health: float = 100.0
-@export var walk_speed: float = 2.5
-@export var run_speed: float = 5.0
 
 # ============================================
 # UI

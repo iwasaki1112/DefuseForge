@@ -216,9 +216,8 @@ func create_character_from_preset(preset: CharacterPresetScript, position: Vecto
 		anim_player.add_animation_library("", _animation_library)
 
 	# Setup animation controller (deferred until added to scene tree)
+	# Speed settings are defined in CharacterAnimationController defaults
 	var anim_ctrl := CharAnimCtrl.new()
-	anim_ctrl.walk_speed = preset.walk_speed
-	anim_ctrl.run_speed = preset.run_speed
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 	# Defer setup until character is in scene tree

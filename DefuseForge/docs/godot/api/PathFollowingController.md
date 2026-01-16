@@ -9,12 +9,14 @@
 | 継承元 | `Node` |
 | ファイルパス | `scripts/characters/path_following_controller.gd` |
 
+## 依存関係
+
+> **Note:** `CharacterAnimationController`が必須。速度設定は`CharacterAnimationController`で一元管理される。
+
 ## Export Properties
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `fallback_walk_speed` | `float` | `1.5` | フォールバック歩行速度（AnimControllerがない場合） |
-| `fallback_run_speed` | `float` | `5.5` | フォールバック走行速度 |
 | `stuck_threshold` | `float` | `0.05` | スタック検出の移動距離閾値 |
 | `stuck_timeout` | `float` | `0.3` | スタック判定時間（秒）- この時間進めないと次のポイントへスキップ |
 | `final_destination_radius` | `float` | `0.5` | 最終目的地への到達判定半径 |

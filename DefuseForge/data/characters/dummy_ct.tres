@@ -11,5 +11,3 @@ description = "Counter-Terrorist training dummy"
 team = 1
 model_scene = ExtResource("2_model")
 max_health = 100.0
-walk_speed = 2.5
-run_speed = 5.0
