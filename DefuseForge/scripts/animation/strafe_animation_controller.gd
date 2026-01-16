@@ -85,6 +85,10 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 
 	if _skeleton:
 		_setup_recoil_modifier()
+		# Set AnimationPlayer root_node to model node (parent of Skeleton3D)
+		# Animation tracks use paths like "Skeleton3D:bonename"
+		if _anim_player:
+			_anim_player.root_node = NodePath("..")
 
 	if _anim_player:
 		_setup_animation_loops()
@@ -440,7 +444,7 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("output", 0, "AimUpperBlend")
 
 	_anim_tree.tree_root = blend_tree
-	_anim_tree.anim_player = _anim_player.get_path()
+	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
 	_anim_tree.active = true
 
 func _setup_upper_body_filter() -> void:

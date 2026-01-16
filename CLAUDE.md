@@ -6,23 +6,20 @@
 - **言語**: GDScript
 
 ## 現在の状態
-開発途中。テストシーン：
-- `scenes/tests/test_animation_viewer.tscn` - アニメーション確認用
-- `scenes/tests/test_path_drawer.tscn` - パス描画・移動確認用
-- `scenes/tests/test_strafe.tscn` - ストレイフ（8方向移動）確認用
-- `scenes/tests/test_simple_mixamo.tscn` - Mixamoキャラクター＋StrafeAnimationController確認用
+開発途中。Mixamo専用のキャラクターシステム。
+
+テストシーン：
+- `scenes/tests/test_simple_mixamo.tscn` - Mixamoキャラクター＋MixamoCharacter＋StrafeAnimationController確認用
 
 ## ドキュメント
 `docs/godot/` 配下：
-- `architecture.md` - システムアーキテクチャ概要、コンポーネント依存関係、シグナルフロー
-- `character-api.md` - CharacterBase/CharacterAPI（選択、回転、移動、武器、アニメーション、IK、レーザー、視界、FogOfWar、レジストリ、ユーティリティクラス、リソース定義）
+- `character-registry.md` - CharacterPreset/CharacterRegistry（キャラクター定義、チーム別管理、ファクトリー）
+- `mixamo-character.md` - MixamoCharacter API（HP、死亡、チーム管理）
 - `strafe-animation-controller.md` - StrafeAnimationController API（8方向ストレイフ、エイム、武器切替、死亡、汎用アクション）
-- `skeleton-modifier-patterns.md` - SkeletonModifier3D、上半身回転、IK実行順序
-- `testing-guide.md` - テストシーンの使い方、デバッグツール
 
 **重要**:
-- 実装前に関連ドキュメントを読むこと（特に `architecture.md` と `character-api.md`）
-- 仕様追加・変更があった場合は `docs/godot/character-api.md` に定義を追記すること
+- 実装前に関連ドキュメントを読むこと（特に `mixamo-character.md` と `strafe-animation-controller.md`）
+- 仕様追加・変更があった場合は該当ドキュメントに定義を追記すること
 
 ## コマンド
 ```bash

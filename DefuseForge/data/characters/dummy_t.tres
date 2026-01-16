@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CharacterPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/character_preset.gd" id="1_preset"]
+[ext_resource type="PackedScene" path="res://assets/characters/terrorist/dummy/dummy_t.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_preset")
+id = "dummy_t"
+display_name = "Dummy"
+description = "Terrorist training dummy"
+team = 2
+model_scene = ExtResource("2_model")
+max_health = 100.0
+walk_speed = 2.5
+run_speed = 5.0

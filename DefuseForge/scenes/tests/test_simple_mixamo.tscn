@@ -1,7 +1,6 @@
-[gd_scene load_steps=7 format=3 uid="uid://cm5y8xnwvqe2k"]
+[gd_scene load_steps=6 format=3 uid="uid://cm5y8xnwvqe2k"]
 
-[ext_resource type="Script" path="res://scripts/tests/simple_mixamo_player.gd" id="1_script"]
-[ext_resource type="PackedScene" uid="uid://b0o2jj5mvw5kq" path="res://assets/characters/mixamo/mixamo_character.blend" id="2_character"]
+[ext_resource type="Script" path="res://scripts/tests/test_character_selector.gd" id="1_script"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.4, 0.6, 0.8, 1)
@@ -17,11 +16,11 @@ ambient_light_source = 2
 ambient_light_color = Color(0.8, 0.8, 0.8, 1)
 ambient_light_energy = 0.5
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
-radius = 0.3
-height = 1.8
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.3, 0.3, 0.3, 1)
 
 [node name="TestSimpleMixamo" type="Node3D"]
+script = ExtResource("1_script")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_1")
@@ -36,27 +35,23 @@ transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 0, 3, 5)
 current = true
 fov = 60.0
 
-[node name="Player" type="CharacterBody3D" parent="."]
-script = ExtResource("1_script")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
-shape = SubResource("CapsuleShape3D_1")
-
-[node name="CharacterModel" parent="Player" instance=ExtResource("2_character")]
-
-[node name="AnimationTree" type="AnimationTree" parent="Player"]
-root_node = NodePath("../CharacterModel")
-anim_player = NodePath("../CharacterModel/AnimationPlayer")
-
 [node name="Floor" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 use_collision = true
 size = Vector3(50, 1, 50)
+material = SubResource("StandardMaterial3D_1")
 
-[node name="InfoLabel" type="Label" parent="."]
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="CharacterDropdown" type="OptionButton" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 250.0
+offset_bottom = 40.0
+
+[node name="InfoLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 50.0
 offset_right = 400.0
-offset_bottom = 80.0
-text = "Simple Mixamo Test
-WASD: Move
-Shift: Run"
+offset_bottom = 200.0
+text = "Loading..."

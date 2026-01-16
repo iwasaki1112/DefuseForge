@@ -12,13 +12,13 @@ config_version=5
 
 config/name="DefuseForge"
 config/description="CS1.6 meets Door Kickers 2 - トップダウンタクティカルシューター"
-run/main_scene="res://scenes/tests/test_animation_viewer.tscn"
+run/main_scene="res://scenes/tests/test_simple_mixamo.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
 [autoload]
 
-PlayerManager="*res://scripts/managers/player_manager.gd"
+CharacterRegistry="*res://scripts/registries/character_registry.gd"
 
 [display]
 

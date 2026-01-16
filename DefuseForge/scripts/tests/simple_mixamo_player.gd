@@ -1,17 +1,17 @@
-extends CharacterBody3D
+extends MixamoCharacter
 ## Simple Mixamo player using AnimCtrl API
-## Demonstrates the clean API usage
+## Demonstrates the clean API usage with MixamoCharacter
 
 const AnimCtrl = preload("res://scripts/animation/strafe_animation_controller.gd")
 
 @onready var model: Node3D = $CharacterModel
 @onready var anim_player: AnimationPlayer = $CharacterModel/AnimationPlayer
 
-var anim_ctrl: Node
 var aim_position := Vector3.ZERO
 var ground_plane := Plane(Vector3.UP, 0)
 
 func _ready() -> void:
+	super._ready()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED)
 
 	# Setup animation controller
@@ -19,6 +19,9 @@ func _ready() -> void:
 	add_child(anim_ctrl)
 	anim_ctrl.setup(model, anim_player)
 	anim_ctrl.set_weapon(AnimCtrl.Weapon.RIFLE)
+
+	# Register controller with MixamoCharacter
+	set_anim_controller(anim_ctrl)
 
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
@@ -28,16 +31,19 @@ func _input(event: InputEvent) -> void:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED)
 
 	# Weapon switching: 1 = Rifle, 2 = Pistol
-	# Death test: K = die
+	# Death test: K = instant kill via take_damage
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_1:
 			anim_ctrl.set_weapon(AnimCtrl.Weapon.RIFLE)
 		elif event.keycode == KEY_2:
 			anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
 		elif event.keycode == KEY_K:
-			anim_ctrl.play_death(AnimCtrl.HitDirection.FRONT, false)
+			take_damage(max_health)  # Instant kill via MixamoCharacter
 
 func _physics_process(delta: float) -> void:
+	if not is_alive:
+		return
+
 	_update_aim_position()
 
 	# Get input
