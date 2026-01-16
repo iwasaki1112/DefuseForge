@@ -35,6 +35,8 @@
 | Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
 | Resource | ContextMenuItem | コンテキストメニュー項目定義 |
 | System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
+| System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |
+| System | EnemyVisibilitySystem | 味方視界に基づく敵キャラクター可視性制御 |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | Test | TestCharacterSelector | キャラクター選択・パス移動・FoWのテストシーン |
 

@@ -8,6 +8,7 @@ extends Node3D
 
 const AnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
 const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
+const EnemyVisibilitySystemScript = preload("res://scripts/systems/enemy_visibility_system.gd")
 const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
 const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
@@ -40,6 +41,7 @@ var characters: Array[Node] = []  ## シーン内の全キャラクター
 var aim_position := Vector3.ZERO
 var ground_plane := Plane(Vector3.UP, 0)
 var fog_of_war_system: Node3D = null
+var enemy_visibility_system: Node = null  ## EnemyVisibilitySystem
 var context_menu: Control = null  ## コンテキストメニュー
 var outlined_meshes: Array[MeshInstance3D] = []  ## アウトライン適用中のメッシュ
 
@@ -65,12 +67,13 @@ var rotation_controller: Node = null
 
 func _ready() -> void:
 	_setup_fog_of_war()
+	_setup_enemy_visibility_system()
 	_setup_context_menu()
 	_setup_path_drawer()
 	_setup_controllers()
 	_setup_control_buttons()
 	_populate_dropdown()
-	character_dropdown.item_selected.connect(_on_character_selected)
+	character_dropdown.item_selected.connect(_on_team_selected)
 
 	# Spawn 2 CT characters at different positions
 	_spawn_initial_characters()
@@ -182,26 +185,16 @@ func _update_vision_toggle_button() -> void:
 
 ## 視界/FoWの状態を全キャラクターに適用
 func _apply_vision_state() -> void:
-	# 全キャラクターのVisionComponentを有効/無効化
-	for character in characters:
-		if character.has_method("get_vision"):
-			var vision = character.get_vision()
-			if vision:
-				if is_vision_enabled:
-					vision.enable()
-				else:
-					vision.disable()
-		elif character.get("vision"):
-			var vision = character.vision
-			if vision:
-				if is_vision_enabled:
-					vision.enable()
-				else:
-					vision.disable()
-
 	# FogOfWarSystemの表示を切り替え
 	if fog_of_war_system:
 		fog_of_war_system.set_fog_visible(is_vision_enabled)
+
+	# EnemyVisibilitySystemの有効/無効を切り替え
+	if enemy_visibility_system:
+		if is_vision_enabled:
+			enemy_visibility_system.enable()
+		else:
+			enemy_visibility_system.disable()
 
 
 ## パス確定ボタン：現在のパスを保存
@@ -288,54 +281,83 @@ func _setup_fog_of_war() -> void:
 	fog_of_war_system.map_size = Vector2(50, 50)  # Match floor size
 	add_child(fog_of_war_system)
 
+
+func _setup_enemy_visibility_system() -> void:
+	enemy_visibility_system = Node.new()
+	enemy_visibility_system.set_script(EnemyVisibilitySystemScript)
+	enemy_visibility_system.name = "EnemyVisibilitySystem"
+	add_child(enemy_visibility_system)
+	enemy_visibility_system.setup(fog_of_war_system)
+
+## ドロップダウンをCT/T選択に変更
 func _populate_dropdown() -> void:
 	character_dropdown.clear()
+	character_dropdown.add_item("CT (Counter-Terrorist)")
+	character_dropdown.set_item_metadata(0, GameCharacter.Team.COUNTER_TERRORIST)
+	character_dropdown.add_item("T (Terrorist)")
+	character_dropdown.set_item_metadata(1, GameCharacter.Team.TERRORIST)
+	character_dropdown.select(0)
 
-	# Add CT characters
-	var cts = CharacterRegistry.get_counter_terrorists()
-	for preset in cts:
-		character_dropdown.add_item("[CT] %s" % preset.display_name)
-		character_dropdown.set_item_metadata(character_dropdown.item_count - 1, preset.id)
-
-	# Add T characters
-	var ts = CharacterRegistry.get_terrorists()
-	for preset in ts:
-		character_dropdown.add_item("[T] %s" % preset.display_name)
-		character_dropdown.set_item_metadata(character_dropdown.item_count - 1, preset.id)
-
-func _on_character_selected(index: int) -> void:
-	var preset_id: String = character_dropdown.get_item_metadata(index)
-	_spawn_character(preset_id)
+## チーム選択時
+func _on_team_selected(index: int) -> void:
+	var new_team: GameCharacter.Team = character_dropdown.get_item_metadata(index)
+	PlayerState.set_player_team(new_team)
+	_deselect_character()  # 敵を選択中だった場合に解除
+	_refresh_info_label()
 
 
-## 初期キャラクター2体を生成
+## 初期キャラクター4体を生成（CT 2体 + T 2体）
 func _spawn_initial_characters() -> void:
 	var cts = CharacterRegistry.get_counter_terrorists()
-	if cts.size() < 1:
+	var ts = CharacterRegistry.get_terrorists()
+
+	# CT 2体を生成
+	if cts.size() >= 1:
+		# 1体目のCT（位置: -3, 0, -2）
+		var ct1 = CharacterRegistry.create_character(cts[0].id, Vector3(-3, 0, -2))
+		if ct1:
+			add_child(ct1)
+			characters.append(ct1)
+			_setup_character_vision_for(ct1)
+			print("[Test] Spawned CT 1: %s at (-3, 0, -2)" % cts[0].display_name)
+
+		# 2体目のCT（位置: -3, 0, 2）
+		var ct_index = 1 if cts.size() > 1 else 0
+		var ct2 = CharacterRegistry.create_character(cts[ct_index].id, Vector3(-3, 0, 2))
+		if ct2:
+			add_child(ct2)
+			characters.append(ct2)
+			_setup_character_vision_for(ct2)
+			print("[Test] Spawned CT 2: %s at (-3, 0, 2)" % cts[ct_index].display_name)
+	else:
 		print("[Test] No CT characters available")
-		return
 
-	# 1体目のCT（位置: -2, 0, 0）
-	var char1 = CharacterRegistry.create_character(cts[0].id, Vector3(-2, 0, 0))
-	if char1:
-		add_child(char1)
-		characters.append(char1)
-		_setup_character_vision_for(char1)
-		print("[Test] Spawned CT 1: %s at (-2, 0, 0)" % cts[0].display_name)
+	# T 2体を生成
+	if ts.size() >= 1:
+		# 1体目のT（位置: 3, 0, -2）
+		var t1 = CharacterRegistry.create_character(ts[0].id, Vector3(3, 0, -2))
+		if t1:
+			add_child(t1)
+			characters.append(t1)
+			_setup_character_vision_for(t1)
+			print("[Test] Spawned T 1: %s at (3, 0, -2)" % ts[0].display_name)
 
-	# 2体目のCT（位置: 2, 0, 0）- 同じか別のCTプリセットを使用
-	var ct_index = 1 if cts.size() > 1 else 0
-	var char2 = CharacterRegistry.create_character(cts[ct_index].id, Vector3(2, 0, 0))
-	if char2:
-		add_child(char2)
-		characters.append(char2)
-		_setup_character_vision_for(char2)
-		print("[Test] Spawned CT 2: %s at (2, 0, 0)" % cts[ct_index].display_name)
+		# 2体目のT（位置: 3, 0, 2）
+		var t_index = 1 if ts.size() > 1 else 0
+		var t2 = CharacterRegistry.create_character(ts[t_index].id, Vector3(3, 0, 2))
+		if t2:
+			add_child(t2)
+			characters.append(t2)
+			_setup_character_vision_for(t2)
+			print("[Test] Spawned T 2: %s at (3, 0, 2)" % ts[t_index].display_name)
+	else:
+		print("[Test] No T characters available")
 
 	# 最初のキャラクターをcurrent_characterに設定
 	if characters.size() > 0:
 		current_character = characters[0]
-		_update_info_label(cts[0].id)
+		if cts.size() >= 1:
+			_update_info_label(cts[0].id)
 
 func _spawn_character(preset_id: String) -> void:
 	# Unregister old vision from FoW
@@ -373,32 +395,41 @@ func _setup_character_vision_for(character: Node) -> void:
 	# Setup vision component
 	var vision = character.setup_vision(90.0, 15.0)
 
-	# Register with FoW system
-	if fog_of_war_system and vision:
-		await get_tree().process_frame  # Wait for VisionComponent to initialize
-		fog_of_war_system.register_vision(vision)
+	# Wait for VisionComponent to initialize
+	if vision:
+		await get_tree().process_frame
 
-		# 現在の視界状態を適用
-		if not is_vision_enabled:
-			vision.disable()
+	# Register with EnemyVisibilitySystem (handles FoW registration internally)
+	if enemy_visibility_system:
+		enemy_visibility_system.register_character(character)
+
+	# Apply current vision state
+	if not is_vision_enabled and vision:
+		vision.disable()
+		if fog_of_war_system:
 			fog_of_war_system.set_fog_visible(false)
 
 func _update_info_label(preset_id: String) -> void:
 	var preset = CharacterRegistry.get_preset(preset_id)
+	var player_team_name = PlayerState.get_team_name()
 	if preset:
 		var control_status = "ON" if is_debug_control_enabled else "OFF"
-		info_label.text = """Character: %s (%s)
+		info_label.text = """[Player Team: %s]
+Selected: %s (%s)
 Team: %s | HP: %.0f
 Manual Control: %s
 
 Tap character to select
 Use context menu for actions""" % [
+			player_team_name,
 			preset.display_name,
 			preset.id,
 			"CT" if preset.team == 1 else "T",
 			preset.max_health,
 			control_status
 		]
+	else:
+		info_label.text = "[Player Team: %s]\nTap a character to select" % player_team_name
 
 
 ## 情報ラベルを現在の状態で更新
@@ -446,10 +477,9 @@ func _input(event: InputEvent) -> void:
 			KEY_K:
 				selected_character.take_damage(selected_character.max_health)
 			KEY_R:
-				# Respawn
-				var index = character_dropdown.selected
-				if index >= 0:
-					_on_character_selected(index)
+				# Respawn selected character
+				if selected_character.has_method("reset_health"):
+					selected_character.reset_health()
 
 
 ## パス追従中のコントローラーがあるかチェック
@@ -510,7 +540,10 @@ func _handle_mouse_click(event: InputEventMouseButton) -> void:
 	match event.button_index:
 		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT:
 			if clicked_character:
-				# キャラクタークリック: 選択 + コンテキストメニュー表示
+				# 敵キャラクターは無視
+				if _is_enemy_character(clicked_character):
+					return
+				# 味方キャラクタークリック: 選択 + コンテキストメニュー表示
 				_select_character(clicked_character)
 				_show_context_menu(event.position, clicked_character)
 			else:
@@ -566,6 +599,11 @@ func _is_child_of(child: Node, parent: Node) -> bool:
 
 ## キャラクターを選択
 func _select_character(character: Node) -> void:
+	# 敵キャラクターは選択不可
+	if PlayerState.is_enemy(character):
+		print("[Selection] Cannot select enemy character: %s" % character.name)
+		return
+
 	selected_character = character
 	current_character = character
 	var preset_id = _get_character_preset_id(character)
@@ -579,7 +617,7 @@ func _select_character(character: Node) -> void:
 func _deselect_character() -> void:
 	selected_character = null
 	_clear_outline()
-	info_label.text = "Tap a character to select"
+	info_label.text = "[Player Team: %s]\nTap a character to select" % PlayerState.get_team_name()
 
 
 ## 選択アウトラインを表示
@@ -1007,3 +1045,12 @@ func _update_mode_info(text: String) -> void:
 		_update_info_label(_get_character_preset_id(current_character) if current_character else "")
 	else:
 		info_label.text = text
+
+
+## ========================================
+## プレイヤーチーム関連ヘルパー
+## ========================================
+
+## 指定キャラクターが敵かどうか判定
+func _is_enemy_character(character: Node) -> bool:
+	return PlayerState.is_enemy(character)
