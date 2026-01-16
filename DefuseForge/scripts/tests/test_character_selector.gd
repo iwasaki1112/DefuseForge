@@ -47,7 +47,7 @@ var outlined_meshes: Array[MeshInstance3D] = []  ## アウトライン適用中�
 
 ## デバッグ操作モード
 var is_debug_control_enabled: bool = false  ## WASD/マウス操作の有効化（デフォルトOFF）
-var is_vision_enabled: bool = true  ## 視界/FoWの有効化（デフォルトON）
+var is_vision_enabled: bool = false  ## 視界/FoWの有効化（デフォルトOFF）
 
 ## パスシステム
 var path_drawer: Node3D = null
@@ -77,6 +77,9 @@ func _ready() -> void:
 
 	# Spawn 2 CT characters at different positions
 	_spawn_initial_characters()
+
+	# Apply initial vision state (OFF by default)
+	_apply_vision_state()
 
 
 func _setup_controllers() -> void:
