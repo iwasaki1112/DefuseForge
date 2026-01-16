@@ -12,14 +12,14 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Export settings
 @export_group("Movement Speed")
-@export var walk_speed := 2.5
+@export var walk_speed := 1.5
 @export var run_speed := 5.0
 @export var crouch_speed := 1.5
 @export var aim_walk_speed := 2.0
 @export var rotation_speed := 15.0
 
 @export_group("Animation Speed Sync")
-@export var anim_walk_speed := 1.4
+@export var anim_walk_speed := 1.5
 @export var anim_run_speed := 5.5
 @export var anim_crouch_speed := 1.2
 

@@ -3,9 +3,9 @@ extends Node
 ## パス追従を管理するコントローラークラス
 ## キャラクターが描画されたパスに沿って移動し、視線ポイントで向きを変える
 
-## 移動速度設定
-@export var walk_speed: float = 3.0
-@export var run_speed: float = 5.5
+## 移動速度設定（フォールバック用、通常はCharacterAnimationControllerから取得）
+@export var fallback_walk_speed: float = 1.5
+@export var fallback_run_speed: float = 5.5
 
 ## シグナル
 signal path_started()
@@ -107,7 +107,17 @@ func process(delta: float) -> void:
 
 	# 移動方向を計算
 	var move_dir = to_target.normalized()
-	var speed = run_speed if _is_running else walk_speed
+
+	# CharacterAnimationControllerから速度を取得
+	var anim_ctrl = _character.get_anim_controller()
+	var speed: float
+	if anim_ctrl and anim_ctrl.has_method("get_current_speed"):
+		if _is_running:
+			speed = anim_ctrl.run_speed
+		else:
+			speed = anim_ctrl.get_current_speed()
+	else:
+		speed = fallback_run_speed if _is_running else fallback_walk_speed
 
 	# 最後の移動方向を保存（完了時の向き保持用）
 	if move_dir.length_squared() > 0.1:
@@ -117,7 +127,6 @@ func process(delta: float) -> void:
 	_update_vision_direction()
 
 	# アニメーション更新
-	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl:
 		var look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else move_dir
 		anim_ctrl.update_animation(move_dir, look_dir, _is_running, delta)
