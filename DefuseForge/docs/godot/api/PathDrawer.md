@@ -41,6 +41,7 @@
 | `ground_plane_height` | `float` | `0.0` | 地面の高さ |
 | `max_points` | `int` | `500` | 最大ポイント数 |
 | `path_click_threshold` | `float` | `0.5` | パスクリック判定距離 |
+| `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
 
 ## Public API
 
@@ -222,3 +223,17 @@ path_drawer.execute_with_vision(false)  # 歩行で実行（Run区間だけ走�
 - `VisionMarker`で視線ポイントを可視化
 - `RunMarker`でRun区間の開始/終点を可視化
 - パス上クリックで最近接点を計算し、そこから視線方向やRun区間を設定
+
+## 障害物（壁）検出
+
+パス描画中に障害物を貫通しないよう、以下のレイキャストチェックを行う:
+
+1. **描画開始時**: キャラクター位置→開始点間に壁があれば描画開始を拒否
+2. **ポイント追加時**: 直前のポイント→新ポイント間に壁があれば、壁直前で停止して描画終了
+
+壁検出は`wall_collision_mask`で指定されたコリジョンレイヤーを対象とする（デフォルト: レイヤー2）。
+
+```gdscript
+# 壁検出を別のレイヤーに変更する場合
+path_drawer.wall_collision_mask = 4  # レイヤー3を使用
+```

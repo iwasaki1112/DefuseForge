@@ -31,6 +31,7 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
 @export var path_click_threshold: float = 0.5  # パスクリック判定距離
+@export var wall_collision_mask: int = 2  # 壁検出用のコリジョンマスク
 
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
@@ -227,6 +228,28 @@ func _get_ground_position(screen_pos: Vector2) -> Variant:
 	return null
 
 
+## 2点間に壁があるかチェック
+## @return: { "hit": bool, "position": Vector3 (ヒット位置、hitがtrueの場合) }
+func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
+	var space_state = get_world_3d().direct_space_state
+	if not space_state:
+		return { "hit": false }
+
+	# 地面ギリギリを避けるため、少し高さを上げてレイキャスト
+	var check_from = from + Vector3(0, 0.5, 0)
+	var check_to = to + Vector3(0, 0.5, 0)
+
+	var query = PhysicsRayQueryParameters3D.create(check_from, check_to, wall_collision_mask)
+	var result = space_state.intersect_ray(query)
+
+	if result:
+		# ヒット位置を地面高さに補正
+		var hit_pos = result.position
+		hit_pos.y = ground_plane_height
+		return { "hit": true, "position": hit_pos }
+	return { "hit": false }
+
+
 ## パス上で最も近い点を見つける
 func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
 	if _pending_path.size() < 2:
@@ -329,6 +352,14 @@ func _update_temp_vision_marker(anchor: Vector3, direction: Vector3) -> void:
 
 
 func _start_drawing(start_pos: Vector3) -> void:
+	# キャラクターが設定されている場合、キャラクター位置→開始点間の壁チェック
+	if _character:
+		var char_pos = Vector3(_character.global_position.x, ground_plane_height, _character.global_position.z)
+		var hit_result = _check_wall_between(char_pos, start_pos)
+		if hit_result.hit:
+			print("[PathDrawer] Cannot start drawing: wall between character and start position")
+			return  # 描画開始を拒否
+
 	_is_drawing = true
 	_path_points.clear()
 	_path_points.append(start_pos)
@@ -341,6 +372,21 @@ func _add_point(pos: Vector3) -> void:
 
 	var last_point = _path_points[_path_points.size() - 1]
 	if pos.distance_to(last_point) < min_point_distance:
+		return
+
+	# 壁検出: 前のポイントから新しいポイントへ壁がないかチェック
+	var hit_result = _check_wall_between(last_point, pos)
+	if hit_result.hit:
+		# 壁直前のポイントを追加して描画終了
+		var wall_pos = hit_result.position
+		# 壁に少し手前で止まる（0.1m手前）
+		var to_wall = (wall_pos - last_point).normalized()
+		var safe_pos = wall_pos - to_wall * 0.1
+		safe_pos.y = ground_plane_height
+		_path_points.append(safe_pos)
+		_path_mesh.update_from_points(_path_points)
+		print("[PathDrawer] Path stopped at wall")
+		_finish_drawing()
 		return
 
 	_path_points.append(pos)

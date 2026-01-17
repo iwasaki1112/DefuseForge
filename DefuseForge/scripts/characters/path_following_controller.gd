@@ -12,7 +12,7 @@ signal vision_point_reached(index: int, direction: Vector3)
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
-@export var stuck_timeout: float = 1.0  ## この時間スタックしたら次のポイントへスキップ
+@export var stuck_timeout: float = 0.5  ## この時間スタックしたら次のポイントへスキップ
 @export var final_destination_radius: float = 0.5  ## 最終目的地への到達判定半径
 
 ## 内部状態
