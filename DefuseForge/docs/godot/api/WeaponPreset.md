@@ -53,6 +53,12 @@
 | `model_scene` | `PackedScene` | - | 武器モデル（オプション） |
 | `icon` | `Texture2D` | - | UI用武器アイコン |
 
+### Attachment
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `attach_offset` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の位置オフセット |
+| `attach_rotation` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の回転オフセット（度） |
+
 ## 使用例
 
 ### GDScriptでの作成
@@ -96,3 +102,51 @@ price = 3100
 var weapon = WeaponRegistry.get_preset("m4a1")
 character.equip_weapon(weapon)
 ```
+
+## 武器モデルの装着に関する重要な注意点
+
+### Mixamoキャラクターのスケルトンスケール問題
+
+Mixamoからエクスポートしたキャラクターモデルは、**スケルトンに約1/100のスケールが適用されている**場合がある。
+
+これにより、`BoneAttachment3D`に配置したオブジェクトは継承されたスケールの影響を受け、**極端に小さく（約1/100）描画される**。
+
+#### 確認方法
+
+```gdscript
+# BoneAttachment3Dのglobal_transformを確認
+print("Attachment global_transform: ", attachment.global_transform)
+# 正常: X, Y, Zベクトルの長さが約1.0
+# 問題あり: X, Y, Zベクトルの長さが約0.01
+```
+
+出力例（問題あり）:
+```
+[X: (0.001729, 0.009372, 0.00303), Y: (-0.000516, 0.003158, -0.009474), Z: (-0.009836, 0.001482, 0.001029), O: ...]
+```
+
+### 武器モデルの調整
+
+スケルトンスケールを補正するため、武器モデルには以下の調整が必要：
+
+| 項目 | 値 | 説明 |
+|------|-----|------|
+| `scale` | `Vector3.ONE * 13` | スケルトン補正(100) × 武器サイズ補正(0.13) |
+| `rotation_degrees` | `Vector3(-65, -103, 4)` | AK47の場合の回転調整 |
+| `position` | `Vector3(3, 6, 1)` | AK47の場合の位置調整 |
+
+※ 回転・位置はGLBモデルの原点設定により異なる
+
+### 武器GLBモデルの推奨設定
+
+Blenderでエクスポートする際：
+- **原点**: グリップ位置に設定
+- **銃口方向**: -Y方向を向くように配置
+- **スケール**: 実寸（メートル単位）
+
+### テストシーン
+
+`scenes/tests/test_weapon_viewer.tscn` で武器の装着状態を確認できる：
+- ドラッグでカメラ回転
+- スライダーで回転・位置・スケールをリアルタイム調整
+- 調整した値をWeaponPresetの`attach_offset`/`attach_rotation`に反映

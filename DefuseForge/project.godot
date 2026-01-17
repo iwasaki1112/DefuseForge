@@ -61,16 +61,10 @@ common/physics_interpolation=true
 
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
-
-# モバイル最適化: 影品質を低に設定
-lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
-lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1
 lights_and_shadows/directional_shadow/size=2048
-
-# モバイル最適化: MSAA無効化、FXAAを有効化（軽量）
-anti_aliasing/quality/msaa_3d=0
-anti_aliasing/quality/screen_space_aa=1
-
-# モバイル最適化: 内部解像度75%（FSR 1.0でアップスケール）
-scaling_3d/mode=1
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1
 scaling_3d/scale=0.75
+anti_aliasing/quality/screen_space_aa=1
+"#ã¢ãã¤ã«æé©å:å½±åè³ªãä½ã«è¨­å®lights_and_shadows/directional_shadow/soft_shadow_filter_quality"=1
+"#ã¢ãã¤ã«æé©å:MSAAç¡å¹åãFXAAãæå¹åï¼è»½éï¼anti_aliasing/quality/msaa_3d"=0
+"#ã¢ãã¤ã«æé©å:åé¨è§£ååº¦75%ï¼FSR1.0ã§ã¢ããã¹ã±ã¼ã«ï¼scaling_3d/mode"=1

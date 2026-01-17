@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cflk5ggmxrfr"
-path.s3tc="res://.godot/imported/ak47_1.png-1cbc72783ee85b43c29162aebdc17587.s3tc.ctex"
-path.etc2="res://.godot/imported/ak47_1.png-1cbc72783ee85b43c29162aebdc17587.etc2.ctex"
+uid="uid://lu7y1r077yyh"
+path.s3tc="res://.godot/imported/ak47_Image_0.png-f0c8e0a9868ac88ed181ec6090f059aa.s3tc.ctex"
+path.etc2="res://.godot/imported/ak47_Image_0.png-f0c8e0a9868ac88ed181ec6090f059aa.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "9c97e904959297cf08bd87ab89a75616"
+"md5": "42752a8ba77641d4b490418ebb3e6cae"
 }
 
 [deps]
 
-source_file="res://assets/weapons/ak47_1.png"
-dest_files=["res://.godot/imported/ak47_1.png-1cbc72783ee85b43c29162aebdc17587.s3tc.ctex", "res://.godot/imported/ak47_1.png-1cbc72783ee85b43c29162aebdc17587.etc2.ctex"]
+source_file="res://assets/weapons/ak47/ak47_Image_0.png"
+dest_files=["res://.godot/imported/ak47_Image_0.png-f0c8e0a9868ac88ed181ec6090f059aa.s3tc.ctex", "res://.godot/imported/ak47_Image_0.png-f0c8e0a9868ac88ed181ec6090f059aa.etc2.ctex"]
 
 [params]
 

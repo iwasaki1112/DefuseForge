@@ -35,6 +35,8 @@ var anim_ctrl: Node = null  # CharacterAnimationController
 var vision: VisionComponent = null  # VisionComponent for FoW
 var combat_awareness: Node = null  # CombatAwarenessComponent for enemy tracking
 var current_weapon: Resource = null  # WeaponPreset
+var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
+var _weapon_model: Node3D = null  # 現在の武器モデル
 
 # ============================================
 # Lifecycle
@@ -171,10 +173,87 @@ func get_combat_awareness() -> Node:
 # Weapon API
 # ============================================
 
+## Find Skeleton3D recursively in node tree
+func _find_skeleton_in_node(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var result = _find_skeleton_in_node(child)
+		if result:
+			return result
+	return null
+
+
+## Create or get BoneAttachment3D for weapon
+func _ensure_weapon_attachment() -> BoneAttachment3D:
+	if _weapon_attachment:
+		return _weapon_attachment
+
+	var model = get_node_or_null("CharacterModel")
+	if not model:
+		print("GameCharacter: CharacterModel not found")
+		return null
+
+	var skeleton = _find_skeleton_in_node(model)
+	if not skeleton:
+		push_warning("GameCharacter: Skeleton not found")
+		return null
+
+	print("GameCharacter: Found skeleton: ", skeleton.name)
+	print("GameCharacter: Bone count: ", skeleton.get_bone_count())
+
+	var bone_idx = skeleton.find_bone("mixamorig_RightHand")
+	if bone_idx < 0:
+		# Try alternative bone names
+		print("GameCharacter: mixamorig_RightHand not found, listing bones:")
+		for i in range(min(skeleton.get_bone_count(), 20)):
+			print("  Bone %d: %s" % [i, skeleton.get_bone_name(i)])
+		push_warning("GameCharacter: mixamorig_RightHand bone not found")
+		return null
+
+	print("GameCharacter: Found RightHand bone at index ", bone_idx)
+
+	_weapon_attachment = BoneAttachment3D.new()
+	_weapon_attachment.name = "WeaponAttachment"
+	_weapon_attachment.bone_name = "mixamorig_RightHand"
+	skeleton.add_child(_weapon_attachment)
+
+	return _weapon_attachment
+
+
+## Attach weapon model to right hand
+func _attach_weapon_model(weapon: Resource) -> void:
+	# Remove old weapon model
+	if _weapon_model:
+		_weapon_model.queue_free()
+		_weapon_model = null
+
+	if not weapon or not weapon.model_scene:
+		return
+
+	var attachment = _ensure_weapon_attachment()
+	if not attachment:
+		return
+
+	_weapon_model = weapon.model_scene.instantiate()
+	_weapon_model.name = "WeaponModel"
+	attachment.add_child(_weapon_model)
+
+	# Apply offset from WeaponPreset (if available)
+	if "attach_offset" in weapon:
+		_weapon_model.position = weapon.attach_offset
+	if "attach_rotation" in weapon:
+		_weapon_model.rotation_degrees = weapon.attach_rotation
+
+
 ## Equip a weapon from WeaponPreset
 ## Applies weapon type and recoil settings to CharacterAnimationController
+## Also attaches weapon model to right hand bone
 func equip_weapon(weapon: Resource) -> void:
 	current_weapon = weapon
+
+	# Attach weapon model to right hand
+	_attach_weapon_model(weapon)
 
 	if not anim_ctrl:
 		return

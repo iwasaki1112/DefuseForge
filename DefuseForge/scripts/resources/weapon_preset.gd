@@ -43,3 +43,10 @@ enum WeaponCategory { RIFLE, PISTOL, SMG, SHOTGUN, SNIPER }
 @export_group("Visual")
 @export var model_scene: PackedScene  ## Weapon model (optional)
 @export var icon: Texture2D  ## Weapon icon for UI
+
+# ============================================
+# Attachment
+# ============================================
+@export_group("Attachment")
+@export var attach_offset: Vector3 = Vector3.ZERO  ## Position offset when attached to hand
+@export var attach_rotation: Vector3 = Vector3.ZERO  ## Rotation offset in degrees when attached to hand

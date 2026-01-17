@@ -106,15 +106,21 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 ### Weapon API
 
 #### equip_weapon(weapon: Resource) -> void
-武器を装備する。WeaponPresetから武器タイプとリコイル設定をCharacterAnimationControllerに適用。
+武器を装備する。WeaponPresetから武器タイプとリコイル設定をCharacterAnimationControllerに適用し、武器モデルを右手ボーンにアタッチする。
 
 **引数:**
 - `weapon` - WeaponPresetリソース
 
 **動作:**
+- 武器モデルを`mixamorig_RightHand`ボーンにBoneAttachment3Dでアタッチ
+- WeaponPresetの`attach_offset`/`attach_rotation`でオフセット調整
 - WeaponCategoryをCharacterAnimationController.Weaponに変換
 - PISTOL → Weapon.PISTOL、それ以外 → Weapon.RIFLE
 - リコイル強度・回復速度をコントローラーに適用
+
+**前提条件:**
+- キャラクターモデルに`CharacterModel`ノードが存在すること
+- Mixamo標準のSkeleton（`mixamorig_RightHand`ボーン）
 
 #### get_current_weapon() -> Resource
 装備中の武器を取得する。
@@ -154,3 +160,6 @@ character.equip_weapon(weapon)
 - 死亡時は`CharacterAnimationController.play_death()`を呼び出し
 - 被弾方向は攻撃者位置から自動計算（前/後/左/右）
 - 死亡時はVisionを無効化し、コリジョンも無効化
+- 武器装備時は`CharacterModel`配下のSkeleton3Dを再帰検索
+- 武器モデルは`BoneAttachment3D`経由で`mixamorig_RightHand`にアタッチ
+- 新しい武器装備時は古い武器モデルを自動削除
