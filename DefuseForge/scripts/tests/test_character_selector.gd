@@ -68,6 +68,9 @@ const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 var path_following_controllers: Dictionary = {}  ## character_id -> PathFollowingController
 var rotation_controller: Node = null
 
+## キャラクターラベルマネージャー
+var label_manager: CharacterLabelManager = null
+
 func _ready() -> void:
 	_setup_fog_of_war()
 	_setup_enemy_visibility_system()
@@ -75,6 +78,7 @@ func _ready() -> void:
 	_setup_path_drawer()
 	_setup_controllers()
 	_setup_control_buttons()
+	_setup_label_manager()
 	_populate_dropdown()
 	character_dropdown.item_selected.connect(_on_team_selected)
 
@@ -322,6 +326,16 @@ func _on_rotation_cancelled() -> void:
 	print("[RotateMode] Cancelled")
 
 
+## ========================================
+## キャラクターラベル
+## ========================================
+
+func _setup_label_manager() -> void:
+	label_manager = CharacterLabelManager.new()
+	label_manager.name = "CharacterLabelManager"
+	add_child(label_manager)
+
+
 func _setup_fog_of_war() -> void:
 	fog_of_war_system = Node3D.new()
 	fog_of_war_system.set_script(FogOfWarSystemScript)
@@ -351,6 +365,7 @@ func _on_team_selected(index: int) -> void:
 	var new_team: GameCharacter.Team = character_dropdown.get_item_metadata(index)
 	PlayerState.set_player_team(new_team)
 	_deselect_all()  # 敵を選択中だった場合に解除
+	label_manager.refresh_labels(characters)  # ラベルを更新（味方のみ表示）
 	_refresh_info_label()
 
 
@@ -367,6 +382,7 @@ func _spawn_initial_characters() -> void:
 			add_child(ct1)
 			characters.append(ct1)
 			_setup_character_vision_for(ct1)
+			label_manager.add_label(ct1)
 			print("[Test] Spawned CT 1: %s at (-3, 0, -2)" % cts[0].display_name)
 
 		# 2体目のCT（位置: -3, 0, 2）
@@ -376,6 +392,7 @@ func _spawn_initial_characters() -> void:
 			add_child(ct2)
 			characters.append(ct2)
 			_setup_character_vision_for(ct2)
+			label_manager.add_label(ct2)
 			print("[Test] Spawned CT 2: %s at (-3, 0, 2)" % cts[ct_index].display_name)
 	else:
 		print("[Test] No CT characters available")
@@ -388,6 +405,7 @@ func _spawn_initial_characters() -> void:
 			add_child(t1)
 			characters.append(t1)
 			_setup_character_vision_for(t1)
+			label_manager.add_label(t1)
 			print("[Test] Spawned T 1: %s at (3, 0, -2)" % ts[0].display_name)
 
 		# 2体目のT（位置: 3, 0, 2）
@@ -397,6 +415,7 @@ func _spawn_initial_characters() -> void:
 			add_child(t2)
 			characters.append(t2)
 			_setup_character_vision_for(t2)
+			label_manager.add_label(t2)
 			print("[Test] Spawned T 2: %s at (3, 0, 2)" % ts[t_index].display_name)
 	else:
 		print("[Test] No T characters available")
@@ -412,6 +431,10 @@ func _spawn_character(preset_id: String) -> void:
 	if current_character and current_character.vision and fog_of_war_system:
 		fog_of_war_system.unregister_vision(current_character.vision)
 
+	# Remove current character label
+	if current_character:
+		label_manager.remove_label(current_character)
+
 	# Remove current character
 	if current_character:
 		characters.erase(current_character)
@@ -425,6 +448,7 @@ func _spawn_character(preset_id: String) -> void:
 		characters.append(current_character)
 		_deselect_all()  # 生成時は未選択状態
 		_setup_character_vision()
+		label_manager.add_label(current_character)
 		_update_info_label(preset_id)
 
 

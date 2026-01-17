@@ -13,6 +13,7 @@
 ## 機能
 
 - 起動時に2体のCT + 2体のTキャラクターを自動生成
+- **キャラクターラベル表示**（味方のみ、A, B, C...の順で頭上に表示）
 - **複数キャラクター同時選択**（トグル選択で追加/解除）
 - マウスクリックでキャラクター選択
 - クリックでコンテキストメニュー表示
@@ -114,6 +115,7 @@
 | `characters` | `Array[Node]` | シーン内の全キャラクター |
 | `selected_characters` | `Array[Node]` | **選択中の全キャラクター** |
 | `primary_character` | `Node` | **最後に選択したキャラクター**（コンテキストメニュー・パス描画基準） |
+| `label_manager` | `CharacterLabelManager` | **キャラクターラベル管理**（詳細は[CharacterLabelManager](CharacterLabelManager.md)参照） |
 
 ## シーン構成
 
@@ -146,6 +148,8 @@ TestCharacterSelector (Node3D)
 ## 内部クラス依存
 
 - `CharacterRegistry` - キャラクター作成
+- `PlayerState` - プレイヤーチーム管理・敵味方判定
+- `CharacterLabelManager` - 味方キャラクターのラベル管理
 - `FogOfWarSystem` - 視界表示
 - `ContextMenuComponent` - コンテキストメニュー
 - `PathDrawer` - パス描画

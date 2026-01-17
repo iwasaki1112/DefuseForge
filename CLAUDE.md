@@ -48,6 +48,7 @@
 | System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |
 | System | EnemyVisibilitySystem | 味方視界に基づく敵キャラクター可視性制御 |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
+| UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
 | Test | TestCharacterSelector | キャラクター選択・パス移動・FoWのテストシーン |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
