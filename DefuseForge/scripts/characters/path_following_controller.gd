@@ -11,8 +11,8 @@ signal path_cancelled()
 signal vision_point_reached(index: int, direction: Vector3)
 
 ## スタック検出設定
-@export var stuck_threshold: float = 0.05  ## この距離以下の移動をスタックとみなす
-@export var stuck_timeout: float = 0.3  ## この時間スタックしたら次のポイントへスキップ
+@export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
+@export var stuck_timeout: float = 1.0  ## この時間スタックしたら次のポイントへスキップ
 @export var final_destination_radius: float = 0.5  ## 最終目的地への到達判定半径
 
 ## 内部状態
@@ -56,20 +56,36 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		return false
 
 	if path.size() < 2:
-		push_warning("[PathFollowingController] Path too short")
+		push_warning("[PathFollowingController] Path too short (size=%d)" % path.size())
 		return false
 
 	_current_path = path.duplicate()
 	_vision_points = vision_points.duplicate()
 	_run_segments = run_segments.duplicate()
 	_vision_index = 0
-	_path_index = 0
 	_is_running = run
 	_is_following = true
 	_forced_look_direction = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 	_last_position = _character.global_position
 	_stuck_time = 0.0
+
+	# キャラクターの現在位置に最も近いパスポイントから開始
+	# （接続線の最初のポイントはキャラクター位置なのでスキップ）
+	_path_index = 0
+	var char_pos = _character.global_position
+	char_pos.y = 0
+	if _current_path.size() > 0:
+		var first_point = _current_path[0]
+		first_point.y = 0
+		if char_pos.distance_to(first_point) < 0.2:
+			# キャラクターがパスの最初のポイントにいる場合、次のポイントを目指す
+			_path_index = 1
+
+	print("[PathFollowingController] %s: Started with %d points, starting from index %d, first target: %s" % [
+		_character.name, _current_path.size(), _path_index,
+		str(_current_path[_path_index]) if _path_index < _current_path.size() else "none"
+	])
 
 	path_started.emit()
 	return true
@@ -131,6 +147,7 @@ func process(delta: float) -> void:
 		_stuck_time += delta
 		if _stuck_time >= stuck_timeout:
 			# 中間地点でスタック → 次のポイントにスキップ
+			print("[PathFollowingController] %s: STUCK at point %d, skipping to %d" % [_character.name, _path_index, _path_index + 1])
 			_path_index += 1
 			_stuck_time = 0.0
 			if _path_index >= _current_path.size():
@@ -142,6 +159,7 @@ func process(delta: float) -> void:
 
 	# 目標点に到達したら次へ
 	if distance < 0.15:
+		print("[PathFollowingController] %s: Reached point %d, moving to %d" % [_character.name, _path_index, _path_index + 1])
 		_path_index += 1
 		if _path_index >= _current_path.size():
 			_finish()

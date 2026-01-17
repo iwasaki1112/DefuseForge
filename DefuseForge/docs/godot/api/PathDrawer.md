@@ -71,6 +71,16 @@ PathDrawerを無効化する。
 #### get_drawn_path() -> PackedVector3Array
 描画されたパスを取得する。
 
+#### get_relative_path() -> PackedVector3Array
+基準位置からの相対パスを取得する。各キャラクターの開始位置にオフセットして使用可能。
+
+**戻り値:** パスの最初のポイントを原点とした相対座標の配列
+
+#### get_relative_vision_points() -> Array[Dictionary]
+相対視線ポイントを取得する（アンカー位置を相対座標に変換）。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "direction": Vector3 }` の配列（anchorは相対座標）
+
 #### is_drawing() -> bool
 現在描画中か確認する。
 

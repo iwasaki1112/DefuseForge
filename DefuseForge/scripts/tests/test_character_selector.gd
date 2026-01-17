@@ -38,14 +38,15 @@ const RotationCtrl = preload("res://scripts/characters/character_rotation_contro
 @onready var clear_paths_button: Button = $UI/ControlPanel/ClearPathsButton
 
 var current_character: Node = null
-var selected_character: Node = null  ## 現在選択中のキャラクター
+var selected_characters: Array[Node] = []  ## 選択中の全キャラクター
+var primary_character: Node = null  ## 最後に選択したキャラクター（コンテキストメニュー対象）
 var characters: Array[Node] = []  ## シーン内の全キャラクター
 var aim_position := Vector3.ZERO
 var ground_plane := Plane(Vector3.UP, 0)
 var fog_of_war_system: Node3D = null
 var enemy_visibility_system: Node = null  ## EnemyVisibilitySystem
 var context_menu: Control = null  ## コンテキストメニュー
-var outlined_meshes: Array[MeshInstance3D] = []  ## アウトライン適用中のメッシュ
+var outlined_meshes_by_character: Dictionary = {}  ## { character_id: Array[MeshInstance3D] }
 
 ## デバッグ操作モード
 var is_debug_control_enabled: bool = false  ## WASD/マウス操作の有効化（デフォルトOFF）
@@ -349,7 +350,7 @@ func _populate_dropdown() -> void:
 func _on_team_selected(index: int) -> void:
 	var new_team: GameCharacter.Team = character_dropdown.get_item_metadata(index)
 	PlayerState.set_player_team(new_team)
-	_deselect_character()  # 敵を選択中だった場合に解除
+	_deselect_all()  # 敵を選択中だった場合に解除
 	_refresh_info_label()
 
 
@@ -422,10 +423,9 @@ func _spawn_character(preset_id: String) -> void:
 	if current_character:
 		add_child(current_character)
 		characters.append(current_character)
-		selected_character = null  # 生成時は未選択状態
+		_deselect_all()  # 生成時は未選択状態
 		_setup_character_vision()
 		_update_info_label(preset_id)
-		_clear_outline()  # アウトラインをクリア
 
 
 func _setup_character_vision() -> void:
@@ -491,10 +491,7 @@ Use context menu for actions""" % [
 
 ## 情報ラベルを現在の状態で更新
 func _refresh_info_label() -> void:
-	if current_character:
-		var preset_id = _get_character_preset_id(current_character)
-		if preset_id:
-			_update_info_label(preset_id)
+	_update_selection_info()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -518,10 +515,10 @@ func _input(event: InputEvent) -> void:
 		if not rotation_controller.is_rotation_active() and not is_path_mode:
 			_handle_mouse_click(event)
 
-	if not selected_character:
+	if not primary_character:
 		return
 
-	var anim_ctrl = selected_character.get_anim_controller()
+	var anim_ctrl = primary_character.get_anim_controller()
 	if not anim_ctrl:
 		return
 
@@ -532,11 +529,11 @@ func _input(event: InputEvent) -> void:
 			KEY_2:
 				anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
 			KEY_K:
-				selected_character.take_damage(selected_character.max_health)
+				primary_character.take_damage(primary_character.max_health)
 			KEY_R:
-				# Respawn selected character
-				if selected_character.has_method("reset_health"):
-					selected_character.reset_health()
+				# Respawn primary character
+				if primary_character.has_method("reset_health"):
+					primary_character.reset_health()
 
 
 ## パス追従中のコントローラーがあるかチェック
@@ -563,8 +560,8 @@ func _update_idle_characters(delta: float) -> void:
 		# パス追従中はスキップ
 		if _is_character_following_path(character):
 			continue
-		# 選択中のキャラクターは後で別処理
-		if character == selected_character:
+		# プライマリキャラクターは後で別処理
+		if character == primary_character:
 			continue
 		# 死亡中はスキップ
 		if not character.is_alive:
@@ -614,14 +611,16 @@ func _handle_mouse_click(event: InputEventMouseButton) -> void:
 				# 敵キャラクターは無視
 				if _is_enemy_character(clicked_character):
 					return
-				# 味方キャラクタークリック: 選択 + コンテキストメニュー表示
-				_select_character(clicked_character)
-				_show_context_menu(event.position, clicked_character)
+				# 味方キャラクタークリック: トグル選択 + コンテキストメニュー表示
+				_toggle_character_selection(clicked_character)
+				# 選択中の場合のみコンテキストメニュー表示
+				if selected_characters.has(clicked_character):
+					_show_context_menu(event.position, clicked_character)
 			else:
-				# キャラクター以外をクリック: メニューを閉じて選択解除
+				# キャラクター以外をクリック: メニューを閉じて全選択解除
 				if context_menu and context_menu.is_open():
 					context_menu.close()
-				_deselect_character()
+				_deselect_all()
 
 
 ## マウス位置がコンテキストメニュー上かどうか
@@ -668,49 +667,96 @@ func _is_child_of(child: Node, parent: Node) -> bool:
 	return false
 
 
-## キャラクターを選択
-func _select_character(character: Node) -> void:
+## キャラクターの選択をトグル（選択/解除を切り替え）
+func _toggle_character_selection(character: Node) -> void:
 	# 敵キャラクターは選択不可
 	if PlayerState.is_enemy(character):
 		print("[Selection] Cannot select enemy character: %s" % character.name)
 		return
 
-	selected_character = character
+	if selected_characters.has(character):
+		# 既に選択中なら解除
+		_remove_from_selection(character)
+	else:
+		# 未選択なら追加
+		_add_to_selection(character)
+
+
+## 選択リストにキャラクターを追加
+func _add_to_selection(character: Node) -> void:
+	if selected_characters.has(character):
+		return
+
+	selected_characters.append(character)
+	primary_character = character
 	current_character = character
-	var preset_id = _get_character_preset_id(character)
-	if preset_id:
-		_update_info_label(preset_id)
-	# 選択アウトラインを表示
-	_show_selection_outline(character)
+	_apply_outline(character)
+	_update_selection_info()
+	print("[Selection] Added %s (total: %d)" % [character.name, selected_characters.size()])
 
 
-## キャラクターの選択を解除
-func _deselect_character() -> void:
-	selected_character = null
-	_clear_outline()
-	info_label.text = "[Player Team: %s]\nTap a character to select" % PlayerState.get_team_name()
+## 選択リストからキャラクターを削除
+func _remove_from_selection(character: Node) -> void:
+	if not selected_characters.has(character):
+		return
+
+	selected_characters.erase(character)
+	_remove_outline(character)
+
+	# プライマリキャラクターを更新
+	if primary_character == character:
+		if selected_characters.size() > 0:
+			primary_character = selected_characters[-1]
+			current_character = primary_character
+		else:
+			primary_character = null
+
+	_update_selection_info()
+	print("[Selection] Removed %s (total: %d)" % [character.name, selected_characters.size()])
 
 
-## 選択アウトラインを表示
-func _show_selection_outline(character: Node) -> void:
-	# 既存のアウトラインを削除
-	_clear_outline()
-	# 選択キャラクターにアウトラインを適用
-	if character:
-		_apply_outline(character)
+## 全選択解除
+func _deselect_all() -> void:
+	for character in selected_characters.duplicate():
+		_remove_outline(character)
+	selected_characters.clear()
+	primary_character = null
+	_update_selection_info()
+	print("[Selection] Deselected all")
+
+
+## 選択情報を更新
+func _update_selection_info() -> void:
+	if selected_characters.size() == 0:
+		info_label.text = "[Player Team: %s]\nTap a character to select" % PlayerState.get_team_name()
+	elif selected_characters.size() == 1:
+		var preset_id = _get_character_preset_id(primary_character)
+		if preset_id:
+			_update_info_label(preset_id)
+	else:
+		var player_team_name = PlayerState.get_team_name()
+		info_label.text = """[Player Team: %s]
+Selected: %d characters
+
+Tap character to toggle selection
+Tap ground to deselect all""" % [player_team_name, selected_characters.size()]
 
 
 ## アウトラインを適用（ステンシル方式）
 func _apply_outline(character: Node) -> void:
+	var char_id = character.get_instance_id()
+
+	# 既にアウトラインがある場合はスキップ
+	if outlined_meshes_by_character.has(char_id):
+		return
+
 	var meshes = _find_mesh_instances(character)
-	print("[Outline] Found %d meshes in %s" % [meshes.size(), character.name])
+	var outlined: Array[MeshInstance3D] = []
 
 	for mesh in meshes:
 		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
-		print("[Outline] Mesh %s has %d surfaces" % [mesh.name, surface_count])
 		for i in range(surface_count):
 			var mat = mesh.get_active_material(i)
-			print("[Outline] Surface %d material type: %s" % [i, mat.get_class() if mat else "null"])
 			if mat and mat is StandardMaterial3D:
 				# マテリアルを複製してステンシルアウトラインを設定
 				var mat_copy: StandardMaterial3D = mat.duplicate()
@@ -718,29 +764,47 @@ func _apply_outline(character: Node) -> void:
 				mat_copy.stencil_outline_thickness = 3.5
 				mat_copy.stencil_color = Color(0.0, 0.8, 1.0, 1.0)
 				mesh.set_surface_override_material(i, mat_copy)
-				print("[Outline] Stencil mode set to: %d, thickness: %f" % [mat_copy.stencil_mode, mat_copy.stencil_outline_thickness])
 			elif mat:
-				print("[Outline] Material is not StandardMaterial3D, trying to convert...")
 				# 新しいStandardMaterial3Dを作成
 				var new_mat = StandardMaterial3D.new()
 				new_mat.stencil_mode = BaseMaterial3D.STENCIL_MODE_OUTLINE
 				new_mat.stencil_outline_thickness = 3.5
 				new_mat.stencil_color = Color(0.0, 0.8, 1.0, 1.0)
 				mesh.set_surface_override_material(i, new_mat)
-				print("[Outline] Created new StandardMaterial3D with stencil outline")
-		outlined_meshes.append(mesh)
-		print("[Outline] Applied outline to: %s" % mesh.name)
+		outlined.append(mesh)
+
+	outlined_meshes_by_character[char_id] = outlined
+	print("[Outline] Applied outline to %s (%d meshes)" % [character.name, outlined.size()])
 
 
-## アウトラインを削除
-func _clear_outline() -> void:
-	for mesh in outlined_meshes:
+## 特定キャラクターのアウトラインを削除
+func _remove_outline(character: Node) -> void:
+	var char_id = character.get_instance_id()
+	if not outlined_meshes_by_character.has(char_id):
+		return
+
+	var meshes = outlined_meshes_by_character[char_id]
+	for mesh in meshes:
 		if is_instance_valid(mesh):
 			# サーフェスオーバーライドをクリア（元のマテリアルに戻る）
 			var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
 			for i in range(surface_count):
 				mesh.set_surface_override_material(i, null)
-	outlined_meshes.clear()
+
+	outlined_meshes_by_character.erase(char_id)
+	print("[Outline] Removed outline from %s" % character.name)
+
+
+## 全てのアウトラインを削除
+func _clear_all_outlines() -> void:
+	for char_id in outlined_meshes_by_character.keys():
+		var meshes = outlined_meshes_by_character[char_id]
+		for mesh in meshes:
+			if is_instance_valid(mesh):
+				var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
+				for i in range(surface_count):
+					mesh.set_surface_override_material(i, null)
+	outlined_meshes_by_character.clear()
 
 
 ## MeshInstance3Dを再帰的に探す
@@ -778,13 +842,24 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 			_toggle_crouch(character)
 
 
-## 移動モード開始
-func _start_move_mode(character: Node) -> void:
-	print("[ContextMenu] Move mode for: ", character.name)
+## 移動モード開始（プライマリキャラクターを基準にパス描画）
+func _start_move_mode(_character: Node) -> void:
+	if selected_characters.is_empty():
+		print("[ContextMenu] No characters selected")
+		return
+
+	# プライマリキャラクターを基準にパス描画
+	print("[ContextMenu] Move mode for %d characters (primary: %s)" % [
+		selected_characters.size(), primary_character.name
+	])
 	is_path_mode = true
-	path_editing_character = character
-	path_drawer.enable(character)
-	_update_mode_info("Path Mode: Draw path with mouse (ESC to cancel)")
+	path_editing_character = primary_character
+	path_drawer.enable(primary_character)
+
+	if selected_characters.size() == 1:
+		_update_mode_info("Path Mode: Draw path (ESC to cancel)")
+	else:
+		_update_mode_info("Path Mode: Draw path for %d characters (ESC to cancel)" % selected_characters.size())
 
 
 ## 回転モード開始
@@ -816,17 +891,17 @@ func _physics_process(delta: float) -> void:
 		rotation_controller.process(delta)
 		return
 
-	if not selected_character:
+	if not primary_character:
 		return
 
-	if not selected_character.is_alive:
+	if not primary_character.is_alive:
 		return
 
 	# パス追従中のキャラクターは手動操作をスキップ
-	if _is_character_following_path(selected_character):
+	if _is_character_following_path(primary_character):
 		return
 
-	var anim_ctrl = selected_character.get_anim_controller()
+	var anim_ctrl = primary_character.get_anim_controller()
 	if not anim_ctrl:
 		return
 
@@ -843,26 +918,26 @@ func _physics_process(delta: float) -> void:
 	# デバッグ操作が無効の場合は入力を無視（敵追跡は有効）
 	if not is_debug_control_enabled:
 		# Combat awarenessを処理
-		if selected_character.combat_awareness and selected_character.combat_awareness.has_method("process"):
-			selected_character.combat_awareness.process(delta)
+		if primary_character.combat_awareness and primary_character.combat_awareness.has_method("process"):
+			primary_character.combat_awareness.process(delta)
 
 		var look_dir: Vector3 = Vector3.ZERO
 
 		# 敵視認チェック（最優先）
-		if selected_character.combat_awareness and selected_character.combat_awareness.has_method("is_tracking_enemy"):
-			if selected_character.combat_awareness.is_tracking_enemy():
-				look_dir = selected_character.combat_awareness.get_override_look_direction()
+		if primary_character.combat_awareness and primary_character.combat_awareness.has_method("is_tracking_enemy"):
+			if primary_character.combat_awareness.is_tracking_enemy():
+				look_dir = primary_character.combat_awareness.get_override_look_direction()
 
 		# デフォルト: 現在の向きを維持
 		if look_dir.length_squared() < 0.1:
 			look_dir = anim_ctrl.get_look_direction()
 
 		anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
-		selected_character.velocity.x = 0
-		selected_character.velocity.z = 0
-		if not selected_character.is_on_floor():
-			selected_character.velocity.y -= 9.8 * delta
-		selected_character.move_and_slide()
+		primary_character.velocity.x = 0
+		primary_character.velocity.z = 0
+		if not primary_character.is_on_floor():
+			primary_character.velocity.y -= 9.8 * delta
+		primary_character.move_and_slide()
 		return
 
 	# Get input
@@ -871,7 +946,7 @@ func _physics_process(delta: float) -> void:
 		0,
 		float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W))
 	)
-	var aim_dir: Vector3 = aim_position - selected_character.global_position
+	var aim_dir: Vector3 = aim_position - primary_character.global_position
 	aim_dir.y = 0
 	var is_running := Input.is_key_pressed(KEY_SHIFT)
 
@@ -892,16 +967,16 @@ func _physics_process(delta: float) -> void:
 	# Movement
 	var speed: float = anim_ctrl.get_current_speed()
 	if move_dir.length() > 0.1:
-		selected_character.velocity.x = move_dir.normalized().x * speed
-		selected_character.velocity.z = move_dir.normalized().z * speed
+		primary_character.velocity.x = move_dir.normalized().x * speed
+		primary_character.velocity.z = move_dir.normalized().z * speed
 	else:
-		selected_character.velocity.x = 0
-		selected_character.velocity.z = 0
+		primary_character.velocity.x = 0
+		primary_character.velocity.z = 0
 
-	if not selected_character.is_on_floor():
-		selected_character.velocity.y -= 9.8 * delta
+	if not primary_character.is_on_floor():
+		primary_character.velocity.y -= 9.8 * delta
 
-	selected_character.move_and_slide()
+	primary_character.move_and_slide()
 
 
 func _update_aim_position() -> void:
@@ -946,64 +1021,93 @@ func _on_path_mode_changed(mode: int) -> void:
 		_update_path_panel_visibility()
 
 
-## 現在編集中のパスを確定して保存
+## 現在編集中のパスを確定して保存（全選択キャラクターに同じパスを適用）
 func _confirm_current_path() -> void:
 	if not path_drawer.has_pending_path():
 		_cancel_path_mode()
 		return
 
-	if not path_editing_character:
-		print("[PathSystem] No character for path")
+	if selected_characters.is_empty():
+		print("[PathSystem] No selected characters for path")
 		_cancel_path_mode()
 		return
 
-	# パス情報を取得
-	var path: Array[Vector3] = []
+	# パス情報を取得（絶対座標のまま）
+	var base_path: Array[Vector3] = []
 	var pending = path_drawer.get_drawn_path()
 	for point in pending:
-		path.append(point)
+		base_path.append(point)
 
-	var vision_points = path_drawer.get_vision_points().duplicate()
-	var run_segments = path_drawer.get_run_segments().duplicate()
+	var base_vision_points = path_drawer.get_vision_points().duplicate()
+	var base_run_segments = path_drawer.get_run_segments().duplicate()
 
-	# 視線マーカーとRunマーカーの所有権を取得（clear前に）
-	var vision_markers = path_drawer.take_vision_markers()
-	var run_markers = path_drawer.take_run_markers()
+	# 元のマーカーの所有権を取得
+	var original_vision_markers = path_drawer.take_vision_markers()
+	var original_run_markers = path_drawer.take_run_markers()
 
-	# 既存のパスがあれば削除
-	var char_id = path_editing_character.get_instance_id()
-	if pending_paths.has(char_id):
-		var old_data = pending_paths[char_id]
-		if old_data.has("path_mesh") and is_instance_valid(old_data["path_mesh"]):
-			old_data["path_mesh"].queue_free()
-		if old_data.has("vision_markers"):
-			for marker in old_data["vision_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if old_data.has("run_markers"):
-			for marker in old_data["run_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
+	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
 
-	# パスメッシュを作成（表示用）
-	var path_mesh = _create_path_mesh(path)
+	# 元のパスの長さを計算
+	var base_length = _calculate_path_length(base_path)
 
-	# キャラクターIDでパスを保存
-	pending_paths[char_id] = {
-		"character": path_editing_character,
-		"path": path,
-		"vision_points": vision_points,
-		"run_segments": run_segments,
-		"path_mesh": path_mesh,
-		"vision_markers": vision_markers,
-		"run_markers": run_markers
-	}
+	# 選択中の全キャラクターに同じパスを適用
+	var first_char_id: int = -1
+	var processed_count = 0
 
-	print("[PathSystem] Saved path for %s: %d points, %d vision points, %d run segments" % [
-		path_editing_character.name, path.size(), vision_points.size(), run_segments.size()
-	])
+	for character in selected_characters:
+		var char_id = character.get_instance_id()
+		var char_pos = Vector3(character.global_position.x, 0, character.global_position.z)
 
-	# パスモードを終了（パスメッシュと視線マーカーは保持）
+		# 既存のパスがあれば削除
+		_clear_pending_path_for_character(char_id)
+
+		# キャラクター位置からパス開始点への接続を含むパスを作成
+		var full_path: Array[Vector3] = []
+		var connect_length: float = 0.0
+
+		if char_pos.distance_to(path_start) > 0.1:
+			# キャラクターがパス開始点にいない場合、接続線を追加
+			full_path.append(char_pos)
+			connect_length = char_pos.distance_to(path_start)
+		full_path.append_array(base_path)
+
+		# 視線ポイントとRun区間の比率を再計算
+		var adjusted_vision_points = _adjust_ratios_for_connection(base_vision_points, connect_length, base_length)
+		var adjusted_run_segments = _adjust_run_ratios_for_connection(base_run_segments, connect_length, base_length)
+
+		# パスメッシュを作成（各キャラクターごと）
+		var path_mesh = _create_path_mesh(full_path)
+
+		if first_char_id == -1:
+			# 最初のキャラクター：マーカーを保持
+			first_char_id = char_id
+			pending_paths[char_id] = {
+				"character": character,
+				"path": full_path,
+				"vision_points": adjusted_vision_points,
+				"run_segments": adjusted_run_segments,
+				"path_mesh": path_mesh,
+				"vision_markers": original_vision_markers,
+				"run_markers": original_run_markers
+			}
+		else:
+			# 2番目以降のキャラクター：マーカーなし
+			pending_paths[char_id] = {
+				"character": character,
+				"path": full_path,
+				"vision_points": adjusted_vision_points,
+				"run_segments": adjusted_run_segments,
+				"path_mesh": path_mesh,
+				"vision_markers": [],
+				"run_markers": []
+			}
+
+		processed_count += 1
+		print("[PathSystem] Saved path for %s (%d points, connect: %.2f)" % [character.name, full_path.size(), connect_length])
+
+	print("[PathSystem] Applied same path to %d characters (formation)" % processed_count)
+
+	# パスモードを終了
 	is_path_mode = false
 	path_editing_character = null
 	path_drawer.clear()
@@ -1013,6 +1117,143 @@ func _confirm_current_path() -> void:
 		path_panel.visible = false
 	_update_mode_info("")
 	_update_pending_paths_label()
+
+
+## パスの長さを計算
+func _calculate_path_length(path: Array[Vector3]) -> float:
+	var length: float = 0.0
+	for i in range(1, path.size()):
+		length += path[i - 1].distance_to(path[i])
+	return length
+
+
+## 接続線を考慮して視線ポイントの比率を調整
+func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+	if connect_length < 0.01 or base_length < 0.01:
+		return vision_points.duplicate()
+
+	var new_length = connect_length + base_length
+	var adjusted: Array[Dictionary] = []
+
+	for vp in vision_points:
+		var old_ratio: float = vp.path_ratio
+		# 新しい比率 = (接続線の長さ + 元の比率 * 元のパス長さ) / 新しいパス長さ
+		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
+		adjusted.append({
+			"path_ratio": new_ratio,
+			"anchor": vp.anchor,
+			"direction": vp.direction
+		})
+
+	return adjusted
+
+
+## 接続線を考慮してRun区間の比率を調整
+func _adjust_run_ratios_for_connection(run_segments: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+	if connect_length < 0.01 or base_length < 0.01:
+		return run_segments.duplicate()
+
+	var new_length = connect_length + base_length
+	var adjusted: Array[Dictionary] = []
+
+	for seg in run_segments:
+		var old_start: float = seg.start_ratio
+		var old_end: float = seg.end_ratio
+		# 新しい比率を計算
+		var new_start: float = (connect_length + old_start * base_length) / new_length
+		var new_end: float = (connect_length + old_end * base_length) / new_length
+		adjusted.append({
+			"start_ratio": new_start,
+			"end_ratio": new_end
+		})
+
+	return adjusted
+
+
+## 特定キャラクターの保留パスをクリア
+func _clear_pending_path_for_character(char_id: int) -> void:
+	if not pending_paths.has(char_id):
+		return
+
+	var old_data = pending_paths[char_id]
+	if old_data.has("path_mesh") and is_instance_valid(old_data["path_mesh"]):
+		old_data["path_mesh"].queue_free()
+	if old_data.has("vision_markers"):
+		for marker in old_data["vision_markers"]:
+			if is_instance_valid(marker):
+				marker.queue_free()
+	if old_data.has("run_markers"):
+		for marker in old_data["run_markers"]:
+			if is_instance_valid(marker):
+				marker.queue_free()
+
+	pending_paths.erase(char_id)
+
+
+## 視線マーカーを複製
+func _duplicate_vision_markers(vision_points: Array[Dictionary]) -> Array[MeshInstance3D]:
+	var markers: Array[MeshInstance3D] = []
+	for vp in vision_points:
+		var marker = MeshInstance3D.new()
+		marker.set_script(preload("res://scripts/effects/vision_marker.gd"))
+		add_child(marker)
+		marker.set_position_and_direction(vp.anchor, vp.direction)
+		markers.append(marker)
+	return markers
+
+
+## Runマーカーを複製
+func _duplicate_run_markers(path: Array[Vector3], run_segments: Array[Dictionary]) -> Array[MeshInstance3D]:
+	var markers: Array[MeshInstance3D] = []
+
+	# パス上の位置を計算するためのヘルパー
+	var total_length: float = 0.0
+	var lengths: Array[float] = [0.0]
+	for i in range(1, path.size()):
+		var seg_len = path[i - 1].distance_to(path[i])
+		total_length += seg_len
+		lengths.append(total_length)
+
+	for seg in run_segments:
+		# 開始点マーカー
+		var start_pos = _get_position_at_ratio(path, lengths, total_length, seg.start_ratio)
+		var start_marker = MeshInstance3D.new()
+		start_marker.set_script(preload("res://scripts/effects/run_marker.gd"))
+		add_child(start_marker)
+		start_marker.set_position_and_type(start_pos, 0)  # START = 0
+		markers.append(start_marker)
+
+		# 終点マーカー
+		var end_pos = _get_position_at_ratio(path, lengths, total_length, seg.end_ratio)
+		var end_marker = MeshInstance3D.new()
+		end_marker.set_script(preload("res://scripts/effects/run_marker.gd"))
+		add_child(end_marker)
+		end_marker.set_position_and_type(end_pos, 1)  # END = 1
+		markers.append(end_marker)
+
+	return markers
+
+
+## パス上の進行率から位置を取得
+func _get_position_at_ratio(path: Array[Vector3], lengths: Array[float], total_length: float, ratio: float) -> Vector3:
+	if path.is_empty():
+		return Vector3.ZERO
+	if ratio <= 0.0:
+		return path[0]
+	if ratio >= 1.0:
+		return path[-1]
+
+	var target_length = total_length * ratio
+	for i in range(1, lengths.size()):
+		if lengths[i] >= target_length:
+			var seg_start = lengths[i - 1]
+			var seg_length = lengths[i] - seg_start
+			if seg_length > 0:
+				var t = (target_length - seg_start) / seg_length
+				return path[i - 1].lerp(path[i], t)
+			else:
+				return path[i - 1]
+	return path[-1]
 
 
 ## パスメッシュを作成
@@ -1042,8 +1283,20 @@ func _execute_all_paths(run: bool) -> void:
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
 		var character = data["character"] as CharacterBody3D
-		var path = data["path"]
-		var vision_points = data["vision_points"]
+
+		# パスを明示的にArray[Vector3]に変換
+		var path: Array[Vector3] = []
+		if data.has("path"):
+			for p in data["path"]:
+				path.append(p)
+
+		# 視線ポイントを明示的にArray[Dictionary]に変換
+		var vision_points: Array[Dictionary] = []
+		if data.has("vision_points"):
+			for vp in data["vision_points"]:
+				vision_points.append(vp)
+
+		# Run区間を明示的にArray[Dictionary]に変換
 		var run_segments: Array[Dictionary] = []
 		if data.has("run_segments"):
 			for seg in data["run_segments"]:
@@ -1058,7 +1311,7 @@ func _execute_all_paths(run: bool) -> void:
 
 		if controller.start_path(path, vision_points, run_segments, run):
 			executed_count += 1
-			print("[PathSystem] Started path for %s (run_segments: %d)" % [character.name, run_segments.size()])
+			print("[PathSystem] Started path for %s (%d points, run_segments: %d)" % [character.name, path.size(), run_segments.size()])
 		else:
 			print("[PathSystem] Failed to start path for %s" % character.name)
 
@@ -1143,7 +1396,7 @@ func _on_path_following_cancelled(character: Node) -> void:
 ## モード情報を更新
 func _update_mode_info(text: String) -> void:
 	if text.is_empty():
-		_update_info_label(_get_character_preset_id(current_character) if current_character else "")
+		_update_selection_info()
 	else:
 		info_label.text = text
 

@@ -402,6 +402,33 @@ func get_drawn_path() -> PackedVector3Array:
 	return _path_points
 
 
+## 基準位置からの相対パスを取得
+## 各キャラクターの開始位置にオフセットして使用可能
+func get_relative_path() -> PackedVector3Array:
+	if _pending_path.size() < 2:
+		return PackedVector3Array()
+	var start = _pending_path[0]
+	var relative = PackedVector3Array()
+	for point in _pending_path:
+		relative.append(point - start)
+	return relative
+
+
+## 相対視線ポイントを取得（アンカー位置を相対座標に変換）
+func get_relative_vision_points() -> Array[Dictionary]:
+	if _pending_path.size() < 2:
+		return []
+	var start = _pending_path[0]
+	var relative_points: Array[Dictionary] = []
+	for vp in _vision_points:
+		relative_points.append({
+			"path_ratio": vp.path_ratio,
+			"anchor": vp.anchor - start,  # 相対座標に変換
+			"direction": vp.direction  # 方向はそのまま
+		})
+	return relative_points
+
+
 func is_drawing() -> bool:
 	return _is_drawing or _is_drawing_vision
 

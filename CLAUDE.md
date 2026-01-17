@@ -12,7 +12,6 @@
 開発途中。Mixamo専用のキャラクターシステム。
 
 テストシーン：
-- `scenes/tests/test_character.tscn` - 複数キャラクターのパス移動・視線設定・同時実行テスト用
 - `scenes/tests/test_simple_mixamo.tscn` - Mixamoキャラクター＋CharacterAnimationController確認用
 
 ## ドキュメント
