@@ -44,7 +44,7 @@ func _setup_mesh() -> void:
 	_icon_material.emission_energy_multiplier = 1.2
 	_icon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_icon_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_icon_material.render_priority = 10
+	_icon_material.render_priority = 11  # 円より上にレンダリング
 
 	_build_mesh()
 
@@ -102,7 +102,7 @@ func _build_play_icon() -> void:
 	var indices = PackedInt32Array()
 
 	var icon_size = circle_radius * 0.6
-	var y_offset = 0.005  # 円より少し上
+	var y_offset = 0.02  # 円より上（Z-fighting防止）
 
 	# 三角形の頂点（右向き再生アイコン）
 	# 中心を基準に配置
@@ -133,7 +133,7 @@ func _build_stop_icon() -> void:
 	var indices = PackedInt32Array()
 
 	var icon_size = circle_radius * 0.5
-	var y_offset = 0.005  # 円より少し上
+	var y_offset = 0.02  # 円より上（Z-fighting防止）
 	var half = icon_size * 0.5
 
 	# 四角形の頂点

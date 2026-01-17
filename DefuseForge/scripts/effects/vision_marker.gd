@@ -41,7 +41,7 @@ func _setup_mesh() -> void:
 	_arrow_material.emission_energy_multiplier = 1.2
 	_arrow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_arrow_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_arrow_material.render_priority = 10  # フォグより上にレンダリング
+	_arrow_material.render_priority = 11  # 円より上にレンダリング
 
 	_build_mesh()
 
@@ -100,7 +100,7 @@ func _build_arrow() -> void:
 	var head_width = circle_radius * 0.4  # 矢印頭の幅
 	var head_length = arrow_length * 0.4  # 矢印頭の長さ
 	var half_thickness = arrow_thickness / 2.0
-	var y_offset = 0.005  # 円より少し上
+	var y_offset = 0.02  # 円より上（Z-fighting防止）
 
 	# シャフト（縦棒）- 中央から上に伸びる
 	var shaft_start = -circle_radius * 0.5
