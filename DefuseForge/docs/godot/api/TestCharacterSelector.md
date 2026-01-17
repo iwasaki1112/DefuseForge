@@ -34,7 +34,7 @@
 | クリック（キャラクター上） | **トグル選択**（選択中なら解除、未選択なら追加）+ コンテキストメニュー |
 | クリック（地面） | **全選択解除** + メニュー閉じる |
 | ドロップダウン | キャラクター追加 |
-| ESC | モードキャンセル |
+| ESC | パス追従中/回転モードのキャンセル |
 
 ### 手動操作（Manual Control ON時）
 | 操作 | 説明 |
@@ -53,16 +53,19 @@
 ### パスモード（複数キャラクター同時対応・隊列移動）
 1. **複数キャラクターをクリックして選択**（トグルで追加）
 2. コンテキストメニューで「Move」選択
+   - **この時点で選択中のキャラクターがパス適用対象として確定**
 3. **プライマリキャラクター**（最後に選択したキャラクター）を基準にパス描画
 4. 視線ポイントモードに自動移行
 5. 「Add Vision」ボタンでパス上をクリック→ドラッグで視線方向設定
 6. 「Add Run」ボタンでRun区間を設定（開始点→終点クリック）
-7. 「Confirm Path」ボタンで**全選択キャラクターに同じパスを適用**
+7. **キャンセル**: キャラクター以外の場所をクリック
+8. 「Confirm Path」ボタンで**パス適用対象キャラクターに同じパスを適用**
    - 各キャラクターは**自分の位置からパス開始点への接続線**を自動生成
    - その後、全員が**同じパス**を歩く（隊列移動）
    - 視線ポイント・Run区間の比率は接続線の長さを考慮して自動調整
-8. 「Execute All」ボタンで全キャラクター同時実行
-9. 全キャラクター到着後にパスと視線マーカーが自動削除
+   - **確定後、選択は自動解除**
+9. 「Execute All」ボタンで全キャラクター同時実行
+10. 全キャラクター到着後にパスと視線マーカーが自動削除
 
 #### 隊列移動の動作
 - プライマリキャラクターはパス開始点から直接移動
@@ -111,11 +114,15 @@
 | `is_vision_enabled` | `bool` | 視界/FoW有効フラグ |
 | `is_path_mode` | `bool` | パス描画モード中 |
 | `path_editing_character` | `Node` | パス編集中のキャラクター |
-| `pending_paths` | `Dictionary` | キャラクターごとの確定パス |
 | `characters` | `Array[Node]` | シーン内の全キャラクター |
-| `selected_characters` | `Array[Node]` | **選択中の全キャラクター** |
-| `primary_character` | `Node` | **最後に選択したキャラクター**（コンテキストメニュー・パス描画基準） |
-| `label_manager` | `CharacterLabelManager` | **キャラクターラベル管理**（詳細は[CharacterLabelManager](CharacterLabelManager.md)参照） |
+
+## マネージャー
+
+| 変数 | 型 | 説明 |
+|------|-----|------|
+| `selection_manager` | `CharacterSelectionManager` | **選択管理**（詳細は[CharacterSelectionManager](CharacterSelectionManager.md)参照） |
+| `path_execution_manager` | `PathExecutionManager` | **パス実行管理**（詳細は[PathExecutionManager](PathExecutionManager.md)参照） |
+| `label_manager` | `CharacterLabelManager` | **ラベル管理**（詳細は[CharacterLabelManager](CharacterLabelManager.md)参照） |
 
 ## シーン構成
 
@@ -149,11 +156,12 @@ TestCharacterSelector (Node3D)
 
 - `CharacterRegistry` - キャラクター作成
 - `PlayerState` - プレイヤーチーム管理・敵味方判定
+- `CharacterSelectionManager` - 選択管理・アウトライン表示
+- `PathExecutionManager` - パス確定・実行・pending_paths管理
 - `CharacterLabelManager` - 味方キャラクターのラベル管理
+- `CharacterColorManager` - キャラクター個別色管理
 - `FogOfWarSystem` - 視界表示
 - `ContextMenuComponent` - コンテキストメニュー
 - `PathDrawer` - パス描画
-- `PathFollowingController` - パス追従（キャラクターごとに動的生成）
 - `CharacterRotationController` - 回転制御
 - `CharacterAnimationController` - アニメーション制御
-- `PathLineMesh` - 確定パスの表示
