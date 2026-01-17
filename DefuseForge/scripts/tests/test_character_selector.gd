@@ -718,7 +718,7 @@ func _equip_glock(character: Node) -> void:
 
 	var weapon = weapon_resource.instantiate()
 	weapon.name = "Glock"
-	weapon.scale = Vector3.ONE * 18.0
+	weapon.scale = Vector3.ONE * 100.0  # Skeleton compensation (Mixamo is 0.01)
 	weapon.rotation_degrees = Vector3(-79, -66, -28)
 	weapon.position = Vector3(1, 7, 2)
 	attachment.add_child(weapon)

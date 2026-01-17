@@ -29,19 +29,19 @@ var _info_label: Label = null
 var _animation_dropdown: OptionButton = null
 var _weapon_dropdown: OptionButton = null
 
-# Weapon configs
+# Weapon configs - scale 100 is skeleton compensation (Mixamo skeleton is 0.01)
 const WEAPON_CONFIGS = {
 	"AK47": {
 		"path": "res://assets/weapons/ak47/ak47.glb",
-		"scale": 13.0,
-		"rotation": Vector3(-65, -103, 4),
-		"position": Vector3(3, 6, 1)
+		"scale": 100.0,
+		"rotation": Vector3(-71, -103, 4),
+		"position": Vector3(2, 6, 1)
 	},
 	"Glock": {
 		"path": "res://assets/weapons/glock/glock.glb",
-		"scale": 18.0,
+		"scale": 100.0,
 		"rotation": Vector3(-79, -66, -28),
-		"position": Vector3(1, 7, 2)
+		"position": Vector3(1, 10, 2)
 	}
 }
 
