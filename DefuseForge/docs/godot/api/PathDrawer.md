@@ -1,6 +1,6 @@
 # PathDrawer
 
-地面にパスを描画するコンポーネント。マウスドラッグでパスを描き、Slice the Pieパターンで視線ポイントを設定可能。
+地面にパスを描画するコンポーネント。マウスドラッグでパスを描き、Slice the Pieパターンで視線ポイントを設定可能。Run区間の設定もサポート。
 
 ## 基本情報
 
@@ -15,7 +15,8 @@
 |---------|------|------|
 | `drawing_finished` | `points: PackedVector3Array` | パス描画完了時 |
 | `vision_point_added` | `anchor: Vector3, direction: Vector3` | 視線ポイント追加時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT） |
+| `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
+| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER） |
 
 ## Enums
 
@@ -26,6 +27,7 @@
 |----|------|
 | `MOVEMENT` | 移動パス描画モード |
 | `VISION_POINT` | 視線ポイント設定モード |
+| `RUN_MARKER` | Runマーカー設定モード |
 
 ## Export Properties
 
@@ -64,7 +66,7 @@ PathDrawerを無効化する。
 有効状態を確認する。
 
 #### clear() -> void
-パスと視線ポイントをすべてクリアする。
+パスと視線ポイントとRunマーカーをすべてクリアする。
 
 #### get_drawn_path() -> PackedVector3Array
 描画されたパスを取得する。
@@ -101,6 +103,36 @@ PathDrawerを無効化する。
 
 #### remove_last_vision_point() -> void
 最後の視線ポイントを削除する。
+
+#### take_vision_markers() -> Array[MeshInstance3D]
+視線マーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+
+### Run Marker API
+
+#### start_run_mode() -> bool
+Runマーカー設定モードに切り替える。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_run_segments() -> bool
+Run区間があるか確認する。
+
+#### get_run_segments() -> Array[Dictionary]
+Run区間を取得する。
+
+**戻り値:** `{ "start_ratio": float, "end_ratio": float }` の配列
+
+#### get_run_segment_count() -> int
+Run区間数を取得する。
+
+#### remove_last_run_segment() -> void
+最後のRun区間を削除する。未完成の開始点がある場合はそれを削除。
+
+#### has_incomplete_run_start() -> bool
+未完成のRun開始点があるか確認する。
+
+#### take_run_markers() -> Array[MeshInstance3D]
+Runマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
 
 ### Execution API
 
@@ -140,17 +172,24 @@ path_drawer.enable(character)
 # シグナル接続
 path_drawer.drawing_finished.connect(_on_path_finished)
 path_drawer.vision_point_added.connect(_on_vision_added)
+path_drawer.run_segment_added.connect(_on_run_added)
 
 # 視線モードに切り替え
 if path_drawer.start_vision_mode():
     print("Now in vision mode")
 
+# Runマーカーモードに切り替え
+if path_drawer.start_run_mode():
+    print("Now in run marker mode")
+    # パス上をクリックして開始点、再度クリックして終点を設置
+
 # パス実行
-path_drawer.execute_with_vision(true)  # 走行で実行
+path_drawer.execute_with_vision(false)  # 歩行で実行（Run区間だけ走る）
 ```
 
-## 視線ポイントデータ形式
+## データ形式
 
+### 視線ポイント
 ```gdscript
 {
     "path_ratio": 0.5,      # パス上の位置（0.0〜1.0）
@@ -159,8 +198,17 @@ path_drawer.execute_with_vision(true)  # 走行で実行
 }
 ```
 
+### Run区間
+```gdscript
+{
+    "start_ratio": 0.3,  # 開始位置（0.0〜1.0）
+    "end_ratio": 0.6     # 終了位置（0.0〜1.0）
+}
+```
+
 ## 内部動作
 
 - `PathLineMesh`でパスを描画（破線+終点ドーナツ）
 - `VisionMarker`で視線ポイントを可視化
-- パス上クリックで最近接点を計算し、そこから視線方向を設定
+- `RunMarker`でRun区間の開始/終点を可視化
+- パス上クリックで最近接点を計算し、そこから視線方向やRun区間を設定
