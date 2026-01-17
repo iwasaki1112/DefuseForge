@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="WeaponPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/weapon_preset.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "m4a1"
+display_name = "M4A1"
+category = 0
+damage = 33.0
+fire_rate = 0.09
+accuracy = 0.85
+recoil_strength = 0.08
+recoil_recovery = 10.0
+price = 3100

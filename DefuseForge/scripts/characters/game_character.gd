@@ -34,6 +34,7 @@ var is_alive: bool = true
 var anim_ctrl: Node = null  # CharacterAnimationController
 var vision: VisionComponent = null  # VisionComponent for FoW
 var combat_awareness: Node = null  # CombatAwarenessComponent for enemy tracking
+var current_weapon: Resource = null  # WeaponPreset
 
 # ============================================
 # Lifecycle
@@ -165,6 +166,43 @@ func setup_combat_awareness() -> Node:
 ## Get CombatAwarenessComponent
 func get_combat_awareness() -> Node:
 	return combat_awareness
+
+# ============================================
+# Weapon API
+# ============================================
+
+## Equip a weapon from WeaponPreset
+## Applies weapon type and recoil settings to CharacterAnimationController
+func equip_weapon(weapon: Resource) -> void:
+	current_weapon = weapon
+
+	if not anim_ctrl:
+		return
+
+	# Convert WeaponCategory to CharacterAnimationController.Weapon
+	# WeaponCategory: RIFLE=0, PISTOL=1, SMG=2, SHOTGUN=3, SNIPER=4
+	# Weapon: NONE=0, RIFLE=1, PISTOL=2
+	var weapon_type: int = 1  # Default to RIFLE
+	if weapon.category == 1:  # PISTOL
+		weapon_type = 2
+
+	if anim_ctrl.has_method("set_weapon"):
+		anim_ctrl.set_weapon(weapon_type)
+
+	# Apply recoil settings directly to controller
+	if "rifle_recoil_strength" in anim_ctrl:
+		# Apply weapon's recoil to both rifle/pistol slots based on category
+		if weapon.category == 1:  # PISTOL
+			anim_ctrl.pistol_recoil_strength = weapon.recoil_strength
+		else:
+			anim_ctrl.rifle_recoil_strength = weapon.recoil_strength
+
+	if "recoil_recovery" in anim_ctrl:
+		anim_ctrl.recoil_recovery = weapon.recoil_recovery
+
+## Get current weapon
+func get_current_weapon() -> Resource:
+	return current_weapon
 
 # ============================================
 # Death Processing

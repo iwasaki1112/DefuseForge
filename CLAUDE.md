@@ -42,7 +42,9 @@
 | Effect | RunMarker | Run区間の開始/終点を示すマーカー |
 | Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー |
 | Registry | CharacterRegistry | プリセット管理＋キャラクター生成（Autoload） |
+| Registry | WeaponRegistry | 武器プリセット管理（Autoload） |
 | Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
+| Resource | WeaponPreset | 武器定義（ID・カテゴリー・ダメージ・リコイル） |
 | Resource | ContextMenuItem | コンテキストメニュー項目定義 |
 | System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
 | System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |

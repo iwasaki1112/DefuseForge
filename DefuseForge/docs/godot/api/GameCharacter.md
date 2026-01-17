@@ -40,6 +40,7 @@
 | `is_alive` | `bool` | `true` | 生存状態 |
 | `anim_ctrl` | `Node` | `null` | CharacterAnimationControllerへの参照 |
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
+| `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
 
 ## Public API
 
@@ -102,6 +103,24 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 **戻り値:** VisionComponentインスタンス
 
+### Weapon API
+
+#### equip_weapon(weapon: Resource) -> void
+武器を装備する。WeaponPresetから武器タイプとリコイル設定をCharacterAnimationControllerに適用。
+
+**引数:**
+- `weapon` - WeaponPresetリソース
+
+**動作:**
+- WeaponCategoryをCharacterAnimationController.Weaponに変換
+- PISTOL → Weapon.PISTOL、それ以外 → Weapon.RIFLE
+- リコイル強度・回復速度をコントローラーに適用
+
+#### get_current_weapon() -> Resource
+装備中の武器を取得する。
+
+**戻り値:** WeaponPresetまたは`null`
+
 ## ライフサイクル
 
 - `_ready()`: HP初期化、`"characters"`グループに追加
@@ -124,6 +143,10 @@ if character.is_enemy_of(other_character):
 
 # Vision設定
 var vision = character.setup_vision(90.0, 15.0)
+
+# 武器装備
+var weapon = WeaponRegistry.get_preset("m4a1")
+character.equip_weapon(weapon)
 ```
 
 ## 内部動作
