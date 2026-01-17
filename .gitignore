@@ -57,7 +57,7 @@ nakama/data/
 
 # iOS/Android builds (large files)
 builds/
-DefuseForge/builds/
+godot/builds/
 
 # FBX2glTF binary (download with tools/setup_fbx2gltf.sh)
 tools/FBX2glTF

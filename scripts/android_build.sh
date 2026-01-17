@@ -6,7 +6,7 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GODOT_PATH="/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot"
-APK_OUTPUT="$PROJECT_ROOT/DefuseForge/builds/android/DefuseForge.apk"
+APK_OUTPUT="$PROJECT_ROOT/godot/builds/android/godot.apk"
 ANDROID_SDK_ROOT="/opt/homebrew/share/android-commandlinetools"
 
 echo "=== Android APKビルドスクリプト ==="
@@ -16,11 +16,11 @@ export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
 export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
 # ビルドディレクトリを作成
-mkdir -p "$PROJECT_ROOT/DefuseForge/builds/android"
+mkdir -p "$PROJECT_ROOT/godot/builds/android"
 
 # APKをエクスポート
 echo "1. APKをエクスポート中..."
-"$GODOT_PATH" --headless --path "$PROJECT_ROOT/DefuseForge" --export-debug "Android" "builds/android/DefuseForge.apk"
+"$GODOT_PATH" --headless --path "$PROJECT_ROOT/godot" --export-debug "Android" "builds/android/godot.apk"
 
 if [ -f "$APK_OUTPUT" ]; then
     echo "   エクスポート完了: $APK_OUTPUT"

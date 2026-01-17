@@ -9,7 +9,7 @@ import bpy
 import os
 
 # 出力先パス（プロジェクトに合わせて変更）
-OUTPUT_PATH = "/Users/iwasakishungo/Git/github.com/iwasaki1112/3d-game/DefuseForge/resources/maps/wall.glb"
+OUTPUT_PATH = "/Users/iwasakishungo/Git/github.com/iwasaki1112/3d-game/godot/resources/maps/wall.glb"
 
 # GLBエクスポート
 bpy.ops.export_scene.gltf(

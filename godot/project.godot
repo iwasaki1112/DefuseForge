@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="DefuseForge"
+config/name="RescueForge"
 config/description="CS1.6 meets Door Kickers 2 - トップダウンタクティカルシューター"
 run/main_scene="res://scenes/tests/test_character.tscn"
 config/features=PackedStringArray("4.5", "Mobile")

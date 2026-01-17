@@ -5,7 +5,7 @@
 
 ## プロジェクト情報
 - **エンジン**: Godot 4.5.1
-- **プロジェクトパス**: `DefuseForge/`
+- **プロジェクトパス**: `godot/`
 - **言語**: GDScript
 
 ## プロジェクト概要
@@ -23,7 +23,7 @@
 ## ドキュメント
 
 ### 実装時の参照（必須）
-**実装前に必ず `DefuseForge/docs/godot/api/` 配下のAPIドキュメントを確認すること。**
+**実装前に必ず `godot/docs/godot/api/` 配下のAPIドキュメントを確認すること。**
 
 既存クラスの仕様・使用例・内部動作が記載されており、実装の整合性を保つために重要。
 
@@ -71,10 +71,10 @@
 ## コマンド
 ```bash
 # エディタ起動
-"/Applications/Godot.app/Contents/MacOS/Godot" --path DefuseForge --editor
+"/Applications/Godot.app/Contents/MacOS/Godot" --path godot --editor
 
 # プロジェクト実行
-"/Applications/Godot.app/Contents/MacOS/Godot" --path DefuseForge
+"/Applications/Godot.app/Contents/MacOS/Godot" --path godot
 ```
 
 ## Tool Priority

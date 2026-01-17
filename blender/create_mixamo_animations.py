@@ -14,8 +14,8 @@ import bpy
 import os
 
 # パス設定（必要に応じて変更）
-PROJECT_ROOT = "/Users/iwasakishungo/Git/github.com/iwasaki1112/DefuseForge"
-VANGUARD_GLB = os.path.join(PROJECT_ROOT, "DefuseForge/assets/characters/vanguard/vanguard.glb")
+PROJECT_ROOT = "/Users/iwasakishungo/Git/github.com/iwasaki1112/godot"
+VANGUARD_GLB = os.path.join(PROJECT_ROOT, "godot/assets/characters/vanguard/vanguard.glb")
 OUTPUT_BLEND = os.path.join(PROJECT_ROOT, "blender/mixamo_animations.blend")
 
 def clear_scene():
