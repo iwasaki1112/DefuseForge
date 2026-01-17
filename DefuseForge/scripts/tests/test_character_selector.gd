@@ -669,6 +669,8 @@ func _complete_vision_setup(character: Node) -> void:
 		character.combat_awareness.enemy_lost.connect(
 			func(enemy): print("[Combat] %s lost sight of %s" % [character.name, enemy.name])
 		)
+		# Enable automatic firing
+		character.combat_awareness.enable_firing()
 
 	# Apply current vision state
 	var vision = character.vision

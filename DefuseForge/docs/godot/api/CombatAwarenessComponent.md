@@ -23,6 +23,7 @@
 |------|-----|------|
 | `SCAN_INTERVAL` | `0.05` | 敵スキャン間隔（50ms、EnemyVisibilitySystemと同等） |
 | `TRACKING_TIMEOUT` | `0.75` | 視界離脱後の追跡継続時間（秒） |
+| `FIRE_INTERVAL` | `0.5` | 発砲間隔（500ms） |
 
 ## Public API
 
@@ -63,6 +64,17 @@
 3. 以降のスキャンで無視リスト内の敵はスキップ
 4. 敵が視界外に出ると無視リストから削除され、再追跡可能になる
 
+### enable_firing() -> void
+自動発砲を有効化する。敵を視認中は自動的に発砲し、ダメージを与える。
+
+### disable_firing() -> void
+自動発砲を無効化する。
+
+### is_firing_enabled() -> bool
+自動発砲が有効か確認する。
+
+**戻り値:** 自動発砲が有効なら`true`
+
 ### process(delta: float) -> void
 毎フレームの処理を行う。所有者の`_physics_process`から呼び出す。
 
@@ -81,6 +93,9 @@ character.setup_combat_awareness()
 # シグナル接続
 character.combat_awareness.enemy_spotted.connect(_on_enemy_spotted)
 character.combat_awareness.enemy_lost.connect(_on_enemy_lost)
+
+# 自動発砲を有効化
+character.combat_awareness.enable_firing()
 
 func _on_enemy_spotted(enemy: Node) -> void:
     print("%s spotted %s" % [character.name, enemy.name])
@@ -168,6 +183,16 @@ func _on_rotation_confirmed(final_direction: Vector3) -> void:
 - `"characters"`グループから敵を検出
 - `GameCharacter.is_enemy_of()`または`PlayerState`を使用して敵判定
 - 死亡キャラクターは除外
+
+### 自動発砲ロジック
+- `enable_firing()`で有効化
+- 毎`process()`呼び出し時に発砲判定
+- 条件: 発砲有効 AND ターゲット存在 AND ターゲット有効
+- 発砲時の動作:
+  1. `CharacterAnimationController.fire()`でリコイルアニメーション再生
+  2. 武器のダメージ値を取得（デフォルト: 10.0）
+  3. `target.take_damage(damage, attacker, is_headshot)`を呼び出し
+- ターゲットが死亡した場合、次のスキャンで即座にクリア
 
 ## パフォーマンス考慮
 

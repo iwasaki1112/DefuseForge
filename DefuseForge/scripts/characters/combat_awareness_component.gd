@@ -16,6 +16,7 @@ signal target_changed(new_target: Node, old_target: Node)
 const SCAN_INTERVAL: float = 0.05  ## Scan every 50ms (matches EnemyVisibilitySystem)
 const TRACKING_TIMEOUT: float = 0.75  ## Time to track last known position after losing sight
 const CHARACTERS_CACHE_INTERVAL: float = 0.2  ## キャラクターキャッシュ更新間隔（200ms）
+const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
 
 # ============================================
 # State
@@ -27,6 +28,8 @@ var _time_since_lost: float = 0.0
 var _is_tracking_last_known: bool = false
 var _scan_timer: float = 0.0
 var _ignored_enemies: Array[Node] = []  ## Enemies dismissed by user action (e.g., rotation)
+var _firing_enabled: bool = false  ## Whether automatic firing is enabled
+var _fire_timer: float = 0.0  ## 発砲タイマー
 
 # キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
@@ -103,6 +106,21 @@ func dismiss_current_target() -> void:
 	clear_target()
 
 
+## Enable automatic firing when enemy is in sight
+func enable_firing() -> void:
+	_firing_enabled = true
+
+
+## Disable automatic firing
+func disable_firing() -> void:
+	_firing_enabled = false
+
+
+## Check if automatic firing is enabled
+func is_firing_enabled() -> bool:
+	return _firing_enabled
+
+
 ## Process function - call from owner's _physics_process
 func process(delta: float) -> void:
 	if not _character:
@@ -126,6 +144,15 @@ func process(delta: float) -> void:
 	if _scan_timer >= SCAN_INTERVAL:
 		_scan_timer = 0.0
 		_scan_for_enemies()
+
+	# Firing logic (when tracking enemy and firing is enabled)
+	if _firing_enabled and _current_target and is_instance_valid(_current_target):
+		_fire_timer += delta
+		if _fire_timer >= FIRE_INTERVAL:
+			_fire_timer = 0.0
+			_try_fire()
+	else:
+		_fire_timer = 0.0  # Reset timer when not firing
 
 
 # ============================================
@@ -155,6 +182,11 @@ func _update_ignored_list() -> void:
 func _scan_for_enemies() -> void:
 	if not _character:
 		return
+
+	# Clear target immediately if they died
+	if _current_target and is_instance_valid(_current_target):
+		if "is_alive" in _current_target and not _current_target.is_alive:
+			clear_target()
 
 	var vision: VisionComponent = _character.get_vision_component() if _character.has_method("get_vision_component") else null
 	if not vision:
@@ -262,3 +294,28 @@ func _get_enemy_characters() -> Array[Node]:
 			enemies.append(character)
 
 	return enemies
+
+
+## Attempt to fire at current target
+func _try_fire() -> void:
+	if not _character:
+		return
+	var anim_ctrl = _character.get_anim_controller()
+	if anim_ctrl and anim_ctrl.has_method("fire"):
+		anim_ctrl.fire()  # Trigger recoil animation
+		_apply_damage_to_target()
+
+
+## Apply damage to the current target
+func _apply_damage_to_target() -> void:
+	if not _current_target or not is_instance_valid(_current_target):
+		return
+	if not _current_target.has_method("take_damage"):
+		return
+
+	var damage: float = 10.0  # Default damage
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	if weapon and "damage" in weapon:
+		damage = weapon.damage
+
+	_current_target.take_damage(damage, _character, false)
