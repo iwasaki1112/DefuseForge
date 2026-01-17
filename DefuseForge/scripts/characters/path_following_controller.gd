@@ -14,6 +14,7 @@ signal vision_point_reached(index: int, direction: Vector3)
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
 @export var stuck_timeout: float = 0.5  ## この時間スタックしたら次のポイントへスキップ
 @export var final_destination_radius: float = 0.5  ## 最終目的地への到達判定半径
+@export var ally_collision_radius: float = 1.0  ## 味方との衝突検出半径
 
 ## 内部状態
 var _character: CharacterBody3D = null
@@ -140,6 +141,12 @@ func process(delta: float) -> void:
 	if distance_to_final < final_destination_radius:
 		_finish()
 		return
+
+	# 味方衝突検出: 最終目的地付近に味方がいれば現在位置で停止
+	if distance_to_final < final_destination_radius + ally_collision_radius:
+		if _is_ally_at_destination():
+			_finish()
+			return
 
 	# スタック検出：移動距離が閾値以下なら時間を加算
 	var moved_distance = char_pos.distance_to(_last_position)
@@ -348,3 +355,41 @@ func _finish() -> void:
 	_last_move_direction = Vector3.ZERO
 
 	path_completed.emit()
+
+
+## 味方判定
+func _is_ally(other: Node) -> bool:
+	if not _character or not other:
+		return false
+	if _character is GameCharacter and other is GameCharacter:
+		return _character.team == other.team
+	var player_state = get_node_or_null("/root/PlayerState")
+	if player_state and player_state.has_method("is_friendly"):
+		return player_state.is_friendly(_character) == player_state.is_friendly(other)
+	return false
+
+
+## 最終目的地付近に味方キャラクターがいるかチェック
+func _is_ally_at_destination() -> bool:
+	if _current_path.size() == 0:
+		return false
+
+	var final_destination = _current_path[_current_path.size() - 1]
+	final_destination.y = 0
+
+	var all_characters = get_tree().get_nodes_in_group("characters")
+
+	for character in all_characters:
+		if character == _character:
+			continue
+		if "is_alive" in character and not character.is_alive:
+			continue
+		if not _is_ally(character):
+			continue
+
+		var char_pos = character.global_position
+		char_pos.y = 0
+		if char_pos.distance_to(final_destination) < ally_collision_radius:
+			return true
+
+	return false
