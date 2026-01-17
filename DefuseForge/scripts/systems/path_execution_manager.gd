@@ -182,6 +182,9 @@ func execute_all_paths(run: bool) -> int:
 	var executed_count = 0
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
+		# 既に実行済み（characterキーなし）のエントリはスキップ
+		if not data.has("character"):
+			continue
 		var character = data["character"] as CharacterBody3D
 
 		# パスを明示的にArray[Vector3]に変換
