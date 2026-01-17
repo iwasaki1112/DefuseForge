@@ -23,6 +23,7 @@ var _current_path: Array[Vector3] = []
 var _path_index: int = 0
 var _vision_points: Array[Dictionary] = []
 var _vision_index: int = 0
+var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
@@ -45,9 +46,11 @@ func set_combat_awareness(component: Node) -> void:
 ## パス追従を開始
 ## @param path: 追従するパス（Vector3の配列）
 ## @param vision_points: 視線ポイント配列（path_ratio, directionを含むDictionary）
-## @param run: 走行モードか
+## @param run_segments: Run区間配列（start_ratio, end_ratioを含むDictionary）
+## @param run: 走行モードか（全体を走る場合）
 ## @return: 開始成功したらtrue
-func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run: bool = false) -> bool:
+func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
+		run_segments: Array[Dictionary] = [], run: bool = false) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -58,6 +61,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run
 
 	_current_path = path.duplicate()
 	_vision_points = vision_points.duplicate()
+	_run_segments = run_segments.duplicate()
 	_vision_index = 0
 	_path_index = 0
 	_is_running = run
@@ -79,6 +83,7 @@ func cancel() -> void:
 	_is_following = false
 	_current_path.clear()
 	_vision_points.clear()
+	_run_segments.clear()
 	_forced_look_direction = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 
@@ -154,37 +159,55 @@ func process(delta: float) -> void:
 		push_warning("[PathFollowingController] CharacterAnimationController is required")
 		return
 
+	# Run区間チェック
+	var progress = _calculate_path_progress()
+	var in_run_segment = _is_in_run_segment(progress)
+
+	# 速度選択: Run区間内なら走る、そうでなければ既存ロジック
 	var speed: float
-	if _is_running:
+	var is_running_now: bool
+	if in_run_segment:
 		speed = anim_ctrl.run_speed
+		is_running_now = true
+	elif _is_running:
+		speed = anim_ctrl.run_speed
+		is_running_now = true
 	else:
 		speed = anim_ctrl.get_current_speed()
+		is_running_now = false
 
 	# 最後の移動方向を保存（完了時の向き保持用）
 	if move_dir.length_squared() > 0.1:
 		_last_move_direction = move_dir
 
-	# 視線方向を更新
-	_update_vision_direction()
+	# 視線方向を更新（Run区間外のみ）
+	if not in_run_segment:
+		_update_vision_direction()
 
-	# Combat awarenessを処理
-	if _combat_awareness and _combat_awareness.has_method("process"):
-		_combat_awareness.process(delta)
+	# Combat awarenessを処理（Run区間外のみ - Run中は敵をスルー）
+	if not in_run_segment:
+		if _combat_awareness and _combat_awareness.has_method("process"):
+			_combat_awareness.process(delta)
 
-	# アニメーション更新（優先順位: 敵視認 > 視線ポイント > 移動方向）
+	# アニメーション更新
 	if anim_ctrl:
 		var look_dir: Vector3 = Vector3.ZERO
 
-		# 1. 敵視認チェック（最優先）
-		if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
-			if _combat_awareness.is_tracking_enemy():
-				look_dir = _combat_awareness.get_override_look_direction()
+		# Run区間中は移動方向のみ（敵認識・視線ポイント無視）
+		if in_run_segment:
+			look_dir = move_dir
+		else:
+			# 優先順位: 敵視認 > 視線ポイント > 移動方向
+			# 1. 敵視認チェック（最優先）
+			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+				if _combat_awareness.is_tracking_enemy():
+					look_dir = _combat_awareness.get_override_look_direction()
 
-		# 2. 視線ポイント or 移動方向
-		if look_dir.length_squared() < 0.1:
-			look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else move_dir
+			# 2. 視線ポイント or 移動方向
+			if look_dir.length_squared() < 0.1:
+				look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else move_dir
 
-		anim_ctrl.update_animation(move_dir, look_dir, _is_running, delta)
+		anim_ctrl.update_animation(move_dir, look_dir, is_running_now, delta)
 
 	# 物理移動
 	_character.velocity.x = move_dir.x * speed
@@ -242,6 +265,14 @@ func _calculate_path_progress() -> float:
 	return current_length / total_length if total_length > 0 else 0.0
 
 
+## Run区間内かどうかを判定
+func _is_in_run_segment(progress: float) -> bool:
+	for seg in _run_segments:
+		if progress >= seg.start_ratio and progress < seg.end_ratio:
+			return true
+	return false
+
+
 ## パス追従完了
 func _finish() -> void:
 	# キャラクターの速度を停止
@@ -272,6 +303,7 @@ func _finish() -> void:
 	_is_following = false
 	_current_path.clear()
 	_vision_points.clear()
+	_run_segments.clear()
 	_forced_look_direction = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 

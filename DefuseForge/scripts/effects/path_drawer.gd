@@ -6,16 +6,22 @@ extends Node3D
 ## Slice the Pie: パス上の任意の点から視線方向を設定可能
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER }
 
 ## 視線ポイントデータ
 ## { "path_ratio": float, "anchor": Vector3, "direction": Vector3 }
+
+## Run区間データ
+## { "start_ratio": float, "end_ratio": float }
 
 signal drawing_finished(points: PackedVector3Array)
 
 ## 視線ポイント用シグナル
 signal vision_point_added(anchor: Vector3, direction: Vector3)
-signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT
+signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER
+
+## Runマーカー用シグナル
+signal run_segment_added(start_ratio: float, end_ratio: float)
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -28,6 +34,7 @@ signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT
 
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
+const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 
 var _camera: Camera3D
 var _character: Node3D
@@ -44,6 +51,11 @@ var _vision_meshes: Array[MeshInstance3D] = []
 var _current_vision_anchor: Vector3 = Vector3.ZERO
 var _current_vision_ratio: float = 0.0
 var _is_drawing_vision: bool = false
+
+## Runマーカー用
+var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
+var _run_meshes: Array[MeshInstance3D] = []
+var _current_run_start: Dictionary = {}  # 未完成のrun開始点 { ratio, position }
 
 ## パス実行管理
 var _pending_path: PackedVector3Array = PackedVector3Array()
@@ -73,10 +85,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _camera == null or not _is_enabled:
 		return
 
-	if _drawing_mode == DrawingMode.MOVEMENT:
-		_handle_movement_input(event)
-	else:
-		_handle_vision_point_input(event)
+	match _drawing_mode:
+		DrawingMode.MOVEMENT:
+			_handle_movement_input(event)
+		DrawingMode.VISION_POINT:
+			_handle_vision_point_input(event)
+		DrawingMode.RUN_MARKER:
+			_handle_run_marker_input(event)
 
 
 ## 移動パス描画の入力処理
@@ -142,6 +157,64 @@ func _handle_vision_point_input(event: InputEvent) -> void:
 				var direction = (ground_pos - _current_vision_anchor).normalized()
 				direction.y = 0
 				_update_temp_vision_marker(_current_vision_anchor, direction)
+
+
+## Runマーカー設定の入力処理
+func _handle_run_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			# パス上の最も近い点を見つける
+			var ground_pos = _get_ground_position(mouse_event.position)
+			if ground_pos == null:
+				return
+
+			var result = _find_closest_point_on_path(ground_pos)
+			if result.distance > path_click_threshold:
+				print("[PathDrawer] Click too far from path for run marker")
+				return
+
+			if _current_run_start.is_empty():
+				# 開始点を設定
+				_current_run_start = { "ratio": result.ratio, "position": result.point }
+				_create_run_marker(result.point, RunMarkerScript.MarkerType.START)
+				print("[PathDrawer] Run start point set at ratio %.2f" % result.ratio)
+			else:
+				# 終点を設定してセグメントを完成
+				var start_ratio = _current_run_start.ratio
+				var end_ratio = result.ratio
+
+				# 開始点が終点より後ろなら入れ替え
+				if start_ratio > end_ratio:
+					var tmp = start_ratio
+					start_ratio = end_ratio
+					end_ratio = tmp
+
+				# Run区間を追加
+				var new_segment = { "start_ratio": start_ratio, "end_ratio": end_ratio }
+				_run_segments.append(new_segment)
+
+				# 終点マーカーを作成
+				_create_run_marker(result.point, RunMarkerScript.MarkerType.END)
+
+				run_segment_added.emit(start_ratio, end_ratio)
+				print("[PathDrawer] Run segment added: %.2f - %.2f" % [start_ratio, end_ratio])
+
+				# 開始点をクリア
+				_current_run_start = {}
+
+			get_viewport().set_input_as_handled()
+
+
+## Runマーカーを作成
+func _create_run_marker(pos: Vector3, type: int) -> void:
+	var marker = MeshInstance3D.new()
+	marker.set_script(RunMarkerScript)
+	add_child(marker)
+	_run_meshes.append(marker)
+
+	# マーカーの位置とタイプを設定
+	marker.set_position_and_type(pos, type)
 
 
 func _get_ground_position(screen_pos: Vector2) -> Variant:
@@ -293,6 +366,7 @@ func clear() -> void:
 	_is_drawing_vision = false
 	_drawing_mode = DrawingMode.MOVEMENT
 	_clear_vision_points()
+	_clear_run_markers()
 
 
 func _clear_vision_points() -> void:
@@ -302,10 +376,25 @@ func _clear_vision_points() -> void:
 	_vision_meshes.clear()
 
 
+func _clear_run_markers() -> void:
+	_run_segments.clear()
+	_current_run_start = {}
+	for mesh in _run_meshes:
+		mesh.queue_free()
+	_run_meshes.clear()
+
+
 ## 視線マーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_vision_markers() -> Array[MeshInstance3D]:
 	var markers = _vision_meshes.duplicate()
 	_vision_meshes.clear()
+	return markers
+
+
+## Runマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
+func take_run_markers() -> Array[MeshInstance3D]:
+	var markers = _run_meshes.duplicate()
+	_run_meshes.clear()
 	return markers
 
 
@@ -397,6 +486,66 @@ func remove_last_vision_point() -> void:
 
 
 ## ========================================
+## Runマーカーモード API
+## ========================================
+
+## Runマーカー設定モードに切り替え
+func start_run_mode() -> bool:
+	if _pending_path.size() < 2:
+		print("[PathDrawer] Cannot start run mode: no movement path set")
+		return false
+
+	_drawing_mode = DrawingMode.RUN_MARKER
+	_is_enabled = true
+	_current_run_start = {}  # 未完成の開始点をクリア
+	mode_changed.emit(int(DrawingMode.RUN_MARKER))
+	print("[PathDrawer] Switched to run marker mode - click to set run start/end points")
+	return true
+
+
+## Run区間があるか
+func has_run_segments() -> bool:
+	return _run_segments.size() > 0
+
+
+## Run区間を取得
+func get_run_segments() -> Array[Dictionary]:
+	return _run_segments
+
+
+## Run区間数を取得
+func get_run_segment_count() -> int:
+	return _run_segments.size()
+
+
+## 最後のRun区間を削除
+func remove_last_run_segment() -> void:
+	if _run_segments.size() > 0:
+		_run_segments.pop_back()
+		# 終点マーカーを削除
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+		# 開始点マーカーも削除
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+		print("[PathDrawer] Last run segment removed")
+	elif not _current_run_start.is_empty():
+		# 未完成の開始点がある場合はそれを削除
+		_current_run_start = {}
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+		print("[PathDrawer] Incomplete run start point removed")
+
+
+## 未完成のRun開始点があるか
+func has_incomplete_run_start() -> bool:
+	return not _current_run_start.is_empty()
+
+
+## ========================================
 ## パス実行 API
 ## ========================================
 
@@ -458,6 +607,7 @@ func clear_pending() -> void:
 	_pending_path.clear()
 	_pending_character = null
 	_clear_vision_points()
+	_clear_run_markers()
 
 
 func _on_path_completed() -> void:

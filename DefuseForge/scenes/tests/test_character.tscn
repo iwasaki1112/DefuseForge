@@ -88,12 +88,7 @@ text = "Pending: 0 paths"
 [node name="ExecuteWalkButton" type="Button" parent="UI/ControlPanel"]
 custom_minimum_size = Vector2(180, 40)
 layout_mode = 2
-text = "Execute All (Walk)"
-
-[node name="ExecuteRunButton" type="Button" parent="UI/ControlPanel"]
-custom_minimum_size = Vector2(180, 40)
-layout_mode = 2
-text = "Execute All (Run)"
+text = "Execute All"
 
 [node name="ClearPathsButton" type="Button" parent="UI/ControlPanel"]
 custom_minimum_size = Vector2(180, 40)
@@ -108,7 +103,7 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -150.0
-offset_top = -140.0
+offset_top = -230.0
 offset_right = 150.0
 offset_bottom = -20.0
 grow_horizontal = 2
@@ -129,6 +124,26 @@ size_flags_horizontal = 3
 text = "Add Vision"
 
 [node name="UndoVisionButton" type="Button" parent="UI/PathPanel/VisionHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Undo"
+
+[node name="RunLabel" type="Label" parent="UI/PathPanel"]
+layout_mode = 2
+text = "Run Segments: 0"
+horizontal_alignment = 1
+
+[node name="RunHBox" type="HBoxContainer" parent="UI/PathPanel"]
+layout_mode = 2
+
+[node name="AddRunButton" type="Button" parent="UI/PathPanel/RunHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Add Run"
+
+[node name="UndoRunButton" type="Button" parent="UI/PathPanel/RunHBox"]
 custom_minimum_size = Vector2(140, 40)
 layout_mode = 2
 size_flags_horizontal = 3

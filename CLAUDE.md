@@ -1,5 +1,8 @@
 # Claude Code Rules (Godot開発)
 
+## Claude設定
+- **言語**: 日本語で応答すること
+
 ## プロジェクト情報
 - **エンジン**: Godot 4.5.1
 - **プロジェクトパス**: `DefuseForge/`
@@ -27,10 +30,11 @@
 | Character | GameCharacter | HP・チーム・死亡処理を管理するCharacterBody3D |
 | Character | VisionComponent | シャドウキャスト法でFoW用の可視ポリゴンを計算 |
 | Character | CombatAwarenessComponent | 敵検出・自動照準を管理するコンポーネント |
-| Character | PathFollowingController | パス追従＋視線ポイント＋スタック検出を行う再利用可能コントローラー |
+| Character | PathFollowingController | パス追従＋視線ポイント＋Run区間＋スタック検出を行う再利用可能コントローラー |
 | Character | CharacterRotationController | 視線方向変更のスムーズな回転制御 |
-| Effect | PathDrawer | マウスドラッグでパス描画＋視線ポイント設定 |
+| Effect | PathDrawer | マウスドラッグでパス描画＋視線ポイント＋Runマーカー設定 |
 | Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
+| Effect | RunMarker | Run区間の開始/終点を示すマーカー |
 | Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー |
 | Registry | CharacterRegistry | プリセット管理＋キャラクター生成（Autoload） |
 | Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
@@ -42,6 +46,13 @@
 | Test | TestCharacterSelector | キャラクター選択・パス移動・FoWのテストシーン |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
+
+### 実装後のドキュメント更新（必須）
+**実装が完了したら、必ず関連するAPIドキュメントを更新すること。**
+
+- 新規クラス作成時: `docs/godot/api/<クラス名>.md` を新規作成
+- 既存クラス変更時: 対応するドキュメントを更新
+- CLAUDE.mdのクラス一覧も必要に応じて更新
 
 ## コマンド
 ```bash

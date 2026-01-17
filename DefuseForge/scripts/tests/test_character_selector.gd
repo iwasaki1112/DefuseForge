@@ -24,6 +24,9 @@ const RotationCtrl = preload("res://scripts/characters/character_rotation_contro
 @onready var vision_label: Label = $UI/PathPanel/VisionLabel
 @onready var add_vision_button: Button = $UI/PathPanel/VisionHBox/AddVisionButton
 @onready var undo_vision_button: Button = $UI/PathPanel/VisionHBox/UndoVisionButton
+@onready var run_label: Label = $UI/PathPanel/RunLabel
+@onready var add_run_button: Button = $UI/PathPanel/RunHBox/AddRunButton
+@onready var undo_run_button: Button = $UI/PathPanel/RunHBox/UndoRunButton
 @onready var confirm_path_button: Button = $UI/PathPanel/ConfirmButton
 @onready var cancel_button: Button = $UI/PathPanel/CancelButton
 @onready var rotate_panel: VBoxContainer = $UI/RotatePanel
@@ -32,7 +35,6 @@ const RotationCtrl = preload("res://scripts/characters/character_rotation_contro
 ## 実行ボタン（外出し）
 @onready var pending_paths_label: Label = $UI/ControlPanel/PendingPathsLabel
 @onready var execute_walk_button: Button = $UI/ControlPanel/ExecuteWalkButton
-@onready var execute_run_button: Button = $UI/ControlPanel/ExecuteRunButton
 @onready var clear_paths_button: Button = $UI/ControlPanel/ClearPathsButton
 
 var current_character: Node = null
@@ -149,6 +151,10 @@ func _setup_control_buttons() -> void:
 	add_vision_button.pressed.connect(_on_add_vision_button_pressed)
 	undo_vision_button.pressed.connect(_on_undo_vision_button_pressed)
 
+	# Runマーカーボタン
+	add_run_button.pressed.connect(_on_add_run_button_pressed)
+	undo_run_button.pressed.connect(_on_undo_run_button_pressed)
+
 	# パス確定/キャンセルボタン
 	confirm_path_button.pressed.connect(_on_confirm_path_button_pressed)
 	cancel_button.pressed.connect(_on_cancel_button_pressed)
@@ -156,9 +162,11 @@ func _setup_control_buttons() -> void:
 	# 視線ポイント追加シグナル
 	path_drawer.vision_point_added.connect(_on_vision_point_added)
 
+	# Runセグメント追加シグナル
+	path_drawer.run_segment_added.connect(_on_run_segment_added)
+
 	# 実行ボタン（外出し）
 	execute_walk_button.pressed.connect(_on_execute_walk_button_pressed)
-	execute_run_button.pressed.connect(_on_execute_run_button_pressed)
 	clear_paths_button.pressed.connect(_on_clear_paths_button_pressed)
 	_update_pending_paths_label()
 
@@ -221,14 +229,9 @@ func _on_cancel_button_pressed() -> void:
 	_cancel_path_mode()
 
 
-## 全員歩き実行ボタン
+## 全員実行ボタン
 func _on_execute_walk_button_pressed() -> void:
 	_execute_all_paths(false)
-
-
-## 全員走り実行ボタン
-func _on_execute_run_button_pressed() -> void:
-	_execute_all_paths(true)
 
 
 ## 全パスクリアボタン
@@ -252,16 +255,40 @@ func _on_vision_point_added(_anchor: Vector3, _direction: Vector3) -> void:
 	_update_vision_label()
 
 
+func _on_add_run_button_pressed() -> void:
+	if path_drawer.has_pending_path():
+		path_drawer.start_run_mode()
+		_update_run_label()
+		print("[PathSystem] Run marker mode activated")
+
+
+func _on_undo_run_button_pressed() -> void:
+	path_drawer.remove_last_run_segment()
+	_update_run_label()
+
+
+func _on_run_segment_added(_start_ratio: float, _end_ratio: float) -> void:
+	_update_run_label()
+
+
 func _update_vision_label() -> void:
 	if vision_label:
 		var count = path_drawer.get_vision_point_count()
 		vision_label.text = "Vision Points: %d" % count
 
 
+func _update_run_label() -> void:
+	if run_label:
+		var count = path_drawer.get_run_segment_count()
+		var incomplete = " (setting...)" if path_drawer.has_incomplete_run_start() else ""
+		run_label.text = "Run Segments: %d%s" % [count, incomplete]
+
+
 func _update_path_panel_visibility() -> void:
 	if path_panel:
 		path_panel.visible = is_path_mode and path_drawer.has_pending_path()
 		_update_vision_label()
+		_update_run_label()
 
 
 ## ========================================
@@ -937,9 +964,11 @@ func _confirm_current_path() -> void:
 		path.append(point)
 
 	var vision_points = path_drawer.get_vision_points().duplicate()
+	var run_segments = path_drawer.get_run_segments().duplicate()
 
-	# 視線マーカーの所有権を取得（clear前に）
+	# 視線マーカーとRunマーカーの所有権を取得（clear前に）
 	var vision_markers = path_drawer.take_vision_markers()
+	var run_markers = path_drawer.take_run_markers()
 
 	# 既存のパスがあれば削除
 	var char_id = path_editing_character.get_instance_id()
@@ -951,6 +980,10 @@ func _confirm_current_path() -> void:
 			for marker in old_data["vision_markers"]:
 				if is_instance_valid(marker):
 					marker.queue_free()
+		if old_data.has("run_markers"):
+			for marker in old_data["run_markers"]:
+				if is_instance_valid(marker):
+					marker.queue_free()
 
 	# パスメッシュを作成（表示用）
 	var path_mesh = _create_path_mesh(path)
@@ -960,12 +993,14 @@ func _confirm_current_path() -> void:
 		"character": path_editing_character,
 		"path": path,
 		"vision_points": vision_points,
+		"run_segments": run_segments,
 		"path_mesh": path_mesh,
-		"vision_markers": vision_markers
+		"vision_markers": vision_markers,
+		"run_markers": run_markers
 	}
 
-	print("[PathSystem] Saved path for %s: %d points, %d vision points" % [
-		path_editing_character.name, path.size(), vision_points.size()
+	print("[PathSystem] Saved path for %s: %d points, %d vision points, %d run segments" % [
+		path_editing_character.name, path.size(), vision_points.size(), run_segments.size()
 	])
 
 	# パスモードを終了（パスメッシュと視線マーカーは保持）
@@ -1009,6 +1044,10 @@ func _execute_all_paths(run: bool) -> void:
 		var character = data["character"] as CharacterBody3D
 		var path = data["path"]
 		var vision_points = data["vision_points"]
+		var run_segments: Array[Dictionary] = []
+		if data.has("run_segments"):
+			for seg in data["run_segments"]:
+				run_segments.append(seg)
 
 		if not is_instance_valid(character):
 			continue
@@ -1017,9 +1056,9 @@ func _execute_all_paths(run: bool) -> void:
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
 
-		if controller.start_path(path, vision_points, run):
+		if controller.start_path(path, vision_points, run_segments, run):
 			executed_count += 1
-			print("[PathSystem] Started path for %s" % character.name)
+			print("[PathSystem] Started path for %s (run_segments: %d)" % [character.name, run_segments.size()])
 		else:
 			print("[PathSystem] Failed to start path for %s" % character.name)
 
@@ -1029,6 +1068,7 @@ func _execute_all_paths(run: bool) -> void:
 		var data = pending_paths[char_id]
 		data.erase("path")
 		data.erase("vision_points")
+		data.erase("run_segments")
 		data.erase("character")
 
 	_update_pending_paths_label()
@@ -1044,7 +1084,7 @@ func _clear_all_pending_paths() -> void:
 	print("[PathSystem] Cleared all pending paths")
 
 
-## 全てのパスメッシュと視線マーカーを削除
+## 全てのパスメッシュと視線マーカーとRunマーカーを削除
 func _clear_all_path_meshes() -> void:
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
@@ -1052,6 +1092,10 @@ func _clear_all_path_meshes() -> void:
 			data["path_mesh"].queue_free()
 		if data.has("vision_markers"):
 			for marker in data["vision_markers"]:
+				if is_instance_valid(marker):
+					marker.queue_free()
+		if data.has("run_markers"):
+			for marker in data["run_markers"]:
 				if is_instance_valid(marker):
 					marker.queue_free()
 
