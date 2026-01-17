@@ -727,7 +727,8 @@ func _get_character_preset_id(character: Node) -> String:
 ## コンテキストメニューを表示
 func _show_context_menu(screen_pos: Vector2, character: Node) -> void:
 	if context_menu:
-		context_menu.open(screen_pos, character)
+		var is_multi = selection_manager.get_selection_count() > 1
+		context_menu.open(screen_pos, character, is_multi)
 
 
 ## コンテキストメニューアイテム選択時

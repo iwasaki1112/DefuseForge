@@ -65,7 +65,8 @@ func _build_ui() -> void:
 
 
 ## メニューを開く
-func open(screen_position: Vector2, character: CharacterBody3D) -> void:
+## is_multi_select: 複数キャラクター選択時はtrue（MOVEのみ表示）
+func open(screen_position: Vector2, character: CharacterBody3D, is_multi_select: bool = false) -> void:
 	if _is_open:
 		# 既に開いている場合は即座にリセット（アニメーションなし、シグナルなし）
 		if _tween:
@@ -76,6 +77,12 @@ func open(screen_position: Vector2, character: CharacterBody3D) -> void:
 
 	_current_character = character
 	_is_open = true
+
+	# 選択数に応じてメニュー項目を設定
+	if is_multi_select:
+		setup_multi_select_items()
+	else:
+		setup_default_items()
 
 	# キャラクター状態に応じてラベルを更新
 	_update_dynamic_labels(character)
@@ -175,6 +182,13 @@ func setup_default_items() -> void:
 	for item_data in DEFAULT_MENU_ITEMS:
 		var item = ContextMenuItemScript.create(item_data["id"], item_data["name"], item_data["order"])
 		add_item(item)
+
+
+## 複数選択時用のメニュー項目をセットアップ（MOVEのみ）
+func setup_multi_select_items() -> void:
+	clear_items()
+	var item = ContextMenuItemScript.create("move", "Move", 0)
+	add_item(item)
 
 
 ## メニューが開いているか

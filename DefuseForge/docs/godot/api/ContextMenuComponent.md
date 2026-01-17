@@ -18,15 +18,18 @@
 ## 定数
 
 ### DEFAULT_MENU_ITEMS
-標準メニュー項目の定義。
+標準メニュー項目の定義（単一選択時用）。
 
 ```gdscript
 const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
     {"id": "move", "name": "Move", "order": 0},
     {"id": "rotate", "name": "Rotate", "order": 1},
-    {"id": "control", "name": "Control", "order": 2},
+    {"id": "crouch", "name": "Crouch", "order": 2},
 ]
 ```
+
+**複数選択時:**
+`setup_multi_select_items()`によりMOVEのみ表示される。
 
 ## Export Properties
 
@@ -47,12 +50,13 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 
 ### Menu Control
 
-#### open(screen_position: Vector2, character: CharacterBody3D) -> void
+#### open(screen_position: Vector2, character: CharacterBody3D, is_multi_select: bool = false) -> void
 メニューを開く。
 
 **引数:**
 - `screen_position` - 画面上の表示位置
 - `character` - 対象キャラクター
+- `is_multi_select` - 複数キャラクター選択時はtrue（MOVEのみ表示）
 
 #### close() -> void
 メニューを閉じる。
@@ -81,7 +85,10 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 全メニュー項目をクリアする。
 
 #### setup_default_items() -> void
-標準メニュー項目をセットアップする。
+標準メニュー項目をセットアップする（Move, Rotate, Crouch）。
+
+#### setup_multi_select_items() -> void
+複数選択時用のメニュー項目をセットアップする（MOVEのみ）。
 
 ## 使用例
 
@@ -97,8 +104,12 @@ context_menu.setup_default_items()
 # シグナル接続
 context_menu.item_selected.connect(_on_menu_item_selected)
 
-# メニューを開く
+# メニューを開く（単一選択時）
 context_menu.open(screen_position, character)
+
+# 複数選択時はis_multi_select=trueでMOVEのみ表示
+var is_multi = selection_manager.get_selection_count() > 1
+context_menu.open(screen_position, character, is_multi)
 
 # カスタム項目追加
 var item = ContextMenuItem.create("fire", "Fire", 3)
