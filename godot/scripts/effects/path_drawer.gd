@@ -31,7 +31,7 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
 @export var path_click_threshold: float = 0.5  # パスクリック判定距離
-@export var wall_collision_mask: int = 2  # 壁検出用のコリジョンマスク
+@export_flags_3d_physics var wall_collision_mask: int = 2  # 壁検出用のコリジョンマスク
 
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")

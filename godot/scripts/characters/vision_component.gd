@@ -52,10 +52,9 @@ const EYE_POSITION_SMOOTHING: float = 0.3  # 視点位置の平滑化係数（�
 const ANGLE_SMOOTHING: float = 0.3  # 角度の平滑化係数（小さいほど滑らか）
 
 # 壁コーナーキャッシュ（パフォーマンス最適化）
+# 壁は静的なので初回構築後は再構築しない（invalidate_wall_cache()で手動更新可能）
 static var _wall_corners_cache: Array[Vector3] = []
 static var _wall_corners_dirty: bool = true
-const CORNER_CACHE_REBUILD_INTERVAL: float = 1.0  # キャッシュ再構築間隔（秒）
-var _corner_cache_timer: float = 0.0
 
 # 静止時最適化
 var _stationary_frames: int = 0
@@ -82,12 +81,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not _enabled:
 		return
-
-	# 壁コーナーキャッシュの定期更新
-	_corner_cache_timer += delta
-	if _corner_cache_timer >= CORNER_CACHE_REBUILD_INTERVAL:
-		_corner_cache_timer = 0.0
-		_wall_corners_dirty = true
 
 	# 静止時は更新間隔を長くする
 	var current_interval := update_interval if _stationary_frames < STATIONARY_THRESHOLD else STATIONARY_UPDATE_INTERVAL
@@ -128,6 +121,11 @@ func set_fov(degrees: float) -> void:
 ## Set view distance
 func set_view_distance(distance: float) -> void:
 	view_distance = max(1.0, distance)
+
+
+## 壁コーナーキャッシュを無効化（壁が動的に変更された場合に呼び出す）
+static func invalidate_wall_cache() -> void:
+	_wall_corners_dirty = true
 
 
 ## Disable vision (for death, etc.)

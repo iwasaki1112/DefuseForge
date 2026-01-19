@@ -176,8 +176,7 @@ func _set_animation(index: int) -> void:
 	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl:
 		# Ensure AnimationTree is active (may have been disabled by direct play)
-		if anim_ctrl._anim_tree:
-			anim_ctrl._anim_tree.active = true
+		anim_ctrl.set_animation_tree_active(true)
 		anim_ctrl.set_weapon(anim_config.weapon)
 		anim_ctrl.set_aiming(anim_config.aiming)
 
@@ -325,8 +324,8 @@ func _on_weapon_selected(index: int) -> void:
 func _play_direct(anim_name: String) -> void:
 	# Stop AnimationTree and play directly via AnimationPlayer
 	var anim_ctrl = _character.get_anim_controller()
-	if anim_ctrl and anim_ctrl._anim_tree:
-		anim_ctrl._anim_tree.active = false
+	if anim_ctrl:
+		anim_ctrl.set_animation_tree_active(false)
 
 	var model = _character.get_node_or_null("CharacterModel")
 	if model:
