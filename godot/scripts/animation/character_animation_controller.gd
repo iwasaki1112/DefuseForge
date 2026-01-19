@@ -346,7 +346,7 @@ func _setup_animation_tree() -> void:
 	var run_weapon_blend := AnimationNodeBlend2.new()
 
 	var idle_anim := AnimationNodeAnimation.new()
-	idle_anim.animation = "rifle_idle"  # TODO: Add separate idle without weapon
+	idle_anim.animation = "pistol_idle"
 
 	# Rifle idle (standing)
 	var rifle_idle_anim := AnimationNodeAnimation.new()
@@ -365,7 +365,7 @@ func _setup_animation_tree() -> void:
 	})
 
 	var crouch_idle_anim := AnimationNodeAnimation.new()
-	crouch_idle_anim.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
+	crouch_idle_anim.animation = "pistol_idle"  # TODO: Add pistol_idle_crouching
 
 	# Rifle idle (crouching)
 	var rifle_crouch_idle_anim := AnimationNodeAnimation.new()
