@@ -344,12 +344,6 @@ func _calculate_hit_direction(attacker: Node3D) -> int:
 	else:
 		return 3  # RIGHT
 
-func _disable_collision() -> void:
-	var collision_shape := get_node_or_null("CollisionShape3D") as CollisionShape3D
-	if collision_shape:
-		collision_shape.disabled = true
-
-
 ## Make corpse passable by other characters while keeping ground collision
 func _make_corpse_passable() -> void:
 	# Set collision_layer to 0 so other characters don't collide with this corpse

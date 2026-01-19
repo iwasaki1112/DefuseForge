@@ -17,6 +17,8 @@ var path_target_characters: Array[Node] = []
 
 ## アウトライン適用中のメッシュ { character_id: Array[MeshInstance3D] }
 var _outlined_meshes_by_character: Dictionary = {}
+## 元のマテリアルオーバーライドを保存 { character_id: { mesh_instance_id: { surface_index: Material } } }
+var _original_materials_by_character: Dictionary = {}
 
 ## アウトライン設定
 var outline_color: Color = Color(0.0, 0.8, 1.0, 1.0)
@@ -119,10 +121,17 @@ func _apply_outline(character: Node) -> void:
 	var search_root = model if model else character
 	var meshes = _find_mesh_instances(search_root)
 	var outlined: Array[MeshInstance3D] = []
+	var original_materials: Dictionary = {}  # { mesh_instance_id: { surface_index: Material } }
 
 	for mesh in meshes:
 		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
+		var mesh_id = mesh.get_instance_id()
+		var mesh_originals: Dictionary = {}
+
 		for i in range(surface_count):
+			# 元のオーバーライドマテリアルを保存（nullの場合もそのまま保存）
+			mesh_originals[i] = mesh.get_surface_override_material(i)
+
 			var mat = mesh.get_active_material(i)
 			if mat and mat is StandardMaterial3D:
 				# マテリアルを複製してステンシルアウトラインを設定
@@ -138,9 +147,12 @@ func _apply_outline(character: Node) -> void:
 				new_mat.stencil_outline_thickness = outline_thickness
 				new_mat.stencil_color = outline_color
 				mesh.set_surface_override_material(i, new_mat)
+
+		original_materials[mesh_id] = mesh_originals
 		outlined.append(mesh)
 
 	_outlined_meshes_by_character[char_id] = outlined
+	_original_materials_by_character[char_id] = original_materials
 	print("[Outline] Applied outline to %s (%d meshes)" % [character.name, outlined.size()])
 
 
@@ -151,14 +163,21 @@ func _remove_outline(character: Node) -> void:
 		return
 
 	var meshes = _outlined_meshes_by_character[char_id]
+	var original_materials: Dictionary = _original_materials_by_character.get(char_id, {})
+
 	for mesh in meshes:
 		if is_instance_valid(mesh):
-			# サーフェスオーバーライドをクリア（元のマテリアルに戻る）
+			var mesh_id = mesh.get_instance_id()
+			var mesh_originals: Dictionary = original_materials.get(mesh_id, {})
 			var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
+
 			for i in range(surface_count):
-				mesh.set_surface_override_material(i, null)
+				# 元のオーバーライドマテリアルを復元
+				var original_mat = mesh_originals.get(i, null)
+				mesh.set_surface_override_material(i, original_mat)
 
 	_outlined_meshes_by_character.erase(char_id)
+	_original_materials_by_character.erase(char_id)
 	print("[Outline] Removed outline from %s" % character.name)
 
 
@@ -166,12 +185,20 @@ func _remove_outline(character: Node) -> void:
 func clear_all_outlines() -> void:
 	for char_id in _outlined_meshes_by_character.keys():
 		var meshes = _outlined_meshes_by_character[char_id]
+		var original_materials: Dictionary = _original_materials_by_character.get(char_id, {})
+
 		for mesh in meshes:
 			if is_instance_valid(mesh):
+				var mesh_id = mesh.get_instance_id()
+				var mesh_originals: Dictionary = original_materials.get(mesh_id, {})
 				var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
+
 				for i in range(surface_count):
-					mesh.set_surface_override_material(i, null)
+					var original_mat = mesh_originals.get(i, null)
+					mesh.set_surface_override_material(i, original_mat)
+
 	_outlined_meshes_by_character.clear()
+	_original_materials_by_character.clear()
 
 
 ## MeshInstance3Dを再帰的に探す（WeaponAttachmentは除外）

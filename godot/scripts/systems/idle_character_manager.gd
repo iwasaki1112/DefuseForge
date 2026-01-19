@@ -51,8 +51,9 @@ func process_idle_characters(delta: float) -> void:
 		# プライマリキャラクターはスキップ（別処理）
 		if character == primary:
 			continue
-		# 死亡中はスキップ
-		if not character.is_alive:
+		# 死亡中はスキップ（GameCharacterのみ）
+		var game_char := character as GameCharacter
+		if game_char and not game_char.is_alive:
 			continue
 
 		_update_idle_character(character, delta)

@@ -31,6 +31,7 @@ var _characters: Array[Node] = []
 # State
 # ============================================
 var _visibility_cache: Dictionary = {}  # { instance_id: bool }
+var _polygon_cache: Dictionary = {}  # { instance_id: PackedVector2Array } - キャッシュ済み2Dポリゴン
 var _is_enabled: bool = true
 var _mode: VisibilityMode = VisibilityMode.FULL_VISION
 
@@ -83,7 +84,9 @@ func register_character(character: Node) -> void:
 ## Unregister a character
 func unregister_character(character: Node) -> void:
 	_characters.erase(character)
-	_visibility_cache.erase(character.get_instance_id())
+	var char_id := character.get_instance_id()
+	_visibility_cache.erase(char_id)
+	_polygon_cache.erase(char_id)
 
 	var game_char := character as GameCharacter
 	if game_char and game_char.vision:
@@ -209,17 +212,28 @@ func _is_position_visible_to_friendlies(world_pos: Vector3) -> bool:
 		if not game_char or not game_char.vision or not game_char.is_alive:
 			continue
 
-		var polygon_3d := game_char.vision.get_visible_polygon()
-		if polygon_3d.size() < 3:
-			continue
+		var char_id := game_char.get_instance_id()
 
-		# Project 3D polygon to 2D (XZ plane)
-		var polygon_2d := PackedVector2Array()
-		for point in polygon_3d:
-			polygon_2d.append(Vector2(point.x, point.z))
+		# キャッシュされた2Dポリゴンを使用
+		if _polygon_cache.has(char_id):
+			var polygon_2d: PackedVector2Array = _polygon_cache[char_id]
+			if polygon_2d.size() >= 3 and Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
+				return true
+		else:
+			# キャッシュがない場合は構築してキャッシュ
+			var polygon_3d := game_char.vision.get_visible_polygon()
+			if polygon_3d.size() < 3:
+				continue
 
-		if Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
-			return true
+			var polygon_2d := PackedVector2Array()
+			polygon_2d.resize(polygon_3d.size())
+			for i in range(polygon_3d.size()):
+				polygon_2d[i] = Vector2(polygon_3d[i].x, polygon_3d[i].z)
+
+			_polygon_cache[char_id] = polygon_2d
+
+			if Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
+				return true
 
 	return false
 
@@ -296,11 +310,23 @@ func _show_all_vision() -> void:
 
 func _on_player_team_changed(_new_team: GameCharacter.Team) -> void:
 	_visibility_cache.clear()
+	_polygon_cache.clear()
 	_update_all_vision_registration()
 	update_visibility()
 
 
-func _on_vision_updated(_visible_points: PackedVector3Array, character: Node) -> void:
+func _on_vision_updated(visible_points: PackedVector3Array, character: Node) -> void:
 	# Only update when friendly vision changes
 	if PlayerState.is_friendly(character):
+		# ポリゴンキャッシュを更新
+		var char_id := character.get_instance_id()
+		if visible_points.size() >= 3:
+			var polygon_2d := PackedVector2Array()
+			polygon_2d.resize(visible_points.size())
+			for i in range(visible_points.size()):
+				polygon_2d[i] = Vector2(visible_points[i].x, visible_points[i].z)
+			_polygon_cache[char_id] = polygon_2d
+		else:
+			_polygon_cache.erase(char_id)
+
 		update_visibility()

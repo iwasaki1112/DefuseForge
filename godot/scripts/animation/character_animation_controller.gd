@@ -198,6 +198,12 @@ func get_current_speed() -> float:
 func is_dead() -> bool:
 	return _is_dead
 
+
+## Set AnimationTree active state
+func set_animation_tree_active(active: bool) -> void:
+	if _anim_tree:
+		_anim_tree.active = active
+
 ## Get current aim direction (for vision calculation)
 func get_look_direction() -> Vector3:
 	return _aim_direction

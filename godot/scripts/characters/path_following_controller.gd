@@ -36,6 +36,10 @@ var _combat_awareness: Node = null  # CombatAwarenessComponent
 var _last_position: Vector3 = Vector3.ZERO
 var _stuck_time: float = 0.0
 
+## パス長キャッシュ（毎フレーム再計算を回避）
+var _cached_total_length: float = 0.0
+var _cached_segment_lengths: Array[float] = []  # 各セグメントの累積距離
+
 ## キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
@@ -77,6 +81,9 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_last_move_direction = Vector3.ZERO
 	_last_position = _character.global_position
 	_stuck_time = 0.0
+
+	# パス長キャッシュを構築
+	_build_path_length_cache()
 
 	# キャラクターの現在位置に最も近いパスポイントから開始
 	# （接続線の最初のポイントはキャラクター位置なのでスキップ）
@@ -275,27 +282,35 @@ func _update_vision_direction() -> void:
 			break
 
 
+## パス長キャッシュを構築
+func _build_path_length_cache() -> void:
+	_cached_segment_lengths.clear()
+	_cached_total_length = 0.0
+
+	if _current_path.size() < 2:
+		return
+
+	_cached_segment_lengths.append(0.0)  # 最初のポイントは累積距離0
+	for i in range(1, _current_path.size()):
+		_cached_total_length += _current_path[i - 1].distance_to(_current_path[i])
+		_cached_segment_lengths.append(_cached_total_length)
+
+
 ## パスの進行率を計算
 ## キャラクターの実際の位置に基づいて、パス上の最も近い点を見つけて進行率を計算
 func _calculate_path_progress() -> float:
 	if _current_path.size() < 2 or not _character:
 		return 0.0
 
+	if _cached_total_length < 0.001:
+		return 0.0
+
 	var char_pos = _character.global_position
 	char_pos.y = 0
-
-	# パスの総距離を計算
-	var total_length = 0.0
-	for i in range(1, _current_path.size()):
-		total_length += _current_path[i - 1].distance_to(_current_path[i])
-
-	if total_length < 0.001:
-		return 0.0
 
 	# 各セグメントを調べて、キャラクターに最も近い点を見つける
 	var best_distance = INF
 	var best_accumulated_length = 0.0
-	var accumulated_length = 0.0
 
 	for i in range(1, _current_path.size()):
 		var p1 = _current_path[i - 1]
@@ -304,25 +319,23 @@ func _calculate_path_progress() -> float:
 		p2.y = 0
 
 		var segment = p2 - p1
-		var segment_length = segment.length()
-		if segment_length < 0.001:
-			accumulated_length += segment_length
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
 			continue
 
 		# セグメント上の最近点を計算
-		var t = clampf((char_pos - p1).dot(segment) / (segment_length * segment_length), 0.0, 1.0)
+		var t = clampf((char_pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
 		var point_on_segment = p1 + segment * t
 		var distance = char_pos.distance_to(point_on_segment)
 
 		# 現在のセグメント以降のみ考慮（戻らない）
-		if i >= _path_index or i == _path_index:
+		if i >= _path_index:
 			if distance < best_distance:
 				best_distance = distance
-				best_accumulated_length = accumulated_length + segment_length * t
+				var segment_length = sqrt(segment_length_sq)
+				best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
 
-		accumulated_length += segment_length
-
-	return best_accumulated_length / total_length
+	return best_accumulated_length / _cached_total_length
 
 
 ## Run区間内かどうかを判定
