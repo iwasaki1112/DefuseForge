@@ -12,7 +12,7 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Export settings
 @export_group("Movement Speed")
-@export var walk_speed := 1.4
+@export var walk_speed := 2.0
 @export var run_speed := 5.0
 @export var crouch_speed := 1.5
 @export var rotation_speed := 15.0
@@ -42,10 +42,13 @@ var _is_running := false
 var _is_dead := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 
-# Animation reference speeds (measured from Mixamo root motion)
-const ANIM_REF_WALK := 1.86  # 30-frame walk animation measured at 1.856 m/s
-const ANIM_REF_RUN := 5.5    # Mixamo run animation ~5.5 m/s
-const ANIM_REF_CROUCH := 1.2 # Mixamo crouch walk ~1.2 m/s
+# Animation visual speeds at 1x playback (2-second/60-frame animations)
+# Different directions have different stride lengths
+const ANIM_SPEED_FORWARD := 2.0   # Forward/backward: large strides
+const ANIM_SPEED_STRAFE := 1.2    # Left/right: small strides
+const ANIM_SPEED_DIAGONAL := 1.6  # Diagonal: medium strides
+const ANIM_REF_RUN := 5.5         # Sprint animation
+const ANIM_REF_CROUCH := 1.5      # Crouch walk
 
 # Death animation name
 const DEATH_ANIM := "death"
@@ -165,7 +168,8 @@ func fire() -> void:
 		_recoil_modifier.recovery_speed = recoil_recovery
 		_recoil_modifier.trigger_recoil(strength)
 
-## Get current movement speed based on state
+## Get current movement speed based on state and direction
+## Returns the animation's visual speed for the current blend direction
 func get_current_speed() -> float:
 	if _is_dead:
 		return 0.0
@@ -174,7 +178,33 @@ func get_current_speed() -> float:
 	elif _is_running:
 		return run_speed
 	else:
-		return walk_speed
+		# Calculate direction-based speed from current blend position
+		return _get_directional_anim_speed()
+
+## Calculate animation visual speed based on blend direction
+func _get_directional_anim_speed() -> float:
+	if _input_dir.length() < 0.01:
+		return ANIM_SPEED_FORWARD  # Default when idle
+
+	# Normalize input direction
+	var dir := _input_dir.normalized()
+
+	# Calculate weights for forward/backward vs strafe
+	var forward_weight := absf(dir.y)  # Y = forward/backward
+	var strafe_weight := absf(dir.x)   # X = left/right
+
+	# Blend between forward and strafe speeds based on direction
+	# Pure forward/backward: forward_weight=1, strafe_weight=0
+	# Pure strafe: forward_weight=0, strafe_weight=1
+	# Diagonal: both ~0.707
+	var speed := ANIM_SPEED_FORWARD * forward_weight + ANIM_SPEED_STRAFE * strafe_weight
+
+	# Normalize for diagonal (weights sum to ~1.414 for diagonal)
+	var total_weight := forward_weight + strafe_weight
+	if total_weight > 0.01:
+		speed /= total_weight
+
+	return speed
 
 ## Check if character is dead
 func is_dead() -> bool:
@@ -422,6 +452,8 @@ func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 	blend_space.auto_triangles = true
 	blend_space.min_space = Vector2(-1, -1)
 	blend_space.max_space = Vector2(1, 1)
+	# Enable sync to keep animation phase synchronized across blend positions
+	blend_space.sync = true
 
 	for pos in anims:
 		var anim_name: String = anims[pos]
@@ -438,6 +470,8 @@ func _create_blend_space_with_fallback(anims: Dictionary) -> AnimationNodeBlendS
 	blend_space.auto_triangles = true
 	blend_space.min_space = Vector2(-1, -1)
 	blend_space.max_space = Vector2(1, 1)
+	# Enable sync to keep animation phase synchronized across blend positions
+	blend_space.sync = true
 
 	for pos in anims:
 		var anim_names: Array = anims[pos]
@@ -476,13 +510,16 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 		var target_blend := Vector2(-sin(angle), -cos(angle))
 
-		var blend_speed := 0.3 if target_blend.length() > _input_dir.length() else 0.1
-		_input_dir = _input_dir.lerp(target_blend, blend_speed)
-
-		_movement_blend = lerp(_movement_blend, 1.0, 0.1)
+		# Smooth but fast interpolation for direction changes
+		# This prevents "popping" when changing direction while keeping responsiveness
+		var blend_speed := 12.0  # Higher = faster response
+		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
-		_movement_blend = lerp(_movement_blend, 0.0, 0.1)
-		_input_dir = _input_dir.lerp(Vector2.ZERO, 0.1)
+		# Quick fade to idle when stopped
+		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
+		if _movement_blend < 0.01:
+			_input_dir = Vector2.ZERO
 
 func _update_animation_tree() -> void:
 	if not _anim_tree or not _anim_tree.active:
@@ -494,15 +531,15 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/CrouchWalkBlend/blend_position", _input_dir)
 
-	# Update animation speed (scale based on movement speed to prevent foot sliding)
-	# Formula: animation_scale = actual_movement_speed / animation_reference_speed
-	var walk_scale := walk_speed / ANIM_REF_WALK
-	var run_scale := run_speed / ANIM_REF_RUN
-	var crouch_scale := crouch_speed / ANIM_REF_CROUCH
+	# TimeScale = 1.0 for walk animations
+	# Movement speed is adjusted per-direction to match animation visual speed
+	# This ensures feet don't slide regardless of movement direction
+	var walk_scale: float = 1.0
+	var run_scale: float = run_speed / ANIM_REF_RUN
+	var crouch_scale: float = crouch_speed / ANIM_REF_CROUCH
 
-	walk_scale = clamp(walk_scale, 0.5, 2.0)
-	run_scale = clamp(run_scale, 0.5, 2.0)
-	crouch_scale = clamp(crouch_scale, 0.5, 2.0)
+	run_scale = clampf(run_scale, 0.5, 2.0)
+	crouch_scale = clampf(crouch_scale, 0.5, 2.0)
 
 	_anim_tree.set("parameters/WalkSpeed/scale", walk_scale)
 	_anim_tree.set("parameters/RunSpeed/scale", run_scale)
