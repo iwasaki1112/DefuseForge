@@ -47,9 +47,9 @@ func confirm_path(
 		print("[PathExecution] No target characters for path")
 		return false
 
-	# パス情報を取得（絶対座標のまま）
+	# パス情報を取得（スムージング済みの内部パス）
 	var base_path: Array[Vector3] = []
-	var pending = path_drawer.get_drawn_path()
+	var pending = path_drawer.get_smoothed_path()
 	for point in pending:
 		base_path.append(point)
 

@@ -42,6 +42,9 @@
 | `max_points` | `int` | `500` | 最大ポイント数 |
 | `path_click_threshold` | `float` | `0.5` | パスクリック判定距離 |
 | `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
+| `enable_smoothing` | `bool` | `true` | パススムージングを有効化 |
+| `smoothing_epsilon` | `float` | `0.15` | RDP間引き許容誤差（大きいほど間引き強） |
+| `smoothing_segments` | `int` | `4` | Catmull-Rom曲線の分割数（大きいほど滑らか） |
 
 ## Public API
 
@@ -70,7 +73,10 @@ PathDrawerを無効化する。
 パスと視線ポイントとRunマーカーをすべてクリアする。
 
 #### get_drawn_path() -> PackedVector3Array
-描画されたパスを取得する。
+描画されたパス（生パス）を取得する。
+
+#### get_smoothed_path() -> PackedVector3Array
+スムージング済みの内部パスを取得する。キャラクター移動用。
 
 #### get_relative_path() -> PackedVector3Array
 基準位置からの相対パスを取得する。各キャラクターの開始位置にオフセットして使用可能。
@@ -322,6 +328,39 @@ path_execution_manager.confirm_path(selected_characters, path_drawer, char_a)
 - `VisionMarker`で視線ポイントを可視化
 - `RunMarker`でRun区間の開始/終点を可視化
 - パス上クリックで最近接点を計算し、そこから視線方向やRun区間を設定
+- **パススムージング**: 描画完了時に`PathSmoother`で手ブレを補正
+
+## パススムージング
+
+描画完了時に手描きパスの手ブレを滑らかにする。
+
+### 処理フロー
+1. **RDP間引き**: Ramer-Douglas-Peucker法で不要ポイントを削除
+2. **Catmull-Rom補間**: 残ったポイントを滑らかな曲線で補間
+
+### パラメータ調整
+
+| パラメータ | 推奨範囲 | 効果 |
+|-----------|----------|------|
+| `smoothing_epsilon` | 0.1〜0.3m | 大きいほど間引きが強く、パスが単純化 |
+| `smoothing_segments` | 3〜6 | 大きいほど滑らかだが、ポイント数が増加 |
+
+```gdscript
+# スムージングを無効化
+path_drawer.enable_smoothing = false
+
+# カスタム設定
+path_drawer.smoothing_epsilon = 0.2  # 強めの間引き
+path_drawer.smoothing_segments = 5   # より滑らかな曲線
+```
+
+### 備考
+- 表示パスは生パス（手描きのまま）、内部パスのみスムージングが適用される
+- キャラクターはスムージング後の滑らかなパスを歩く
+- 視線ポイント・Run区間はスムージング後のパスを基準に設定される
+- 3ポイント未満のパスではスムージングはスキップされる
+
+詳細は [PathSmoother](PathSmoother.md) を参照。
 
 ## 障害物（壁）検出
 

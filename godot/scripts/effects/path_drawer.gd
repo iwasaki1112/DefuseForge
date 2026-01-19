@@ -33,6 +33,11 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 @export var path_click_threshold: float = 0.5  # パスクリック判定距離
 @export_flags_3d_physics var wall_collision_mask: int = 2  # 壁検出用のコリジョンマスク
 
+## スムージング設定
+@export var enable_smoothing: bool = true  # パススムージングを有効化
+@export var smoothing_epsilon: float = 0.15  # RDP間引き許容誤差（大きいほど間引き強）
+@export var smoothing_segments: int = 4  # Catmull-Rom曲線の分割数（大きいほど滑らか）
+
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
 const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
@@ -482,11 +487,15 @@ func _finish_drawing() -> void:
 	_is_drawing = false
 
 	if _path_points.size() >= 2 and _character:
-		_pending_path = _path_points.duplicate()
+		# 表示パスはそのまま、内部パスのみスムージング（より滑らかに補間）
+		if enable_smoothing and _path_points.size() >= 3:
+			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
+		else:
+			_pending_path = _path_points.duplicate()
 		_pending_character = _character as CharacterBody3D
 
 	drawing_finished.emit(_path_points)
-	print("[PathDrawer] Movement path finished with %d points" % _path_points.size())
+	print("[PathDrawer] Movement path finished with %d points (internal: %d)" % [_path_points.size(), _pending_path.size()])
 
 
 ## パスをクリア
@@ -533,6 +542,11 @@ func take_run_markers() -> Array[MeshInstance3D]:
 
 func get_drawn_path() -> PackedVector3Array:
 	return _path_points
+
+
+## スムージング済みの内部パスを取得（キャラクター移動用）
+func get_smoothed_path() -> PackedVector3Array:
+	return _pending_path
 
 
 ## 基準位置からの相対パスを取得
