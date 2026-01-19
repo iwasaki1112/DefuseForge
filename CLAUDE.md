@@ -30,7 +30,7 @@
 ### クラス別APIドキュメント
 | カテゴリ | クラス | 概要 |
 |---------|--------|------|
-| Animation | CharacterAnimationController | 8方向ストレイフ・エイム・リコイル・デスを統合制御 |
+| Animation | CharacterAnimationController | 8方向ストレイフ・リコイル・デスを統合制御 |
 | Animation | RecoilModifier | SkeletonModifier3Dで発射時の反動を適用 |
 | Character | GameCharacter | HP・チーム・死亡処理を管理するCharacterBody3D |
 | Character | VisionComponent | シャドウキャスト法でFoW用の可視ポリゴンを計算 |

@@ -12,10 +12,9 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Export settings
 @export_group("Movement Speed")
-@export var walk_speed := 1.5
+@export var walk_speed := 1.4
 @export var run_speed := 5.0
 @export var crouch_speed := 1.5
-@export var aim_walk_speed := 2.0
 @export var rotation_speed := 15.0
 
 @export_group("Recoil")
@@ -39,13 +38,12 @@ var _recoil_modifier: SkeletonModifier3D
 # State
 var _stance := Stance.STAND
 var _weapon := Weapon.RIFLE
-var _is_aiming := false
 var _is_running := false
 var _is_dead := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 
-# Animation reference speeds (Mixamo animation inherent speeds - do not change)
-const ANIM_REF_WALK := 1.39  # Mixamo walk animation ~1.39 m/s
+# Animation reference speeds (measured from Mixamo root motion)
+const ANIM_REF_WALK := 1.86  # 30-frame walk animation measured at 1.856 m/s
 const ANIM_REF_RUN := 5.5    # Mixamo run animation ~5.5 m/s
 const ANIM_REF_CROUCH := 1.2 # Mixamo crouch walk ~1.2 m/s
 
@@ -56,12 +54,10 @@ const DEATH_ANIM := "death"
 var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0
 var _crouch_blend := 0.0
-var _aim_blend := 0.0
 var _weapon_blend := 0.0
 var _fire_cooldown := 0.0
 
 # Internal nodes
-var _aim_upper_blend: AnimationNodeBlend2
 
 const RecoilModifierScript = preload("res://scripts/modifiers/recoil_modifier.gd")
 
@@ -84,7 +80,6 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 		_setup_animation_loops()
 
 	_setup_animation_tree()
-	call_deferred("_setup_upper_body_filter")
 	_update_weapon_idle_blend()
 
 	# 初期のエイム方向をモデルの前方向に設定
@@ -110,7 +105,7 @@ func update_animation(
 	if aim_direction.length_squared() > 0.001:
 		_aim_direction = aim_direction.normalized()
 
-	_is_running = is_running and _stance != Stance.CROUCH and not _is_aiming
+	_is_running = is_running and _stance != Stance.CROUCH
 
 	# Update model rotation
 	_update_model_rotation(aim_direction, delta)
@@ -148,10 +143,6 @@ func _update_weapon_idle_blend() -> void:
 	_anim_tree.set("parameters/WeaponIdleStandBlend/blend_amount", blend_value)
 	_anim_tree.set("parameters/WeaponIdleCrouchBlend/blend_amount", blend_value)
 
-## Set aiming state (upper body layer)
-func set_aiming(aiming: bool) -> void:
-	_is_aiming = aiming
-
 ## Trigger fire action (recoil)
 func fire() -> void:
 	if _fire_cooldown > 0:
@@ -180,8 +171,6 @@ func get_current_speed() -> float:
 		return 0.0
 	if _stance == Stance.CROUCH:
 		return crouch_speed
-	elif _is_aiming:
-		return aim_walk_speed
 	elif _is_running:
 		return run_speed
 	else:
@@ -352,20 +341,6 @@ func _setup_animation_tree() -> void:
 	var rifle_crouch_idle_anim := AnimationNodeAnimation.new()
 	rifle_crouch_idle_anim.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
 
-	# Aiming animations - Rifle
-	var aim_rifle_stand := AnimationNodeAnimation.new()
-	aim_rifle_stand.animation = "rifle_idle"
-
-	var aim_rifle_crouch := AnimationNodeAnimation.new()
-	aim_rifle_crouch.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
-
-	# Aiming animations - Pistol (use pistol_walk_forward for upper body pose)
-	var aim_pistol_stand := AnimationNodeAnimation.new()
-	aim_pistol_stand.animation = "pistol_walk_forward"  # Use pistol pose for upper body
-
-	var aim_pistol_crouch := AnimationNodeAnimation.new()
-	aim_pistol_crouch.animation = "pistol_walk_forward"  # TODO: Add pistol_idle_crouching
-
 	# TimeScale nodes
 	var walk_speed_node := AnimationNodeTimeScale.new()
 	var run_speed_node := AnimationNodeTimeScale.new()
@@ -380,15 +355,6 @@ func _setup_animation_tree() -> void:
 	# Weapon idle blend nodes (switches idle based on weapon type)
 	var weapon_idle_stand_blend := AnimationNodeBlend2.new()
 	var weapon_idle_crouch_blend := AnimationNodeBlend2.new()
-
-	# Weapon blend nodes
-	var weapon_stand_blend := AnimationNodeBlend2.new()
-	var weapon_crouch_blend := AnimationNodeBlend2.new()
-
-	# Aiming blend with filter
-	var aim_pose_blend := AnimationNodeBlend2.new()
-	_aim_upper_blend = AnimationNodeBlend2.new()
-	_aim_upper_blend.filter_enabled = true
 
 	# Add nodes
 	blend_tree.add_node("Idle", idle_anim, Vector2(-600, -200))
@@ -417,17 +383,6 @@ func _setup_animation_tree() -> void:
 
 	blend_tree.add_node("StandCrouchBlend", stand_crouch_blend, Vector2(200, 300))
 
-	blend_tree.add_node("AimRifleStand", aim_rifle_stand, Vector2(100, 600))
-	blend_tree.add_node("AimRifleCrouch", aim_rifle_crouch, Vector2(100, 800))
-	blend_tree.add_node("AimPistolStand", aim_pistol_stand, Vector2(300, 600))
-	blend_tree.add_node("AimPistolCrouch", aim_pistol_crouch, Vector2(300, 800))
-
-	blend_tree.add_node("WeaponStandBlend", weapon_stand_blend, Vector2(200, 700))
-	blend_tree.add_node("WeaponCrouchBlend", weapon_crouch_blend, Vector2(200, 900))
-
-	blend_tree.add_node("AimPoseBlend", aim_pose_blend, Vector2(400, 800))
-	blend_tree.add_node("AimUpperBlend", _aim_upper_blend, Vector2(500, 400))
-
 	# Connect nodes
 	# Weapon-based idle blend (0 = rifle idle, 1 = normal idle; controlled by weapon type)
 	blend_tree.connect_node("WeaponIdleStandBlend", 0, "RifleIdle")
@@ -454,47 +409,12 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("StandCrouchBlend", 0, "StandingBlend")
 	blend_tree.connect_node("StandCrouchBlend", 1, "CrouchingBlend")
 
-	blend_tree.connect_node("WeaponStandBlend", 0, "AimRifleStand")
-	blend_tree.connect_node("WeaponStandBlend", 1, "AimPistolStand")
-	blend_tree.connect_node("WeaponCrouchBlend", 0, "AimRifleCrouch")
-	blend_tree.connect_node("WeaponCrouchBlend", 1, "AimPistolCrouch")
-
-	blend_tree.connect_node("AimPoseBlend", 0, "WeaponStandBlend")
-	blend_tree.connect_node("AimPoseBlend", 1, "WeaponCrouchBlend")
-
-	blend_tree.connect_node("AimUpperBlend", 0, "StandCrouchBlend")
-	blend_tree.connect_node("AimUpperBlend", 1, "AimPoseBlend")
-
-	blend_tree.connect_node("output", 0, "AimUpperBlend")
+	blend_tree.connect_node("output", 0, "StandCrouchBlend")
 
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
 	_anim_tree.active = true
 
-
-func _setup_upper_body_filter() -> void:
-	if not _skeleton or not _aim_upper_blend:
-		return
-
-	var armature = _skeleton.get_parent()
-	var armature_name = armature.name if armature else "Armature"
-	var skeleton_name = _skeleton.name
-	var skeleton_path = "%s/%s" % [armature_name, skeleton_name]
-
-	_add_bone_filter_recursive(skeleton_path, upper_body_root)
-
-func _add_bone_filter_recursive(skeleton_path: String, bone_name: String) -> void:
-	var bone_idx = _skeleton.find_bone(bone_name)
-	if bone_idx < 0:
-		return
-
-	var filter_path = "%s:%s" % [skeleton_path, bone_name]
-	_aim_upper_blend.set_filter_path(NodePath(filter_path), true)
-
-	for i in range(_skeleton.get_bone_count()):
-		if _skeleton.get_bone_parent(i) == bone_idx:
-			var child_name = _skeleton.get_bone_name(i)
-			_add_bone_filter_recursive(skeleton_path, child_name)
 
 func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 	var blend_space := AnimationNodeBlendSpace2D.new()
@@ -591,11 +511,9 @@ func _update_animation_tree() -> void:
 	# Update blend amounts
 	var target_run := 1.0 if _is_running else 0.0
 	var target_crouch := 1.0 if _stance == Stance.CROUCH else 0.0
-	var target_aim := 1.0 if _is_aiming else 0.0
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
 
 	_crouch_blend = lerp(_crouch_blend, target_crouch, 0.15)
-	_aim_blend = lerp(_aim_blend, target_aim, 0.2)
 	_weapon_blend = lerp(_weapon_blend, target_weapon, 0.2)
 
 	_anim_tree.set("parameters/WalkRunBlend/blend_amount", target_run)
@@ -605,10 +523,5 @@ func _update_animation_tree() -> void:
 	# Weapon-based walk/run animation (0 = rifle, 1 = pistol)
 	_anim_tree.set("parameters/WalkWeaponBlend/blend_amount", _weapon_blend)
 	_anim_tree.set("parameters/RunWeaponBlend/blend_amount", _weapon_blend)
-
-	_anim_tree.set("parameters/WeaponStandBlend/blend_amount", _weapon_blend)
-	_anim_tree.set("parameters/WeaponCrouchBlend/blend_amount", _weapon_blend)
-	_anim_tree.set("parameters/AimPoseBlend/blend_amount", _crouch_blend)
-	_anim_tree.set("parameters/AimUpperBlend/blend_amount", _aim_blend)
 
 #endregion

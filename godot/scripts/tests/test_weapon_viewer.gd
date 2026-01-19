@@ -47,20 +47,20 @@ const WEAPON_CONFIGS = {
 
 # Animation configs
 const ANIMATIONS = [
-	# Rifle AIM + Movement
-	{"name": "[Rifle] Walk Forward", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "forward", "run": false},
-	{"name": "[Rifle] Walk Backward", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "backward", "run": false},
-	{"name": "[Rifle] Walk Left", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "left", "run": false},
-	{"name": "[Rifle] Walk Right", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "right", "run": false},
-	{"name": "[Rifle] Sprint", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": false, "move": "forward", "run": true},
-	{"name": "[Rifle] Aim Idle", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "none", "run": false},
-	# Pistol AIM + Movement
-	{"name": "[Pistol] Walk Forward", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "forward", "run": false},
-	{"name": "[Pistol] Walk Backward", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "backward", "run": false},
-	{"name": "[Pistol] Walk Left", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "left", "run": false},
-	{"name": "[Pistol] Walk Right", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "right", "run": false},
-	{"name": "[Pistol] Sprint", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": false, "move": "forward", "run": true},
-	{"name": "[Pistol] Aim Idle", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "none", "run": false},
+	# Rifle Movement
+	{"name": "[Rifle] Walk Forward", "weapon": AnimCtrl.Weapon.RIFLE, "move": "forward", "run": false},
+	{"name": "[Rifle] Walk Backward", "weapon": AnimCtrl.Weapon.RIFLE, "move": "backward", "run": false},
+	{"name": "[Rifle] Walk Left", "weapon": AnimCtrl.Weapon.RIFLE, "move": "left", "run": false},
+	{"name": "[Rifle] Walk Right", "weapon": AnimCtrl.Weapon.RIFLE, "move": "right", "run": false},
+	{"name": "[Rifle] Sprint", "weapon": AnimCtrl.Weapon.RIFLE, "move": "forward", "run": true},
+	{"name": "[Rifle] Idle", "weapon": AnimCtrl.Weapon.RIFLE, "move": "none", "run": false},
+	# Pistol Movement
+	{"name": "[Pistol] Walk Forward", "weapon": AnimCtrl.Weapon.PISTOL, "move": "forward", "run": false},
+	{"name": "[Pistol] Walk Backward", "weapon": AnimCtrl.Weapon.PISTOL, "move": "backward", "run": false},
+	{"name": "[Pistol] Walk Left", "weapon": AnimCtrl.Weapon.PISTOL, "move": "left", "run": false},
+	{"name": "[Pistol] Walk Right", "weapon": AnimCtrl.Weapon.PISTOL, "move": "right", "run": false},
+	{"name": "[Pistol] Sprint", "weapon": AnimCtrl.Weapon.PISTOL, "move": "forward", "run": true},
+	{"name": "[Pistol] Idle", "weapon": AnimCtrl.Weapon.PISTOL, "move": "none", "run": false},
 ]
 
 # Current animation state
@@ -178,7 +178,6 @@ func _set_animation(index: int) -> void:
 		# Ensure AnimationTree is active (may have been disabled by direct play)
 		anim_ctrl.set_animation_tree_active(true)
 		anim_ctrl.set_weapon(anim_config.weapon)
-		anim_ctrl.set_aiming(anim_config.aiming)
 
 	# Store movement state
 	_current_move = anim_config.get("move", "none")
