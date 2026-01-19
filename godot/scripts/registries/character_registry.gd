@@ -57,11 +57,6 @@ func _load_animation_library() -> void:
 
 	if source_anim_player:
 		_animation_library = source_anim_player.get_animation_library("")
-		if _animation_library:
-			print("CharacterRegistry: Loaded %d animations from %s" % [
-				_animation_library.get_animation_list().size(),
-				ANIMATION_SOURCE.get_file()
-			])
 
 	anim_instance.queue_free()
 

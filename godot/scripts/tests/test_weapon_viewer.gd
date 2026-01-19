@@ -52,14 +52,14 @@ const ANIMATIONS = [
 	{"name": "[Rifle] Walk Backward", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "backward", "run": false},
 	{"name": "[Rifle] Walk Left", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "left", "run": false},
 	{"name": "[Rifle] Walk Right", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "right", "run": false},
-	{"name": "[Rifle] Run Forward", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "forward", "run": true},
+	{"name": "[Rifle] Sprint", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": false, "move": "forward", "run": true},
 	{"name": "[Rifle] Aim Idle", "weapon": AnimCtrl.Weapon.RIFLE, "aiming": true, "move": "none", "run": false},
 	# Pistol AIM + Movement
 	{"name": "[Pistol] Walk Forward", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "forward", "run": false},
 	{"name": "[Pistol] Walk Backward", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "backward", "run": false},
 	{"name": "[Pistol] Walk Left", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "left", "run": false},
 	{"name": "[Pistol] Walk Right", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "right", "run": false},
-	{"name": "[Pistol] Run Forward", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "forward", "run": true},
+	{"name": "[Pistol] Sprint", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": false, "move": "forward", "run": true},
 	{"name": "[Pistol] Aim Idle", "weapon": AnimCtrl.Weapon.PISTOL, "aiming": true, "move": "none", "run": false},
 ]
 
@@ -118,11 +118,15 @@ func _ready() -> void:
 	# Create UI first (before loading weapon)
 	_create_ui()
 
-	# Load default weapon (Glock)
+	# Load default weapon (Glock) and set matching Pistol animation
 	_load_weapon("Glock")
 
-	# Set default animation (Rifle Walk Forward)
-	_set_animation(0)
+	# Find first Pistol Walk Forward animation (index 6)
+	for i in range(ANIMATIONS.size()):
+		if ANIMATIONS[i].weapon == AnimCtrl.Weapon.PISTOL and ANIMATIONS[i].move == "forward" and not ANIMATIONS[i].run:
+			_animation_dropdown.selected = i
+			_set_animation(i)
+			break
 
 
 func _load_weapon(weapon_name: String) -> void:
@@ -171,6 +175,9 @@ func _set_animation(index: int) -> void:
 	var anim_config = ANIMATIONS[index]
 	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl:
+		# Ensure AnimationTree is active (may have been disabled by direct play)
+		if anim_ctrl._anim_tree:
+			anim_ctrl._anim_tree.active = true
 		anim_ctrl.set_weapon(anim_config.weapon)
 		anim_ctrl.set_aiming(anim_config.aiming)
 
@@ -276,6 +283,20 @@ func _create_ui() -> void:
 	_info_label.text = "..."
 	vbox.add_child(_info_label)
 
+	vbox.add_child(HSeparator.new())
+
+	# Direct animation test buttons (bypass AnimationTree)
+	vbox.add_child(_create_label("Direct Play (Debug)"))
+	var btn_rifle := Button.new()
+	btn_rifle.text = "Play rifle_walk_forward"
+	btn_rifle.pressed.connect(_play_direct.bind("rifle_walk_forward"))
+	vbox.add_child(btn_rifle)
+
+	var btn_pistol := Button.new()
+	btn_pistol.text = "Play pistol_walk_forward"
+	btn_pistol.pressed.connect(_play_direct.bind("pistol_walk_forward"))
+	vbox.add_child(btn_pistol)
+
 
 func _on_animation_selected(index: int) -> void:
 	_set_animation(index)
@@ -284,6 +305,39 @@ func _on_animation_selected(index: int) -> void:
 func _on_weapon_selected(index: int) -> void:
 	var weapon_name = WEAPON_CONFIGS.keys()[index]
 	_load_weapon(weapon_name)
+
+	# Auto-select matching animation type based on weapon
+	var target_weapon_type: int
+	if weapon_name == "Glock":
+		target_weapon_type = AnimCtrl.Weapon.PISTOL
+	else:
+		target_weapon_type = AnimCtrl.Weapon.RIFLE
+
+	# Find first animation matching the weapon type and current move direction
+	for i in range(ANIMATIONS.size()):
+		var anim = ANIMATIONS[i]
+		if anim.weapon == target_weapon_type and anim.move == _current_move and anim.run == _current_run:
+			_animation_dropdown.selected = i
+			_set_animation(i)
+			break
+
+
+func _play_direct(anim_name: String) -> void:
+	# Stop AnimationTree and play directly via AnimationPlayer
+	var anim_ctrl = _character.get_anim_controller()
+	if anim_ctrl and anim_ctrl._anim_tree:
+		anim_ctrl._anim_tree.active = false
+
+	var model = _character.get_node_or_null("CharacterModel")
+	if model:
+		var anim_player = model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+		if anim_player:
+			if anim_player.has_animation(anim_name):
+				anim_player.play(anim_name)
+				print("Direct play: ", anim_name)
+			else:
+				print("Animation not found: ", anim_name)
+				print("Available: ", anim_player.get_animation_list())
 
 
 func _create_label(text: String) -> Label:

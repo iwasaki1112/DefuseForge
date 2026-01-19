@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://cennsas3xm3cq"]
+
+[ext_resource type="PackedScene" uid="uid://b8exny18gcx4o" path="res://assets/weapons/ak47/ak47.glb" id="1"]
+
+[node name="AK47" type="Node3D"]
+
+[node name="Model" parent="." instance=ExtResource("1")]
+
+[node name="LeftHandGrip" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.064895034, 0.34100354)

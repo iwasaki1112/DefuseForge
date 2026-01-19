@@ -280,12 +280,20 @@ func _setup_recoil_modifier() -> void:
 
 func _setup_animation_loops() -> void:
 	var loop_anims := [
-		"idle", "idle_aiming", "idle_crouching", "idle_crouching_aiming",
-		"pistol_idle",
-		"walk_forward", "walk_backward", "walk_left", "walk_right",
-		"walk_forward_left", "walk_forward_right", "walk_backward_left", "walk_backward_right",
-		"run_forward", "run_backward", "run_left", "run_right",
-		"run_forward_left", "run_forward_right", "run_backward_left", "run_backward_right",
+		# Idle animations
+		"rifle_idle", "rifle_idle_crouching",
+		"pistol_idle", "pistol_idle_crouching",
+		# Rifle walk
+		"rifle_walk_forward", "rifle_walk_backward", "rifle_walk_left", "rifle_walk_right",
+		"rifle_walk_forward_left", "rifle_walk_forward_right", "rifle_walk_backward_left", "rifle_walk_backward_right",
+		# Rifle sprint
+		"rifle_sprint",
+		# Pistol walk
+		"pistol_walk_forward", "pistol_walk_backward", "pistol_walk_left", "pistol_walk_right",
+		"pistol_walk_forward_left", "pistol_walk_forward_right", "pistol_walk_backward_left", "pistol_walk_backward_right",
+		# Pistol sprint
+		"pistol_sprint",
+		# Crouching (TODO: add rifle_/pistol_ prefix)
 		"walk_crouching_forward", "walk_crouching_backward", "walk_crouching_left", "walk_crouching_right",
 		"walk_crouching_forward_left", "walk_crouching_forward_right",
 		"walk_crouching_backward_left", "walk_crouching_backward_right",
@@ -308,35 +316,47 @@ func _setup_animation_tree() -> void:
 
 	var blend_tree := AnimationNodeBlendTree.new()
 
-	# Standing animations
-	var walk_blend_space := _create_blend_space({
-		Vector2(0, -1): "walk_forward",
-		Vector2(0, 1): "walk_backward",
-		Vector2(-1, 0): "walk_left",
-		Vector2(1, 0): "walk_right",
-		Vector2(-0.707, -0.707): "walk_forward_left",
-		Vector2(0.707, -0.707): "walk_forward_right",
-		Vector2(-0.707, 0.707): "walk_backward_left",
-		Vector2(0.707, 0.707): "walk_backward_right",
+	# Standing animations - Rifle
+	var rifle_walk_blend_space := _create_blend_space({
+		Vector2(0, -1): "rifle_walk_forward",
+		Vector2(0, 1): "rifle_walk_backward",
+		Vector2(-1, 0): "rifle_walk_left",
+		Vector2(1, 0): "rifle_walk_right",
+		Vector2(-0.707, -0.707): "rifle_walk_forward_left",
+		Vector2(0.707, -0.707): "rifle_walk_forward_right",
+		Vector2(-0.707, 0.707): "rifle_walk_backward_left",
+		Vector2(0.707, 0.707): "rifle_walk_backward_right",
 	})
 
-	var run_blend_space := _create_blend_space({
-		Vector2(0, -1): "run_forward",
-		Vector2(0, 1): "run_backward",
-		Vector2(-1, 0): "run_left",
-		Vector2(1, 0): "run_right",
-		Vector2(-0.707, -0.707): "run_forward_left",
-		Vector2(0.707, -0.707): "run_forward_right",
-		Vector2(-0.707, 0.707): "run_backward_left",
-		Vector2(0.707, 0.707): "run_backward_right",
+	# Sprint animations (single animation, not BlendSpace)
+	var rifle_sprint_anim := AnimationNodeAnimation.new()
+	rifle_sprint_anim.animation = "rifle_sprint"
+
+	var pistol_sprint_anim := AnimationNodeAnimation.new()
+	pistol_sprint_anim.animation = "pistol_sprint"
+
+	# Standing animations - Pistol (fallback to rifle if not available)
+	var pistol_walk_blend_space := _create_blend_space_with_fallback({
+		Vector2(0, -1): ["pistol_walk_forward", "rifle_walk_forward"],
+		Vector2(0, 1): ["pistol_walk_backward", "rifle_walk_backward"],
+		Vector2(-1, 0): ["pistol_walk_left", "rifle_walk_left"],
+		Vector2(1, 0): ["pistol_walk_right", "rifle_walk_right"],
+		Vector2(-0.707, -0.707): ["pistol_walk_forward_left", "rifle_walk_forward_left"],
+		Vector2(0.707, -0.707): ["pistol_walk_forward_right", "rifle_walk_forward_right"],
+		Vector2(-0.707, 0.707): ["pistol_walk_backward_left", "rifle_walk_backward_left"],
+		Vector2(0.707, 0.707): ["pistol_walk_backward_right", "rifle_walk_backward_right"],
 	})
+
+	# Weapon walk/run blend nodes
+	var walk_weapon_blend := AnimationNodeBlend2.new()
+	var run_weapon_blend := AnimationNodeBlend2.new()
 
 	var idle_anim := AnimationNodeAnimation.new()
-	idle_anim.animation = "idle"
+	idle_anim.animation = "rifle_idle"  # TODO: Add separate idle without weapon
 
-	# Rifle idle (standing) - uses aiming pose
+	# Rifle idle (standing)
 	var rifle_idle_anim := AnimationNodeAnimation.new()
-	rifle_idle_anim.animation = "idle_aiming"
+	rifle_idle_anim.animation = "rifle_idle"
 
 	# Crouching animations
 	var crouch_walk_blend_space := _create_blend_space({
@@ -351,25 +371,25 @@ func _setup_animation_tree() -> void:
 	})
 
 	var crouch_idle_anim := AnimationNodeAnimation.new()
-	crouch_idle_anim.animation = "idle_crouching"
+	crouch_idle_anim.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
 
-	# Rifle idle (crouching) - uses crouching aiming pose
+	# Rifle idle (crouching)
 	var rifle_crouch_idle_anim := AnimationNodeAnimation.new()
-	rifle_crouch_idle_anim.animation = "idle_crouching_aiming"
+	rifle_crouch_idle_anim.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
 
 	# Aiming animations - Rifle
 	var aim_rifle_stand := AnimationNodeAnimation.new()
-	aim_rifle_stand.animation = "idle_aiming"
+	aim_rifle_stand.animation = "rifle_idle"
 
 	var aim_rifle_crouch := AnimationNodeAnimation.new()
-	aim_rifle_crouch.animation = "idle_crouching_aiming"
+	aim_rifle_crouch.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
 
-	# Aiming animations - Pistol
+	# Aiming animations - Pistol (use pistol_walk_forward for upper body pose)
 	var aim_pistol_stand := AnimationNodeAnimation.new()
-	aim_pistol_stand.animation = "pistol_idle"
+	aim_pistol_stand.animation = "pistol_walk_forward"  # Use pistol pose for upper body
 
 	var aim_pistol_crouch := AnimationNodeAnimation.new()
-	aim_pistol_crouch.animation = "pistol_idle"
+	aim_pistol_crouch.animation = "pistol_walk_forward"  # TODO: Add pistol_idle_crouching
 
 	# TimeScale nodes
 	var walk_speed_node := AnimationNodeTimeScale.new()
@@ -399,8 +419,15 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node("Idle", idle_anim, Vector2(-600, -200))
 	blend_tree.add_node("RifleIdle", rifle_idle_anim, Vector2(-600, -50))
 	blend_tree.add_node("WeaponIdleStandBlend", weapon_idle_stand_blend, Vector2(-400, -100))
-	blend_tree.add_node("WalkBlend", walk_blend_space, Vector2(-600, 100))
-	blend_tree.add_node("RunBlend", run_blend_space, Vector2(-600, 300))
+	# Rifle walk/sprint
+	blend_tree.add_node("RifleWalkBlend", rifle_walk_blend_space, Vector2(-800, 100))
+	blend_tree.add_node("RifleSprint", rifle_sprint_anim, Vector2(-800, 300))
+	# Pistol walk/sprint
+	blend_tree.add_node("PistolWalkBlend", pistol_walk_blend_space, Vector2(-800, 150))
+	blend_tree.add_node("PistolSprint", pistol_sprint_anim, Vector2(-800, 350))
+	# Weapon-based walk/run blend
+	blend_tree.add_node("WalkWeaponBlend", walk_weapon_blend, Vector2(-600, 100))
+	blend_tree.add_node("RunWeaponBlend", run_weapon_blend, Vector2(-600, 300))
 	blend_tree.add_node("WalkSpeed", walk_speed_node, Vector2(-400, 100))
 	blend_tree.add_node("RunSpeed", run_speed_node, Vector2(-400, 300))
 	blend_tree.add_node("WalkRunBlend", walk_run_blend, Vector2(-200, 200))
@@ -433,8 +460,13 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("WeaponIdleCrouchBlend", 0, "RifleCrouchIdle")
 	blend_tree.connect_node("WeaponIdleCrouchBlend", 1, "CrouchIdle")
 
-	blend_tree.connect_node("WalkSpeed", 0, "WalkBlend")
-	blend_tree.connect_node("RunSpeed", 0, "RunBlend")
+	# Connect weapon-based walk/sprint (0 = rifle, 1 = pistol)
+	blend_tree.connect_node("WalkWeaponBlend", 0, "RifleWalkBlend")
+	blend_tree.connect_node("WalkWeaponBlend", 1, "PistolWalkBlend")
+	blend_tree.connect_node("RunWeaponBlend", 0, "RifleSprint")
+	blend_tree.connect_node("RunWeaponBlend", 1, "PistolSprint")
+	blend_tree.connect_node("WalkSpeed", 0, "WalkWeaponBlend")
+	blend_tree.connect_node("RunSpeed", 0, "RunWeaponBlend")
 	blend_tree.connect_node("WalkRunBlend", 0, "WalkSpeed")
 	blend_tree.connect_node("WalkRunBlend", 1, "RunSpeed")
 	blend_tree.connect_node("StandingBlend", 0, "WeaponIdleStandBlend")
@@ -463,6 +495,7 @@ func _setup_animation_tree() -> void:
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
 	_anim_tree.active = true
+
 
 func _setup_upper_body_filter() -> void:
 	if not _skeleton or not _aim_upper_blend:
@@ -504,6 +537,27 @@ func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 
 	return blend_space
 
+func _create_blend_space_with_fallback(anims: Dictionary) -> AnimationNodeBlendSpace2D:
+	var blend_space := AnimationNodeBlendSpace2D.new()
+	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
+	blend_space.auto_triangles = true
+	blend_space.min_space = Vector2(-1, -1)
+	blend_space.max_space = Vector2(1, 1)
+
+	for pos in anims:
+		var anim_names: Array = anims[pos]
+		var found_anim := ""
+		for anim_name in anim_names:
+			if _anim_player.has_animation(anim_name):
+				found_anim = anim_name
+				break
+		if not found_anim.is_empty():
+			var anim_node := AnimationNodeAnimation.new()
+			anim_node.animation = found_anim
+			blend_space.add_blend_point(anim_node, pos)
+
+	return blend_space
+
 func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	if not _model:
 		return
@@ -539,10 +593,10 @@ func _update_animation_tree() -> void:
 	if not _anim_tree or not _anim_tree.active:
 		return
 
-	# Update blend positions
+	# Update blend positions (walk only, sprint is a single animation)
 	if _movement_blend > 0.01:
-		_anim_tree.set("parameters/WalkBlend/blend_position", _input_dir)
-		_anim_tree.set("parameters/RunBlend/blend_position", _input_dir)
+		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
+		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/CrouchWalkBlend/blend_position", _input_dir)
 
 	# Update animation speed (scale based on movement speed to prevent foot sliding)
@@ -573,6 +627,9 @@ func _update_animation_tree() -> void:
 	_anim_tree.set("parameters/StandingBlend/blend_amount", _movement_blend)
 	_anim_tree.set("parameters/CrouchingBlend/blend_amount", _movement_blend)
 	_anim_tree.set("parameters/StandCrouchBlend/blend_amount", _crouch_blend)
+	# Weapon-based walk/run animation (0 = rifle, 1 = pistol)
+	_anim_tree.set("parameters/WalkWeaponBlend/blend_amount", _weapon_blend)
+	_anim_tree.set("parameters/RunWeaponBlend/blend_amount", _weapon_blend)
 
 	_anim_tree.set("parameters/WeaponStandBlend/blend_amount", _weapon_blend)
 	_anim_tree.set("parameters/WeaponCrouchBlend/blend_amount", _weapon_blend)
