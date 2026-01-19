@@ -1,6 +1,6 @@
 # CharacterAnimationController
 
-キャラクターアニメーションを管理するコントローラークラス。移動、エイム、戦闘、デスアニメーションを統合的に制御する。
+キャラクターアニメーションを管理するコントローラークラス。移動、戦闘、デスアニメーションを統合的に制御する。
 
 ## 基本情報
 
@@ -46,7 +46,6 @@
 | `walk_speed` | `float` | `1.5` | 歩行速度 |
 | `run_speed` | `float` | `5.0` | 走行速度 |
 | `crouch_speed` | `float` | `1.5` | しゃがみ移動速度 |
-| `aim_walk_speed` | `float` | `2.0` | エイム中の歩行速度 |
 | `rotation_speed` | `float` | `15.0` | 回転速度 |
 
 > **Note:** アニメーション基準速度（`ANIM_REF_WALK`, `ANIM_REF_RUN`, `ANIM_REF_CROUCH`）は内部定数として管理され、足滑り防止のためのスケーリングに使用される。
@@ -75,12 +74,12 @@
 - `model` - キャラクターモデル（Skeleton3Dを含む）
 - `anim_player` - AnimationPlayerノード
 
-### update_animation(movement_direction: Vector3, aim_direction: Vector3, is_running: bool, delta: float) -> void
+### update_animation(movement_direction: Vector3, look_direction: Vector3, is_running: bool, delta: float) -> void
 毎フレーム呼び出してアニメーションを更新する。
 
 **引数:**
 - `movement_direction` - 移動方向ベクトル（ワールド座標）
-- `aim_direction` - エイム方向ベクトル
+- `look_direction` - 視線方向ベクトル
 - `is_running` - 走行中か
 - `delta` - デルタタイム
 
@@ -89,9 +88,6 @@
 
 ### set_weapon(weapon: Weapon) -> void
 武器タイプを設定する。
-
-### set_aiming(aiming: bool) -> void
-エイム状態を設定する。上半身レイヤーに影響。
 
 ### fire() -> void
 発射アクションをトリガーする。リコイルアニメーションを再生。
@@ -107,12 +103,12 @@
 **戻り値:** 死亡状態なら`true`
 
 ### get_look_direction() -> Vector3
-現在のエイム方向を取得する（視界計算用）。
+現在の視線方向を取得する（視界計算用）。
 
-**戻り値:** エイム方向ベクトル（正規化済み）
+**戻り値:** 視線方向ベクトル（正規化済み）
 
 ### set_look_direction(direction: Vector3) -> void
-エイム方向を直接設定する（回転モード用）。モデルの向きも即座に更新。
+視線方向を直接設定する（回転モード用）。モデルの向きも即座に更新。
 
 **引数:**
 - `direction` - 視線方向ベクトル
@@ -135,19 +131,17 @@ anim_ctrl.setup(model, anim_player)
 # 毎フレーム更新
 func _physics_process(delta):
     var move_dir = Vector3(input_x, 0, input_z)
-    var aim_dir = aim_target - global_position
-    anim_ctrl.update_animation(move_dir, aim_dir, is_running, delta)
+    var look_dir = target_position - global_position
+    anim_ctrl.update_animation(move_dir, look_dir, is_running, delta)
 
 # 状態変更
 anim_ctrl.set_stance(CharacterAnimationController.Stance.CROUCH)
 anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
-anim_ctrl.set_aiming(true)
 anim_ctrl.fire()
 ```
 
 ## 内部動作
 
 - 8方向ストレイフアニメーションを`BlendSpace2D`で管理
-- 上半身エイムはボーンフィルター付き`Blend2`で合成
 - `RecoilModifier`でプロシージャルリコイルを適用
 - Mixamoリグ専用設計

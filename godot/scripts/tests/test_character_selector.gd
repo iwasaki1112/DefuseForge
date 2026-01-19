@@ -712,11 +712,10 @@ func _complete_vision_setup(character: Node) -> void:
 		if fog_of_war_system:
 			fog_of_war_system.set_fog_visible(false)
 
-	# Set default weapon to pistol with aiming pose
+	# Set default weapon to pistol
 	var anim_ctrl = character.get_anim_controller()
 	if anim_ctrl:
 		anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
-		anim_ctrl.set_aiming(true)
 
 	# Equip default weapon (Glock)
 	var default_weapon = WeaponRegistry.get_preset("glock")
@@ -1102,10 +1101,9 @@ func _physics_process(delta: float) -> void:
 		AnimCtrl.Stance.CROUCH if Input.is_key_pressed(KEY_C)
 		else AnimCtrl.Stance.STAND
 	)
-	anim_ctrl.set_aiming(Input.is_key_pressed(KEY_F))
 
 	# Fire action
-	if Input.is_key_pressed(KEY_SPACE) and Input.is_key_pressed(KEY_F):
+	if Input.is_key_pressed(KEY_SPACE):
 		anim_ctrl.fire()
 
 	# Movement
