@@ -49,15 +49,8 @@ const ANIM_REF_WALK := 1.39  # Mixamo walk animation ~1.39 m/s
 const ANIM_REF_RUN := 5.5    # Mixamo run animation ~5.5 m/s
 const ANIM_REF_CROUCH := 1.2 # Mixamo crouch walk ~1.2 m/s
 
-# Death animation mapping
-const DEATH_ANIMS := {
-	"stand_front": "death_from_the_front",
-	"stand_back": "death_from_the_back",
-	"stand_right": "death_from_right",
-	"stand_front_headshot": "death_from_front_headshot",
-	"stand_back_headshot": "death_from_back_headshot",
-	"crouch_front": "death_crouching_headshot_front",
-}
+# Death animation name
+const DEATH_ANIM := "death"
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -220,9 +213,9 @@ func set_look_direction(direction: Vector3) -> void:
 			_model.transform.basis = target_basis
 
 ## Play death animation
-## hit_direction: Direction the hit came FROM (e.g., FRONT means shot from front, falls backward)
-## headshot: If true, plays headshot variant if available
-func play_death(hit_direction: HitDirection = HitDirection.FRONT, headshot: bool = false) -> void:
+## hit_direction: Direction the hit came FROM (reserved for future use)
+## headshot: Reserved for future use
+func play_death(_hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void:
 	if _is_dead:
 		return
 
@@ -232,36 +225,12 @@ func play_death(hit_direction: HitDirection = HitDirection.FRONT, headshot: bool
 	if _anim_tree:
 		_anim_tree.active = false
 
-	# Select death animation
-	var anim_key := ""
-	var stance_prefix := "crouch" if _stance == Stance.CROUCH else "stand"
-
-	match hit_direction:
-		HitDirection.FRONT:
-			if headshot:
-				anim_key = stance_prefix + "_front_headshot"
-			else:
-				anim_key = stance_prefix + "_front"
-		HitDirection.BACK:
-			if headshot:
-				anim_key = stance_prefix + "_back_headshot"
-			else:
-				anim_key = stance_prefix + "_back"
-		HitDirection.RIGHT:
-			anim_key = stance_prefix + "_right"
-		HitDirection.LEFT:
-			# Use right animation (no left variant available)
-			anim_key = stance_prefix + "_right"
-
-	# Get animation name with fallback
-	var anim_name: String = DEATH_ANIMS.get(anim_key, "")
-	if anim_name.is_empty() or not _anim_player.has_animation(anim_name):
-		# Fallback to front death
-		anim_name = DEATH_ANIMS.get("stand_front", "death_from_the_front") as String
-
-	if _anim_player.has_animation(anim_name):
-		_anim_player.play(anim_name)
+	# Play death animation
+	if _anim_player.has_animation(DEATH_ANIM):
+		_anim_player.play(DEATH_ANIM)
 		_anim_player.animation_finished.connect(_on_death_animation_finished, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Death animation not found: %s" % DEATH_ANIM)
 
 func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
