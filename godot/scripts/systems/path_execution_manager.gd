@@ -47,7 +47,13 @@ func confirm_path(
 		print("[PathExecution] No target characters for path")
 		return false
 
-	# パス情報を取得（スムージング済みの内部パス）
+	# 表示用パス（生パス）を取得
+	var display_path: Array[Vector3] = []
+	var drawn = path_drawer.get_drawn_path()
+	for point in drawn:
+		display_path.append(point)
+
+	# 移動用パス（スムージング済み）を取得
 	var base_path: Array[Vector3] = []
 	var pending = path_drawer.get_smoothed_path()
 	for point in pending:
@@ -104,14 +110,17 @@ func confirm_path(
 		_clear_pending_path_for_character(char_id)
 
 		# キャラクター位置からパス開始点への接続を含むパスを作成
-		var full_path: Array[Vector3] = []
+		var full_path: Array[Vector3] = []  # 移動用（スムージング済み）
+		var full_display_path: Array[Vector3] = []  # 表示用（生パス）
 		var connect_length: float = 0.0
 
 		if char_pos.distance_to(path_start) > 0.1:
 			# キャラクターがパス開始点にいない場合、接続線を追加
 			full_path.append(char_pos)
+			full_display_path.append(char_pos)
 			connect_length = char_pos.distance_to(path_start)
 		full_path.append_array(base_path)
+		full_display_path.append_array(display_path)
 
 		# キャラクター固有の視線ポイントとRun区間を取得
 		var char_vision_points: Array[Dictionary] = []
@@ -128,8 +137,8 @@ func confirm_path(
 		var adjusted_vision_points = _adjust_ratios_for_connection(char_vision_points, connect_length, base_length)
 		var adjusted_run_segments = _adjust_run_ratios_for_connection(char_run_segments, connect_length, base_length)
 
-		# パスメッシュを作成（各キャラクターごと、キャラクター色適用）
-		var path_mesh = _create_path_mesh(full_path, character)
+		# パスメッシュを作成（表示用の生パスを使用）
+		var path_mesh = _create_path_mesh(full_display_path, character)
 
 		# マルチモードの場合、元のマーカーを削除して新しいマーカーを生成
 		if is_multi_mode and all_vision_markers.has(char_id):
