@@ -59,6 +59,9 @@
 | System | PathModeController | パスモード状態管理（開始・確定・キャンセル） |
 | System | MapManager | マップライフサイクル管理・クリーンアップ |
 | System | GameManager | コアゲームシステム初期化・更新の一元管理 |
+| System | SettingsManager | 設定管理（プレイヤー名保存）（Autoload） |
+| Screen | MainMenuScreen | メインメニュー画面 |
+| Screen | OptionScreen | オプション設定画面 |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
 | UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
