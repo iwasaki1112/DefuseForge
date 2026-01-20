@@ -42,12 +42,12 @@ var _is_running := false
 var _is_dead := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 
-# Animation visual speeds at 1x playback (2-second/60-frame animations)
+# Animation visual speeds at 1x playback (1-second/30-frame animations at 30fps)
 # Different directions have different stride lengths
 const ANIM_SPEED_FORWARD := 2.0   # Forward/backward: large strides
 const ANIM_SPEED_STRAFE := 1.2    # Left/right: small strides
 const ANIM_SPEED_DIAGONAL := 1.6  # Diagonal: medium strides
-const ANIM_REF_RUN := 5.5         # Sprint animation
+const ANIM_REF_RUN := 5.5         # Sprint animation (15 frames at 30fps = 0.5s)
 const ANIM_REF_CROUCH := 1.5      # Crouch walk
 
 # Death animation name
