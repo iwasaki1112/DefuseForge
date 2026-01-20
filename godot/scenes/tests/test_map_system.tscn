@@ -1,12 +1,131 @@
 [gd_scene load_steps=2 format=3 uid="uid://dkw8m3yhnpq2x"]
 
-[ext_resource type="Script" path="res://scenes/tests/test_map_system.gd" id="1_script"]
+[sub_resource type="GDScript" id="GDScript_test"]
+script/source = "extends Node3D
+## マップシステムテストシーン
+
+var game_manager: GameManager = null
+
+@onready var camera: Camera3D = $Camera3D
+@onready var ui_layer: CanvasLayer = $UILayer
+@onready var map_container: Node3D = $MapContainer
+@onready var character_container: Node3D = $CharacterContainer
+@onready var info_label: Label = $UILayer/InfoLabel
+
+
+func _ready() -> void:
+	_setup_game_manager()
+	_update_info_label()
+	game_manager.set_vision_enabled(false)
+
+
+func _setup_game_manager() -> void:
+	game_manager = GameManager.new()
+	game_manager.name = \"GameManager\"
+	add_child(game_manager)
+	game_manager.setup(camera, character_container, ui_layer, Vector2(50, 50), map_container)
+	game_manager.selection_changed.connect(_on_selection_changed)
+	game_manager.all_paths_completed.connect(_on_all_paths_completed)
+	game_manager.path_confirmed.connect(_on_path_confirmed)
+	if game_manager.map_manager:
+		game_manager.map_manager.map_loaded.connect(_on_map_loaded)
+		game_manager.map_manager.map_unloaded.connect(_on_map_unloaded)
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_1:
+				_switch_map(\"test\")
+			KEY_C:
+				_spawn_characters()
+			KEY_R:
+				_reload_map()
+			KEY_SPACE:
+				_execute_paths()
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
+
+
+func _physics_process(delta: float) -> void:
+	if game_manager:
+		game_manager.process_frame(delta)
+
+
+func _switch_map(map_id: String) -> void:
+	var map_instance = game_manager.switch_map(map_id)
+	if map_instance:
+		_update_info_label()
+
+
+func _spawn_characters() -> void:
+	if not game_manager.has_map():
+		return
+	var ct_spawns = game_manager.get_spawn_points(true)
+	for i in range(mini(ct_spawns.size(), 2)):
+		var character = CharacterRegistry.create_character(\"dummy_ct\", ct_spawns[i])
+		if character:
+			character_container.add_child(character)
+			game_manager.register_character(character)
+	var t_spawns = game_manager.get_spawn_points(false)
+	for i in range(mini(t_spawns.size(), 2)):
+		var character = CharacterRegistry.create_character(\"dummy_t\", t_spawns[i])
+		if character:
+			character_container.add_child(character)
+			game_manager.register_character(character)
+	_update_info_label()
+
+
+func _reload_map() -> void:
+	var current_id = game_manager.get_current_map_id()
+	if not current_id.is_empty():
+		_switch_map(current_id)
+
+
+func _execute_paths() -> void:
+	print(\"[TestMapSystem] Execute paths called, pending: %d\" % game_manager.get_pending_path_count())
+	var count = game_manager.execute_all_paths(false)
+	print(\"[TestMapSystem] Executed %d paths\" % count)
+
+
+func _update_info_label() -> void:
+	var current_map_id = game_manager.get_current_map_id()
+	var text := \"=== Test Map System ===\\n\"
+	text += \"1: Load map\\n\"
+	text += \"C: Spawn characters\\n\"
+	text += \"R: Reload map\\n\"
+	text += \"Space: Execute paths\\n\\n\"
+	text += \"Map: %s\\n\" % (current_map_id if game_manager.has_map() else \"None\")
+	text += \"Characters: %d\" % game_manager.characters.size()
+	info_label.text = text
+
+
+func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
+	pass
+
+
+func _on_all_paths_completed() -> void:
+	print(\"[TestMapSystem] All paths completed\")
+
+
+func _on_path_confirmed(count: int) -> void:
+	print(\"[TestMapSystem] Path confirmed: %d\" % count)
+
+
+func _on_map_loaded(_map_id: String, _map_instance: Node3D) -> void:
+	_update_info_label()
+
+
+func _on_map_unloaded(_map_id: String) -> void:
+	_update_info_label()
+"
 
 [node name="TestMapSystem" type="Node3D"]
-script = ExtResource("1_script")
+script = SubResource("GDScript_test")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 30, 20)
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 12, 9)
 fov = 50.0
 
 [node name="UILayer" type="CanvasLayer" parent="."]
@@ -15,10 +134,7 @@ fov = 50.0
 offset_left = 10.0
 offset_top = 10.0
 offset_right = 400.0
-offset_bottom = 100.0
-text = "Test Map System
-1: test_map | 2: gridmap_test
-C: Spawn | R: Reload"
+offset_bottom = 200.0
 
 [node name="MapContainer" type="Node3D" parent="."]
 
