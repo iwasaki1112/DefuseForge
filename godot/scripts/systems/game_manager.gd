@@ -6,6 +6,7 @@ class_name GameManager
 const AnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
 const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
 const EnemyVisibilitySystemScript = preload("res://scripts/systems/enemy_visibility_system.gd")
+const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
 const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
 const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
@@ -36,6 +37,7 @@ var idle_manager: IdleCharacterManager = null
 var path_mode_controller: PathModeController = null
 var fog_of_war_system: Node3D = null
 var enemy_visibility_system: Node = null
+var map_manager: MapManager = null
 var path_drawer: Node3D = null
 var rotation_controller: Node = null
 
@@ -48,6 +50,7 @@ var label_manager: CharacterLabelManager = null
 var camera: Camera3D = null
 var characters: Array[Node] = []
 var _mesh_parent: Node3D = null
+var _map_container: Node3D = null
 var _ui_layer: CanvasLayer = null
 
 ## 設定
@@ -62,9 +65,11 @@ var _ground_plane := Plane(Vector3.UP, 0)
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
-func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: Vector2 = Vector2(50, 50)) -> void:
+## map_container: マップを追加する親ノード（省略時はmesh_parentを使用）
+func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: Vector2 = Vector2(50, 50), map_container: Node3D = null) -> void:
 	camera = cam
 	_mesh_parent = mesh_parent
+	_map_container = map_container if map_container else mesh_parent
 	_ui_layer = ui_layer
 	fow_map_size = map_size
 
@@ -77,11 +82,12 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_rotation_controller()
 	_setup_fog_of_war()
 	_setup_enemy_visibility_system()
+	_setup_map_manager()
 	_setup_context_menu()
 	_setup_marker_edit_panel()
 	_setup_label_manager()
 
-	print("[GameManager] Setup complete - 11 systems initialized")
+	print("[GameManager] Setup complete - 12 systems initialized")
 
 
 ## キャラクターを登録（視界・武器・色・ラベルも自動セットアップ）
@@ -324,6 +330,62 @@ func set_vision_enabled(enabled: bool) -> void:
 			enemy_visibility_system.enable_full()
 		else:
 			enemy_visibility_system.enable_lightweight()
+
+
+## ========================================
+## マップ管理（MapManager委譲）
+## ========================================
+
+## マップをロード
+## auto_cleanup: 既存マップの自動クリーンアップ（デフォルトtrue）
+## Returns: マップインスタンス、失敗時はnull
+func load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D:
+	if map_manager:
+		return map_manager.load_map(map_preset_id, auto_cleanup)
+	push_error("[GameManager] MapManager not initialized")
+	return null
+
+
+## マップをアンロード
+func unload_map(cleanup_characters: bool = true) -> void:
+	if map_manager:
+		map_manager.unload_map(cleanup_characters)
+
+
+## マップを切り替え
+## Returns: 新しいマップインスタンス、失敗時はnull
+func switch_map(new_map_id: String) -> Node3D:
+	if map_manager:
+		return map_manager.switch_map(new_map_id)
+	return null
+
+
+## マップがロードされているか
+func has_map() -> bool:
+	return map_manager and map_manager.has_map()
+
+
+## 現在のマップIDを取得
+func get_current_map_id() -> String:
+	return map_manager.current_map_id if map_manager else ""
+
+
+## 現在のマップサイズを取得
+func get_map_size() -> Vector2:
+	return map_manager.get_map_size() if map_manager else Vector2.ZERO
+
+
+## スポーン位置を取得（現在のマップから）
+func get_spawn_points(is_ct: bool) -> Array[Vector3]:
+	return map_manager.get_spawn_points(is_ct) if map_manager else []
+
+
+## スポーン位置を取得（任意のマップIDから）
+func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]:
+	var preset = MapRegistry.get_preset(map_preset_id)
+	if not preset:
+		return []
+	return preset.spawn_points_ct if is_ct else preset.spawn_points_t
 
 
 ## ========================================
@@ -674,6 +736,13 @@ func _setup_enemy_visibility_system() -> void:
 	enemy_visibility_system.name = "EnemyVisibilitySystem"
 	add_child(enemy_visibility_system)
 	enemy_visibility_system.setup(fog_of_war_system)
+
+
+func _setup_map_manager() -> void:
+	map_manager = MapManager.new()
+	map_manager.name = "MapManager"
+	add_child(map_manager)
+	map_manager.setup(_map_container, self)
 
 
 func _setup_context_menu() -> void:

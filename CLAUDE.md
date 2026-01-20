@@ -44,8 +44,10 @@
 | Util | PathSmoother | RDP間引き＋Catmull-Rom補間でパススムージング |
 | Registry | CharacterRegistry | プリセット管理＋キャラクター生成（Autoload） |
 | Registry | WeaponRegistry | 武器プリセット管理（Autoload） |
+| Registry | MapRegistry | マッププリセット管理＋マップインスタンス化（Autoload） |
 | Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
 | Resource | WeaponPreset | 武器定義（ID・カテゴリー・ダメージ・リコイル） |
+| Resource | MapPreset | マップ定義（ID・シーン・サイズ・スポーン位置） |
 | Resource | ContextMenuItem | コンテキストメニュー項目定義 |
 | System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
 | System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |
@@ -55,6 +57,7 @@
 | System | PathExecutionManager | パス確定・実行・pending_paths管理 |
 | System | IdleCharacterManager | アイドル中キャラクターの状態更新管理 |
 | System | PathModeController | パスモード状態管理（開始・確定・キャンセル） |
+| System | MapManager | マップライフサイクル管理・クリーンアップ |
 | System | GameManager | コアゲームシステム初期化・更新の一元管理 |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |

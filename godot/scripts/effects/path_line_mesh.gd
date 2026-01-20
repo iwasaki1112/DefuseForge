@@ -4,9 +4,9 @@ extends MeshInstance3D
 ## パスの線描画
 ## 破線 + 先端にドーナツ型の円
 
-@export var line_height: float = 0.02  # 地面からの高さ
-@export var line_width: float = 0.04   # 線の幅
-@export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
+@export var line_height: float = 0.15  # 地面からの高さ
+@export var line_width: float = 0.08   # 線の幅
+@export var line_color: Color = Color(0.0, 1.0, 0.0, 1.0)  # 緑
 @export var dash_length: float = 0.15  # 破線の長さ
 @export var gap_length: float = 0.1    # 破線の間隔
 @export var end_circle_radius: float = 0.15  # 先端円の半径
