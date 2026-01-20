@@ -41,6 +41,32 @@ SettingsManager.set_player_name("NewName")
 # settings_changedシグナルが発火
 ```
 
+### get_selected_map() -> String
+
+選択中のマップIDを取得する（セッション中のみ保持）。
+
+```gdscript
+var map_id := SettingsManager.get_selected_map()
+if not map_id.is_empty():
+    var preset := MapRegistry.get_preset(map_id)
+```
+
+### set_selected_map(map_id: String) -> void
+
+選択中のマップIDを設定する（永続化されない）。
+
+```gdscript
+SettingsManager.set_selected_map("test")
+```
+
+### clear_selected_map() -> void
+
+選択中のマップIDをクリアする。
+
+```gdscript
+SettingsManager.clear_selected_map()
+```
+
 ## 使用例
 
 ### 設定変更の監視

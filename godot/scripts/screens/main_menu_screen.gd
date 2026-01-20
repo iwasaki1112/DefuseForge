@@ -5,7 +5,7 @@ extends Control
 ## ゲーム起動時に表示されるメインメニュー。
 ## Training、Optionボタンでシーン遷移する。
 
-const TRAINING_SCENE := "res://scenes/tests/test_character.tscn"
+const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const OPTION_SCENE := "res://scenes/screens/option.tscn"
 
 var _welcome_label: Label
@@ -83,7 +83,7 @@ func _update_welcome_message() -> void:
 
 
 func _on_training_pressed() -> void:
-	get_tree().change_scene_to_file(TRAINING_SCENE)
+	get_tree().change_scene_to_file(MAP_SELECTION_SCENE)
 
 
 func _on_option_pressed() -> void:

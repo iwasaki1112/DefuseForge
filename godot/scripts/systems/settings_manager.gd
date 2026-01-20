@@ -14,6 +14,9 @@ const DEFAULT_PLAYER_NAME := "Player"
 
 var _config: ConfigFile
 
+## セッション中のみ保持（永続化しない）
+var _selected_map_id: String = ""
+
 
 func _ready() -> void:
 	_config = ConfigFile.new()
@@ -47,3 +50,22 @@ func set_player_name(value: String) -> void:
 	_config.set_value(SECTION_PLAYER, KEY_PLAYER_NAME, trimmed)
 	_save_settings()
 	settings_changed.emit()
+
+
+# ============================================
+# Selected Map (Session Only)
+# ============================================
+
+## 選択中のマップIDを取得
+func get_selected_map() -> String:
+	return _selected_map_id
+
+
+## 選択中のマップIDを設定（セッション中のみ保持）
+func set_selected_map(map_id: String) -> void:
+	_selected_map_id = map_id
+
+
+## 選択中のマップIDをクリア
+func clear_selected_map() -> void:
+	_selected_map_id = ""

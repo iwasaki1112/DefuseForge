@@ -22,6 +22,9 @@
 
 ## ドキュメント
 
+### ゲームフロー
+**`godot/docs/godot/game-flow.md`** - 画面遷移とシステムの流れを記載。
+
 ### 実装時の参照（必須）
 **実装前に必ず `godot/docs/godot/api/` 配下のAPIドキュメントを確認すること。**
 
@@ -59,8 +62,9 @@
 | System | PathModeController | パスモード状態管理（開始・確定・キャンセル） |
 | System | MapManager | マップライフサイクル管理・クリーンアップ |
 | System | GameManager | コアゲームシステム初期化・更新の一元管理 |
-| System | SettingsManager | 設定管理（プレイヤー名保存）（Autoload） |
+| System | SettingsManager | 設定管理（プレイヤー名保存・選択マップ保持）（Autoload） |
 | Screen | MainMenuScreen | メインメニュー画面 |
+| Screen | MapSelectionScreen | マップ選択画面 |
 | Screen | OptionScreen | オプション設定画面 |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
