@@ -24,6 +24,10 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 @export var pistol_fire_rate := 0.2
 @export var recoil_recovery := 10.0
 
+@export_group("Root Motion")
+@export var use_root_motion: bool = true
+@export var root_bone_name: String = "mixamorig_Hips"
+
 @export_group("Bone Names")
 @export var upper_body_root := "mixamorig_Spine1"
 @export var spine_bone := "mixamorig_Spine2"
@@ -54,11 +58,35 @@ const ANIM_REF_CROUCH := 1.5      # Crouch walk
 const DEATH_ANIM := "death"
 
 # Blend values
-var _input_dir := Vector2.ZERO
+var _input_dir := Vector2(0, -1)  # 前方向で初期化
 var _movement_blend := 0.0
 var _crouch_blend := 0.0
 var _weapon_blend := 0.0
 var _fire_cooldown := 0.0
+var _current_walk_state := "rifle_walk_forward"  # 現在のwalkステート
+
+# 8方向ベクトルとステート名のマッピング
+const DIR8_VECTORS := [
+	Vector2(0, -1),       # Forward
+	Vector2(0, 1),        # Backward
+	Vector2(-1, 0),       # Left
+	Vector2(1, 0),        # Right
+	Vector2(-0.707, -0.707),  # Forward-Left
+	Vector2(0.707, -0.707),   # Forward-Right
+	Vector2(-0.707, 0.707),   # Backward-Left
+	Vector2(0.707, 0.707),    # Backward-Right
+]
+
+const DIR8_STATE_NAMES := [
+	"walk_forward",
+	"walk_backward",
+	"walk_left",
+	"walk_right",
+	"walk_forward_left",
+	"walk_forward_right",
+	"walk_backward_left",
+	"walk_backward_right",
+]
 
 # Internal nodes
 
@@ -74,10 +102,8 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 
 	if _skeleton:
 		_setup_recoil_modifier()
-		# Set AnimationPlayer root_node to model node (parent of Skeleton3D)
-		# Animation tracks use paths like "Skeleton3D:bonename"
-		if _anim_player:
-			_anim_player.root_node = NodePath("..")
+		# AnimationPlayer root_node はデフォルト（自身の親）のままにする
+		# GLBインポート時のトラックパスと一致させるため
 
 	if _anim_player:
 		_setup_animation_loops()
@@ -211,6 +237,25 @@ func is_dead() -> bool:
 	return _is_dead
 
 
+## Get root motion position delta for this frame (world space)
+## Returns Vector3.ZERO if not moving (idle) to prevent drift
+func get_root_motion_delta() -> Vector3:
+	if not _anim_tree or not use_root_motion or _is_dead:
+		return Vector3.ZERO
+
+	var local_motion := _anim_tree.get_root_motion_position()
+
+	# Idleドリフト対策: 微小な移動は無視
+	if local_motion.length_squared() < 0.0001:
+		return Vector3.ZERO
+
+	# モデルの回転を適用してワールド座標に変換
+	if _model:
+		local_motion = _model.global_transform.basis * local_motion
+
+	return local_motion
+
+
 ## Set AnimationTree active state
 func set_animation_tree_active(active: bool) -> void:
 	if _anim_tree:
@@ -301,59 +346,41 @@ func _setup_animation_loops() -> void:
 				anim.loop_mode = Animation.LOOP_LINEAR
 
 func _setup_animation_tree() -> void:
-	# Create or get AnimationTree
+	# Create or get AnimationTree (must be sibling of AnimationPlayer for track resolution)
 	_anim_tree = _model.get_node_or_null("AnimationTree") as AnimationTree
 	if not _anim_tree:
 		_anim_tree = AnimationTree.new()
 		_anim_tree.name = "AnimationTree"
-		_model.get_parent().add_child(_anim_tree)
+		_model.add_child(_anim_tree)
 
 	var blend_tree := AnimationNodeBlendTree.new()
 
-	# Standing animations - Rifle
-	var rifle_walk_blend_space := _create_blend_space({
-		Vector2(0, -1): "rifle_walk_forward",
-		Vector2(0, 1): "rifle_walk_backward",
-		Vector2(-1, 0): "rifle_walk_left",
-		Vector2(1, 0): "rifle_walk_right",
-		Vector2(-0.707, -0.707): "rifle_walk_forward_left",
-		Vector2(0.707, -0.707): "rifle_walk_forward_right",
-		Vector2(-0.707, 0.707): "rifle_walk_backward_left",
-		Vector2(0.707, 0.707): "rifle_walk_backward_right",
-	})
+	# Standing animations - Rifle (StateMachine for instant direction switching)
+	var rifle_walk_sm := _create_walk_state_machine("rifle")
 
 	# Sprint animations (single animation, not BlendSpace)
 	var rifle_sprint_anim := AnimationNodeAnimation.new()
-	rifle_sprint_anim.animation = "rifle_sprint"
+	rifle_sprint_anim.animation = _get_animation_with_fallback("rifle_sprint", "rifle_walk_forward")
 
 	var pistol_sprint_anim := AnimationNodeAnimation.new()
-	pistol_sprint_anim.animation = "pistol_sprint"
+	pistol_sprint_anim.animation = _get_animation_with_fallback("pistol_sprint", "rifle_sprint")
 
-	# Standing animations - Pistol (fallback to rifle if not available)
-	var pistol_walk_blend_space := _create_blend_space_with_fallback({
-		Vector2(0, -1): ["pistol_walk_forward", "rifle_walk_forward"],
-		Vector2(0, 1): ["pistol_walk_backward", "rifle_walk_backward"],
-		Vector2(-1, 0): ["pistol_walk_left", "rifle_walk_left"],
-		Vector2(1, 0): ["pistol_walk_right", "rifle_walk_right"],
-		Vector2(-0.707, -0.707): ["pistol_walk_forward_left", "rifle_walk_forward_left"],
-		Vector2(0.707, -0.707): ["pistol_walk_forward_right", "rifle_walk_forward_right"],
-		Vector2(-0.707, 0.707): ["pistol_walk_backward_left", "rifle_walk_backward_left"],
-		Vector2(0.707, 0.707): ["pistol_walk_backward_right", "rifle_walk_backward_right"],
-	})
+	# Standing animations - Pistol (StateMachine with fallback to rifle)
+	var pistol_walk_sm := _create_walk_state_machine("pistol")
 
 	# Weapon walk/run blend nodes
 	var walk_weapon_blend := AnimationNodeBlend2.new()
 	var run_weapon_blend := AnimationNodeBlend2.new()
 
 	var idle_anim := AnimationNodeAnimation.new()
-	idle_anim.animation = "pistol_idle"
+	idle_anim.animation = _get_animation_with_fallback("pistol_idle", "rifle_idle")
 
 	# Rifle idle (standing)
 	var rifle_idle_anim := AnimationNodeAnimation.new()
-	rifle_idle_anim.animation = "rifle_idle"
+	rifle_idle_anim.animation = _get_animation_with_fallback("rifle_idle", "rifle_walk_forward")
 
-	# Crouching animations
-	var crouch_walk_blend_space := _create_blend_space({
+	# Crouching animations (BlendSpace2D - less frequent direction changes)
+	var crouch_walk_blend_space := _create_crouch_blend_space({
 		Vector2(0, -1): "walk_crouching_forward",
 		Vector2(0, 1): "walk_crouching_backward",
 		Vector2(-1, 0): "walk_crouching_left",
@@ -365,11 +392,11 @@ func _setup_animation_tree() -> void:
 	})
 
 	var crouch_idle_anim := AnimationNodeAnimation.new()
-	crouch_idle_anim.animation = "pistol_idle"  # TODO: Add pistol_idle_crouching
+	crouch_idle_anim.animation = _get_animation_with_fallback("pistol_idle_crouching", "rifle_idle_crouching", "rifle_idle")
 
 	# Rifle idle (crouching)
 	var rifle_crouch_idle_anim := AnimationNodeAnimation.new()
-	rifle_crouch_idle_anim.animation = "rifle_idle"  # TODO: Add rifle_idle_crouching
+	rifle_crouch_idle_anim.animation = _get_animation_with_fallback("rifle_idle_crouching", "rifle_idle")
 
 	# TimeScale nodes
 	var walk_speed_node := AnimationNodeTimeScale.new()
@@ -390,11 +417,11 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node("Idle", idle_anim, Vector2(-600, -200))
 	blend_tree.add_node("RifleIdle", rifle_idle_anim, Vector2(-600, -50))
 	blend_tree.add_node("WeaponIdleStandBlend", weapon_idle_stand_blend, Vector2(-400, -100))
-	# Rifle walk/sprint
-	blend_tree.add_node("RifleWalkBlend", rifle_walk_blend_space, Vector2(-800, 100))
+	# Rifle walk/sprint (StateMachine for instant direction switching)
+	blend_tree.add_node("RifleWalkSM", rifle_walk_sm, Vector2(-800, 100))
 	blend_tree.add_node("RifleSprint", rifle_sprint_anim, Vector2(-800, 300))
-	# Pistol walk/sprint
-	blend_tree.add_node("PistolWalkBlend", pistol_walk_blend_space, Vector2(-800, 150))
+	# Pistol walk/sprint (StateMachine for instant direction switching)
+	blend_tree.add_node("PistolWalkSM", pistol_walk_sm, Vector2(-800, 150))
 	blend_tree.add_node("PistolSprint", pistol_sprint_anim, Vector2(-800, 350))
 	# Weapon-based walk/run blend
 	blend_tree.add_node("WalkWeaponBlend", walk_weapon_blend, Vector2(-600, 100))
@@ -421,8 +448,8 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("WeaponIdleCrouchBlend", 1, "CrouchIdle")
 
 	# Connect weapon-based walk/sprint (0 = rifle, 1 = pistol)
-	blend_tree.connect_node("WalkWeaponBlend", 0, "RifleWalkBlend")
-	blend_tree.connect_node("WalkWeaponBlend", 1, "PistolWalkBlend")
+	blend_tree.connect_node("WalkWeaponBlend", 0, "RifleWalkSM")
+	blend_tree.connect_node("WalkWeaponBlend", 1, "PistolWalkSM")
 	blend_tree.connect_node("RunWeaponBlend", 0, "RifleSprint")
 	blend_tree.connect_node("RunWeaponBlend", 1, "PistolSprint")
 	blend_tree.connect_node("WalkSpeed", 0, "WalkWeaponBlend")
@@ -442,17 +469,107 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("output", 0, "StandCrouchBlend")
 
 	_anim_tree.tree_root = blend_tree
+	# Godot 4.x: anim_player is deprecated, but still works
+	# AnimationMixer (parent class) root_node must be set for track resolution
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
+	_anim_tree.root_node = NodePath("..")  # Point to CharacterModel for track resolution
 	_anim_tree.active = true
 
+	# Initialize all blend parameters to default values
+	_anim_tree.set("parameters/StandCrouchBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/StandingBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/CrouchingBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/WalkRunBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/WalkWeaponBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/RunWeaponBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/WeaponIdleStandBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/WeaponIdleCrouchBlend/blend_amount", 0.0)
+	_anim_tree.set("parameters/WalkSpeed/scale", 1.0)
+	_anim_tree.set("parameters/RunSpeed/scale", 1.0)
+	_anim_tree.set("parameters/CrouchSpeed/scale", 1.0)
+	# Crouch用BlendSpace2Dの初期位置
+	_anim_tree.set("parameters/CrouchWalkBlend/blend_position", Vector2(0, -1))
 
-func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
+	print("[CharAnim] AnimationTree setup complete:")
+	print("[CharAnim]   tree_root: %s" % _anim_tree.tree_root)
+	print("[CharAnim]   anim_player: %s" % _anim_tree.anim_player)
+	print("[CharAnim]   root_node: %s" % _anim_tree.root_node)
+	print("[CharAnim]   active: %s" % _anim_tree.active)
+
+	# Process mode: PHYSICS for consistent timing with move_and_slide()
+	_anim_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
+
+	# NOTE: root_motion_track is DISABLED because it causes T-pose in complex BlendTrees.
+	# When root_motion_track is set, Godot removes the Hips bone animation from skeleton pose
+	# and makes it available via get_root_motion_position(). However, this breaks the skeleton
+	# hierarchy causing all other bones to render incorrectly (T-pose).
+	# TODO: Investigate alternative RootMotion approaches or use dedicated Root bone.
+	# if use_root_motion and _skeleton and _anim_player:
+	# 	var anim_root := _anim_player.get_node(_anim_player.root_node)
+	# 	if anim_root:
+	# 		var skeleton_path := anim_root.get_path_to(_skeleton)
+	# 		var track_path := "%s:%s" % [skeleton_path, root_bone_name]
+	# 		_anim_tree.root_motion_track = NodePath(track_path)
+	# 		print("[CharacterAnimationController] RootMotion enabled, track: %s" % track_path)
+
+
+## 8方向walkステートマシンを作成（BlendSpace2Dの代わり）
+func _create_walk_state_machine(prefix: String) -> AnimationNodeStateMachine:
+	var sm := AnimationNodeStateMachine.new()
+
+	# 8方向のアニメーションをステートとして追加
+	var state_anims := {
+		"walk_forward": prefix + "_walk_forward",
+		"walk_backward": prefix + "_walk_backward",
+		"walk_left": prefix + "_walk_left",
+		"walk_right": prefix + "_walk_right",
+		"walk_forward_left": prefix + "_walk_forward_left",
+		"walk_forward_right": prefix + "_walk_forward_right",
+		"walk_backward_left": prefix + "_walk_backward_left",
+		"walk_backward_right": prefix + "_walk_backward_right",
+	}
+
+	for state_name in state_anims.keys():
+		var anim_name: String = state_anims[state_name]
+		# フォールバック: prefixのアニメがなければrifle_を試す
+		if not _anim_player.has_animation(anim_name):
+			anim_name = "rifle_" + state_name  # rifle_walk_forward等
+		if _anim_player.has_animation(anim_name):
+			var anim_node := AnimationNodeAnimation.new()
+			anim_node.animation = anim_name
+			sm.add_node(state_name, anim_node)
+
+	# Godot 4.x: Startノードから最初のステートへの遷移を追加
+	if sm.has_node("walk_forward"):
+		var start_tr := AnimationNodeStateMachineTransition.new()
+		start_tr.xfade_time = 0.08  # 短いブレンド時間
+		start_tr.switch_mode = AnimationNodeStateMachineTransition.SWITCH_MODE_SYNC
+		sm.add_transition("Start", "walk_forward", start_tr)
+
+	# すべてのステート間に短いブレンド遷移を作成
+	# 即時(0)だとパカパカ、長すぎると変なポーズになるため0.08秒に設定
+	var state_names := state_anims.keys()
+	for from_state in state_names:
+		if not sm.has_node(from_state):
+			continue
+		for to_state in state_names:
+			if from_state == to_state or not sm.has_node(to_state):
+				continue
+			var tr := AnimationNodeStateMachineTransition.new()
+			tr.xfade_time = 0.08  # 短いブレンド時間（パカパカ防止）
+			tr.switch_mode = AnimationNodeStateMachineTransition.SWITCH_MODE_SYNC  # 位相同期
+			tr.reset = false
+			sm.add_transition(from_state, to_state, tr)
+
+	return sm
+
+## Crouch用BlendSpace2D（こちらは急な方向変化が少ないのでBlendSpace2Dのまま）
+func _create_crouch_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 	var blend_space := AnimationNodeBlendSpace2D.new()
 	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
 	blend_space.auto_triangles = true
 	blend_space.min_space = Vector2(-1, -1)
 	blend_space.max_space = Vector2(1, 1)
-	# Enable sync to keep animation phase synchronized across blend positions
 	blend_space.sync = true
 
 	for pos in anims:
@@ -464,28 +581,20 @@ func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 
 	return blend_space
 
-func _create_blend_space_with_fallback(anims: Dictionary) -> AnimationNodeBlendSpace2D:
-	var blend_space := AnimationNodeBlendSpace2D.new()
-	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
-	blend_space.auto_triangles = true
-	blend_space.min_space = Vector2(-1, -1)
-	blend_space.max_space = Vector2(1, 1)
-	# Enable sync to keep animation phase synchronized across blend positions
-	blend_space.sync = true
-
-	for pos in anims:
-		var anim_names: Array = anims[pos]
-		var found_anim := ""
-		for anim_name in anim_names:
-			if _anim_player.has_animation(anim_name):
-				found_anim = anim_name
-				break
-		if not found_anim.is_empty():
-			var anim_node := AnimationNodeAnimation.new()
-			anim_node.animation = found_anim
-			blend_space.add_blend_point(anim_node, pos)
-
-	return blend_space
+## Get animation name with fallback support
+## Returns the first animation that exists in the AnimationPlayer
+func _get_animation_with_fallback(primary: String, fallback1: String, fallback2: String = "") -> String:
+	if _anim_player.has_animation(primary):
+		return primary
+	if _anim_player.has_animation(fallback1):
+		print("[CharAnim] Animation '%s' not found, using fallback '%s'" % [primary, fallback1])
+		return fallback1
+	if not fallback2.is_empty() and _anim_player.has_animation(fallback2):
+		print("[CharAnim] Animation '%s' not found, using fallback '%s'" % [primary, fallback2])
+		return fallback2
+	# Return primary anyway (will show error in Godot if missing)
+	push_warning("[CharAnim] Animation '%s' and fallbacks not found!" % primary)
+	return primary
 
 func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	if not _model:
@@ -508,28 +617,61 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	if move_dir.length() > 0.1:
 		var char_forward := _model.global_transform.basis.z
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
-		var target_blend := Vector2(-sin(angle), -cos(angle))
+		var dir2 := Vector2(-sin(angle), -cos(angle))
 
-		# Smooth but fast interpolation for direction changes
-		# This prevents "popping" when changing direction while keeping responsiveness
-		var blend_speed := 12.0  # Higher = faster response
-		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
-		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
+		# 8方向にスナップしてステート名を取得
+		var new_state := _dir_to_walk_state(dir2)
+
+		# ステートが変わった場合のみtravel
+		if new_state != _current_walk_state:
+			_current_walk_state = new_state
+			_travel_walk_state(new_state)
+
+		# Crouch用BlendSpace2D（こちらは補間でOK）
+		_input_dir = dir2
+
+		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-15.0 * delta))
 	else:
-		# Quick fade to idle when stopped
-		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
-		if _movement_blend < 0.01:
-			_input_dir = Vector2.ZERO
+		# アイドルへ戻す
+		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-5.0 * delta))
+
+## 入力方向を最も近い8方向のステート名に変換
+func _dir_to_walk_state(dir: Vector2) -> String:
+	if dir.length() < 0.01:
+		return "walk_forward"
+
+	var best_idx := 0
+	var best_dot := -2.0
+
+	for i in range(DIR8_VECTORS.size()):
+		var dot := dir.normalized().dot(DIR8_VECTORS[i].normalized())
+		if dot > best_dot:
+			best_dot = dot
+			best_idx = i
+
+	return DIR8_STATE_NAMES[best_idx]
+
+## StateMachineのplaybackを使ってwalkステートを切り替え
+func _travel_walk_state(state_name: String) -> void:
+	if not _anim_tree:
+		return
+
+	# Rifle StateMachine
+	var rifle_playback = _anim_tree.get("parameters/RifleWalkSM/playback") as AnimationNodeStateMachinePlayback
+	if rifle_playback and rifle_playback.get_current_node() != state_name:
+		rifle_playback.travel(state_name)
+
+	# Pistol StateMachine
+	var pistol_playback = _anim_tree.get("parameters/PistolWalkSM/playback") as AnimationNodeStateMachinePlayback
+	if pistol_playback and pistol_playback.get_current_node() != state_name:
+		pistol_playback.travel(state_name)
 
 func _update_animation_tree() -> void:
 	if not _anim_tree or not _anim_tree.active:
 		return
 
-	# Update blend positions (walk only, sprint is a single animation)
-	if _movement_blend > 0.01:
-		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
-		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
-		_anim_tree.set("parameters/CrouchWalkBlend/blend_position", _input_dir)
+	# Crouch用BlendSpace2Dのみblend_position更新（Rifle/PistolはStateMachineで制御）
+	_anim_tree.set("parameters/CrouchWalkBlend/blend_position", _input_dir)
 
 	# TimeScale = 1.0 for walk animations
 	# Movement speed is adjusted per-direction to match animation visual speed

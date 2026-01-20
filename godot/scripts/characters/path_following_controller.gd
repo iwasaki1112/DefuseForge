@@ -255,8 +255,20 @@ func process(delta: float) -> void:
 		anim_ctrl.update_animation(move_dir, look_dir, is_running_now, delta)
 
 	# 物理移動
-	_character.velocity.x = move_dir.x * speed
-	_character.velocity.z = move_dir.z * speed
+	if anim_ctrl.use_root_motion:
+		# RootMotionから移動量を取得
+		var root_motion: Vector3 = anim_ctrl.get_root_motion_delta()
+		if root_motion.length_squared() > 0.0001:
+			_character.velocity.x = root_motion.x / delta
+			_character.velocity.z = root_motion.z / delta
+		else:
+			# RootMotionがない場合（アイドルアニメーション等）
+			_character.velocity.x = 0
+			_character.velocity.z = 0
+	else:
+		# 従来方式（InPlace）- フォールバック
+		_character.velocity.x = move_dir.x * speed
+		_character.velocity.z = move_dir.z * speed
 
 	if not _character.is_on_floor():
 		_character.velocity.y -= 9.8 * delta

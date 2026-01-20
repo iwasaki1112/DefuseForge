@@ -110,8 +110,14 @@ func process_primary_idle(character: Node, delta: float) -> void:
 	anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
 
 	# 重力適用
-	character.velocity.x = 0
-	character.velocity.z = 0
+	if anim_ctrl.use_root_motion:
+		# RootMotion時もアイドルアニメーションから微小な移動があり得る
+		var root_motion: Vector3 = anim_ctrl.get_root_motion_delta()
+		character.velocity.x = root_motion.x / delta if delta > 0 else 0.0
+		character.velocity.z = root_motion.z / delta if delta > 0 else 0.0
+	else:
+		character.velocity.x = 0
+		character.velocity.z = 0
 	if not character.is_on_floor():
 		character.velocity.y -= 9.8 * delta
 	character.move_and_slide()
