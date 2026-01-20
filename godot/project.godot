@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 CharacterRegistry="*res://scripts/registries/character_registry.gd"
 WeaponRegistry="*res://scripts/registries/weapon_registry.gd"
+MapRegistry="*res://scripts/registries/map_registry.gd"
 PlayerState="*res://scripts/systems/player_state.gd"
 CharacterColorManager="*res://scripts/systems/character_color_manager.gd"
 

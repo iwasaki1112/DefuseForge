@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MapPreset" load_steps=2 format=3 uid="uid://dm8n3x7ypqr2k"]
+
+[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://cn8m3x7ypqw2k" path="res://scenes/maps/gridmap_test.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+id = "gridmap_test"
+display_name = "GridMap Test"
+description = "Test map using GridMap and MeshLibrary"
+map_scene = ExtResource("2_scene")
+map_size = Vector2(10, 10)
+spawn_points_ct = Array[Vector3]([Vector3(2, 0.1, 2), Vector3(3, 0.1, 2)])
+spawn_points_t = Array[Vector3]([Vector3(7, 0.1, 7), Vector3(8, 0.1, 7)])

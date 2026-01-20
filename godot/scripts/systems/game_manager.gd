@@ -327,6 +327,42 @@ func set_vision_enabled(enabled: bool) -> void:
 
 
 ## ========================================
+## マップ管理
+## ========================================
+
+## マップをロード（MapRegistryから）
+## Returns: マップインスタンス、失敗時はnull
+func load_map(map_preset_id: String) -> Node3D:
+	var preset = MapRegistry.get_preset(map_preset_id)
+	if not preset:
+		push_error("[GameManager] Map preset not found: %s" % map_preset_id)
+		return null
+
+	var map_instance = MapRegistry.instantiate_map(map_preset_id)
+	if not map_instance:
+		return null
+
+	# FoWマップサイズ更新
+	fow_map_size = preset.map_size
+	if fog_of_war_system:
+		fog_of_war_system.map_size = preset.map_size
+
+	# 壁キャッシュ無効化（VisionComponent用）
+	VisionComponent.invalidate_wall_cache()
+
+	print("[GameManager] Map loaded: %s (size: %s)" % [map_preset_id, preset.map_size])
+	return map_instance
+
+
+## マッププリセットからスポーン位置を取得
+func get_spawn_points(map_preset_id: String, is_ct: bool) -> Array[Vector3]:
+	var preset = MapRegistry.get_preset(map_preset_id)
+	if not preset:
+		return []
+	return preset.spawn_points_ct if is_ct else preset.spawn_points_t
+
+
+## ========================================
 ## 毎フレーム処理
 ## ========================================
 

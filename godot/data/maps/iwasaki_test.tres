@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MapPreset" load_steps=3 format=3 uid="uid://bx8n4y70pqr3m"]
+
+[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/maps/iwasaki_test.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+id = "iwasaki_test"
+display_name = "Iwasaki Test Map"
+description = "Custom test map"
+map_scene = ExtResource("2_scene")
+map_size = Vector2(20, 20)
+spawn_points_ct = Array[Vector3]([Vector3(2, 0, 2), Vector3(3, 0, 2)])
+spawn_points_t = Array[Vector3]([Vector3(15, 0, 15), Vector3(16, 0, 15)])

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MapPreset" load_steps=2 format=3 uid="uid://c3wgxm8ynqphj"]
+
+[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://bqkx7m8ydpxwl" path="res://scenes/maps/test_map.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+id = "test_map"
+display_name = "Test Map"
+description = "Simple test map with floor, walls, and spawn points"
+map_scene = ExtResource("2_scene")
+map_size = Vector2(50, 50)
+spawn_points_ct = Array[Vector3]([Vector3(-20, 0, -20), Vector3(-18, 0, -20), Vector3(-16, 0, -20)])
+spawn_points_t = Array[Vector3]([Vector3(20, 0, 20), Vector3(18, 0, 20), Vector3(16, 0, 20)])
