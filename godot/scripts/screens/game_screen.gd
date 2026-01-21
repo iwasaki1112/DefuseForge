@@ -15,6 +15,7 @@ const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 @onready var map_container: Node3D = $MapContainer
 @onready var ui_layer: CanvasLayer = $UILayer
 @onready var team_display_label: Label = $UILayer/TeamDisplayLabel
+@onready var money_label: Label = $UILayer/MoneyLabel
 
 ## コアシステム
 var game_manager: GameManager = null
@@ -44,6 +45,7 @@ func _ready() -> void:
 	_spawn_characters()
 	_update_team_display()
 	_setup_camera_for_player()
+	_setup_money()
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
@@ -213,12 +215,28 @@ func _setup_camera_for_player() -> void:
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
 
 
+## 所持金をセットアップ
+func _setup_money() -> void:
+	# 初期資金にリセット
+	PlayerState.reset_money()
+	# シグナル接続
+	PlayerState.money_changed.connect(_on_money_changed)
+	# 初期表示更新
+	_update_money_display()
+
+
 ## チーム表示を更新
 func _update_team_display() -> void:
 	if team_display_label:
 		var team_name := PlayerState.get_team_name()
 		var full_name := "Counter-Terrorist" if team_name == "CT" else "Terrorist"
 		team_display_label.text = "You are: %s (%s)" % [full_name, team_name]
+
+
+## 所持金表示を更新
+func _update_money_display() -> void:
+	if money_label:
+		money_label.text = "$%d" % PlayerState.get_money()
 
 
 ## 保留パス数ラベルを更新
@@ -321,3 +339,7 @@ func _on_all_paths_completed() -> void:
 
 func _on_paths_cleared() -> void:
 	_update_pending_paths_label()
+
+
+func _on_money_changed(_new_amount: int) -> void:
+	_update_money_display()

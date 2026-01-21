@@ -51,7 +51,7 @@
 | Resource | EnvironmentPreset | 環境プリセット定義（ライティング・影・レンダリング品質・ポストプロセス） |
 | Resource | ContextMenuItem | コンテキストメニュー項目定義 |
 | System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
-| System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |
+| System | PlayerState | プレイヤーチーム管理＋味方/敵分類＋お金管理（Autoload） |
 | System | EnemyVisibilitySystem | 味方視界に基づく敵キャラクター可視性制御 |
 | System | CharacterColorManager | キャラクター個別色管理（Autoload） |
 | System | CharacterSelectionManager | 複数キャラクター選択＋アウトライン表示管理 |

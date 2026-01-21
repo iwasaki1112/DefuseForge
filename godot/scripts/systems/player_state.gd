@@ -4,14 +4,21 @@ class_name PlayerStateClass
 ## Manages the player's team and provides utility functions for team-based logic
 
 # ============================================
+# Constants
+# ============================================
+const INITIAL_MONEY: int = 800  ## 初期資金（ゲーム開始時）
+
+# ============================================
 # Signals
 # ============================================
 signal team_changed(new_team: GameCharacter.Team)
+signal money_changed(new_amount: int)
 
 # ============================================
 # State
 # ============================================
 var _player_team: GameCharacter.Team = GameCharacter.Team.COUNTER_TERRORIST
+var _money: int = INITIAL_MONEY
 
 # ============================================
 # Team API
@@ -78,3 +85,69 @@ func filter_enemies(characters: Array) -> Array[Node]:
 		if is_enemy(character):
 			result.append(character)
 	return result
+
+
+# ============================================
+# Money API
+# ============================================
+
+## Get current money
+func get_money() -> int:
+	return _money
+
+
+## Set money directly
+func set_money(amount: int) -> void:
+	var clamped := maxi(0, amount)
+	if _money == clamped:
+		return
+	_money = clamped
+	money_changed.emit(_money)
+	print("[PlayerState] Money set to: $%d" % _money)
+
+
+## Add money (e.g., round reward, kill reward)
+func add_money(amount: int) -> void:
+	if amount <= 0:
+		return
+	set_money(_money + amount)
+
+
+## Spend money if sufficient funds available
+## Returns true if successful, false if insufficient funds
+func spend_money(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if _money < amount:
+		print("[PlayerState] Insufficient funds: have $%d, need $%d" % [_money, amount])
+		return false
+	set_money(_money - amount)
+	return true
+
+
+## Check if player can afford amount
+func can_afford(amount: int) -> bool:
+	return _money >= amount
+
+
+## Reset money to initial amount (e.g., game start)
+func reset_money() -> void:
+	set_money(INITIAL_MONEY)
+	print("[PlayerState] Money reset to initial: $%d" % INITIAL_MONEY)
+
+
+## Add round reward
+func add_round_reward(won: bool, loss_streak: int = 0) -> void:
+	var reward: int
+	if won:
+		reward = 3250  # 勝利報酬
+	else:
+		# 敗北報酬（連敗ボーナス）
+		match loss_streak:
+			0: reward = 1400
+			1: reward = 1900
+			2: reward = 2400
+			3: reward = 2900
+			_: reward = 3400  # 最大
+	add_money(reward)
+	print("[PlayerState] Round reward: $%d (won=%s, loss_streak=%d)" % [reward, won, loss_streak])
