@@ -85,22 +85,22 @@ MapPresetが参照するマップシーン（.tscn）の推奨構造:
 
 ```
 MapRoot (Node3D)
-├── Environment (Node3D)
-│   ├── DirectionalLight3D
-│   └── WorldEnvironment
-├── Floor (StaticBody3D) [collision_layer=1]
-│   ├── CSGBox3D / MeshInstance3D
-│   └── CollisionShape3D
+├── Floor (CSGBox3D / MeshInstance3D) [use_collision=true]
 ├── Walls (Node3D)
-│   └── Wall_* (StaticBody3D) [collision_layer=2]
-│       └── CSGBox3D / MeshInstance3D
-├── SpawnPoints (Node3D)
+│   └── Wall_* (CSGBox3D / StaticBody3D) [collision_layer=2]
+├── SpawnPoints (Node3D) [オプション - MapPresetで座標指定も可]
 │   ├── CT_Spawns (Node3D)
 │   │   └── Spawn* (Marker3D)
 │   └── T_Spawns (Node3D)
 │       └── Spawn* (Marker3D)
 └── Navigation (NavigationRegion3D) [オプション]
 ```
+
+**重要: 環境設定について**
+
+マップシーンにDirectionalLight3DやWorldEnvironmentを含めないこと。
+環境設定（ライティング・影・レンダリング品質）はGameScreenの`EnvironmentSetup`が自動的に適用する。
+詳細は [EnvironmentSetup](EnvironmentSetup.md) を参照。
 
 ## コリジョンレイヤー
 
@@ -117,3 +117,4 @@ MapRoot (Node3D)
 - [GameManager](GameManager.md) - load_map()でマップロード
 - [VisionComponent](VisionComponent.md) - 壁グループを使用した視界計算
 - [FogOfWarSystem](FogOfWarSystem.md) - map_sizeを使用
+- [EnvironmentSetup](EnvironmentSetup.md) - 環境設定の自動適用

@@ -8,7 +8,7 @@ class_name GameScreen
 ## シーン定数
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
-const DEFAULT_LIGHTING_PRESET := "res://data/lighting/default.tres"
+const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -18,7 +18,7 @@ const DEFAULT_LIGHTING_PRESET := "res://data/lighting/default.tres"
 
 ## コアシステム
 var game_manager: GameManager = null
-var lighting_setup: LightingSetup = null
+var environment_setup: EnvironmentSetup = null
 
 ## UI要素
 var _pending_paths_label: Label
@@ -36,7 +36,7 @@ var _ground_plane := Plane(Vector3.UP, 0)
 
 
 func _ready() -> void:
-	_setup_lighting()
+	_setup_environment()
 	_determine_player_team()
 	_setup_game_manager()
 	_setup_control_ui()
@@ -53,14 +53,14 @@ func _ready() -> void:
 ## 初期化処理
 ## ========================================
 
-## ライティングをセットアップ
-func _setup_lighting() -> void:
-	lighting_setup = LightingSetup.new()
-	lighting_setup.name = "LightingSetup"
-	var preset := load(DEFAULT_LIGHTING_PRESET) as LightingPreset
+## 環境をセットアップ
+func _setup_environment() -> void:
+	environment_setup = EnvironmentSetup.new()
+	environment_setup.name = "EnvironmentSetup"
+	var preset := load(DEFAULT_ENVIRONMENT_PRESET) as EnvironmentPreset
 	if preset:
-		lighting_setup.preset = preset
-	add_child(lighting_setup)
+		environment_setup.preset = preset
+	add_child(environment_setup)
 
 
 ## プレイヤーチームをランダムに決定

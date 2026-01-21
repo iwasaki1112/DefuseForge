@@ -2,28 +2,28 @@ extends Node3D
 ## ライティング調整用テストシーン
 ## キャラクターを1体配置してライトの見え方を確認する
 
-const DEFAULT_LIGHTING_PRESET := "res://data/lighting/default.tres"
+const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
 @onready var spawn_point: Marker3D = $CharacterSpawnPoint
 
 var _character: Node = null
-var _lighting_setup: LightingSetup = null
+var _environment_setup: EnvironmentSetup = null
 
 
 func _ready() -> void:
-	# LightingSetupを使用（GameScreenと同じ方法）
-	_setup_lighting()
+	# EnvironmentSetupを使用（GameScreenと同じ方法）
+	_setup_environment()
 	_spawn_character()
 
 
-func _setup_lighting() -> void:
-	_lighting_setup = LightingSetup.new()
-	_lighting_setup.name = "LightingSetup"
-	var preset := load(DEFAULT_LIGHTING_PRESET) as LightingPreset
+func _setup_environment() -> void:
+	_environment_setup = EnvironmentSetup.new()
+	_environment_setup.name = "EnvironmentSetup"
+	var preset := load(DEFAULT_ENVIRONMENT_PRESET) as EnvironmentPreset
 	if preset:
-		_lighting_setup.preset = preset
-	add_child(_lighting_setup)
-	print("[LightingTest] Using LightingSetup")
+		_environment_setup.preset = preset
+	add_child(_environment_setup)
+	print("[LightingTest] Using EnvironmentSetup")
 
 
 func _spawn_character() -> void:
