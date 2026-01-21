@@ -14,6 +14,28 @@
 - **入力**: タップ/クリックのみ（モバイル前提）
 - **パフォーマンス優先**: モバイル向けに最適化すること
 
+## リポジトリ構成（概要）
+- **`godot/`**: ゲーム本体（Godotプロジェクト）
+- **`docs/`**: ドキュメント群（Godot仕様・API・AI向け指示）
+- **`blender/`**: マップ/アセット制作関連
+- **`tools/`**: 開発支援ツール類
+- **`scripts/`**: 自動化・補助スクリプト
+- **`docker-compose.yml`**: 開発/検証用の構成
+- **`agents.md` / `CLAUDE.md` / `GEMINI.md`**: AIエージェント向けの指示
+
+## 主要エントリポイント（最初に見る場所）
+- **画面フローの全体像**: `docs/godot/game-flow.md`
+- **最初に表示される画面**: `scenes/screens/main_menu.tscn` / `scripts/screens/main_menu_screen.gd`
+- **マップ選択画面**: `scenes/screens/map_selection.tscn` / `scripts/screens/map_selection_screen.gd`
+- **設定画面**: `scenes/screens/option.tscn` / `scripts/screens/option_screen.gd`
+- **ゲーム本編画面**: `scenes/screens/game.tscn` / `scripts/screens/game_screen.gd`
+
+## game-flowの読み方（最短導線）
+1. **画面遷移図**: 起動からゲーム開始までの流れを把握
+2. **GameScreen**: 初期化処理と主要システムの関係を把握
+3. **データフロー**: MapSelection→GameScreenのデータ伝播を確認
+4. **登録済みマップ**: マップ追加・構成の流れを確認
+
 ## 現在の状態
 開発途中。Mixamo専用のキャラクターシステム。マップはBlenderで作成しGLTFインポート。
 
@@ -79,15 +101,6 @@
 - 新規クラス作成時: `docs/godot/api/<クラス名>.md` を新規作成
 - 既存クラス変更時: 対応するドキュメントを更新
 - docs/ai/COMMON_INSTRUCTION.mdのクラス一覧も必要に応じて更新
-
-## コマンド
-```bash
-# エディタ起動
-"/Applications/Godot.app/Contents/MacOS/Godot" --path godot --editor
-
-# プロジェクト実行
-"/Applications/Godot.app/Contents/MacOS/Godot" --path godot
-```
 
 ## Tool Priority
 1. **Godot MCP** (優先) - シーン作成・編集・実行
