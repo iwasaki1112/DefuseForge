@@ -143,12 +143,23 @@ func unregister_character(character: Node) -> void:
 
 ## マウス/タッチクリック処理（シーンから呼び出す）
 func handle_click(screen_pos: Vector2, button_index: int) -> bool:
-	# コンテキストメニューが開いている場合、メニューUI上のクリックは無視
-	if context_menu and context_menu.is_open():
-		if _is_point_over_context_menu(screen_pos):
-			return true  # 入力を消費
-
 	var clicked_character = raycast_character(screen_pos)
+
+	# コンテキストメニューが開いている場合の処理
+	if context_menu and context_menu.is_open():
+		var menu_character = context_menu.get_current_character()
+		# 同じキャラクターをクリック: 選択解除してメニューを閉じる
+		if clicked_character and clicked_character == menu_character:
+			selection_manager.remove_from_selection(clicked_character)
+			context_menu.close()
+			return true
+		# メニューUI上のクリック（ボタン以外の部分）: 選択解除してメニューを閉じる
+		# ※ボタンがクリックされた場合は_unhandled_inputに到達しないため、ここに来るのはボタン以外
+		if _is_point_over_context_menu(screen_pos):
+			if menu_character:
+				selection_manager.remove_from_selection(menu_character)
+			context_menu.close()
+			return true
 
 	match button_index:
 		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT:
@@ -633,6 +644,7 @@ func _setup_context_menu() -> void:
 		_ui_layer.add_child(context_menu)
 		context_menu.setup_default_items()
 		context_menu.item_selected.connect(_on_context_menu_item_selected)
+		context_menu.background_clicked.connect(_on_context_menu_background_clicked)
 
 
 func _update_context_menu_follow() -> void:
@@ -798,6 +810,12 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 		_:
 			# その他のアクションは外部に通知
 			context_action_requested.emit(action_id, character)
+
+
+func _on_context_menu_background_clicked(character: CharacterBody3D) -> void:
+	# メニュー背景（中央の穴など）がクリックされた場合、選択解除
+	if character and selection_manager:
+		selection_manager.remove_from_selection(character)
 
 
 ## 武器ショップを開く

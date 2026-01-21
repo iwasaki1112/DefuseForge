@@ -7,6 +7,7 @@ extends Control
 ## モバイル（タッチ）とPC（マウス）両対応
 
 signal item_selected(action_id: String, character: CharacterBody3D)
+signal background_clicked(character: CharacterBody3D)  ## メニュー背景（ボタン以外）がクリックされた
 
 const ContextMenuItemScript = preload("res://scripts/resources/context_menu_item.gd")
 
@@ -205,7 +206,7 @@ func _build_ui() -> void:
 
 	# メニューのルートコンテナ
 	_menu_root = Control.new()
-	_menu_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_root.mouse_filter = Control.MOUSE_FILTER_PASS  # 親に入力を伝播
 	add_child(_menu_root)
 
 	_background = TextureRect.new()
@@ -455,12 +456,31 @@ func _gui_input(event: InputEvent) -> void:
 			pressed = event.pressed
 
 		if pressed and _is_open:
-			# パネル外をクリックした場合は閉じる
 			var local_pos = _menu_root.get_local_mouse_position()
 			var panel_rect = Rect2(Vector2.ZERO, _menu_root.size)
 			if not panel_rect.has_point(local_pos):
+				# パネル外をクリックした場合は閉じて選択解除
+				var character = _current_character
 				close()
+				background_clicked.emit(character)
 				get_viewport().set_input_as_handled()
+			elif not _is_point_over_any_button(local_pos):
+				# パネル内だがボタン以外（中央の穴など）をクリックした場合
+				var character = _current_character
+				close()
+				background_clicked.emit(character)
+				get_viewport().set_input_as_handled()
+
+
+## クリック位置がボタン上かどうかを判定
+func _is_point_over_any_button(local_pos: Vector2) -> bool:
+	for button in _buttons:
+		if not is_instance_valid(button):
+			continue
+		var button_rect = Rect2(button.position, button.size)
+		if button_rect.has_point(local_pos):
+			return true
+	return false
 
 
 ## キャラクター状態に応じて動的ラベルを更新
