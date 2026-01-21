@@ -1,0 +1,203 @@
+[gd_scene load_steps=7 format=3 uid="uid://dpp5no3qcgw0c"]
+
+[ext_resource type="Script" path="res://scripts/tests/test_character_selector.gd" id="1_script"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
+sky_top_color = Color(0.4, 0.6, 0.8, 1)
+sky_horizon_color = Color(0.7, 0.8, 0.9, 1)
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("ProceduralSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.8, 0.8, 1)
+ambient_light_energy = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.3, 0.3, 0.3, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2"]
+albedo_color = Color(0.6, 0.4, 0.3, 1)
+
+[node name="TestCharacter" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 10, 0)
+light_energy = 1.5
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.342, 0.94, 0, -0.94, 0.342, 0, 15, 5.5)
+projection = 1
+current = true
+fov = 60.0
+size = 12.0
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(50, 1, 50)
+material = SubResource("StandardMaterial3D_1")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="CharacterDropdown" type="OptionButton" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 250.0
+offset_bottom = 40.0
+
+[node name="WeaponDropdown" type="OptionButton" parent="UI"]
+offset_left = 260.0
+offset_top = 10.0
+offset_right = 450.0
+offset_bottom = 40.0
+
+[node name="InfoLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 50.0
+offset_right = 400.0
+offset_bottom = 200.0
+text = "Loading..."
+
+[node name="ControlPanel" type="VBoxContainer" parent="UI"]
+offset_left = 10.0
+offset_top = 220.0
+offset_right = 200.0
+offset_bottom = 500.0
+
+[node name="ManualControlButton" type="Button" parent="UI/ControlPanel"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+text = "Manual Control: ON"
+
+[node name="VisionToggleButton" type="Button" parent="UI/ControlPanel"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+text = "Vision/FoW: ON"
+
+[node name="Separator" type="HSeparator" parent="UI/ControlPanel"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="PendingPathsLabel" type="Label" parent="UI/ControlPanel"]
+layout_mode = 2
+text = "Pending: 0 paths"
+
+[node name="ExecuteWalkButton" type="Button" parent="UI/ControlPanel"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+text = "Execute All"
+
+[node name="ClearPathsButton" type="Button" parent="UI/ControlPanel"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+text = "Clear All Paths"
+
+[node name="PathPanel" type="VBoxContainer" parent="UI"]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -230.0
+offset_right = 150.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="VisionLabel" type="Label" parent="UI/PathPanel"]
+layout_mode = 2
+text = "Vision Points: 0"
+horizontal_alignment = 1
+
+[node name="VisionHBox" type="HBoxContainer" parent="UI/PathPanel"]
+layout_mode = 2
+
+[node name="AddVisionButton" type="Button" parent="UI/PathPanel/VisionHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Add Vision"
+
+[node name="UndoVisionButton" type="Button" parent="UI/PathPanel/VisionHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Undo"
+
+[node name="RunLabel" type="Label" parent="UI/PathPanel"]
+layout_mode = 2
+text = "Run Segments: 0"
+horizontal_alignment = 1
+
+[node name="RunHBox" type="HBoxContainer" parent="UI/PathPanel"]
+layout_mode = 2
+
+[node name="AddRunButton" type="Button" parent="UI/PathPanel/RunHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Add Run"
+
+[node name="UndoRunButton" type="Button" parent="UI/PathPanel/RunHBox"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Undo"
+
+[node name="ConfirmButton" type="Button" parent="UI/PathPanel"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Confirm Path"
+
+[node name="CancelButton" type="Button" parent="UI/PathPanel"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Cancel"
+
+[node name="RotatePanel" type="VBoxContainer" parent="UI"]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="RotateLabel" type="Label" parent="UI/RotatePanel"]
+layout_mode = 2
+text = "Tap to set direction"
+horizontal_alignment = 1
+
+[node name="RotateConfirmButton" type="Button" parent="UI/RotatePanel"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Confirm"
+
+[node name="RotateCancelButton" type="Button" parent="UI/RotatePanel"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Cancel"
+
+[node name="Wall" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2455626, 1, 0)
+use_collision = true
+collision_layer = 2
+collision_mask = 0
+size = Vector3(0.5, 2, 6)
+material = SubResource("StandardMaterial3D_2")
