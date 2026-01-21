@@ -15,9 +15,7 @@
 | 責務 | 説明 |
 |------|------|
 | 環境セットアップ | EnvironmentSetupを生成し、環境プリセットを適用 |
-| マップロード | SettingsManagerから選択マップIDを取得し、MapManagerでロード |
-| キャラクタースポーン | MapPresetのスポーン位置にCT/T両チームのキャラクターを配置 |
-| ランダムチーム選定 | プレイヤーをCT/Tどちらかにランダムに割り当て |
+| マッチセットアップ | MatchSetupServiceでマップロード・スポーン・カメラ調整を実行 |
 | UI更新 | チーム表示、所持金、保留パス数の表示更新 |
 | 入力委譲 | InputControllerが入力イベントをGameManagerへ委譲（パス/回転/キャンセル） |
 | カメラ操作 | 右ドラッグでカメラを平行移動 |
@@ -59,13 +57,11 @@ GameScreen (Node3D)
 ```
 _ready()
 ├─ _setup_environment()       # 環境プリセット適用
-├─ _determine_player_team()   # ランダムチーム決定
 ├─ _setup_game_manager()      # GameManager初期化
 ├─ _setup_hud()               # UI構築
+├─ _setup_match_service()     # マッチセットアップ
 ├─ _load_map()                # マップロード
-├─ _spawn_characters()        # キャラクタースポーン
 ├─ _update_team_display()     # チーム表示更新
-├─ _setup_camera_for_player() # カメラ位置調整
 ├─ _setup_money()             # 所持金管理
 ├─ _setup_camera_pan()        # カメラ平行移動
 └─ _setup_input_controller() # 入力コントローラー
@@ -102,3 +98,4 @@ func _on_start_pressed() -> void:
 - [MapSelectionScreen](MapSelectionScreen.md) - 遷移元画面
 - [InputController](InputController.md) - 入力処理
 - [GameHUD](GameHUD.md) - 画面操作UI
+- [MatchSetupService](MatchSetupService.md) - マッチ初期化
