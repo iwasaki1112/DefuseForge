@@ -685,6 +685,7 @@ func _setup_weapon_shop_modal() -> void:
 		weapon_shop_modal.name = GameConstants.NODE_WEAPON_SHOP_MODAL
 		_ui_layer.add_child(weapon_shop_modal)
 		weapon_shop_modal.weapon_purchased.connect(_on_weapon_purchased)
+		weapon_shop_modal.closed.connect(_on_weapon_shop_closed)
 
 
 func _setup_label_manager() -> void:
@@ -827,3 +828,10 @@ func _open_weapon_shop(character: CharacterBody3D) -> void:
 ## 武器購入完了時
 func _on_weapon_purchased(weapon: WeaponPreset, character: CharacterBody3D) -> void:
 	print("[GameManager] Weapon purchased: %s for %s" % [weapon.display_name, character.name])
+
+
+## 武器ショップ閉じた時
+func _on_weapon_shop_closed(character: CharacterBody3D) -> void:
+	# キャラクター選択を解除
+	if character and selection_manager:
+		selection_manager.remove_from_selection(character)

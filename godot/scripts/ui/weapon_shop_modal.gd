@@ -5,7 +5,7 @@ extends Control
 ## 武器一覧を表示し、選択・購入を行う
 
 signal weapon_purchased(weapon: WeaponPreset, character: CharacterBody3D)
-signal closed()
+signal closed(character: CharacterBody3D)
 
 const MODAL_SIZE := Vector2(400, 500)
 const BUTTON_SIZE := Vector2(360, 60)
@@ -303,9 +303,10 @@ func _on_buy_pressed() -> void:
 ## 閉じるアニメーション完了時
 func _on_close_animation_finished() -> void:
 	hide()
+	var character := _current_character
 	_current_character = null
 	_selected_weapon = null
-	closed.emit()
+	closed.emit(character)
 
 
 ## オーバーレイクリック検出
