@@ -3,8 +3,6 @@ class_name GameManager
 ## コアゲームシステム管理
 ## システムの初期化・更新・入力処理・UI管理を一元管理
 
-const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
-const EnemyVisibilitySystemScript = preload("res://scripts/systems/enemy_visibility_system.gd")
 const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
 const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
@@ -12,6 +10,7 @@ const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
 const MarkerEditPanelScript = preload("res://scripts/ui/marker_edit_panel.gd")
 const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
 const PathServiceScript = preload("res://scripts/systems/path_service.gd")
+const VisionServiceScript = preload("res://scripts/systems/vision_service.gd")
 
 ## UI接続用シグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -43,6 +42,7 @@ var path_drawer: Node3D = null
 var rotation_controller: Node = null
 var character_setup_service: CharacterSetupService = null
 var path_service: PathService = null
+var vision_service: VisionService = null
 
 ## UIコンポーネント
 var context_menu: Control = null
@@ -81,8 +81,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_path_drawer()
 	_setup_path_mode_controller()
 	_setup_rotation_controller()
-	_setup_fog_of_war()
-	_setup_enemy_visibility_system()
+	_setup_vision_service()
 	_setup_map_manager()
 	_setup_context_menu()
 	_setup_marker_edit_panel()
@@ -90,7 +89,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_label_manager()
 	_setup_character_setup_service()
 
-	print("[GameManager] Setup complete - 13 systems initialized")
+	print("[GameManager] Setup complete - 14 systems initialized")
 
 
 ## キャラクターを登録（視界・武器・色・ラベルも自動セットアップ）
@@ -119,10 +118,8 @@ func unregister_character(character: Node) -> void:
 		idle_manager.remove_character(character)
 
 	# 視界システムから解除
-	if character.vision and fog_of_war_system:
-		fog_of_war_system.unregister_vision(character.vision)
-	if enemy_visibility_system:
-		enemy_visibility_system.unregister_character(character)
+	if vision_service:
+		vision_service.unregister_character(character)
 
 	# ラベル削除・色解放
 	if label_manager:
@@ -296,17 +293,8 @@ func set_vision_enabled(enabled: bool) -> void:
 	is_vision_enabled = enabled
 	if character_setup_service:
 		character_setup_service.is_vision_enabled = enabled
-
-	# FogOfWarSystemの表示を切り替え
-	if fog_of_war_system:
-		fog_of_war_system.set_fog_visible(enabled)
-
-	# EnemyVisibilitySystemのモードを切り替え
-	if enemy_visibility_system:
-		if enabled:
-			enemy_visibility_system.enable_full()
-		else:
-			enemy_visibility_system.enable_lightweight()
+	if vision_service:
+		vision_service.set_enabled(enabled)
 
 
 ## ========================================
@@ -584,20 +572,13 @@ func _setup_rotation_controller() -> void:
 	rotation_controller.rotation_cancelled.connect(_on_rotation_cancelled)
 
 
-func _setup_fog_of_war() -> void:
-	fog_of_war_system = Node3D.new()
-	fog_of_war_system.set_script(FogOfWarSystemScript)
-	fog_of_war_system.name = "FogOfWarSystem"
-	fog_of_war_system.map_size = fow_map_size
-	add_child(fog_of_war_system)
-
-
-func _setup_enemy_visibility_system() -> void:
-	enemy_visibility_system = Node.new()
-	enemy_visibility_system.set_script(EnemyVisibilitySystemScript)
-	enemy_visibility_system.name = "EnemyVisibilitySystem"
-	add_child(enemy_visibility_system)
-	enemy_visibility_system.setup(fog_of_war_system)
+func _setup_vision_service() -> void:
+	vision_service = VisionServiceScript.new()
+	vision_service.name = "VisionService"
+	add_child(vision_service)
+	vision_service.setup(fow_map_size, is_vision_enabled)
+	fog_of_war_system = vision_service.fog_of_war_system
+	enemy_visibility_system = vision_service.enemy_visibility_system
 
 
 func _setup_map_manager() -> void:
@@ -666,8 +647,8 @@ func _setup_path_service() -> void:
 func _setup_character_setup_service() -> void:
 	character_setup_service = CharacterSetupServiceScript.new()
 	character_setup_service.setup(
-		enemy_visibility_system,
-		fog_of_war_system,
+		vision_service.enemy_visibility_system,
+		vision_service.fog_of_war_system,
 		label_manager,
 		default_weapon_id,
 		is_vision_enabled,
@@ -752,4 +733,3 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 		_:
 			# その他のアクションは外部に通知
 			context_action_requested.emit(action_id, character)
-

@@ -1,13 +1,13 @@
 # GameManager
 
 ## 概要
-コアゲームシステムの初期化・更新・入力処理・UI管理を一元管理するマネージャークラス。テストシーンとゲームロジックを完全に分離し、13個のサブシステムを統合制御する。
+コアゲームシステムの初期化・更新・入力処理・UI管理を一元管理するマネージャークラス。テストシーンとゲームロジックを完全に分離し、14個のサブシステムを統合制御する。
 
 ## ファイル
 `godot/scripts/systems/game_manager.gd`
 
 ## 責務
-- 13個のシステムの初期化を正しい順序で実行
+- 14個のシステムの初期化を正しい順序で実行
 - 入力処理（レイキャスト、クリック）
 - UI管理（コンテキストメニュー、マーカーパネル、ラベル）
 - キャラクター登録時の自動セットアップ（視界、武器、色、ラベル）はCharacterSetupServiceに委譲
@@ -31,6 +31,7 @@
 | 11 | CharacterLabelManager | キャラクターラベル |
 | 12 | CharacterSetupService | キャラクター初期セットアップ |
 | 13 | PathService | パス描画/編集/実行の統合制御 |
+| 14 | VisionService | 視界/FoW/敵可視性の統合制御 |
 
 ## シグナル
 
@@ -66,6 +67,7 @@ var path_drawer: Node3D
 var rotation_controller: Node
 var character_setup_service: CharacterSetupService
 var path_service: PathService
+var vision_service: VisionService
 
 # UIコンポーネント
 var context_menu: Control
