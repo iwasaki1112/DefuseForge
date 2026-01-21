@@ -1,19 +1,12 @@
 [gd_scene load_steps=3 format=3 uid="uid://daiuj6gyptaj2"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
-albedo_color = Color(0.3, 0.3, 0.3, 1)
+albedo_color = Color(0.4, 0.4, 0.4, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
 albedo_color = Color(0.6, 0.4, 0.3, 1)
 
 [node name="TestMap" type="Node3D"]
-
-[node name="Environment" type="Node3D" parent="."]
-
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Environment"]
-transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 10, 0)
-light_energy = 1.5
-shadow_enabled = true
 
 [node name="Floor" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)

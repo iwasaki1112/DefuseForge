@@ -8,6 +8,7 @@ class_name GameScreen
 ## シーン定数
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
+const DEFAULT_LIGHTING_PRESET := "res://data/lighting/default.tres"
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -17,6 +18,7 @@ const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 
 ## コアシステム
 var game_manager: GameManager = null
+var lighting_setup: LightingSetup = null
 
 ## UI要素
 var _pending_paths_label: Label
@@ -34,12 +36,14 @@ var _ground_plane := Plane(Vector3.UP, 0)
 
 
 func _ready() -> void:
+	_setup_lighting()
 	_determine_player_team()
 	_setup_game_manager()
 	_setup_control_ui()
 	_load_map()
 	_spawn_characters()
 	_update_team_display()
+	_setup_camera_for_player()
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
@@ -48,6 +52,16 @@ func _ready() -> void:
 ## ========================================
 ## 初期化処理
 ## ========================================
+
+## ライティングをセットアップ
+func _setup_lighting() -> void:
+	lighting_setup = LightingSetup.new()
+	lighting_setup.name = "LightingSetup"
+	var preset := load(DEFAULT_LIGHTING_PRESET) as LightingPreset
+	if preset:
+		lighting_setup.preset = preset
+	add_child(lighting_setup)
+
 
 ## プレイヤーチームをランダムに決定
 func _determine_player_team() -> void:
@@ -176,6 +190,27 @@ func _spawn_team_characters(presets: Array, spawn_points: Array) -> void:
 		if character:
 			add_child(character)
 			game_manager.register_character(character)
+
+
+## カメラを自分のキャラクターに合わせる
+func _setup_camera_for_player() -> void:
+	# 自分のチームのキャラクターを探す
+	var player_team := PlayerState.get_player_team()
+	var player_character: Node3D = null
+
+	for character in game_manager.characters:
+		if character is GameCharacter and character.team == player_team:
+			player_character = character
+			break
+
+	if player_character:
+		# カメラを少しズーム
+		camera.size = 6.0
+
+		# キャラクターの頭上にカメラを移動（Y軸とZ軸のオフセットを維持）
+		var target_pos := player_character.global_position
+		var camera_offset := Vector3(0, 15, 5.5)  # 現在のカメラ高さとZ位置を維持
+		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
 
 
 ## チーム表示を更新

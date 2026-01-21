@@ -48,6 +48,7 @@
 | Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
 | Resource | WeaponPreset | 武器定義（ID・カテゴリー・ダメージ・リコイル） |
 | Resource | MapPreset | マップ定義（ID・シーン・サイズ・スポーン位置） |
+| Resource | LightingPreset | ライティング定義（光・影・アンビエント設定） |
 | Resource | ContextMenuItem | コンテキストメニュー項目定義 |
 | System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
 | System | PlayerState | プレイヤーチーム管理＋味方/敵分類（Autoload） |
@@ -58,6 +59,7 @@
 | System | IdleCharacterManager | アイドル中キャラクターの状態更新管理 |
 | System | PathModeController | パスモード状態管理（開始・確定・キャンセル） |
 | System | MapManager | マップライフサイクル管理・クリーンアップ |
+| System | LightingSetup | ライティング適用コンポーネント（モバイル最適化済み） |
 | System | GameManager | コアゲームシステム初期化・更新の一元管理 |
 | System | SettingsManager | 設定管理（プレイヤー名保存・選択マップ保持）（Autoload） |
 | Screen | MainMenuScreen | メインメニュー画面 |
