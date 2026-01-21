@@ -29,12 +29,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if game_manager.is_path_mode() and event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if game_manager.has_pending_path():
-				var drawer := game_manager.path_drawer
 				# 視線/Run設定中はPathDrawerに入力を渡す
-				if drawer and drawer.get_drawing_mode() != PathDrawer.DrawingMode.MOVEMENT:
+				if game_manager.path_service and game_manager.path_service.is_marker_mode():
 					return
 				var clicked = game_manager.raycast_character(event.position)
-				game_manager.path_mode_controller.handle_click_to_cancel(clicked)
+				if game_manager.path_service:
+					game_manager.path_service.handle_click_to_cancel(clicked)
 		return
 
 	# 通常クリック処理（左クリックのみ）

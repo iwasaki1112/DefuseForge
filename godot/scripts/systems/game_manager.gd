@@ -3,7 +3,6 @@ class_name GameManager
 ## コアゲームシステム管理
 ## システムの初期化・更新・入力処理・UI管理を一元管理
 
-const AnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
 const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
 const EnemyVisibilitySystemScript = preload("res://scripts/systems/enemy_visibility_system.gd")
 const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
@@ -11,6 +10,8 @@ const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
 const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
 const MarkerEditPanelScript = preload("res://scripts/ui/marker_edit_panel.gd")
+const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
+const PathServiceScript = preload("res://scripts/systems/path_service.gd")
 
 ## UI接続用シグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -40,6 +41,8 @@ var enemy_visibility_system: Node = null
 var map_manager: MapManager = null
 var path_drawer: Node3D = null
 var rotation_controller: Node = null
+var character_setup_service: CharacterSetupService = null
+var path_service: PathService = null
 
 ## UIコンポーネント
 var context_menu: Control = null
@@ -83,9 +86,11 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_map_manager()
 	_setup_context_menu()
 	_setup_marker_edit_panel()
+	_setup_path_service()
 	_setup_label_manager()
+	_setup_character_setup_service()
 
-	print("[GameManager] Setup complete - 12 systems initialized")
+	print("[GameManager] Setup complete - 13 systems initialized")
 
 
 ## キャラクターを登録（視界・武器・色・ラベルも自動セットアップ）
@@ -98,7 +103,8 @@ func register_character(character: Node) -> void:
 		idle_manager.add_character(character)
 
 	# 視界セットアップ
-	_setup_character_vision(character)
+	if character_setup_service:
+		character_setup_service.setup_character(character)
 
 	print("[GameManager] Registered character: %s" % character.name)
 
@@ -214,70 +220,41 @@ func _is_child_of(child: Node, parent: Node) -> bool:
 
 ## 移動モード開始（選択中キャラクターでパス描画）
 func start_move_mode() -> bool:
-	var primary = selection_manager.primary_character
-	if not primary:
-		print("[GameManager] No primary character selected")
-		return false
-
-	# 選択中のキャラクター配列を取得
-	var selected_chars: Array[Node] = []
-	for c in selection_manager.selected_characters:
-		selected_chars.append(c)
-
-	# プライマリキャラクターの色を取得
-	var char_color = CharacterColorManager.get_character_color(primary)
-
-	# パスモード開始
-	if not path_mode_controller.start(primary, char_color):
-		return false
-
-	# マルチセレクトの場合
-	if selected_chars.size() > 1:
-		path_drawer.start_multi_character_mode(selected_chars)
-		marker_edit_panel.setup(selected_chars, path_drawer)
-	else:
-		path_drawer.set_active_edit_character(primary)
-		marker_edit_panel.setup(selected_chars, path_drawer)
-
-	return true
+	return path_service.start_move_mode() if path_service else false
 
 
 ## パスモード開始（外部指定）
 func start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool:
-	if not path_mode_controller:
-		return false
-	return path_mode_controller.start(primary, char_color)
+	return path_service.start_path_mode(primary, char_color) if path_service else false
 
 
 ## パスモード確定
 func confirm_path() -> void:
-	if path_mode_controller:
-		path_mode_controller.confirm()
+	if path_service:
+		path_service.confirm_path()
 
 
 ## パスモードキャンセル
 func cancel_path() -> void:
-	if path_mode_controller:
-		path_mode_controller.cancel()
+	if path_service:
+		path_service.cancel_path()
 
 
 ## 全パスを実行
 func execute_all_paths(run: bool) -> int:
-	if not path_execution_manager:
-		return 0
-	return path_execution_manager.execute_all_paths(run)
+	return path_service.execute_all_paths(run) if path_service else 0
 
 
 ## 全保留パスをクリア
 func clear_all_pending_paths() -> void:
-	if path_execution_manager:
-		path_execution_manager.clear_all_pending_paths()
+	if path_service:
+		path_service.clear_all_pending_paths()
 
 
 ## 全パス追従キャンセル
 func cancel_all_path_following() -> void:
-	if path_execution_manager:
-		path_execution_manager.cancel_all_path_following()
+	if path_service:
+		path_service.cancel_all_path_following()
 
 
 ## ========================================
@@ -317,6 +294,8 @@ func cancel_rotation() -> void:
 ## 視界/FoWの有効化切り替え
 func set_vision_enabled(enabled: bool) -> void:
 	is_vision_enabled = enabled
+	if character_setup_service:
+		character_setup_service.is_vision_enabled = enabled
 
 	# FogOfWarSystemの表示を切り替え
 	if fog_of_war_system:
@@ -393,8 +372,8 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 ## 毎フレーム処理（_physics_processから呼ぶ）
 func process_frame(delta: float) -> void:
 	# パス追従コントローラーを処理
-	if path_execution_manager:
-		path_execution_manager.process_controllers(delta)
+	if path_service:
+		path_service.process_controllers(delta)
 
 	# アイドルキャラクターを処理
 	if idle_manager:
@@ -416,22 +395,22 @@ func is_rotation_active() -> bool:
 
 ## パスモード中か
 func is_path_mode() -> bool:
-	return path_mode_controller and path_mode_controller.is_path_mode()
+	return path_service and path_service.is_path_mode()
 
 
 ## パス追従中のキャラクターがいるか
 func is_any_path_following_active() -> bool:
-	return path_execution_manager and path_execution_manager.is_any_path_following_active()
+	return path_service and path_service.is_any_path_following_active()
 
 
 ## 指定キャラクターがパス追従中か
 func is_character_following_path(character: Node) -> bool:
-	return path_execution_manager and path_execution_manager.is_character_following_path(character)
+	return path_service and path_service.is_character_following_path(character)
 
 
 ## 保留パス数を取得
 func get_pending_path_count() -> int:
-	return path_execution_manager.get_pending_path_count() if path_execution_manager else 0
+	return path_service.get_pending_path_count() if path_service else 0
 
 
 ## 回転中のキャラクターを取得
@@ -441,7 +420,7 @@ func get_rotating_character() -> Node:
 
 ## パスモード対象数を取得
 func get_path_target_count() -> int:
-	return path_mode_controller.get_target_count() if path_mode_controller else 0
+	return path_service.get_path_target_count() if path_service else 0
 
 
 ## プライマリキャラクターを取得
@@ -460,68 +439,68 @@ func get_selection_count() -> int:
 
 ## パス描画済みか
 func has_pending_path() -> bool:
-	return path_drawer and path_drawer.has_pending_path()
+	return path_service.has_pending_path() if path_service else false
 
 
 ## 視線モード開始
 func start_vision_mode() -> bool:
-	return path_drawer.start_vision_mode() if path_drawer else false
+	return path_service.start_vision_mode() if path_service else false
 
 
 ## 視線ポイントを削除
 func remove_last_vision_point() -> void:
-	if path_drawer:
-		path_drawer.remove_last_vision_point()
+	if path_service:
+		path_service.remove_last_vision_point()
 
 
 ## Runモード開始
 func start_run_mode() -> void:
-	if path_drawer:
-		path_drawer.start_run_mode()
+	if path_service:
+		path_service.start_run_mode()
 
 
 ## 最後のRun区間を削除
 func remove_last_run_segment() -> void:
-	if path_drawer:
-		path_drawer.remove_last_run_segment()
+	if path_service:
+		path_service.remove_last_run_segment()
 
 
 ## 視線ポイント数を取得
 func get_vision_point_count() -> int:
-	return path_drawer.get_vision_point_count() if path_drawer else 0
+	return path_service.get_vision_point_count() if path_service else 0
 
 
 ## Run区間数を取得
 func get_run_segment_count() -> int:
-	return path_drawer.get_run_segment_count() if path_drawer else 0
+	return path_service.get_run_segment_count() if path_service else 0
 
 
 ## 未完了のRun開始点があるか
 func has_incomplete_run_start() -> bool:
-	return path_drawer.has_incomplete_run_start() if path_drawer else false
+	return path_service.has_incomplete_run_start() if path_service else false
 
 
 ## マルチキャラクターモードか
 func is_multi_character_mode() -> bool:
-	return path_drawer.is_multi_character_mode() if path_drawer else false
+	return path_service.is_multi_character_mode() if path_service else false
 
 
 ## マルチキャラクターモード開始
 func start_multi_character_mode(selected_chars: Array[Node]) -> void:
-	if path_drawer:
-		path_drawer.start_multi_character_mode(selected_chars)
+	if path_service:
+		path_service.start_multi_character_mode(selected_chars)
 
 
 ## アクティブ編集キャラクターを設定
 func set_active_edit_character(character: Node) -> void:
-	if path_drawer:
-		path_drawer.set_active_edit_character(character)
+	if path_service:
+		path_service.set_active_edit_character(character)
 
 
 ## キャラクター色を設定
 func set_path_drawer_color(color: Color) -> void:
-	if path_drawer:
-		path_drawer.set_character_color(color)
+	if path_service:
+		path_service.set_path_drawer_color(color)
 
 
 ## ========================================
@@ -536,115 +515,9 @@ func _show_context_menu(screen_pos: Vector2, character: Node) -> void:
 
 
 ## マーカーパネルを表示
-func show_marker_panel() -> void:
-	if marker_edit_panel:
-		marker_edit_panel.visible = true
-
-
-## マーカーパネルを非表示
-func hide_marker_panel() -> void:
-	if marker_edit_panel:
-		marker_edit_panel.visible = false
-		marker_edit_panel.clear()
-
-
 ## 回転パネル表示状態を取得（外部UI用）
 func is_context_menu_open() -> bool:
 	return context_menu and context_menu.is_open()
-
-
-## ========================================
-## キャラクターセットアップ（内部）
-## ========================================
-
-## キャラクターの視界をセットアップ
-func _setup_character_vision(character: Node) -> void:
-	if not character:
-		return
-
-	# Setup vision component
-	var vision = character.setup_vision(default_vision_fov, default_vision_range)
-
-	# 遅延セットアップ
-	if vision:
-		_complete_character_setup.call_deferred(character)
-	else:
-		_complete_character_setup(character)
-
-
-## キャラクターセットアップ完了処理
-func _complete_character_setup(character: Node) -> void:
-	if not character or not is_instance_valid(character):
-		return
-
-	# EnemyVisibilitySystemに登録
-	if enemy_visibility_system:
-		enemy_visibility_system.register_character(character)
-
-	# Combat awarenessセットアップ
-	character.setup_combat_awareness()
-	if character.combat_awareness:
-		character.combat_awareness.enemy_spotted.connect(
-			func(enemy): print("[Combat] %s spotted %s" % [character.name, enemy.name])
-		)
-		character.combat_awareness.enemy_lost.connect(
-			func(enemy): print("[Combat] %s lost sight of %s" % [character.name, enemy.name])
-		)
-		character.combat_awareness.enable_firing()
-
-	# 視界状態を適用
-	var vision = character.vision
-	if not is_vision_enabled and vision:
-		vision.disable()
-		if fog_of_war_system:
-			fog_of_war_system.set_fog_visible(false)
-
-	# デフォルト武器を装備
-	var anim_ctrl = character.get_anim_controller()
-	if anim_ctrl:
-		anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
-
-	var default_weapon = WeaponRegistry.get_preset(default_weapon_id)
-	if default_weapon:
-		_equip_weapon(character, default_weapon)
-
-	# 味方の場合、色とラベルを割り当て
-	if not PlayerState.is_enemy(character):
-		_assign_color_and_label(character)
-
-
-## 武器を装備
-func _equip_weapon(character: Node, weapon_preset: Resource) -> void:
-	if not character or not weapon_preset:
-		return
-
-	if character.has_method("equip_weapon"):
-		character.equip_weapon(weapon_preset)
-
-
-## 色とラベルを割り当て
-func _assign_color_and_label(character: Node) -> void:
-	if not character:
-		return
-
-	# 敵には割り当てない
-	if PlayerState.is_enemy(character):
-		return
-
-	# 色を割り当て
-	var color_index = CharacterColorManager.assign_color(character)
-	if color_index == -1:
-		if label_manager:
-			label_manager.add_label(character)
-		return
-
-	# ラベルを追加
-	if label_manager:
-		label_manager.add_label(character)
-		var color = CharacterColorManager.get_character_color(character)
-		var label_char = CharacterColorManager.get_character_label(character)
-		label_manager.set_label_color(character, color)
-		label_manager.set_label_text(character, label_char)
 
 
 ## 全キャラクターの色・ラベルを再割り当て
@@ -653,7 +526,8 @@ func refresh_character_colors() -> void:
 	if label_manager:
 		label_manager.clear_all()
 	for character in characters:
-		_assign_color_and_label(character)
+		if character_setup_service:
+			character_setup_service.assign_color_and_label(character)
 
 
 ## ========================================
@@ -673,9 +547,6 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 	path_execution_manager.name = "PathExecutionManager"
 	add_child(path_execution_manager)
 	path_execution_manager.setup(mesh_parent)
-	path_execution_manager.path_confirmed.connect(_on_path_confirmed)
-	path_execution_manager.all_paths_completed.connect(_on_all_paths_completed)
-	path_execution_manager.paths_cleared.connect(_on_paths_cleared)
 
 
 func _setup_idle_manager() -> void:
@@ -695,9 +566,6 @@ func _setup_path_drawer() -> void:
 	path_drawer.name = "PathDrawer"
 	add_child(path_drawer)
 	path_drawer.setup(camera)
-	path_drawer.mode_changed.connect(_on_path_mode_changed)
-	path_drawer.vision_point_added.connect(_on_vision_point_added)
-	path_drawer.run_segment_added.connect(_on_run_segment_added)
 
 
 func _setup_path_mode_controller() -> void:
@@ -705,10 +573,6 @@ func _setup_path_mode_controller() -> void:
 	path_mode_controller.name = "PathModeController"
 	add_child(path_mode_controller)
 	path_mode_controller.setup(path_drawer, selection_manager, path_execution_manager)
-	path_mode_controller.mode_started.connect(_on_path_mode_started)
-	path_mode_controller.mode_ended.connect(_on_path_mode_ended)
-	path_mode_controller.mode_cancelled.connect(_on_path_mode_cancelled)
-	path_mode_controller.path_ready.connect(_on_path_ready)
 
 
 func _setup_rotation_controller() -> void:
@@ -767,15 +631,6 @@ func _setup_marker_edit_panel() -> void:
 	marker_edit_panel.offset_right = -10
 	marker_edit_panel.offset_top = 10
 
-	# シグナル接続
-	marker_edit_panel.character_selected.connect(_on_marker_panel_character_selected)
-	marker_edit_panel.vision_add_requested.connect(_on_marker_panel_vision_add)
-	marker_edit_panel.vision_undo_requested.connect(_on_marker_panel_vision_undo)
-	marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
-	marker_edit_panel.run_undo_requested.connect(_on_marker_panel_run_undo)
-	marker_edit_panel.confirm_requested.connect(_on_marker_panel_confirm)
-	marker_edit_panel.cancel_requested.connect(_on_marker_panel_cancel)
-
 	marker_edit_panel.visible = false
 
 
@@ -783,6 +638,42 @@ func _setup_label_manager() -> void:
 	label_manager = CharacterLabelManager.new()
 	label_manager.name = "CharacterLabelManager"
 	add_child(label_manager)
+
+
+func _setup_path_service() -> void:
+	path_service = PathServiceScript.new()
+	path_service.name = "PathService"
+	add_child(path_service)
+	path_service.setup(
+		path_drawer,
+		selection_manager,
+		path_execution_manager,
+		path_mode_controller,
+		marker_edit_panel
+	)
+	path_service.mode_started.connect(_on_path_mode_started)
+	path_service.mode_ended.connect(_on_path_mode_ended)
+	path_service.mode_cancelled.connect(_on_path_mode_cancelled)
+	path_service.path_ready.connect(_on_path_ready)
+	path_service.path_confirmed.connect(_on_path_confirmed)
+	path_service.all_paths_completed.connect(_on_all_paths_completed)
+	path_service.paths_cleared.connect(_on_paths_cleared)
+	path_service.mode_changed.connect(_on_path_mode_changed)
+	path_service.vision_point_added.connect(_on_vision_point_added)
+	path_service.run_segment_added.connect(_on_run_segment_added)
+
+
+func _setup_character_setup_service() -> void:
+	character_setup_service = CharacterSetupServiceScript.new()
+	character_setup_service.setup(
+		enemy_visibility_system,
+		fog_of_war_system,
+		label_manager,
+		default_weapon_id,
+		is_vision_enabled,
+		default_vision_fov,
+		default_vision_range
+	)
 
 
 ## ========================================
@@ -802,20 +693,14 @@ func _on_path_mode_started(character: Node) -> void:
 
 
 func _on_path_mode_ended() -> void:
-	hide_marker_panel()
 	path_mode_ended.emit()
 
 
 func _on_path_mode_cancelled() -> void:
-	hide_marker_panel()
 	path_mode_cancelled.emit()
 
 
 func _on_path_ready() -> void:
-	# 視線ポイントモードへ移行
-	if start_vision_mode():
-		# MarkerEditPanelを表示
-		show_marker_panel()
 	path_ready.emit()
 
 
@@ -848,14 +733,10 @@ func _on_path_mode_changed(mode: int) -> void:
 
 
 func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_vision_point_added()
 	vision_point_added.emit(anchor, direction)
 
 
 func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_run_segment_added()
 	run_segment_added.emit(start_ratio, end_ratio)
 
 
@@ -872,33 +753,3 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 			# その他のアクションは外部に通知
 			context_action_requested.emit(action_id, character)
 
-
-func _on_marker_panel_character_selected(character: Node) -> void:
-	var char_color = CharacterColorManager.get_character_color(character)
-	set_path_drawer_color(char_color)
-
-
-func _on_marker_panel_vision_add(_character: Node) -> void:
-	if has_pending_path():
-		start_vision_mode()
-
-
-func _on_marker_panel_vision_undo(_character: Node) -> void:
-	remove_last_vision_point()
-
-
-func _on_marker_panel_run_add(_character: Node) -> void:
-	if has_pending_path():
-		start_run_mode()
-
-
-func _on_marker_panel_run_undo(_character: Node) -> void:
-	remove_last_run_segment()
-
-
-func _on_marker_panel_confirm() -> void:
-	confirm_path()
-
-
-func _on_marker_panel_cancel() -> void:
-	cancel_path()
