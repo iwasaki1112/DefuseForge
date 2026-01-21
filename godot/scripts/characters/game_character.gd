@@ -36,6 +36,7 @@ var vision: VisionComponent = null  # VisionComponent for FoW
 var combat_awareness: CombatAwarenessComponent = null  # CombatAwarenessComponent for enemy tracking
 var current_weapon: WeaponPreset = null  # WeaponPreset
 var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
+var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
 
 # ============================================
@@ -217,6 +218,17 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 	return _weapon_attachment
 
 
+## Create or get WeaponSocket under BoneAttachment3D
+func _ensure_weapon_socket(attachment: BoneAttachment3D) -> Node3D:
+	if _weapon_socket and _weapon_socket.is_inside_tree():
+		return _weapon_socket
+
+	_weapon_socket = Node3D.new()
+	_weapon_socket.name = GameConstants.NODE_WEAPON_SOCKET
+	attachment.add_child(_weapon_socket)
+	return _weapon_socket
+
+
 ## Attach weapon model to right hand
 func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	# Remove old weapon model
@@ -232,25 +244,31 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	if not attachment:
 		return
 
+	var socket = _ensure_weapon_socket(attachment)
+	if not socket:
+		return
+
 	_weapon_model = weapon.model_scene.instantiate()
 	_weapon_model.name = GameConstants.NODE_WEAPON_MODEL
-	attachment.add_child(_weapon_model)
+	socket.add_child(_weapon_model)
 
 	# Mixamo skeleton is 0.01 scale, so weapon needs 100x scale
 	_weapon_model.scale = Vector3.ONE * 100.0
+	_weapon_model.position = Vector3.ZERO
+	_weapon_model.rotation_degrees = Vector3.ZERO
 
 	# Apply offset from WeaponPreset (use defaults for Mixamo if not set)
 	if weapon.attach_offset != Vector3.ZERO:
-		_weapon_model.position = weapon.attach_offset
+		socket.position = weapon.attach_offset
 	else:
 		# Default offset for Mixamo right hand
-		_weapon_model.position = Vector3(1, 7, 2)
+		socket.position = Vector3(1, 7, 2)
 
 	if weapon.attach_rotation != Vector3.ZERO:
-		_weapon_model.rotation_degrees = weapon.attach_rotation
+		socket.rotation_degrees = weapon.attach_rotation
 	else:
 		# Default rotation for Mixamo right hand
-		_weapon_model.rotation_degrees = Vector3(-79, -66, -28)
+		socket.rotation_degrees = Vector3(-79, -66, -28)
 
 	print("GameCharacter: Attached weapon model: ", weapon.display_name)
 
@@ -290,6 +308,10 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 ## Get current weapon
 func get_current_weapon() -> WeaponPreset:
 	return current_weapon
+
+## Get weapon socket node (for adjustment/tools)
+func get_weapon_socket() -> Node3D:
+	return _weapon_socket
 
 # ============================================
 # Death Processing

@@ -50,3 +50,16 @@ func _update_camera() -> void:
 
 	global_position = target + offset
 	look_at(target)
+
+
+## Set camera orbit position by yaw angle (radians)
+## yaw: 0 = back, PI/2 = right, PI = front, -PI/2 = left
+func set_yaw(yaw: float) -> void:
+	_yaw = yaw
+	_update_camera()
+
+
+## Set camera distance
+func set_distance(dist: float) -> void:
+	_distance = clamp(dist, min_distance, max_distance)
+	_update_camera()

@@ -1,0 +1,198 @@
+[gd_scene load_steps=4 format=3 uid="uid://weaponadjust123"]
+
+[ext_resource type="Script" path="res://scripts/tests/weapon_adjustment.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/tests/free_camera.gd" id="2_camera"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="WeaponAdjustmentTest" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 0, 3, 5)
+current = true
+script = ExtResource("2_camera")
+target = Vector3(0, 1, 0)
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(10, 1, 10)
+material = SubResource("StandardMaterial3D_1")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="UI"]
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Weapon Adjustment"
+horizontal_alignment = 1
+
+[node name="WeaponOption" type="OptionButton" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelPos" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Position Offset"
+
+[node name="PosX" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/PosX"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/PosX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/PosX"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="PosY" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/PosY"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/PosY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/PosY"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="PosZ" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/PosZ"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/PosZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/PosZ"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="HSeparator2" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelRot" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Rotation Offset"
+
+[node name="RotX" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/RotX"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/RotX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/RotX"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="RotY" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/RotY"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/RotY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/RotY"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="RotZ" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/Panel/VBox/RotZ"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/RotZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/RotZ"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="HSeparator3" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="CopyButton" type="Button" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Copy to Clipboard"
+
+[node name="OutputText" type="TextEdit" parent="UI/Panel/VBox"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+editable = false
+wrap_mode = 1

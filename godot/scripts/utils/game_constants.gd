@@ -5,6 +5,7 @@ class_name GameConstants
 # ========================================================
 const NODE_CHARACTER_MODEL := "CharacterModel"
 const NODE_WEAPON_ATTACHMENT := "WeaponAttachment"
+const NODE_WEAPON_SOCKET := "WeaponSocket"
 const NODE_WEAPON_MODEL := "WeaponModel"
 const NODE_ANIMATION_TREE := "AnimationTree"
 const NODE_VISION_COMPONENT := "VisionComponent"

@@ -68,3 +68,4 @@ tools/FBX2glTF-License.txt
 # Note: *.uid files are tracked for consistency (Godot 4.4+ uses UIDs for resource references)
 
 **/CLAUDE.md
+.gemini-clipboard

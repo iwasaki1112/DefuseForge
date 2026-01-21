@@ -79,9 +79,11 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 		if _anim_player:
 			_anim_player.root_node = NodePath("..")
 
-	if _anim_player:
-		_setup_animation_loops()
+	if not _anim_player:
+		printerr("CharacterAnimationController: AnimationPlayer not found/provided")
+		return
 
+	_setup_animation_loops()
 	_setup_animation_tree()
 	_update_weapon_idle_blend()
 

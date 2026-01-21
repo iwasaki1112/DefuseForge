@@ -56,8 +56,8 @@
 ### Attachment
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `attach_offset` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の位置オフセット |
-| `attach_rotation` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の回転オフセット（度） |
+| `attach_offset` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の位置オフセット（WeaponSocketに適用） |
+| `attach_rotation` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の回転オフセット（度、WeaponSocketに適用） |
 
 ## 使用例
 
@@ -143,4 +143,3 @@ Blenderでエクスポートする際：
 - **原点**: グリップ位置に設定
 - **銃口方向**: -Y方向を向くように配置
 - **スケール**: **実寸（メートル単位）**で作成（例: AK47 = 0.87m, Glock = 0.2m）
-

@@ -41,6 +41,7 @@
 | `anim_ctrl` | `Node` | `null` | CharacterAnimationControllerへの参照 |
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
+| `_weapon_socket` | `Node3D` | `null` | 武器調整用のソケットノード |
 
 ## Public API
 
@@ -127,6 +128,11 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 **戻り値:** WeaponPresetまたは`null`
 
+#### get_weapon_socket() -> Node3D
+武器の位置・回転調整用ソケットノードを取得する。
+
+**戻り値:** `WeaponSocket`ノードまたは`null`
+
 ## ライフサイクル
 
 - `_ready()`: HP初期化、`"characters"`グループに追加
@@ -161,5 +167,5 @@ character.equip_weapon(weapon)
 - 被弾方向は攻撃者位置から自動計算（前/後/左/右）
 - 死亡時はVisionを無効化し、コリジョンも無効化
 - 武器装備時は`CharacterModel`配下のSkeleton3Dを再帰検索
-- 武器モデルは`BoneAttachment3D`経由で`mixamorig_RightHand`にアタッチ
+- 武器モデルは`BoneAttachment3D`配下の`WeaponSocket`に配置される
 - 新しい武器装備時は古い武器モデルを自動削除
