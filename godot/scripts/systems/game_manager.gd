@@ -47,7 +47,9 @@ var vision_service: VisionService = null
 
 ## UIコンポーネント
 var context_menu: Control = null
-var _context_menu_follow_offset: Vector2 = Vector2.ZERO
+
+@export_group("コンテキストメニュー")
+@export var context_menu_offset: Vector2 = Vector2(7.82, 32.19)  ## メニュー位置のスクリーン座標オフセット
 var marker_edit_panel: VBoxContainer = null
 var label_manager: CharacterLabelManager = null
 var weapon_shop_modal: Control = null
@@ -536,11 +538,13 @@ func set_path_drawer_color(color: Color) -> void:
 func _show_context_menu(screen_pos: Vector2, character: Node) -> void:
 	if context_menu:
 		var is_multi = selection_manager.get_selection_count() > 1
-		_context_menu_follow_offset = Vector2.ZERO
+		# キャラクターの体の中心を基準にメニューを表示
+		var menu_pos = screen_pos
 		if camera and character:
-			var base_pos = camera.unproject_position(character.global_position)
-			_context_menu_follow_offset = screen_pos - base_pos
-		context_menu.open(screen_pos, character, is_multi)
+			var character_center = character.global_position + Vector3(0, 0.9, 0)
+			menu_pos = camera.unproject_position(character_center)
+			menu_pos += context_menu_offset
+		context_menu.open(menu_pos, character, is_multi)
 
 
 ## マーカーパネルを表示
@@ -655,8 +659,9 @@ func _update_context_menu_follow() -> void:
 	var character = context_menu.get_current_character()
 	if not character:
 		return
-	var base_pos = camera.unproject_position(character.global_position)
-	context_menu.update_screen_position(base_pos + _context_menu_follow_offset)
+	var character_center = character.global_position + Vector3(0, 0.9, 0)
+	var base_pos = camera.unproject_position(character_center)
+	context_menu.update_screen_position(base_pos + context_menu_offset)
 
 
 func _setup_marker_edit_panel() -> void:
