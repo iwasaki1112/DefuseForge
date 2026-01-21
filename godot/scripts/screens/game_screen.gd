@@ -6,9 +6,8 @@ class_name GameScreen
 ## キャラクターをスポーン、プレイヤーをCT/Tにランダム割り当てする。
 
 ## シーン定数
-const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
-const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
+const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -22,30 +21,26 @@ var game_manager: GameManager = null
 var environment_setup: EnvironmentSetup = null
 
 ## UI要素
-var _pending_paths_label: Label
-var _execute_button: Button
-var _clear_paths_button: Button
+var _hud: GameHUD = null
 
 ## カメラ移動
-var _camera_drag_active: bool = false
-var _camera_drag_start: Vector2 = Vector2.ZERO
-var _camera_start_position: Vector3 = Vector3.ZERO
-var _camera_pan_speed: float = 0.05
+var _camera_pan_controller: CameraPanController = null
+var _input_controller: InputController = null
 
-## 地面判定用
-var _ground_plane := Plane(Vector3.UP, 0)
 
 
 func _ready() -> void:
 	_setup_environment()
 	_determine_player_team()
 	_setup_game_manager()
-	_setup_control_ui()
+	_setup_hud()
 	_load_map()
 	_spawn_characters()
 	_update_team_display()
 	_setup_camera_for_player()
 	_setup_money()
+	_setup_camera_pan()
+	_setup_input_controller()
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
@@ -89,47 +84,27 @@ func _setup_game_manager() -> void:
 
 
 ## コントロールUIのセットアップ
-func _setup_control_ui() -> void:
-	var control_panel := VBoxContainer.new()
-	control_panel.name = "ControlPanel"
-	control_panel.anchor_left = 0.0
-	control_panel.anchor_top = 0.0
-	control_panel.anchor_right = 0.0
-	control_panel.anchor_bottom = 0.0
-	control_panel.offset_left = 10
-	control_panel.offset_top = 80
-	control_panel.offset_right = 200
-	control_panel.add_theme_constant_override("separation", 10)
-	ui_layer.add_child(control_panel)
+func _setup_hud() -> void:
+	_hud = GameHUD.new()
+	_hud.name = "GameHUD"
+	ui_layer.add_child(_hud)
+	_hud.setup()
+	_hud.execute_all_requested.connect(_on_execute_button_pressed)
+	_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
 
-	# 保留パス数ラベル
-	_pending_paths_label = Label.new()
-	_pending_paths_label.text = "Pending: 0 paths"
-	_pending_paths_label.add_theme_font_size_override("font_size", 18)
-	control_panel.add_child(_pending_paths_label)
 
-	# 実行ボタン
-	_execute_button = Button.new()
-	_execute_button.text = "Execute All"
-	_execute_button.custom_minimum_size = Vector2(180, 45)
-	_execute_button.add_theme_font_size_override("font_size", 18)
-	_execute_button.pressed.connect(_on_execute_button_pressed)
-	control_panel.add_child(_execute_button)
+## カメラのパン操作をセットアップ
+func _setup_camera_pan() -> void:
+	_camera_pan_controller = CameraPanControllerScript.new()
+	_camera_pan_controller.setup(camera, 0.05)
 
-	# クリアボタン
-	_clear_paths_button = Button.new()
-	_clear_paths_button.text = "Clear All Paths"
-	_clear_paths_button.custom_minimum_size = Vector2(180, 45)
-	_clear_paths_button.add_theme_font_size_override("font_size", 18)
-	_clear_paths_button.pressed.connect(_on_clear_paths_button_pressed)
-	control_panel.add_child(_clear_paths_button)
 
-	# 操作説明ラベル
-	var help_label := Label.new()
-	help_label.text = "Right-drag: Move camera"
-	help_label.add_theme_font_size_override("font_size", 14)
-	help_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	control_panel.add_child(help_label)
+## 入力コントローラーをセットアップ
+func _setup_input_controller() -> void:
+	_input_controller = InputController.new()
+	_input_controller.name = "InputController"
+	add_child(_input_controller)
+	_input_controller.setup(game_manager, _camera_pan_controller)
 
 
 ## マップをロード
@@ -241,8 +216,8 @@ func _update_money_display() -> void:
 
 ## 保留パス数ラベルを更新
 func _update_pending_paths_label() -> void:
-	if _pending_paths_label:
-		_pending_paths_label.text = "Pending: %d paths" % game_manager.get_pending_path_count()
+	if _hud:
+		_hud.set_pending_paths(game_manager.get_pending_path_count())
 
 
 ## ========================================
@@ -255,62 +230,6 @@ func _on_execute_button_pressed() -> void:
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
-
-
-## ========================================
-## 入力処理
-## ========================================
-
-func _unhandled_input(event: InputEvent) -> void:
-	# カメラドラッグ（右クリック）
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			if event.pressed:
-				_camera_drag_active = true
-				_camera_drag_start = event.position
-				_camera_start_position = camera.global_position
-			else:
-				_camera_drag_active = false
-			return
-
-	# カメラドラッグ移動
-	if event is InputEventMouseMotion and _camera_drag_active:
-		var delta = event.position - _camera_drag_start
-		var move_x = -delta.x * _camera_pan_speed
-		var move_z = -delta.y * _camera_pan_speed
-		camera.global_position = _camera_start_position + Vector3(move_x, 0, move_z)
-		return
-
-	# 回転モード中
-	if game_manager.is_rotation_active() and event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			game_manager.handle_rotation_input(event.position)
-		return
-
-	# パスモード中：パス描画後にキャラクター以外をクリックでキャンセル
-	if game_manager.is_path_mode() and event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if game_manager.has_pending_path():
-				var clicked = game_manager.raycast_character(event.position)
-				game_manager.path_mode_controller.handle_click_to_cancel(clicked)
-		return
-
-	# 通常クリック処理（左クリックのみ）
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if not game_manager.is_rotation_active() and not game_manager.is_path_mode():
-				game_manager.handle_click(event.position, event.button_index)
-
-
-func _input(event: InputEvent) -> void:
-	# ESCキー処理
-	if event.is_action_pressed("ui_cancel"):
-		if game_manager.is_any_path_following_active():
-			game_manager.cancel_all_path_following()
-		elif game_manager.is_rotation_active():
-			game_manager.cancel_rotation()
-		elif game_manager.is_path_mode():
-			game_manager.cancel_path()
 
 
 ## ========================================

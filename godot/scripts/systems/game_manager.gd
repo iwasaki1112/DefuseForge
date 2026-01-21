@@ -60,8 +60,6 @@ var default_vision_range: float = 15.0
 var default_weapon_id: String = "glock"
 var is_vision_enabled: bool = false
 
-## 内部
-var _ground_plane := Plane(Vector3.UP, 0)
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）

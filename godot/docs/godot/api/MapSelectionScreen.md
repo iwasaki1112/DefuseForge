@@ -92,6 +92,7 @@ MainMenu → [Training] → MapSelectionScreen → [Start Game] → GameScene
 - **MapRegistry**: マッププリセット一覧の取得
 - **MapPreset**: マップ情報の参照
 - **SettingsManager**: 選択マップIDの保持
+- **ScreenLayout**: 背景生成
 
 ## 関連クラス
 
