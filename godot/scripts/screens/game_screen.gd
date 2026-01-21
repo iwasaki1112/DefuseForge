@@ -55,12 +55,13 @@ func _ready() -> void:
 
 ## 環境をセットアップ
 func _setup_environment() -> void:
-	environment_setup = EnvironmentSetup.new()
-	environment_setup.name = "EnvironmentSetup"
-	var preset := load(DEFAULT_ENVIRONMENT_PRESET) as EnvironmentPreset
-	if preset:
-		environment_setup.preset = preset
-	add_child(environment_setup)
+	if environment_setup == null:
+		environment_setup = EnvironmentSetup.new()
+		environment_setup.name = "EnvironmentSetup"
+		var preset := load(DEFAULT_ENVIRONMENT_PRESET) as EnvironmentPreset
+		if preset:
+			environment_setup.preset = preset
+		add_child(environment_setup)
 
 
 ## プレイヤーチームをランダムに決定
@@ -72,47 +73,52 @@ func _determine_player_team() -> void:
 
 ## GameManagerのセットアップ
 func _setup_game_manager() -> void:
-	game_manager = GameManager.new()
-	game_manager.name = "GameManager"
-	add_child(game_manager)
+	if game_manager == null:
+		game_manager = GameManager.new()
+		game_manager.name = "GameManager"
+		add_child(game_manager)
 
-	# マップサイズはマップロード後に更新されるため、初期値で設定
-	game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
+		# マップサイズはマップロード後に更新されるため、初期値で設定
+		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-	# シグナル接続
-	game_manager.selection_changed.connect(_on_selection_changed)
-	game_manager.path_confirmed.connect(_on_path_confirmed)
-	game_manager.all_paths_completed.connect(_on_all_paths_completed)
-	game_manager.paths_cleared.connect(_on_paths_cleared)
+		# シグナル接続
+		game_manager.selection_changed.connect(_on_selection_changed)
+		game_manager.path_confirmed.connect(_on_path_confirmed)
+		game_manager.all_paths_completed.connect(_on_all_paths_completed)
+		game_manager.paths_cleared.connect(_on_paths_cleared)
 
 
 func _setup_match_service() -> void:
-	_match_setup_service = MatchSetupServiceScript.new()
-	_match_setup_service.setup(game_manager, camera)
+	if _match_setup_service == null:
+		_match_setup_service = MatchSetupServiceScript.new()
+		_match_setup_service.setup(game_manager, camera)
 
 
 ## コントロールUIのセットアップ
 func _setup_hud() -> void:
-	_hud = GameHUD.new()
-	_hud.name = "GameHUD"
-	ui_layer.add_child(_hud)
-	_hud.setup()
-	_hud.execute_all_requested.connect(_on_execute_button_pressed)
-	_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
+	if _hud == null:
+		_hud = GameHUD.new()
+		_hud.name = "GameHUD"
+		ui_layer.add_child(_hud)
+		_hud.setup()
+		_hud.execute_all_requested.connect(_on_execute_button_pressed)
+		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
 
 
 ## カメラのパン操作をセットアップ
 func _setup_camera_pan() -> void:
-	_camera_pan_controller = CameraPanControllerScript.new()
-	_camera_pan_controller.setup(camera, 0.05)
+	if _camera_pan_controller == null:
+		_camera_pan_controller = CameraPanControllerScript.new()
+		_camera_pan_controller.setup(camera, 0.05)
 
 
 ## 入力コントローラーをセットアップ
 func _setup_input_controller() -> void:
-	_input_controller = InputController.new()
-	_input_controller.name = "InputController"
-	add_child(_input_controller)
-	_input_controller.setup(game_manager, _camera_pan_controller)
+	if _input_controller == null:
+		_input_controller = InputController.new()
+		_input_controller.name = "InputController"
+		add_child(_input_controller)
+		_input_controller.setup(game_manager, _camera_pan_controller)
 
 
 ## マップをロード

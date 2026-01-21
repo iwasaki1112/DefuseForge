@@ -45,7 +45,7 @@ var _weapon_model: Node3D = null  # 現在の武器モデル
 func _ready() -> void:
 	current_health = max_health
 	is_alive = true
-	add_to_group("characters")
+	add_to_group(GameConstants.GROUP_CHARACTERS)
 
 # ============================================
 # HP API
@@ -140,7 +140,7 @@ func get_vision_component() -> VisionComponent:
 func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent:
 	if vision == null:
 		vision = VisionComponent.new()
-		vision.name = "VisionComponent"
+		vision.name = GameConstants.NODE_VISION_COMPONENT
 		add_child(vision)
 
 	vision.set_fov(fov)
@@ -155,7 +155,7 @@ func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent
 func setup_combat_awareness() -> CombatAwarenessComponent:
 	if combat_awareness == null:
 		combat_awareness = CombatAwarenessComponent.new()
-		combat_awareness.name = "CombatAwarenessComponent"
+		combat_awareness.name = GameConstants.NODE_COMBAT_AWARENESS
 		add_child(combat_awareness)
 		combat_awareness.setup(self)
 	return combat_awareness
@@ -185,7 +185,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 	if _weapon_attachment:
 		return _weapon_attachment
 
-	var model = get_node_or_null("CharacterModel")
+	var model = get_node_or_null(GameConstants.NODE_CHARACTER_MODEL)
 	if not model:
 		print("GameCharacter: CharacterModel not found")
 		return null
@@ -198,7 +198,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 	print("GameCharacter: Found skeleton: ", skeleton.name)
 	print("GameCharacter: Bone count: ", skeleton.get_bone_count())
 
-	var bone_idx = skeleton.find_bone("mixamorig_RightHand")
+	var bone_idx = skeleton.find_bone(GameConstants.BONE_RIGHT_HAND)
 	if bone_idx < 0:
 		# Try alternative bone names
 		print("GameCharacter: mixamorig_RightHand not found, listing bones:")
@@ -210,8 +210,8 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 	print("GameCharacter: Found RightHand bone at index ", bone_idx)
 
 	_weapon_attachment = BoneAttachment3D.new()
-	_weapon_attachment.name = "WeaponAttachment"
-	_weapon_attachment.bone_name = "mixamorig_RightHand"
+	_weapon_attachment.name = GameConstants.NODE_WEAPON_ATTACHMENT
+	_weapon_attachment.bone_name = GameConstants.BONE_RIGHT_HAND
 	skeleton.add_child(_weapon_attachment)
 
 	return _weapon_attachment
@@ -233,7 +233,7 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 		return
 
 	_weapon_model = weapon.model_scene.instantiate()
-	_weapon_model.name = "WeaponModel"
+	_weapon_model.name = GameConstants.NODE_WEAPON_MODEL
 	attachment.add_child(_weapon_model)
 
 	# Mixamo skeleton is 0.01 scale, so weapon needs 100x scale

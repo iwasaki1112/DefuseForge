@@ -523,138 +523,151 @@ func refresh_character_colors() -> void:
 ## ========================================
 
 func _setup_selection_manager() -> void:
-	selection_manager = CharacterSelectionManager.new()
-	selection_manager.name = "SelectionManager"
-	add_child(selection_manager)
-	selection_manager.selection_changed.connect(_on_selection_changed)
-	selection_manager.primary_changed.connect(_on_primary_changed)
+	if selection_manager == null:
+		selection_manager = CharacterSelectionManager.new()
+		selection_manager.name = "SelectionManager"
+		add_child(selection_manager)
+		selection_manager.selection_changed.connect(_on_selection_changed)
+		selection_manager.primary_changed.connect(_on_primary_changed)
 
 
 func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
-	path_execution_manager = PathExecutionManager.new()
-	path_execution_manager.name = "PathExecutionManager"
-	add_child(path_execution_manager)
-	path_execution_manager.setup(mesh_parent)
+	if path_execution_manager == null:
+		path_execution_manager = PathExecutionManager.new()
+		path_execution_manager.name = "PathExecutionManager"
+		add_child(path_execution_manager)
+		path_execution_manager.setup(mesh_parent)
 
 
 func _setup_idle_manager() -> void:
-	idle_manager = IdleCharacterManager.new()
-	idle_manager.name = "IdleCharacterManager"
-	add_child(idle_manager)
-	idle_manager.setup(
-		characters,
-		func(c): return path_execution_manager.is_character_following_path(c),
-		func(): return selection_manager.primary_character
-	)
+	if idle_manager == null:
+		idle_manager = IdleCharacterManager.new()
+		idle_manager.name = "IdleCharacterManager"
+		add_child(idle_manager)
+		idle_manager.setup(
+			characters,
+			func(c): return path_execution_manager.is_character_following_path(c),
+			func(): return selection_manager.primary_character
+		)
 
 
 func _setup_path_drawer() -> void:
-	path_drawer = Node3D.new()
-	path_drawer.set_script(PathDrawerScript)
-	path_drawer.name = "PathDrawer"
-	add_child(path_drawer)
-	path_drawer.setup(camera)
+	if path_drawer == null:
+		path_drawer = Node3D.new()
+		path_drawer.set_script(PathDrawerScript)
+		path_drawer.name = "PathDrawer"
+		add_child(path_drawer)
+		path_drawer.setup(camera)
 
 
 func _setup_path_mode_controller() -> void:
-	path_mode_controller = PathModeController.new()
-	path_mode_controller.name = "PathModeController"
-	add_child(path_mode_controller)
-	path_mode_controller.setup(path_drawer, selection_manager, path_execution_manager)
+	if path_mode_controller == null:
+		path_mode_controller = PathModeController.new()
+		path_mode_controller.name = "PathModeController"
+		add_child(path_mode_controller)
+		path_mode_controller.setup(path_drawer, selection_manager, path_execution_manager)
 
 
 func _setup_rotation_controller() -> void:
-	rotation_controller = Node.new()
-	rotation_controller.set_script(RotationCtrl)
-	rotation_controller.name = "RotationController"
-	add_child(rotation_controller)
-	rotation_controller.rotation_confirmed.connect(_on_rotation_confirmed)
-	rotation_controller.rotation_cancelled.connect(_on_rotation_cancelled)
+	if rotation_controller == null:
+		rotation_controller = Node.new()
+		rotation_controller.set_script(RotationCtrl)
+		rotation_controller.name = "RotationController"
+		add_child(rotation_controller)
+		rotation_controller.rotation_confirmed.connect(_on_rotation_confirmed)
+		rotation_controller.rotation_cancelled.connect(_on_rotation_cancelled)
 
 
 func _setup_vision_service() -> void:
-	vision_service = VisionServiceScript.new()
-	vision_service.name = "VisionService"
-	add_child(vision_service)
-	vision_service.setup(fow_map_size, is_vision_enabled)
-	fog_of_war_system = vision_service.fog_of_war_system
-	enemy_visibility_system = vision_service.enemy_visibility_system
+	if vision_service == null:
+		vision_service = VisionServiceScript.new()
+		vision_service.name = "VisionService"
+		add_child(vision_service)
+		vision_service.setup(fow_map_size, is_vision_enabled)
+		fog_of_war_system = vision_service.fog_of_war_system
+		enemy_visibility_system = vision_service.enemy_visibility_system
 
 
 func _setup_map_manager() -> void:
-	map_manager = MapManager.new()
-	map_manager.name = "MapManager"
-	add_child(map_manager)
-	map_manager.setup(_map_container, self)
+	if map_manager == null:
+		map_manager = MapManager.new()
+		map_manager.name = "MapManager"
+		add_child(map_manager)
+		map_manager.setup(_map_container, self)
 
 
 func _setup_context_menu() -> void:
-	context_menu = Control.new()
-	context_menu.set_script(ContextMenuScript)
-	context_menu.name = "ContextMenu"
-	_ui_layer.add_child(context_menu)
-	context_menu.setup_default_items()
-	context_menu.item_selected.connect(_on_context_menu_item_selected)
+	if context_menu == null:
+		context_menu = Control.new()
+		context_menu.set_script(ContextMenuScript)
+		context_menu.name = "ContextMenu"
+		_ui_layer.add_child(context_menu)
+		context_menu.setup_default_items()
+		context_menu.item_selected.connect(_on_context_menu_item_selected)
 
 
 func _setup_marker_edit_panel() -> void:
-	marker_edit_panel = VBoxContainer.new()
-	marker_edit_panel.set_script(MarkerEditPanelScript)
-	marker_edit_panel.name = "MarkerEditPanel"
-	_ui_layer.add_child(marker_edit_panel)
+	if marker_edit_panel == null:
+		marker_edit_panel = VBoxContainer.new()
+		marker_edit_panel.set_script(MarkerEditPanelScript)
+		marker_edit_panel.name = "MarkerEditPanel"
+		_ui_layer.add_child(marker_edit_panel)
 
-	# 右側に配置
-	marker_edit_panel.anchor_left = 1.0
-	marker_edit_panel.anchor_right = 1.0
-	marker_edit_panel.anchor_top = 0.0
-	marker_edit_panel.anchor_bottom = 0.0
-	marker_edit_panel.offset_left = -240
-	marker_edit_panel.offset_right = -10
-	marker_edit_panel.offset_top = 10
+		# 右側に配置
+		marker_edit_panel.anchor_left = 1.0
+		marker_edit_panel.anchor_right = 1.0
+		marker_edit_panel.anchor_top = 0.0
+		marker_edit_panel.anchor_bottom = 0.0
+		marker_edit_panel.offset_left = -240
+		marker_edit_panel.offset_right = -10
+		marker_edit_panel.offset_top = 10
 
-	marker_edit_panel.visible = false
+		marker_edit_panel.visible = false
 
 
 func _setup_label_manager() -> void:
-	label_manager = CharacterLabelManager.new()
-	label_manager.name = "CharacterLabelManager"
-	add_child(label_manager)
+	if label_manager == null:
+		label_manager = CharacterLabelManager.new()
+		label_manager.name = "CharacterLabelManager"
+		add_child(label_manager)
 
 
 func _setup_path_service() -> void:
-	path_service = PathServiceScript.new()
-	path_service.name = "PathService"
-	add_child(path_service)
-	path_service.setup(
-		path_drawer,
-		selection_manager,
-		path_execution_manager,
-		path_mode_controller,
-		marker_edit_panel
-	)
-	path_service.mode_started.connect(_on_path_mode_started)
-	path_service.mode_ended.connect(_on_path_mode_ended)
-	path_service.mode_cancelled.connect(_on_path_mode_cancelled)
-	path_service.path_ready.connect(_on_path_ready)
-	path_service.path_confirmed.connect(_on_path_confirmed)
-	path_service.all_paths_completed.connect(_on_all_paths_completed)
-	path_service.paths_cleared.connect(_on_paths_cleared)
-	path_service.mode_changed.connect(_on_path_mode_changed)
-	path_service.vision_point_added.connect(_on_vision_point_added)
-	path_service.run_segment_added.connect(_on_run_segment_added)
+	if path_service == null:
+		path_service = PathServiceScript.new()
+		path_service.name = "PathService"
+		add_child(path_service)
+		path_service.setup(
+			path_drawer,
+			selection_manager,
+			path_execution_manager,
+			path_mode_controller,
+			marker_edit_panel
+		)
+		path_service.mode_started.connect(_on_path_mode_started)
+		path_service.mode_ended.connect(_on_path_mode_ended)
+		path_service.mode_cancelled.connect(_on_path_mode_cancelled)
+		path_service.path_ready.connect(_on_path_ready)
+		path_service.path_confirmed.connect(_on_path_confirmed)
+		path_service.all_paths_completed.connect(_on_all_paths_completed)
+		path_service.paths_cleared.connect(_on_paths_cleared)
+		path_service.mode_changed.connect(_on_path_mode_changed)
+		path_service.vision_point_added.connect(_on_vision_point_added)
+		path_service.run_segment_added.connect(_on_run_segment_added)
 
 
 func _setup_character_setup_service() -> void:
-	character_setup_service = CharacterSetupServiceScript.new()
-	character_setup_service.setup(
-		vision_service.enemy_visibility_system,
-		vision_service.fog_of_war_system,
-		label_manager,
-		default_weapon_id,
-		is_vision_enabled,
-		default_vision_fov,
-		default_vision_range
-	)
+	if character_setup_service == null:
+		character_setup_service = CharacterSetupServiceScript.new()
+		character_setup_service.setup(
+			vision_service.enemy_visibility_system,
+			vision_service.fog_of_war_system,
+			label_manager,
+			default_weapon_id,
+			is_vision_enabled,
+			default_vision_fov,
+			default_vision_range
+		)
 
 
 ## ========================================
