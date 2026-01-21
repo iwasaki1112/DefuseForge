@@ -25,6 +25,7 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
     {"id": "move", "name": "Move", "order": 0},
     {"id": "rotate", "name": "Rotate", "order": 1},
     {"id": "crouch", "name": "Crouch", "order": 2},
+    {"id": "buy", "name": "Buy", "order": 3},
 ]
 ```
 
@@ -37,9 +38,14 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `button_size` | `Vector2` | `(120, 50)` | ボタンサイズ |
-| `button_margin` | `float` | `4.0` | ボタン間のマージン |
-| `panel_padding` | `float` | `8.0` | パネル内側のパディング |
 | `font_size` | `int` | `16` | フォントサイズ |
+
+### ラジアル配置
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `radial_radius` | `float` | `120.0` | 中心からボタン中心までの距離 |
+| `radial_start_angle_degrees` | `float` | `-90.0` | 最初のボタン角度（度） |
+| `radial_padding` | `float` | `8.0` | 画面端マージン |
 
 ### アニメーション
 | プロパティ | 型 | デフォルト | 説明 |
@@ -127,15 +133,15 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 ## 内部動作
 
 ### UI構成
-- `PanelContainer` > `MarginContainer` > `VBoxContainer` > `Button[]`
+- `Control`（メニュー用ルート） > `Button[]`（円周配置）
 
 ### 表示アニメーション
 - フェードイン + スケールアップ（0.9 → 1.0）
 - Tweenで制御（`animation_duration`秒）
 
 ### 画面端クリッピング対策
-- 右端/下端を超える場合は位置を調整
-- 左端/上端は10pxのマージンを確保
+- メニュー中心を基準にメニュー矩形を生成し、画面端にはみ出さないようにクランプ
+- `radial_padding`で端の余白を調整
 
 ### メニュー外クリック検出
 - `_gui_input`でパネル外クリックを検出して自動で閉じる
