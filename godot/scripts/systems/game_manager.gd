@@ -242,6 +242,9 @@ func cancel_path() -> void:
 
 ## 全パスを実行
 func execute_all_paths(run: bool) -> int:
+	# パス実行開始時にコンテキストメニューを閉じる
+	if context_menu and context_menu.is_open():
+		context_menu.close()
 	return path_service.execute_all_paths(run) if path_service else 0
 
 
@@ -379,6 +382,13 @@ func process_frame(delta: float) -> void:
 	# アイドルキャラクターを処理
 	if idle_manager:
 		idle_manager.process_idle_characters(delta)
+
+	# プライマリキャラクターのアイドル処理（パス追従中でない場合）
+	var primary = get_primary_character()
+	if primary and idle_manager and not is_character_following_path(primary):
+		# 回転モード中でない場合のみ
+		if not is_rotation_active():
+			idle_manager.process_primary_idle(primary, delta)
 
 	# 回転モード処理
 	if rotation_controller and rotation_controller.is_rotation_active():
