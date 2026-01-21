@@ -7,8 +7,8 @@
 script = ExtResource("1_script")
 id = "iwasaki_test"
 display_name = "Iwasaki Test"
-description = "Development test map with GridMap"
+description = "Development test map"
 map_scene = ExtResource("2_scene")
-map_size = Vector2(20, 20)
-spawn_points_ct = Array[Vector3]([Vector3(2, 0.1, 2)])
-spawn_points_t = Array[Vector3]([Vector3(-4, 0.1, 8)])
+map_size = Vector2(50, 50)
+spawn_points_ct = Array[Vector3]([Vector3(-3, 0, -5)])
+spawn_points_t = Array[Vector3]([Vector3(3, 0, -5)])

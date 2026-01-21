@@ -27,9 +27,8 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
     │         [Start Game]
     ▼              ▼
 ┌────────┐  ┌────────────┐
-│  Back  │  │ GameScene  │  ゲームプレイ
-└────────┘  │(test_char) │
-            └────────────┘
+│  Back  │  │ GameScreen │  ゲームプレイ
+└────────┘  └────────────┘
 ```
 
 ## 画面詳細
@@ -76,13 +75,25 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 | ボタン | 遷移先 | 説明 |
 |--------|--------|------|
 | Back | MainMenuScreen | メインメニューに戻る |
-| Start Game | GameScene | 選択したマップでゲーム開始 |
+| Start Game | GameScreen | 選択したマップでゲーム開始 |
 
-### 4. GameScene (test_character)
+### 4. GameScreen
 
-**シーン**: `scenes/tests/test_character.tscn`
+**シーン**: `scenes/screens/game.tscn`
+**スクリプト**: `scripts/screens/game_screen.gd`
 
-ゲームプレイ画面。選択したマップで戦闘を行う。
+ゲームプレイ画面。選択したマップでキャラクターを操作する。
+
+**初期化処理**:
+1. プレイヤーチームをランダムに決定（CT/T）
+2. GameManagerをセットアップ
+3. 選択マップをロード
+4. FogOfWarSystemのマップサイズを更新（`set_map_size()`を使用）
+5. キャラクターをスポーン位置に配置
+6. チーム表示UIを更新
+7. 視界システムを有効化
+
+**注意**: マップロード後、`FogOfWarSystem.set_map_size()`でマップサイズを更新すること。プロパティ直接変更では反映されない。
 
 **主要システム**:
 - `GameManager` - コアシステム初期化・更新
@@ -90,6 +101,18 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 - `CharacterSelectionManager` - キャラクター選択
 - `PathExecutionManager` - パス描画・実行
 - `FogOfWarSystem` - 視界システム
+- `EnemyVisibilitySystem` - 敵可視性制御
+
+**シーン構造**:
+```
+GameScreen (Node3D)
+├─ WorldEnvironment
+├─ DirectionalLight3D
+├─ Camera3D (俯瞰視点)
+├─ MapContainer (Node3D) ← マップがロードされる
+└─ UILayer (CanvasLayer)
+    └─ TeamDisplayLabel ← "You are CT/T" 表示
+```
 
 ## データフロー
 
@@ -106,11 +129,29 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
    └─ SettingsManager.set_selected_map(map_id) で選択マップを保存
    └─ change_scene_to_file(GAME_SCENE)
 
-4. GameScene読み込み
-   └─ GameManager._ready()
-       └─ MapManager.load_map_from_settings()
-           └─ SettingsManager.get_selected_map() でマップID取得
-           └─ MapRegistry.instantiate_map(map_id) でマップ生成
+4. GameScreen読み込み
+   └─ GameScreen._ready()
+       ├─ PlayerState.set_player_team() でランダムチーム決定
+       ├─ GameManager.setup() でシステム初期化
+       ├─ GameManager.load_map() でマップロード
+       │   └─ SettingsManager.get_selected_map() でマップID取得
+       │   └─ MapRegistry.get_preset(map_id) でプリセット取得
+       └─ キャラクタースポーン
+           └─ CharacterRegistry.create_character() でキャラクター生成
+           └─ GameManager.register_character() で登録
+```
+
+### キャラクタースポーン詳細
+
+```
+GameScreen._spawn_characters()
+├─ game_manager.map_manager.current_preset からスポーン位置取得
+├─ CT側スポーン
+│   ├─ CharacterRegistry.get_counter_terrorists() でCTプリセット取得
+│   └─ spawn_points_ct の位置にキャラクター配置
+└─ T側スポーン
+    ├─ CharacterRegistry.get_terrorists() でTプリセット取得
+    └─ spawn_points_t の位置にキャラクター配置
 ```
 
 ## 登録済みマップ
@@ -120,8 +161,7 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 
 | ID | 表示名 | シーン | 説明 |
 |----|--------|--------|------|
-| `test` | Test Map | `scenes/maps/test.tscn` | 基本テストマップ |
-| `iwasaki_test` | Iwasaki Test | `scenes/maps/iwasaki_test.tscn` | GridMap開発用マップ |
+| `iwasaki_test` | Iwasaki Test | `scenes/maps/iwasaki_test.tscn` | 開発用マップ |
 
 ### マップの追加方法
 
@@ -142,8 +182,11 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 | MainMenuScreen | メインメニューUI |
 | MapSelectionScreen | マップ選択UI |
 | OptionScreen | 設定UI |
+| GameScreen | ゲームプレイ画面 |
 | SettingsManager | 設定永続化・選択マップ保持 |
 | MapRegistry | マッププリセット管理 |
 | MapPreset | マップ定義リソース |
 | MapManager | マップライフサイクル管理 |
 | GameManager | ゲームシステム統括 |
+| PlayerState | プレイヤーチーム管理 |
+| CharacterRegistry | キャラクター生成 |

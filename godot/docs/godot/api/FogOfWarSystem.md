@@ -32,9 +32,17 @@ Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描�
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `fog_color` | `Color` | 暗青(0.85 alpha) | フォグの色 |
-| `quality` | `Quality` | `HIGH` | 品質設定 |
+| `quality` | `Quality` | `LOW` | 品質設定（モバイル最適化） |
 
 ## Public API
+
+### set_map_size(new_size: Vector2) -> void
+マップサイズを動的に変更する。フォグメッシュとシェーダーパラメータを再設定。
+
+**引数:**
+- `new_size` - 新しいマップサイズ
+
+**注意:** `map_size`プロパティを直接変更しても反映されない。必ずこのメソッドを使用すること。
 
 ### register_vision(vision: VisionComponent) -> void
 VisionComponentを登録する。
@@ -67,13 +75,16 @@ VisionComponentを解除する。
 ```gdscript
 # FoWシステム作成
 var fow = FogOfWarSystem.new()
-fow.map_size = Vector2(50, 50)
-fow.quality = FogOfWarSystem.Quality.HIGH
+fow.map_size = Vector2(50, 50)  # 初期化前なら直接設定可
+fow.quality = FogOfWarSystem.Quality.LOW
 add_child(fow)
 
 # VisionComponent登録
 var vision = character.setup_vision(90.0, 15.0)
 fow.register_vision(vision)
+
+# マップサイズを動的に変更（必ずset_map_size()を使用）
+fow.set_map_size(Vector2(20, 20))
 
 # 色変更
 fow.set_fog_color(Color(0.1, 0.1, 0.2, 0.9))
@@ -81,6 +92,24 @@ fow.set_fog_color(Color(0.1, 0.1, 0.2, 0.9))
 # 非表示
 fow.set_fog_visible(false)
 ```
+
+## 注意事項
+
+### map_sizeの動的変更
+
+**重要:** `_ready()`後に`map_size`プロパティを直接変更しても、フォグメッシュやシェーダーパラメータは更新されない。
+
+```gdscript
+# NG: 反映されない
+fow.map_size = Vector2(20, 20)
+
+# OK: メッシュとシェーダーも更新される
+fow.set_map_size(Vector2(20, 20))
+```
+
+**症状:** 視界ポリゴンがキャラクターの足元から離れた位置に描画される。
+
+**原因:** `_ready()`でフォグメッシュ（`PlaneMesh`）とシェーダーパラメータ（`map_min`, `map_max`）が作成・設定される。後から`map_size`を変更しても、これらは更新されないため座標変換がずれる。
 
 ## 内部動作
 

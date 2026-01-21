@@ -141,12 +141,6 @@ func _setup_wall_groups(node: Node) -> void:
 		if collision_obj.collision_layer & WALL_COLLISION_LAYER:
 			node.add_to_group("walls")
 
-	# Also check GridMap nodes
-	if node is GridMap:
-		var grid_map := node as GridMap
-		if grid_map.collision_layer & WALL_COLLISION_LAYER:
-			node.add_to_group("walls")
-
 	# Recursively process children
 	for child in node.get_children():
 		_setup_wall_groups(child)

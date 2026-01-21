@@ -93,7 +93,7 @@ MapRoot (Node3D)
 │   └── CollisionShape3D
 ├── Walls (Node3D)
 │   └── Wall_* (StaticBody3D) [collision_layer=2]
-│       └── CSGBox3D / GridMap
+│       └── CSGBox3D / MeshInstance3D
 ├── SpawnPoints (Node3D)
 │   ├── CT_Spawns (Node3D)
 │   │   └── Spawn* (Marker3D)

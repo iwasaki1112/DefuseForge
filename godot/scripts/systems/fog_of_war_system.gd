@@ -257,3 +257,19 @@ func get_visibility_texture() -> ViewportTexture:
 	if _visibility_viewport:
 		return _visibility_viewport.get_texture()
 	return null
+
+
+## マップサイズを動的に変更（フォグメッシュとシェーダーパラメータを再設定）
+func set_map_size(new_size: Vector2) -> void:
+	map_size = new_size
+
+	# フォグメッシュのサイズを更新
+	if _fog_mesh and _fog_mesh.mesh is PlaneMesh:
+		(_fog_mesh.mesh as PlaneMesh).size = map_size
+
+	# シェーダーパラメータを更新
+	if _fog_material:
+		_fog_material.set_shader_parameter("map_min", Vector2(-map_size.x / 2, -map_size.y / 2))
+		_fog_material.set_shader_parameter("map_max", Vector2(map_size.x / 2, map_size.y / 2))
+
+	_needs_update = true

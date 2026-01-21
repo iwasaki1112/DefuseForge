@@ -117,4 +117,3 @@ selection_manager.deselect_all()
 ## 関連クラス
 
 - [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
-- [TestCharacterSelector](TestCharacterSelector.md) - テストシーンでの使用例

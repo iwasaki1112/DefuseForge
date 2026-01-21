@@ -15,10 +15,7 @@
 - **パフォーマンス優先**: モバイル向けに最適化すること
 
 ## 現在の状態
-開発途中。Mixamo専用のキャラクターシステム。
-
-テストシーン：
-- `scenes/tests/test_simple_mixamo.tscn` - Mixamoキャラクター＋CharacterAnimationController確認用
+開発途中。Mixamo専用のキャラクターシステム。マップはBlenderで作成しGLTFインポート。
 
 ## ドキュメント
 
@@ -66,10 +63,10 @@
 | Screen | MainMenuScreen | メインメニュー画面 |
 | Screen | MapSelectionScreen | マップ選択画面 |
 | Screen | OptionScreen | オプション設定画面 |
+| Screen | GameScreen | ゲームプレイ画面（マップロード・キャラクタースポーン） |
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
 | UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
-| Test | TestCharacterSelector | キャラクター選択・パス移動・FoWのテストシーン |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
 

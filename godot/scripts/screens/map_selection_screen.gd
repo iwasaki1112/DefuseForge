@@ -8,11 +8,12 @@ extends Control
 signal map_selected(preset_id: String)
 
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
-const GAME_SCENE := "res://scenes/tests/test_character.tscn"
+const GAME_SCENE := "res://scenes/screens/game.tscn"
 
 var _map_container: GridContainer
 var _selected_map_id: String = ""
 var _map_cards: Dictionary = {}  # { map_id: Control }
+var _start_btn: Button
 
 
 func _ready() -> void:
@@ -89,14 +90,14 @@ func _create_footer() -> Control:
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_theme_constant_override("separation", 20)
 
-	var start_btn := Button.new()
-	start_btn.name = "StartButton"
-	start_btn.text = "Start Game"
-	start_btn.custom_minimum_size = Vector2(250, 60)
-	start_btn.add_theme_font_size_override("font_size", 28)
-	start_btn.disabled = true
-	start_btn.pressed.connect(_on_start_pressed)
-	hbox.add_child(start_btn)
+	_start_btn = Button.new()
+	_start_btn.name = "StartButton"
+	_start_btn.text = "Start Game"
+	_start_btn.custom_minimum_size = Vector2(250, 60)
+	_start_btn.add_theme_font_size_override("font_size", 28)
+	_start_btn.disabled = true
+	_start_btn.pressed.connect(_on_start_pressed)
+	hbox.add_child(_start_btn)
 
 	return hbox
 
@@ -221,9 +222,8 @@ func _select_map(map_id: String) -> void:
 		style.border_color = Color(0.3, 0.7, 1.0, 1.0)
 
 	# 開始ボタンを有効化
-	var start_btn := find_child("StartButton") as Button
-	if start_btn:
-		start_btn.disabled = false
+	if _start_btn:
+		_start_btn.disabled = false
 
 	map_selected.emit(map_id)
 
@@ -237,7 +237,6 @@ func _on_start_pressed() -> void:
 		return
 
 	# 選択したマップIDを保持してゲームシーンに遷移
-	# GameManagerなどでマップIDを参照できるようにする
 	_start_game_with_map(_selected_map_id)
 
 

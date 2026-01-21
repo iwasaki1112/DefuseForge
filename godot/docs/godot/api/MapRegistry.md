@@ -98,7 +98,6 @@ MapRegistry.unregister("custom_map")
 
 対象ノード:
 - `CollisionObject3D`（StaticBody3D等）
-- `GridMap`
 
 これにより、VisionComponentの視界計算で壁として認識される。
 

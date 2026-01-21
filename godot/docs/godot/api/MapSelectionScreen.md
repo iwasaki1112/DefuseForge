@@ -21,7 +21,7 @@
 | 定数 | 値 | 説明 |
 |-----|-----|------|
 | `MAIN_MENU_SCENE` | `res://scenes/screens/main_menu.tscn` | メインメニューシーンパス |
-| `GAME_SCENE` | `res://scenes/tests/test_character.tscn` | ゲームシーンパス |
+| `GAME_SCENE` | `res://scenes/screens/game.tscn` | ゲームシーンパス |
 
 ## プロパティ
 

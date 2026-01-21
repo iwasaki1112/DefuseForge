@@ -144,9 +144,3 @@ Blenderでエクスポートする際：
 - **銃口方向**: -Y方向を向くように配置
 - **スケール**: **実寸（メートル単位）**で作成（例: AK47 = 0.87m, Glock = 0.2m）
 
-### テストシーン
-
-`scenes/tests/test_weapon_viewer.tscn` で武器の装着状態を確認できる：
-- ドラッグでカメラ回転
-- スライダーで回転・位置・スケールをリアルタイム調整
-- 調整した値をWeaponPresetの`attach_offset`/`attach_rotation`に反映
