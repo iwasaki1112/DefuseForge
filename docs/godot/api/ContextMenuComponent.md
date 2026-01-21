@@ -8,6 +8,7 @@
 |------|-----|
 | 継承元 | `Control` |
 | ファイルパス | `scripts/ui/context_menu_component.gd` |
+| シーンパス | `scenes/ui/context_menu_component.tscn` |
 
 ## Signals
 
@@ -39,6 +40,7 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 |-----------|-----|----------|------|
 | `button_size` | `Vector2` | `(120, 50)` | ボタンサイズ |
 | `font_size` | `int` | `16` | フォントサイズ |
+| `show_button_text` | `bool` | `true` | ボタンのテキスト表示 |
 
 ### ラジアル配置
 | プロパティ | 型 | デフォルト | 説明 |
@@ -46,11 +48,35 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 | `radial_radius` | `float` | `120.0` | 中心からボタン中心までの距離 |
 | `radial_start_angle_degrees` | `float` | `-90.0` | 最初のボタン角度（度） |
 | `radial_padding` | `float` | `8.0` | 画面端マージン |
+| `use_background_texture_layout` | `bool` | `false` | 背景テクスチャ前提の配置を使用 |
+| `background_texture` | `Texture2D` | - | 背景テクスチャ（4分割固定向け） |
+| `background_scale` | `float` | `1.0` | 背景テクスチャのスケール |
+| `background_radial_radius_ratio` | `float` | `0.34` | 背景サイズからのラジアル半径比率 |
+
+### セグメント画像
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `use_segment_textures` | `bool` | `false` | セグメント画像を使う |
+| `segment_move_texture` | `Texture2D` | - | Move用セグメント |
+| `segment_rotation_texture` | `Texture2D` | - | Rotate用セグメント |
+| `segment_buy_texture` | `Texture2D` | - | Buy用セグメント |
+| `segment_crouch_texture` | `Texture2D` | - | Crouch用セグメント |
+| `segment_move_rotation_degrees` | `float` | `0.0` | Moveセグメントの回転 |
+| `segment_rotation_rotation_degrees` | `float` | `90.0` | Rotateセグメントの回転 |
+| `segment_buy_rotation_degrees` | `float` | `180.0` | Buyセグメントの回転 |
+| `segment_crouch_rotation_degrees` | `float` | `270.0` | Crouchセグメントの回転 |
+| `segment_scale` | `float` | `1.0` | セグメントのスケール |
+| `segment_pivot_offset` | `Vector2` | `(256, 256)` | セグメント回転中心 |
 
 ### アニメーション
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `animation_duration` | `float` | `0.15` | 表示/非表示アニメーション時間 |
+| `item_animation_duration` | `float` | `0.18` | 各ボタンの表示アニメーション時間 |
+| `item_stagger_delay` | `float` | `0.06` | ボタン表示の遅延間隔 |
+| `item_scale_start` | `float` | `0.6` | 表示開始時スケール |
+| `item_scale_peak` | `float` | `1.06` | ふわっと膨らむピーク |
+| `item_scale_end` | `float` | `1.0` | 最終スケール |
 
 ## Public API
 
@@ -72,6 +98,9 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 
 #### get_current_character() -> CharacterBody3D
 現在のキャラクターを取得する。
+
+#### update_screen_position(screen_position: Vector2) -> void
+メニュー位置を更新する（カメラ移動時などに追従させる）。
 
 ### Item Management
 
@@ -134,10 +163,12 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 
 ### UI構成
 - `Control`（メニュー用ルート） > `Button[]`（円周配置）
+- セグメント画像の場合は `click_mask` を設定してアルファ領域のみ反応
 
 ### 表示アニメーション
 - フェードイン + スケールアップ（0.9 → 1.0）
 - Tweenで制御（`animation_duration`秒）
+- ボタンは順番にフェードイン + ふわっと拡大して戻る（`item_stagger_delay`秒間隔）
 
 ### 画面端クリッピング対策
 - メニュー中心を基準にメニュー矩形を生成し、画面端にはみ出さないようにクランプ
@@ -145,3 +176,7 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 
 ### メニュー外クリック検出
 - `_gui_input`でパネル外クリックを検出して自動で閉じる
+
+### エディタプレビュー
+- `@tool` + `Engine.is_editor_hint()` の場合はデフォルト項目で描画して表示する
+- プロパティ変更時は自動でプレビューを再構築する

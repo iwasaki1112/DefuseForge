@@ -6,7 +6,7 @@ class_name GameManager
 const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
 const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
-const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
+const ContextMenuScene = preload("res://scenes/ui/context_menu_component.tscn")
 const MarkerEditPanelScript = preload("res://scripts/ui/marker_edit_panel.gd")
 const WeaponShopModalScript = preload("res://scripts/ui/weapon_shop_modal.gd")
 const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
@@ -47,6 +47,7 @@ var vision_service: VisionService = null
 
 ## UIコンポーネント
 var context_menu: Control = null
+var _context_menu_follow_offset: Vector2 = Vector2.ZERO
 var marker_edit_panel: VBoxContainer = null
 var label_manager: CharacterLabelManager = null
 var weapon_shop_modal: Control = null
@@ -394,6 +395,8 @@ func process_frame(delta: float) -> void:
 	if rotation_controller and rotation_controller.is_rotation_active():
 		rotation_controller.process(delta)
 
+	_update_context_menu_follow()
+
 
 ## ========================================
 ## 状態取得API
@@ -522,6 +525,10 @@ func set_path_drawer_color(color: Color) -> void:
 func _show_context_menu(screen_pos: Vector2, character: Node) -> void:
 	if context_menu:
 		var is_multi = selection_manager.get_selection_count() > 1
+		_context_menu_follow_offset = Vector2.ZERO
+		if camera and character:
+			var base_pos = camera.unproject_position(character.global_position)
+			_context_menu_follow_offset = screen_pos - base_pos
 		context_menu.open(screen_pos, character, is_multi)
 
 
@@ -621,12 +628,23 @@ func _setup_map_manager() -> void:
 
 func _setup_context_menu() -> void:
 	if context_menu == null:
-		context_menu = Control.new()
-		context_menu.set_script(ContextMenuScript)
+		context_menu = ContextMenuScene.instantiate()
 		context_menu.name = GameConstants.NODE_CONTEXT_MENU
 		_ui_layer.add_child(context_menu)
 		context_menu.setup_default_items()
 		context_menu.item_selected.connect(_on_context_menu_item_selected)
+
+
+func _update_context_menu_follow() -> void:
+	if not context_menu or not context_menu.is_open():
+		return
+	if not camera:
+		return
+	var character = context_menu.get_current_character()
+	if not character:
+		return
+	var base_pos = camera.unproject_position(character.global_position)
+	context_menu.update_screen_position(base_pos + _context_menu_follow_offset)
 
 
 func _setup_marker_edit_panel() -> void:

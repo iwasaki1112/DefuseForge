@@ -1,3 +1,4 @@
+@tool
 class_name ContextMenuComponent
 extends Control
 
@@ -21,26 +22,180 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 @export_group("外観設定")
 @export var button_size: Vector2 = Vector2(120, 50)  ## ボタンサイズ（モバイル向け大きめ）
 @export var font_size: int = 16  ## フォントサイズ
+var _show_button_text: bool = true
+@export var show_button_text: bool = true:  ## ボタンのテキスト表示
+	get:
+		return _show_button_text
+	set(value):
+		_show_button_text = value
+		_queue_editor_refresh()
 
 @export_group("ラジアル配置")
-@export var radial_radius: float = 120.0  ## 中心からボタン中心までの距離
-@export var radial_start_angle_degrees: float = -90.0  ## 最初のボタン角度（度）
-@export var radial_padding: float = 8.0  ## 画面端マージン
+var _radial_radius: float = 120.0
+var _radial_start_angle_degrees: float = -90.0
+var _radial_padding: float = 8.0
+var _use_background_texture_layout: bool = false
+var _background_texture: Texture2D
+var _background_scale: float = 1.0
+var _background_radial_radius_ratio: float = 0.34
+
+@export var radial_radius: float = 120.0:  ## 中心からボタン中心までの距離
+	get:
+		return _radial_radius
+	set(value):
+		_radial_radius = value
+		_queue_editor_refresh()
+@export var radial_start_angle_degrees: float = -90.0:  ## 最初のボタン角度（度）
+	get:
+		return _radial_start_angle_degrees
+	set(value):
+		_radial_start_angle_degrees = value
+		_queue_editor_refresh()
+@export var radial_padding: float = 8.0:  ## 画面端マージン
+	get:
+		return _radial_padding
+	set(value):
+		_radial_padding = value
+		_queue_editor_refresh()
+@export var use_background_texture_layout: bool = false:  ## 背景テクスチャ前提の配置を使用
+	get:
+		return _use_background_texture_layout
+	set(value):
+		_use_background_texture_layout = value
+		_queue_editor_refresh()
+@export var background_texture: Texture2D:  ## 背景テクスチャ（4分割固定向け）
+	get:
+		return _background_texture
+	set(value):
+		_background_texture = value
+		_queue_editor_refresh()
+@export var background_scale: float = 1.0:  ## 背景テクスチャのスケール
+	get:
+		return _background_scale
+	set(value):
+		_background_scale = value
+		_queue_editor_refresh()
+@export var background_radial_radius_ratio: float = 0.34:  ## 背景サイズからのラジアル半径比率
+	get:
+		return _background_radial_radius_ratio
+	set(value):
+		_background_radial_radius_ratio = value
+		_queue_editor_refresh()
+
+@export_group("セグメント画像")
+var _use_segment_textures: bool = false
+var _segment_move_texture: Texture2D
+var _segment_rotation_texture: Texture2D
+var _segment_buy_texture: Texture2D
+var _segment_crouch_texture: Texture2D
+var _segment_move_rotation_degrees: float = 0.0
+var _segment_rotation_rotation_degrees: float = 90.0
+var _segment_buy_rotation_degrees: float = 180.0
+var _segment_crouch_rotation_degrees: float = 270.0
+var _segment_scale: float = 1.0
+var _segment_pivot_offset: Vector2 = Vector2(256, 256)
+
+@export var use_segment_textures: bool = false:  ## セグメント画像を使う
+	get:
+		return _use_segment_textures
+	set(value):
+		_use_segment_textures = value
+		_queue_editor_refresh()
+@export var segment_move_texture: Texture2D:
+	get:
+		return _segment_move_texture
+	set(value):
+		_segment_move_texture = value
+		_queue_editor_refresh()
+@export var segment_rotation_texture: Texture2D:
+	get:
+		return _segment_rotation_texture
+	set(value):
+		_segment_rotation_texture = value
+		_queue_editor_refresh()
+@export var segment_buy_texture: Texture2D:
+	get:
+		return _segment_buy_texture
+	set(value):
+		_segment_buy_texture = value
+		_queue_editor_refresh()
+@export var segment_crouch_texture: Texture2D:
+	get:
+		return _segment_crouch_texture
+	set(value):
+		_segment_crouch_texture = value
+		_queue_editor_refresh()
+@export var segment_move_rotation_degrees: float = 0.0:
+	get:
+		return _segment_move_rotation_degrees
+	set(value):
+		_segment_move_rotation_degrees = value
+		_queue_editor_refresh()
+@export var segment_rotation_rotation_degrees: float = 90.0:
+	get:
+		return _segment_rotation_rotation_degrees
+	set(value):
+		_segment_rotation_rotation_degrees = value
+		_queue_editor_refresh()
+@export var segment_buy_rotation_degrees: float = 180.0:
+	get:
+		return _segment_buy_rotation_degrees
+	set(value):
+		_segment_buy_rotation_degrees = value
+		_queue_editor_refresh()
+@export var segment_crouch_rotation_degrees: float = 270.0:
+	get:
+		return _segment_crouch_rotation_degrees
+	set(value):
+		_segment_crouch_rotation_degrees = value
+		_queue_editor_refresh()
+@export var segment_scale: float = 1.0:  ## セグメントのスケール
+	get:
+		return _segment_scale
+	set(value):
+		_segment_scale = value
+		_queue_editor_refresh()
+@export var segment_pivot_offset: Vector2 = Vector2(256, 256):  ## セグメント回転中心
+	get:
+		return _segment_pivot_offset
+	set(value):
+		_segment_pivot_offset = value
+		_queue_editor_refresh()
 
 @export_group("アニメーション")
 @export var animation_duration: float = 0.15  ## 表示/非表示アニメーション時間
+@export var item_animation_duration: float = 0.18  ## 各ボタンの表示アニメーション時間
+@export var item_stagger_delay: float = 0.06  ## ボタン表示の遅延間隔
+@export var item_scale_start: float = 0.6  ## 表示開始時スケール
+@export var item_scale_peak: float = 1.06  ## ふわっと膨らむピーク
+@export var item_scale_end: float = 1.0  ## 最終スケール
 
 var _menu_root: Control
+var _background: TextureRect
 var _items: Array = []  # Array of ContextMenuItem resources
-var _buttons: Array[Button] = []
+var _buttons: Array[BaseButton] = []
 var _current_character: CharacterBody3D = null
 var _is_open: bool = false
 var _tween: Tween
+var _item_tween: Tween
 
 
 func _ready() -> void:
 	_build_ui()
-	hide()
+	if Engine.is_editor_hint():
+		setup_default_items()
+		_rebuild_buttons()
+		show()
+	else:
+		hide()
+
+
+func _queue_editor_refresh() -> void:
+	if not Engine.is_editor_hint():
+		return
+	if not is_inside_tree():
+		return
+	call_deferred("_rebuild_buttons")
 
 
 func _build_ui() -> void:
@@ -52,6 +207,12 @@ func _build_ui() -> void:
 	_menu_root = Control.new()
 	_menu_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_menu_root)
+
+	_background = TextureRect.new()
+	_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_background.stretch_mode = TextureRect.STRETCH_SCALE
+	_menu_root.add_child(_background)
 
 
 ## メニューを開く
@@ -81,16 +242,7 @@ func open(screen_position: Vector2, character: CharacterBody3D, is_multi_select:
 	_rebuild_buttons()
 
 	# 位置を計算（画面端クリッピング対策）
-	await get_tree().process_frame  # サイズ計算を待つ
-	var menu_size = _menu_root.size
-	var viewport_size = get_viewport().get_visible_rect().size
-
-	var pos = screen_position - (menu_size * 0.5)
-	# 画面端クリッピング
-	pos.x = clamp(pos.x, radial_padding, viewport_size.x - menu_size.x - radial_padding)
-	pos.y = clamp(pos.y, radial_padding, viewport_size.y - menu_size.y - radial_padding)
-
-	_menu_root.position = pos
+	_apply_menu_position(screen_position)
 
 	# アニメーション
 	show()
@@ -104,6 +256,7 @@ func open(screen_position: Vector2, character: CharacterBody3D, is_multi_select:
 	_tween.set_parallel(true)
 	_tween.tween_property(_menu_root, "modulate:a", 1.0, animation_duration)
 	_tween.tween_property(_menu_root, "scale", Vector2.ONE, animation_duration).set_ease(Tween.EASE_OUT)
+	_play_item_open_animation()
 
 
 ## メニューを閉じる
@@ -192,6 +345,15 @@ func get_panel_rect() -> Rect2:
 	return Rect2()
 
 
+## メニュー位置を更新（カメラ移動時など）
+func update_screen_position(screen_position: Vector2) -> void:
+	if not _is_open:
+		return
+	if not _menu_root or _menu_root.size == Vector2.ZERO:
+		return
+	_apply_menu_position(screen_position)
+
+
 ## ボタンを再構築
 func _rebuild_buttons() -> void:
 	# 既存ボタンをクリア（即座に削除してサイズを正しく計算）
@@ -202,32 +364,75 @@ func _rebuild_buttons() -> void:
 
 	# メニューサイズを再計算
 	var button_extent = Vector2(button_size.x * 0.5, button_size.y * 0.5)
-	var menu_half_size = Vector2(radial_radius, radial_radius) + button_extent
-	_menu_root.custom_minimum_size = menu_half_size * 2.0
-	_menu_root.size = _menu_root.custom_minimum_size
+	if use_segment_textures and _has_any_segment_texture():
+		var base_size = _get_segment_base_size()
+		_menu_root.custom_minimum_size = Vector2(base_size, base_size) * segment_scale
+		_menu_root.size = _menu_root.custom_minimum_size
+	elif use_background_texture_layout and background_texture:
+		var texture_size = background_texture.get_size() * background_scale
+		_menu_root.custom_minimum_size = texture_size
+		_menu_root.size = texture_size
+	else:
+		var menu_half_size = Vector2(radial_radius, radial_radius) + button_extent
+		_menu_root.custom_minimum_size = menu_half_size * 2.0
+		_menu_root.size = _menu_root.custom_minimum_size
+
+	_background.texture = background_texture
+	_background.visible = (background_texture != null) and not use_segment_textures
 
 	# 新規ボタンを作成
 	for item in _items:
-		var button = Button.new()
-		button.text = item.display_name
-		button.custom_minimum_size = button_size
-		button.size = button_size
-		button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		button.disabled = not item.enabled
-		button.add_theme_font_size_override("font_size", font_size)
+		var button: BaseButton = null
+		var segment_texture = _get_segment_texture(item.action_id)
+		if use_segment_textures and segment_texture:
+			var texture_button = TextureButton.new()
+			texture_button.texture_normal = segment_texture
+			texture_button.texture_pressed = segment_texture
+			texture_button.texture_hover = segment_texture
+			texture_button.texture_disabled = segment_texture
+			texture_button.ignore_texture_size = true
+			texture_button.stretch_mode = TextureButton.STRETCH_SCALE
+			var scaled_size = segment_texture.get_size() * segment_scale
+			texture_button.custom_minimum_size = scaled_size
+			texture_button.size = scaled_size
+			texture_button.disabled = not item.enabled
+			texture_button.tooltip_text = item.display_name
+			texture_button.texture_click_mask = _get_click_mask(segment_texture)
+			button = texture_button
+		else:
+			var text_button = Button.new()
+			text_button.text = item.display_name if show_button_text else ""
+			text_button.tooltip_text = item.display_name
+			text_button.custom_minimum_size = button_size
+			text_button.size = button_size
+			text_button.disabled = not item.enabled
+			text_button.flat = true
+			text_button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+			text_button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+			text_button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+			text_button.add_theme_stylebox_override("disabled", StyleBoxEmpty.new())
+			text_button.add_theme_font_size_override("font_size", font_size)
+			text_button.pivot_offset = button_size * 0.5
 
-		# アイコンがあれば設定
-		if item.icon:
-			button.icon = item.icon
+			# アイコンがあれば設定
+			if item.icon:
+				text_button.icon = item.icon
+			button = text_button
+
+		button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 
 		# クリックイベント
 		var action_id = item.action_id
+		button.set_meta("action_id", action_id)
 		button.pressed.connect(func(): _on_button_pressed(action_id))
 
 		_menu_root.add_child(button)
 		_buttons.append(button)
 
-	_update_radial_layout()
+	if use_segment_textures and _has_any_segment_texture():
+		_update_segment_layout()
+	else:
+		_update_radial_layout()
 
 	# サイズを確定
 	_menu_root.reset_size()
@@ -273,9 +478,101 @@ func _update_radial_layout() -> void:
 	var count = _buttons.size()
 	var angle_step = TAU / max(1, count)
 	var start_angle = deg_to_rad(radial_start_angle_degrees)
+	var layout_radius = radial_radius
+	if use_background_texture_layout and background_texture:
+		layout_radius = min(_menu_root.size.x, _menu_root.size.y) * background_radial_radius_ratio
 
 	for i in range(count):
 		var angle = start_angle + angle_step * i
-		var offset = Vector2(cos(angle), sin(angle)) * radial_radius
+		var offset = Vector2(cos(angle), sin(angle)) * layout_radius
 		var pos = center + offset - (button_size * 0.5)
 		_buttons[i].position = pos
+
+
+func _update_segment_layout() -> void:
+	if _buttons.is_empty():
+		return
+
+	var center = _menu_root.size * 0.5
+	var base_pivot = segment_pivot_offset * segment_scale
+
+	for button in _buttons:
+		var action_id = button.get_meta("action_id") if button.has_meta("action_id") else ""
+
+		button.pivot_offset = base_pivot
+		button.position = center - base_pivot
+		button.rotation_degrees = _get_segment_rotation_degrees(action_id)
+
+
+func _get_segment_texture(action_id: String) -> Texture2D:
+	match action_id:
+		"move":
+			return segment_move_texture
+		"rotate", "rotation":
+			return segment_rotation_texture
+		"buy":
+			return segment_buy_texture
+		"crouch":
+			return segment_crouch_texture
+	return null
+
+
+func _get_segment_rotation_degrees(action_id: String) -> float:
+	match action_id:
+		"move":
+			return segment_move_rotation_degrees
+		"rotate", "rotation":
+			return segment_rotation_rotation_degrees
+		"buy":
+			return segment_buy_rotation_degrees
+		"crouch":
+			return segment_crouch_rotation_degrees
+	return 0.0
+
+
+func _has_any_segment_texture() -> bool:
+	return segment_move_texture or segment_rotation_texture or segment_buy_texture or segment_crouch_texture
+
+
+func _get_segment_base_size() -> float:
+	var max_size := 0.0
+	for texture in [segment_move_texture, segment_rotation_texture, segment_buy_texture, segment_crouch_texture]:
+		if texture:
+			max_size = max(max_size, texture.get_size().x)
+	return max_size if max_size > 0.0 else _menu_root.size.x
+
+
+func _get_click_mask(texture: Texture2D) -> BitMap:
+	var image := texture.get_image()
+	var bitmap := BitMap.new()
+	if image:
+		bitmap.create_from_image_alpha(image)
+	return bitmap
+
+
+func _apply_menu_position(screen_position: Vector2) -> void:
+	var menu_size = _menu_root.size
+	var viewport_size = get_viewport().get_visible_rect().size
+
+	var pos = screen_position - (menu_size * 0.5)
+	# 画面端クリッピング
+	pos.x = clamp(pos.x, radial_padding, viewport_size.x - menu_size.x - radial_padding)
+	pos.y = clamp(pos.y, radial_padding, viewport_size.y - menu_size.y - radial_padding)
+
+	_menu_root.position = pos
+	_menu_root.pivot_offset = _menu_root.size * 0.5
+
+
+func _play_item_open_animation() -> void:
+	if _item_tween:
+		_item_tween.kill()
+	_item_tween = create_tween()
+	_item_tween.set_parallel(true)
+	for i in range(_buttons.size()):
+		var button = _buttons[i]
+		button.modulate.a = 0.0
+		button.scale = Vector2.ONE * item_scale_start
+		var delay = item_stagger_delay * i
+		_item_tween.tween_property(button, "modulate:a", 1.0, item_animation_duration).set_delay(delay)
+		_item_tween.tween_property(button, "scale", Vector2.ONE * item_scale_peak, item_animation_duration * 0.7).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_item_tween.tween_property(button, "scale", Vector2.ONE * item_scale_end, item_animation_duration * 0.3).set_delay(delay + item_animation_duration * 0.7).set_ease(Tween.EASE_OUT)

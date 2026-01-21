@@ -101,6 +101,12 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 - `ui_layer`: UIを追加するCanvasLayer
 - `map_size`: FoWマップサイズ（デフォルト50x50）
 
+### コンテキストメニュー設定
+
+`_setup_context_menu()` 内で `res://scenes/ui/context_menu_component.tscn` をインスタンス化する。
+
+設定値はシーン側で管理している。
+
 ### キャラクター管理
 
 ```gdscript
@@ -183,6 +189,8 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 ```gdscript
 func process_frame(delta: float) -> void
 ```
+
+- コンテキストメニューの追従更新を含む
 
 ### 状態取得
 
