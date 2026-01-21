@@ -1,0 +1,54 @@
+[gd_scene load_steps=6 format=3 uid="uid://c5yq3hk8mvnx7"]
+
+[ext_resource type="Script" path="res://scripts/tests/lighting_test.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/tests/free_camera.gd" id="2_camera"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.4, 0.4, 0.4, 1)
+
+[sub_resource type="Environment" id="Environment_mobile"]
+background_mode = 1
+background_color = Color(0.3, 0.35, 0.4, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.65, 0.7, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 2
+ssao_enabled = false
+ssil_enabled = false
+sdfgi_enabled = false
+glow_enabled = false
+fog_enabled = false
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributes_mobile"]
+dof_blur_far_enabled = false
+dof_blur_near_enabled = false
+
+[node name="LightingTest" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 0, 3, 5)
+attributes = SubResource("CameraAttributes_mobile")
+script = ExtResource("2_camera")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 10, 0)
+light_color = Color(1, 0.98, 0.95, 1)
+light_energy = 1.2
+shadow_enabled = true
+shadow_bias = 0.1
+shadow_blur = 0.5
+directional_shadow_mode = 0
+directional_shadow_max_distance = 30.0
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(20, 1, 20)
+material = SubResource("StandardMaterial3D_floor")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_mobile")
+
+[node name="CharacterSpawnPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
