@@ -19,7 +19,7 @@ func _ready() -> void:
 	_update_camera()
 
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	# 左クリックドラッグで回転
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:

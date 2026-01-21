@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3 uid="uid://c5yq3hk8mvnx7"]
+[gd_scene load_steps=8 format=3 uid="uid://c5yq3hk8mvnx7"]
 
 [ext_resource type="Script" path="res://scripts/tests/lighting_test.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/tests/free_camera.gd" id="2_camera"]
+[ext_resource type="Script" path="res://scripts/tests/lighting_ui.gd" id="3_ui"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
 albedo_color = Color(0.4, 0.4, 0.4, 1)
@@ -11,7 +12,7 @@ background_mode = 1
 background_color = Color(0.3, 0.35, 0.4, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.6, 0.65, 0.7, 1)
-ambient_light_energy = 0.4
+ambient_light_energy = 0.1
 tonemap_mode = 2
 ssao_enabled = false
 ssil_enabled = false
@@ -23,6 +24,17 @@ fog_enabled = false
 dof_blur_far_enabled = false
 dof_blur_near_enabled = false
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.15, 0.15, 0.15, 0.9)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+
 [node name="LightingTest" type="Node3D"]
 script = ExtResource("1_script")
 
@@ -32,12 +44,13 @@ attributes = SubResource("CameraAttributes_mobile")
 script = ExtResource("2_camera")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 10, 0)
+transform = Transform3D(1, 0, 0, 0, 0.225, 0.974, 0, -0.974, 0.225, 0, 10, 0)
+rotation_degrees = Vector3(-77, -33, 0)
 light_color = Color(1, 0.98, 0.95, 1)
-light_energy = 1.2
+light_energy = 0.3
 shadow_enabled = true
 shadow_bias = 0.1
-shadow_blur = 0.5
+shadow_blur = 0.7
 directional_shadow_mode = 0
 directional_shadow_max_distance = 30.0
 
@@ -52,3 +65,147 @@ environment = SubResource("Environment_mobile")
 
 [node name="CharacterSpawnPoint" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="LightingUI" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -280.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 300.0
+grow_horizontal = 0
+script = ExtResource("3_ui")
+directional_light_path = NodePath("../../DirectionalLight3D")
+world_environment_path = NodePath("../../WorldEnvironment")
+
+[node name="Panel" type="PanelContainer" parent="CanvasLayer/LightingUI"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="CanvasLayer/LightingUI/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+text = "Lighting Settings"
+horizontal_alignment = 1
+
+[node name="Separator" type="HSeparator" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="EnergyRow" type="HBoxContainer" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/EnergyRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Energy"
+
+[node name="Slider" type="HSlider" parent="CanvasLayer/LightingUI/Panel/VBox/EnergyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.1
+max_value = 3.0
+step = 0.05
+value = 0.3
+
+[node name="Value" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/EnergyRow"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+text = "0.30"
+horizontal_alignment = 2
+
+[node name="ShadowRow" type="HBoxContainer" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/ShadowRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Shadow"
+
+[node name="Slider" type="HSlider" parent="CanvasLayer/LightingUI/Panel/VBox/ShadowRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 2.0
+step = 0.05
+value = 0.7
+
+[node name="Value" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/ShadowRow"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+text = "0.70"
+horizontal_alignment = 2
+
+[node name="AmbientRow" type="HBoxContainer" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/AmbientRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Ambient"
+
+[node name="Slider" type="HSlider" parent="CanvasLayer/LightingUI/Panel/VBox/AmbientRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+value = 0.1
+
+[node name="Value" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/AmbientRow"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+text = "0.10"
+horizontal_alignment = 2
+
+[node name="PitchRow" type="HBoxContainer" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/PitchRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Pitch"
+
+[node name="Slider" type="HSlider" parent="CanvasLayer/LightingUI/Panel/VBox/PitchRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -90.0
+max_value = 0.0
+value = -77.0
+
+[node name="Value" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/PitchRow"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+text = "-77°"
+horizontal_alignment = 2
+
+[node name="YawRow" type="HBoxContainer" parent="CanvasLayer/LightingUI/Panel/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/YawRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Yaw"
+
+[node name="Slider" type="HSlider" parent="CanvasLayer/LightingUI/Panel/VBox/YawRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+value = -33.0
+
+[node name="Value" type="Label" parent="CanvasLayer/LightingUI/Panel/VBox/YawRow"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+text = "-33°"
+horizontal_alignment = 2
