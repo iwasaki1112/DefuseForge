@@ -20,15 +20,17 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 
 @export_group("外観設定")
 @export var button_size: Vector2 = Vector2(120, 50)  ## ボタンサイズ（モバイル向け大きめ）
-@export var button_margin: float = 4.0  ## ボタン間のマージン
-@export var panel_padding: float = 8.0  ## パネル内側のパディング
 @export var font_size: int = 16  ## フォントサイズ
+
+@export_group("ラジアル配置")
+@export var radial_radius: float = 120.0  ## 中心からボタン中心までの距離
+@export var radial_start_angle_degrees: float = -90.0  ## 最初のボタン角度（度）
+@export var radial_padding: float = 8.0  ## 画面端マージン
 
 @export_group("アニメーション")
 @export var animation_duration: float = 0.15  ## 表示/非表示アニメーション時間
 
-var _panel: PanelContainer
-var _vbox: VBoxContainer
+var _menu_root: Control
 var _items: Array = []  # Array of ContextMenuItem resources
 var _buttons: Array[Button] = []
 var _current_character: CharacterBody3D = null
@@ -46,23 +48,10 @@ func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
-	# パネルコンテナ
-	_panel = PanelContainer.new()
-	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_panel)
-
-	# マージンコンテナ
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", int(panel_padding))
-	margin.add_theme_constant_override("margin_top", int(panel_padding))
-	margin.add_theme_constant_override("margin_right", int(panel_padding))
-	margin.add_theme_constant_override("margin_bottom", int(panel_padding))
-	_panel.add_child(margin)
-
-	# 縦並びコンテナ
-	_vbox = VBoxContainer.new()
-	_vbox.add_theme_constant_override("separation", int(button_margin))
-	margin.add_child(_vbox)
+	# メニューのルートコンテナ
+	_menu_root = Control.new()
+	_menu_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_menu_root)
 
 
 ## メニューを開く
@@ -72,7 +61,7 @@ func open(screen_position: Vector2, character: CharacterBody3D, is_multi_select:
 		# 既に開いている場合は即座にリセット（アニメーションなし、シグナルなし）
 		if _tween:
 			_tween.kill()
-		_panel.hide()
+		_menu_root.hide()
 		_is_open = false
 		# menu_closedは発火しない（新しいメニューを開くため）
 
@@ -93,34 +82,28 @@ func open(screen_position: Vector2, character: CharacterBody3D, is_multi_select:
 
 	# 位置を計算（画面端クリッピング対策）
 	await get_tree().process_frame  # サイズ計算を待つ
-	var menu_size = _panel.size
+	var menu_size = _menu_root.size
 	var viewport_size = get_viewport().get_visible_rect().size
 
-	var pos = screen_position
-	# 右端クリッピング
-	if pos.x + menu_size.x > viewport_size.x:
-		pos.x = viewport_size.x - menu_size.x - 10
-	# 下端クリッピング
-	if pos.y + menu_size.y > viewport_size.y:
-		pos.y = viewport_size.y - menu_size.y - 10
-	# 左端・上端
-	pos.x = max(10, pos.x)
-	pos.y = max(10, pos.y)
+	var pos = screen_position - (menu_size * 0.5)
+	# 画面端クリッピング
+	pos.x = clamp(pos.x, radial_padding, viewport_size.x - menu_size.x - radial_padding)
+	pos.y = clamp(pos.y, radial_padding, viewport_size.y - menu_size.y - radial_padding)
 
-	_panel.position = pos
+	_menu_root.position = pos
 
 	# アニメーション
 	show()
-	_panel.show()  # パネルも表示（リセット時にhide()されているため）
-	_panel.modulate.a = 0.0
-	_panel.scale = Vector2(0.9, 0.9)
+	_menu_root.show()  # リセット時にhide()されているため
+	_menu_root.modulate.a = 0.0
+	_menu_root.scale = Vector2(0.9, 0.9)
 
 	if _tween:
 		_tween.kill()
 	_tween = create_tween()
 	_tween.set_parallel(true)
-	_tween.tween_property(_panel, "modulate:a", 1.0, animation_duration)
-	_tween.tween_property(_panel, "scale", Vector2.ONE, animation_duration).set_ease(Tween.EASE_OUT)
+	_tween.tween_property(_menu_root, "modulate:a", 1.0, animation_duration)
+	_tween.tween_property(_menu_root, "scale", Vector2.ONE, animation_duration).set_ease(Tween.EASE_OUT)
 
 
 ## メニューを閉じる
@@ -136,8 +119,8 @@ func close() -> void:
 		_tween.kill()
 	_tween = create_tween()
 	_tween.set_parallel(true)
-	_tween.tween_property(_panel, "modulate:a", 0.0, animation_duration)
-	_tween.tween_property(_panel, "scale", Vector2(0.9, 0.9), animation_duration).set_ease(Tween.EASE_IN)
+	_tween.tween_property(_menu_root, "modulate:a", 0.0, animation_duration)
+	_tween.tween_property(_menu_root, "scale", Vector2(0.9, 0.9), animation_duration).set_ease(Tween.EASE_IN)
 	_tween.chain().tween_callback(hide)
 
 
@@ -204,8 +187,8 @@ func get_current_character() -> CharacterBody3D:
 
 ## パネルの矩形を取得（画面座標）
 func get_panel_rect() -> Rect2:
-	if _panel:
-		return Rect2(_panel.global_position, _panel.size)
+	if _menu_root:
+		return Rect2(_menu_root.global_position, _menu_root.size)
 	return Rect2()
 
 
@@ -213,18 +196,23 @@ func get_panel_rect() -> Rect2:
 func _rebuild_buttons() -> void:
 	# 既存ボタンをクリア（即座に削除してサイズを正しく計算）
 	for button in _buttons:
-		_vbox.remove_child(button)
+		_menu_root.remove_child(button)
 		button.queue_free()
 	_buttons.clear()
 
-	# VBoxContainerのサイズをリセット
-	_vbox.reset_size()
+	# メニューサイズを再計算
+	var button_extent = Vector2(button_size.x * 0.5, button_size.y * 0.5)
+	var menu_half_size = Vector2(radial_radius, radial_radius) + button_extent
+	_menu_root.custom_minimum_size = menu_half_size * 2.0
+	_menu_root.size = _menu_root.custom_minimum_size
 
 	# 新規ボタンを作成
 	for item in _items:
 		var button = Button.new()
 		button.text = item.display_name
 		button.custom_minimum_size = button_size
+		button.size = button_size
+		button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		button.disabled = not item.enabled
 		button.add_theme_font_size_override("font_size", font_size)
 
@@ -236,11 +224,13 @@ func _rebuild_buttons() -> void:
 		var action_id = item.action_id
 		button.pressed.connect(func(): _on_button_pressed(action_id))
 
-		_vbox.add_child(button)
+		_menu_root.add_child(button)
 		_buttons.append(button)
 
-	# パネルサイズをリセット
-	_panel.reset_size()
+	_update_radial_layout()
+
+	# サイズを確定
+	_menu_root.reset_size()
 
 
 ## ボタン押下時
@@ -261,8 +251,8 @@ func _gui_input(event: InputEvent) -> void:
 
 		if pressed and _is_open:
 			# パネル外をクリックした場合は閉じる
-			var local_pos = _panel.get_local_mouse_position()
-			var panel_rect = Rect2(Vector2.ZERO, _panel.size)
+			var local_pos = _menu_root.get_local_mouse_position()
+			var panel_rect = Rect2(Vector2.ZERO, _menu_root.size)
 			if not panel_rect.has_point(local_pos):
 				close()
 				get_viewport().set_input_as_handled()
@@ -273,3 +263,19 @@ func _update_dynamic_labels(character: CharacterBody3D) -> void:
 	if character and character.has_method("is_crouching"):
 		var is_crouching = character.is_crouching()
 		set_item_display_name("crouch", "Stand" if is_crouching else "Crouch")
+
+
+func _update_radial_layout() -> void:
+	if _buttons.is_empty():
+		return
+
+	var center = _menu_root.size * 0.5
+	var count = _buttons.size()
+	var angle_step = TAU / max(1, count)
+	var start_angle = deg_to_rad(radial_start_angle_degrees)
+
+	for i in range(count):
+		var angle = start_angle + angle_step * i
+		var offset = Vector2(cos(angle), sin(angle)) * radial_radius
+		var pos = center + offset - (button_size * 0.5)
+		_buttons[i].position = pos
