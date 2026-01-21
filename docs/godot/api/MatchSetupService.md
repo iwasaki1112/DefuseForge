@@ -23,6 +23,8 @@
 ### `spawn_characters() -> void`
 マッププリセットに基づいてCT/Tのキャラクターを生成する。
 
+内部で`GameManager.get_current_map_preset()`を使用し、キャラクターは`GameManager.get_character_parent()`配下に追加される。
+
 ### `setup_camera_for_player() -> void`
 プレイヤーキャラクターに合わせてカメラ位置を調整する。
 

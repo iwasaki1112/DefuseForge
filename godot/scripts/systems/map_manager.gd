@@ -89,7 +89,7 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 	if _game_manager:
 		_game_manager.fow_map_size = preset.map_size
 		if _game_manager.fog_of_war_system:
-			_game_manager.fog_of_war_system.map_size = preset.map_size
+			_game_manager.fog_of_war_system.set_map_size(preset.map_size)
 
 	# 壁キャッシュ無効化（VisionComponent用）
 	VisionComponent.invalidate_wall_cache()

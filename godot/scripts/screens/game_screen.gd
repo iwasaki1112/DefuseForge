@@ -64,13 +64,6 @@ func _setup_environment() -> void:
 		add_child(environment_setup)
 
 
-## プレイヤーチームをランダムに決定
-func _determine_player_team() -> void:
-	var teams = [GameCharacter.Team.COUNTER_TERRORIST, GameCharacter.Team.TERRORIST]
-	var random_team = teams[randi() % 2]
-	PlayerState.set_player_team(random_team)
-
-
 ## GameManagerのセットアップ
 func _setup_game_manager() -> void:
 	if game_manager == null:

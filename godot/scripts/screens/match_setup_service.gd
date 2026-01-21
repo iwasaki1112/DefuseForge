@@ -40,7 +40,7 @@ func spawn_characters() -> void:
 		push_error("[MatchSetup] Cannot spawn characters - no map loaded")
 		return
 
-	var preset = game_manager.map_manager.current_preset
+	var preset = game_manager.get_current_map_preset()
 	if not preset:
 		push_error("[MatchSetup] Cannot spawn characters - no map preset")
 		return
@@ -86,5 +86,6 @@ func _spawn_team_characters(presets: Array, spawn_points: Array) -> void:
 		var spawn_pos: Vector3 = spawn_points[i]
 		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
 		if character:
-			game_manager.add_child(character)
+			var character_parent = game_manager.get_character_parent()
+			character_parent.add_child(character)
 			game_manager.register_character(character)

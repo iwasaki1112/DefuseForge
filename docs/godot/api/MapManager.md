@@ -57,6 +57,7 @@ map_manager.setup(_map_container, self)
 
 - `auto_cleanup`: trueの場合、既存マップを自動アンロード（デフォルトtrue）
 - Returns: マップインスタンス、失敗時はnull
+- FogOfWarSystemのマップサイズ更新は`set_map_size()`経由で反映
 
 ```gdscript
 var map = map_manager.load_map("test_map")

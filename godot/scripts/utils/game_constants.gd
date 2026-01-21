@@ -21,7 +21,6 @@ const NODE_CONTEXT_MENU := "ContextMenu"
 const NODE_MARKER_EDIT_PANEL := "MarkerEditPanel"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
 const NODE_PATH_SERVICE := "PathService"
-const NODE_CHARACTER_SETUP := "CharacterSetupService"
 
 # ========================================================
 # Group Names

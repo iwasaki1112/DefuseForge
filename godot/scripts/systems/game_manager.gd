@@ -335,6 +335,11 @@ func get_current_map_id() -> String:
 	return map_manager.current_map_id if map_manager else ""
 
 
+## 現在のマッププリセットを取得
+func get_current_map_preset() -> MapPreset:
+	return map_manager.current_preset if map_manager else null
+
+
 ## 現在のマップサイズを取得
 func get_map_size() -> Vector2:
 	return map_manager.get_map_size() if map_manager else Vector2.ZERO
@@ -351,6 +356,11 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 	if not preset:
 		return []
 	return preset.spawn_points_ct if is_ct else preset.spawn_points_t
+
+
+## キャラクターを追加する親ノードを取得
+func get_character_parent() -> Node3D:
+	return _map_container if _map_container else _mesh_parent
 
 
 ## ========================================
@@ -525,7 +535,7 @@ func refresh_character_colors() -> void:
 func _setup_selection_manager() -> void:
 	if selection_manager == null:
 		selection_manager = CharacterSelectionManager.new()
-		selection_manager.name = "SelectionManager"
+		selection_manager.name = GameConstants.NODE_SELECTION_MANAGER
 		add_child(selection_manager)
 		selection_manager.selection_changed.connect(_on_selection_changed)
 		selection_manager.primary_changed.connect(_on_primary_changed)
@@ -534,7 +544,7 @@ func _setup_selection_manager() -> void:
 func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 	if path_execution_manager == null:
 		path_execution_manager = PathExecutionManager.new()
-		path_execution_manager.name = "PathExecutionManager"
+		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
 		add_child(path_execution_manager)
 		path_execution_manager.setup(mesh_parent)
 
@@ -542,7 +552,7 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 func _setup_idle_manager() -> void:
 	if idle_manager == null:
 		idle_manager = IdleCharacterManager.new()
-		idle_manager.name = "IdleCharacterManager"
+		idle_manager.name = GameConstants.NODE_IDLE_MANAGER
 		add_child(idle_manager)
 		idle_manager.setup(
 			characters,
@@ -555,7 +565,7 @@ func _setup_path_drawer() -> void:
 	if path_drawer == null:
 		path_drawer = Node3D.new()
 		path_drawer.set_script(PathDrawerScript)
-		path_drawer.name = "PathDrawer"
+		path_drawer.name = GameConstants.NODE_PATH_DRAWER
 		add_child(path_drawer)
 		path_drawer.setup(camera)
 
@@ -563,7 +573,7 @@ func _setup_path_drawer() -> void:
 func _setup_path_mode_controller() -> void:
 	if path_mode_controller == null:
 		path_mode_controller = PathModeController.new()
-		path_mode_controller.name = "PathModeController"
+		path_mode_controller.name = GameConstants.NODE_PATH_MODE_CONTROLLER
 		add_child(path_mode_controller)
 		path_mode_controller.setup(path_drawer, selection_manager, path_execution_manager)
 
@@ -572,7 +582,7 @@ func _setup_rotation_controller() -> void:
 	if rotation_controller == null:
 		rotation_controller = Node.new()
 		rotation_controller.set_script(RotationCtrl)
-		rotation_controller.name = "RotationController"
+		rotation_controller.name = GameConstants.NODE_ROTATION_CONTROLLER
 		add_child(rotation_controller)
 		rotation_controller.rotation_confirmed.connect(_on_rotation_confirmed)
 		rotation_controller.rotation_cancelled.connect(_on_rotation_cancelled)
@@ -581,7 +591,7 @@ func _setup_rotation_controller() -> void:
 func _setup_vision_service() -> void:
 	if vision_service == null:
 		vision_service = VisionServiceScript.new()
-		vision_service.name = "VisionService"
+		vision_service.name = GameConstants.NODE_VISION_SERVICE
 		add_child(vision_service)
 		vision_service.setup(fow_map_size, is_vision_enabled)
 		fog_of_war_system = vision_service.fog_of_war_system
@@ -591,7 +601,7 @@ func _setup_vision_service() -> void:
 func _setup_map_manager() -> void:
 	if map_manager == null:
 		map_manager = MapManager.new()
-		map_manager.name = "MapManager"
+		map_manager.name = GameConstants.NODE_MAP_MANAGER
 		add_child(map_manager)
 		map_manager.setup(_map_container, self)
 
@@ -600,7 +610,7 @@ func _setup_context_menu() -> void:
 	if context_menu == null:
 		context_menu = Control.new()
 		context_menu.set_script(ContextMenuScript)
-		context_menu.name = "ContextMenu"
+		context_menu.name = GameConstants.NODE_CONTEXT_MENU
 		_ui_layer.add_child(context_menu)
 		context_menu.setup_default_items()
 		context_menu.item_selected.connect(_on_context_menu_item_selected)
@@ -610,7 +620,7 @@ func _setup_marker_edit_panel() -> void:
 	if marker_edit_panel == null:
 		marker_edit_panel = VBoxContainer.new()
 		marker_edit_panel.set_script(MarkerEditPanelScript)
-		marker_edit_panel.name = "MarkerEditPanel"
+		marker_edit_panel.name = GameConstants.NODE_MARKER_EDIT_PANEL
 		_ui_layer.add_child(marker_edit_panel)
 
 		# 右側に配置
@@ -628,14 +638,14 @@ func _setup_marker_edit_panel() -> void:
 func _setup_label_manager() -> void:
 	if label_manager == null:
 		label_manager = CharacterLabelManager.new()
-		label_manager.name = "CharacterLabelManager"
+		label_manager.name = GameConstants.NODE_LABEL_MANAGER
 		add_child(label_manager)
 
 
 func _setup_path_service() -> void:
 	if path_service == null:
 		path_service = PathServiceScript.new()
-		path_service.name = "PathService"
+		path_service.name = GameConstants.NODE_PATH_SERVICE
 		add_child(path_service)
 		path_service.setup(
 			path_drawer,

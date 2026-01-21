@@ -118,6 +118,11 @@ func refresh_character_colors() -> void
 ```
 全キャラクターの色・ラベルを再割り当て（チーム変更時など）。
 
+```gdscript
+func get_character_parent() -> Node3D
+```
+キャラクターを追加する親ノードを取得（MapContainer優先）。
+
 ### 入力処理
 
 ```gdscript
@@ -157,6 +162,20 @@ func cancel_rotation() -> void
 
 ```gdscript
 func set_vision_enabled(enabled: bool) -> void
+```
+
+### マップ管理
+
+```gdscript
+func load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D
+func unload_map(cleanup_characters: bool = true) -> void
+func switch_map(new_map_id: String) -> Node3D
+func has_map() -> bool
+func get_current_map_id() -> String
+func get_current_map_preset() -> MapPreset
+func get_map_size() -> Vector2
+func get_spawn_points(is_ct: bool) -> Array[Vector3]
+func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]
 ```
 
 ### 毎フレーム処理
