@@ -69,6 +69,7 @@
 | UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
 | UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
 | UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
+| UI | WeaponShopModal | 武器購入モーダル（BUYメニュー） |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
 

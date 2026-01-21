@@ -15,6 +15,7 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 	{"id": "move", "name": "Move", "order": 0},
 	{"id": "rotate", "name": "Rotate", "order": 1},
 	{"id": "crouch", "name": "Crouch", "order": 2},
+	{"id": "buy", "name": "Buy", "order": 3},
 ]
 
 @export_group("外観設定")

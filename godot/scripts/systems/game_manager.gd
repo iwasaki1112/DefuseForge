@@ -8,6 +8,7 @@ const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
 const ContextMenuScript = preload("res://scripts/ui/context_menu_component.gd")
 const MarkerEditPanelScript = preload("res://scripts/ui/marker_edit_panel.gd")
+const WeaponShopModalScript = preload("res://scripts/ui/weapon_shop_modal.gd")
 const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
 const PathServiceScript = preload("res://scripts/systems/path_service.gd")
 const VisionServiceScript = preload("res://scripts/systems/vision_service.gd")
@@ -48,6 +49,7 @@ var vision_service: VisionService = null
 var context_menu: Control = null
 var marker_edit_panel: VBoxContainer = null
 var label_manager: CharacterLabelManager = null
+var weapon_shop_modal: Control = null
 
 ## 外部参照
 var camera: Camera3D = null
@@ -85,11 +87,12 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_map_manager()
 	_setup_context_menu()
 	_setup_marker_edit_panel()
+	_setup_weapon_shop_modal()
 	_setup_path_service()
 	_setup_label_manager()
 	_setup_character_setup_service()
 
-	print("[GameManager] Setup complete - 14 systems initialized")
+	print("[GameManager] Setup complete - 15 systems initialized")
 
 
 ## キャラクターを登録（視界・武器・色・ラベルも自動セットアップ）
@@ -635,6 +638,15 @@ func _setup_marker_edit_panel() -> void:
 		marker_edit_panel.visible = false
 
 
+func _setup_weapon_shop_modal() -> void:
+	if weapon_shop_modal == null:
+		weapon_shop_modal = Control.new()
+		weapon_shop_modal.set_script(WeaponShopModalScript)
+		weapon_shop_modal.name = GameConstants.NODE_WEAPON_SHOP_MODAL
+		_ui_layer.add_child(weapon_shop_modal)
+		weapon_shop_modal.weapon_purchased.connect(_on_weapon_purchased)
+
+
 func _setup_label_manager() -> void:
 	if label_manager == null:
 		label_manager = CharacterLabelManager.new()
@@ -753,6 +765,19 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 		"crouch":
 			if character.has_method("toggle_crouch"):
 				character.toggle_crouch()
+		"buy":
+			_open_weapon_shop(character)
 		_:
 			# その他のアクションは外部に通知
 			context_action_requested.emit(action_id, character)
+
+
+## 武器ショップを開く
+func _open_weapon_shop(character: CharacterBody3D) -> void:
+	if weapon_shop_modal:
+		weapon_shop_modal.open(character)
+
+
+## 武器購入完了時
+func _on_weapon_purchased(weapon: WeaponPreset, character: CharacterBody3D) -> void:
+	print("[GameManager] Weapon purchased: %s for %s" % [weapon.display_name, character.name])
