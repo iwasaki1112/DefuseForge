@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CharacterPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/character_preset.gd" id="1_preset"]
+[ext_resource type="PackedScene" path="res://assets/characters/counter_terrorist/alpha/alpha.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_preset")
+id = "alpha_ct"
+display_name = "Alpha"
+description = "Counter-Terrorist operative"
+team = 1
+model_scene = ExtResource("2_model")
+max_health = 100.0

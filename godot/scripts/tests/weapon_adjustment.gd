@@ -6,6 +6,7 @@ const WeaponPresetScript = preload("res://scripts/resources/weapon_preset.gd")
 const CharacterAnimationController = preload("res://scripts/animation/character_animation_controller.gd")
 
 # UI References
+@onready var character_option: OptionButton = $UI/Panel/VBox/CharacterOption
 @onready var weapon_option: OptionButton = $UI/Panel/VBox/WeaponOption
 @onready var pos_x_spin: SpinBox = $UI/Panel/VBox/PosX/SpinBox
 @onready var pos_x_slider: HSlider = $UI/Panel/VBox/PosX/HSlider
@@ -27,15 +28,18 @@ const CharacterAnimationController = preload("res://scripts/animation/character_
 
 # Data
 var character: GameCharacter
+var characters: Array[CharacterPresetScript] = []
 var weapons: Array[WeaponPresetScript] = []
+var current_character_idx: int = -1
 var current_weapon_idx: int = -1
 var _environment_setup: Node = null
+var _animation_library: AnimationLibrary = null
 
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
 func _ready() -> void:
 	_setup_environment()
-	_setup_scene()
+	_animation_library = _load_animation_library()
 	_load_data()
 	_setup_ui()
 	_setup_camera_buttons()
@@ -44,6 +48,10 @@ func _ready() -> void:
 	if camera:
 		camera.set_distance(3.0)
 		camera.set_yaw(0)  # Front view
+
+	# Select first character if available
+	if not characters.is_empty():
+		_select_character(0)
 
 	# Select first weapon if available
 	if not weapons.is_empty():
@@ -66,13 +74,15 @@ func _process(delta: float) -> void:
 			# Look towards -Z (facing the camera at front view)
 			anim_ctrl.update_animation(Vector3.ZERO, Vector3.BACK, false, delta)
 
-func _setup_scene() -> void:
-	# Load Dummy CT Character
-	var preset_path = "res://data/characters/dummy_ct.tres"
-	var preset = load(preset_path) as CharacterPresetScript
+func _setup_scene(preset: CharacterPresetScript) -> void:
 	if not preset:
 		printerr("Failed to load character preset")
 		return
+
+	# Remove existing character if any
+	if character:
+		character.queue_free()
+		character = null
 
 	var model = preset.model_scene.instantiate()
 	character = GameCharacterScript.new()
@@ -89,12 +99,11 @@ func _setup_scene() -> void:
 		anim_player.name = "AnimationPlayer"
 		model.add_child(anim_player)
 
-	# Load shared animation library
-	var anim_lib = _load_animation_library()
-	if anim_lib:
+	# Apply shared animation library
+	if _animation_library:
 		if anim_player.has_animation_library(""):
 			anim_player.remove_animation_library("")
-		anim_player.add_animation_library("", anim_lib)
+		anim_player.add_animation_library("", _animation_library)
 
 	var anim_ctrl = CharacterAnimationController.new()
 	character.add_child(anim_ctrl)
@@ -137,11 +146,26 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 	return null
 
 func _load_data() -> void:
+	# Load character presets from directory
+	var char_dir = DirAccess.open("res://data/characters/")
+	if char_dir:
+		char_dir.list_dir_begin()
+		var file_name = char_dir.get_next()
+		while file_name != "":
+			if not char_dir.current_is_dir() and file_name.ends_with(".tres"):
+				var path = "res://data/characters/" + file_name
+				var c = load(path) as CharacterPresetScript
+				if c:
+					characters.append(c)
+			file_name = char_dir.get_next()
+		char_dir.list_dir_end()
+
+	# Load weapon presets
 	var weapon_paths = [
 		"res://data/weapons/ak47.tres",
 		"res://data/weapons/glock.tres"
 	]
-	
+
 	for path in weapon_paths:
 		if ResourceLoader.exists(path):
 			var w = load(path) as WeaponPresetScript
@@ -149,10 +173,16 @@ func _load_data() -> void:
 				weapons.append(w)
 
 func _setup_ui() -> void:
+	# Setup character dropdown
+	character_option.clear()
+	for c in characters:
+		character_option.add_item(c.display_name)
+	character_option.item_selected.connect(_select_character)
+
+	# Setup weapon dropdown
 	weapon_option.clear()
 	for w in weapons:
 		weapon_option.add_item(w.display_name)
-	
 	weapon_option.item_selected.connect(_select_weapon)
 	
 	# Connect signals for Position
@@ -172,6 +202,20 @@ func _setup_ui() -> void:
 	rot_z_spin.value_changed.connect(func(v): rot_z_slider.value = v; _update_transform())
 	
 	copy_button.pressed.connect(_copy_values)
+
+func _select_character(idx: int) -> void:
+	if idx < 0 or idx >= characters.size():
+		return
+
+	current_character_idx = idx
+	var preset = characters[idx]
+
+	_setup_scene(preset)
+
+	# Re-equip current weapon if any
+	if current_weapon_idx >= 0 and current_weapon_idx < weapons.size():
+		_select_weapon(current_weapon_idx)
+
 
 func _select_weapon(idx: int) -> void:
 	if idx < 0 or idx >= weapons.size():
