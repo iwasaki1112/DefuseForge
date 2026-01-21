@@ -31,10 +31,10 @@ var is_alive: bool = true
 # ============================================
 # References
 # ============================================
-var anim_ctrl: Node = null  # CharacterAnimationController
+var anim_ctrl: CharacterAnimationController = null  # CharacterAnimationController
 var vision: VisionComponent = null  # VisionComponent for FoW
-var combat_awareness: Node = null  # CombatAwarenessComponent for enemy tracking
-var current_weapon: Resource = null  # WeaponPreset
+var combat_awareness: CombatAwarenessComponent = null  # CombatAwarenessComponent for enemy tracking
+var current_weapon: WeaponPreset = null  # WeaponPreset
 var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
 
@@ -96,11 +96,11 @@ func is_enemy_of(other: GameCharacter) -> bool:
 # ============================================
 
 ## Set CharacterAnimationController
-func set_anim_controller(controller: Node) -> void:
+func set_anim_controller(controller: CharacterAnimationController) -> void:
 	anim_ctrl = controller
 
 ## Get CharacterAnimationController
-func get_anim_controller() -> Node:
+func get_anim_controller() -> CharacterAnimationController:
 	return anim_ctrl
 
 # ============================================
@@ -109,8 +109,8 @@ func get_anim_controller() -> Node:
 
 ## Check if character is crouching
 func is_crouching() -> bool:
-	if anim_ctrl and anim_ctrl.has_method("get_stance"):
-		return anim_ctrl.get_stance() == 1  # Stance.CROUCH
+	if anim_ctrl:
+		return anim_ctrl.get_stance() == CharacterAnimationController.Stance.CROUCH
 	return false
 
 
@@ -118,12 +118,10 @@ func is_crouching() -> bool:
 func toggle_crouch() -> void:
 	if not anim_ctrl:
 		return
-	if not anim_ctrl.has_method("set_stance") or not anim_ctrl.has_method("get_stance"):
-		return
 
 	var current = anim_ctrl.get_stance()
 	# Stance.STAND = 0, Stance.CROUCH = 1
-	anim_ctrl.set_stance(0 if current == 1 else 1)
+	anim_ctrl.set_stance(CharacterAnimationController.Stance.STAND if current == CharacterAnimationController.Stance.CROUCH else CharacterAnimationController.Stance.CROUCH)
 
 
 # ============================================
@@ -154,11 +152,9 @@ func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent
 # ============================================
 
 ## Setup combat awareness component (auto-create if not exists)
-func setup_combat_awareness() -> Node:
+func setup_combat_awareness() -> CombatAwarenessComponent:
 	if combat_awareness == null:
-		var CombatAwarenessScript = preload("res://scripts/characters/combat_awareness_component.gd")
-		combat_awareness = Node.new()
-		combat_awareness.set_script(CombatAwarenessScript)
+		combat_awareness = CombatAwarenessComponent.new()
 		combat_awareness.name = "CombatAwarenessComponent"
 		add_child(combat_awareness)
 		combat_awareness.setup(self)
@@ -166,7 +162,7 @@ func setup_combat_awareness() -> Node:
 
 
 ## Get CombatAwarenessComponent
-func get_combat_awareness() -> Node:
+func get_combat_awareness() -> CombatAwarenessComponent:
 	return combat_awareness
 
 # ============================================
@@ -222,7 +218,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 
 
 ## Attach weapon model to right hand
-func _attach_weapon_model(weapon: Resource) -> void:
+func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	# Remove old weapon model
 	if _weapon_model:
 		_weapon_model.queue_free()
@@ -262,7 +258,7 @@ func _attach_weapon_model(weapon: Resource) -> void:
 ## Equip a weapon from WeaponPreset
 ## Applies weapon type and recoil settings to CharacterAnimationController
 ## Also attaches weapon model to right hand bone
-func equip_weapon(weapon: Resource) -> void:
+func equip_weapon(weapon: WeaponPreset) -> void:
 	current_weapon = weapon
 
 	# Attach weapon model to right hand
@@ -274,17 +270,16 @@ func equip_weapon(weapon: Resource) -> void:
 	# Convert WeaponCategory to CharacterAnimationController.Weapon
 	# WeaponCategory: RIFLE=0, PISTOL=1, SMG=2, SHOTGUN=3, SNIPER=4
 	# Weapon: NONE=0, RIFLE=1, PISTOL=2
-	var weapon_type: int = 1  # Default to RIFLE
-	if weapon.category == 1:  # PISTOL
-		weapon_type = 2
+	var weapon_type: CharacterAnimationController.Weapon = CharacterAnimationController.Weapon.RIFLE
+	if weapon.category == WeaponPreset.WeaponCategory.PISTOL:
+		weapon_type = CharacterAnimationController.Weapon.PISTOL
 
-	if anim_ctrl.has_method("set_weapon"):
-		anim_ctrl.set_weapon(weapon_type)
+	anim_ctrl.set_weapon(weapon_type)
 
 	# Apply recoil settings directly to controller
 	if "rifle_recoil_strength" in anim_ctrl:
 		# Apply weapon's recoil to both rifle/pistol slots based on category
-		if weapon.category == 1:  # PISTOL
+		if weapon.category == WeaponPreset.WeaponCategory.PISTOL:
 			anim_ctrl.pistol_recoil_strength = weapon.recoil_strength
 		else:
 			anim_ctrl.rifle_recoil_strength = weapon.recoil_strength
@@ -293,7 +288,7 @@ func equip_weapon(weapon: Resource) -> void:
 		anim_ctrl.recoil_recovery = weapon.recoil_recovery
 
 ## Get current weapon
-func get_current_weapon() -> Resource:
+func get_current_weapon() -> WeaponPreset:
 	return current_weapon
 
 # ============================================
