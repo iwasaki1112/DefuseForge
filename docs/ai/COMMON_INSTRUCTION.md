@@ -63,6 +63,7 @@
 | Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | Effect | RunMarker | Run区間の開始/終点を示すマーカー |
 | Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー |
+| Effect | CharacterSelectedMarker | 選択中キャラクター足元の回転マーカー |
 | Util | PathSmoother | RDP間引き＋Catmull-Rom補間でパススムージング |
 | Registry | CharacterRegistry | プリセット管理＋キャラクター生成（Autoload） |
 | Registry | WeaponRegistry | 武器プリセット管理（Autoload） |

@@ -19,6 +19,8 @@ var path_target_characters: Array[Node] = []
 var _outlined_meshes_by_character: Dictionary = {}
 ## 元のマテリアルオーバーライドを保存 { character_id: { mesh_instance_id: { surface_index: Material } } }
 var _original_materials_by_character: Dictionary = {}
+## 選択マーカー { character_id: CharacterSelectedMarker }
+var _selection_markers: Dictionary = {}
 
 ## アウトライン設定
 var outline_color: Color = Color(0.0, 0.8, 1.0, 1.0)
@@ -153,6 +155,10 @@ func _apply_outline(character: Node) -> void:
 
 	_outlined_meshes_by_character[char_id] = outlined
 	_original_materials_by_character[char_id] = original_materials
+
+	# 選択マーカーを作成
+	_create_selection_marker(character)
+
 	print("[Outline] Applied outline to %s (%d meshes)" % [character.name, outlined.size()])
 
 
@@ -178,6 +184,10 @@ func _remove_outline(character: Node) -> void:
 
 	_outlined_meshes_by_character.erase(char_id)
 	_original_materials_by_character.erase(char_id)
+
+	# 選択マーカーを削除
+	_remove_selection_marker(character)
+
 	print("[Outline] Removed outline from %s" % character.name)
 
 
@@ -200,6 +210,9 @@ func clear_all_outlines() -> void:
 	_outlined_meshes_by_character.clear()
 	_original_materials_by_character.clear()
 
+	# 全ての選択マーカーを削除
+	_clear_all_selection_markers()
+
 
 ## MeshInstance3Dを再帰的に探す（WeaponAttachmentは除外）
 func _find_mesh_instances(node: Node) -> Array[MeshInstance3D]:
@@ -214,3 +227,50 @@ func _find_mesh_instances(node: Node) -> Array[MeshInstance3D]:
 	for child in node.get_children():
 		result.append_array(_find_mesh_instances(child))
 	return result
+
+
+## 選択マーカーを作成
+func _create_selection_marker(character: Node) -> void:
+	var char_id = character.get_instance_id()
+
+	# 既にマーカーがある場合はスキップ
+	if _selection_markers.has(char_id):
+		return
+
+	var marker: CharacterSelectedMarker = CharacterSelectedMarker.new()
+	marker.attach_to_character(character)
+
+	# シーンツリーに追加（キャラクターの親に追加して独立して動作させる）
+	var parent: Node = character.get_parent()
+	if parent:
+		parent.add_child(marker)
+	else:
+		add_child(marker)
+
+	_selection_markers[char_id] = marker
+	print("[SelectionMarker] Created marker for %s" % character.name)
+
+
+## 選択マーカーを削除
+func _remove_selection_marker(character: Node) -> void:
+	var char_id = character.get_instance_id()
+
+	if not _selection_markers.has(char_id):
+		return
+
+	var marker: CharacterSelectedMarker = _selection_markers[char_id]
+	if is_instance_valid(marker):
+		marker.queue_free()
+
+	_selection_markers.erase(char_id)
+	print("[SelectionMarker] Removed marker for %s" % character.name)
+
+
+## 全ての選択マーカーを削除
+func _clear_all_selection_markers() -> void:
+	for char_id in _selection_markers.keys():
+		var marker: CharacterSelectedMarker = _selection_markers[char_id]
+		if is_instance_valid(marker):
+			marker.queue_free()
+
+	_selection_markers.clear()

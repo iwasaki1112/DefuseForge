@@ -1,4 +1,15 @@
 extends Node3D
+## 武器位置調整用ツールシーン
+##
+## キャラクターに武器を持たせ、位置・回転オフセットをリアルタイムに調整する機能を提供する。
+## 調整した値はクリップボードにコピー可能。
+## 
+## 主な機能:
+## - キャラクターの切り替え
+## - 武器の切り替え
+## - 武器のアタッチ位置(Offset)・回転(Rotation)の調整
+## - カメラアングル操作
+## - 調整値のテキスト出力とコピー
 
 const GameCharacterScript = preload("res://scripts/characters/game_character.gd")
 const CharacterPresetScript = preload("res://scripts/resources/character_preset.gd")
