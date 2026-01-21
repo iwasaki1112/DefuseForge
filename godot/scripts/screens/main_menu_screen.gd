@@ -7,6 +7,7 @@ extends Control
 
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const OPTION_SCENE := "res://scenes/screens/option.tscn"
+const ScreenLayout := preload("res://scripts/ui/screen_layout.gd")
 
 var _welcome_label: Label
 
@@ -18,20 +19,9 @@ func _ready() -> void:
 
 
 func _setup_ui() -> void:
-	# 背景色
-	var bg := ColorRect.new()
-	bg.color = Color(0.1, 0.1, 0.15, 1.0)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-
-	# メインコンテナ（中央揃え）
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 30)
-	center.add_child(vbox)
+	# 背景と中央配置の共通レイアウト
+	ScreenLayout.add_solid_background(self)
+	var vbox := ScreenLayout.create_centered_vbox(self, 30)
 
 	# タイトル
 	var title := Label.new()

@@ -25,8 +25,8 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 @export var recoil_recovery := 10.0
 
 @export_group("Bone Names")
-@export var upper_body_root := "mixamorig_Spine1"
-@export var spine_bone := "mixamorig_Spine2"
+@export var upper_body_root := GameConstants.BONE_SPINE_1
+@export var spine_bone := GameConstants.BONE_SPINE_2
 
 # Internal references
 var _model: Node3D
@@ -51,7 +51,7 @@ const ANIM_REF_RUN := 5.5         # Sprint animation (15 frames at 30fps = 0.5s)
 const ANIM_REF_CROUCH := 1.5      # Crouch walk
 
 # Death animation name
-const DEATH_ANIM := "death"
+const DEATH_ANIM := GameConstants.ANIM_DEATH
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -302,10 +302,10 @@ func _setup_animation_loops() -> void:
 
 func _setup_animation_tree() -> void:
 	# Create or get AnimationTree
-	_anim_tree = _model.get_node_or_null("AnimationTree") as AnimationTree
+	_anim_tree = _model.get_node_or_null(GameConstants.NODE_ANIMATION_TREE) as AnimationTree
 	if not _anim_tree:
 		_anim_tree = AnimationTree.new()
-		_anim_tree.name = "AnimationTree"
+		_anim_tree.name = GameConstants.NODE_ANIMATION_TREE
 		_model.get_parent().add_child(_anim_tree)
 
 	var blend_tree := AnimationNodeBlendTree.new()

@@ -505,6 +505,8 @@ func clear() -> void:
 	_is_drawing = false
 	_is_drawing_vision = false
 	_drawing_mode = DrawingMode.MOVEMENT
+	_pending_path.clear()
+	_pending_character = null
 	_clear_vision_points()
 	_clear_run_markers()
 	# マルチキャラクターモードもクリア

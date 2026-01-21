@@ -9,10 +9,11 @@ signal map_selected(preset_id: String)
 
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const GAME_SCENE := "res://scenes/screens/game.tscn"
+const ScreenLayout := preload("res://scripts/ui/screen_layout.gd")
 
 var _map_container: GridContainer
 var _selected_map_id: String = ""
-var _map_cards: Dictionary = {}  # { map_id: Control }
+var _map_cards: Dictionary[String, PanelContainer] = {}  # { map_id: PanelContainer }
 var _start_btn: Button
 
 
@@ -23,10 +24,7 @@ func _ready() -> void:
 
 func _setup_ui() -> void:
 	# 背景色
-	var bg := ColorRect.new()
-	bg.color = Color(0.1, 0.1, 0.15, 1.0)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	ScreenLayout.add_solid_background(self)
 
 	# メインコンテナ
 	var main_vbox := VBoxContainer.new()

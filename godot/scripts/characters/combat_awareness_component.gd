@@ -1,4 +1,5 @@
 extends Node
+class_name CombatAwarenessComponent
 ## Combat Awareness Component
 ## Handles individual character enemy detection and tracking
 ## Automatically detects enemies in vision cone and provides aim direction override

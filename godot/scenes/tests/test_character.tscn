@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://dpp5no3qcgw0c"]
+[gd_scene load_steps=7 format=3 uid="uid://bxg25fpyknax5"]
 
 [ext_resource type="Script" path="res://scripts/tests/test_character_selector.gd" id="1_script"]
 
