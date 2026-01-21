@@ -8,16 +8,16 @@ extends Node3D
 ## 描画モード
 enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER }
 
-## 視線ポイントデータ
-## { "path_ratio": float, "anchor": Vector3, "direction": Vector3 }
+## 視線ポイントデータ（ターゲットポイントモード）
+## { "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }
 
 ## Run区間データ
 ## { "start_ratio": float, "end_ratio": float }
 
 signal drawing_finished(points: PackedVector3Array)
 
-## 視線ポイント用シグナル
-signal vision_point_added(anchor: Vector3, direction: Vector3)
+## 視線ポイント用シグナル（target_pointはキャラクターが見続ける地点）
+signal vision_point_added(anchor: Vector3, target_point: Vector3)
 signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER
 
 ## Runマーカー用シグナル
@@ -170,9 +170,8 @@ func _handle_vision_point_input(event: InputEvent) -> void:
 		if _is_drawing_vision:
 			var ground_pos = _get_ground_position(event.position)
 			if ground_pos != null:
-				var direction = (ground_pos - _current_vision_anchor).normalized()
-				direction.y = 0
-				_update_temp_vision_marker(_current_vision_anchor, direction)
+				# ターゲットポイントモード: ドラッグ位置をターゲット地点として表示
+				_update_temp_vision_marker(_current_vision_anchor, ground_pos)
 
 
 ## Runマーカー設定の入力処理
@@ -328,13 +327,17 @@ func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
 	return { "point": closest_point, "distance": closest_distance, "ratio": closest_ratio }
 
 
-## 視線ポイントの設定を完了
+## 視線ポイントの設定を完了（ターゲットポイントモード）
+## end_posがターゲット地点として保存される
 func _finish_vision_point(end_pos: Vector3) -> void:
-	var direction = (end_pos - _current_vision_anchor).normalized()
+	var target_point = end_pos
+	target_point.y = 0  # 地面高さに正規化
+
+	var direction = (target_point - _current_vision_anchor)
 	direction.y = 0
 
 	if direction.length_squared() < 0.001:
-		print("[PathDrawer] Vision direction too short")
+		print("[PathDrawer] Vision target too close to anchor")
 		# 一時マーカーがあれば削除
 		_remove_temp_vision_marker()
 		return
@@ -342,11 +345,11 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	# 一時マーカーを削除（新しいマーカーを正しい位置に挿入するため）
 	_remove_temp_vision_marker()
 
-	# 視線ポイントを追加（path_ratio順にソート）
+	# 視線ポイントを追加（path_ratio順にソート）- ターゲットポイントモード
 	var new_point = {
 		"path_ratio": _current_vision_ratio,
 		"anchor": _current_vision_anchor,
-		"direction": direction
+		"target_point": target_point  # directionではなくtarget_pointを保存
 	}
 
 	# マルチキャラクターモードの場合、アクティブキャラクターのデータに追加
@@ -366,12 +369,12 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 
 			vision_points.insert(insert_index, new_point)
 
-			# 視線マーカーを作成
-			var marker = _create_vision_marker_node(_current_vision_anchor, direction)
+			# 視線マーカーを作成（ターゲットポイントモード）
+			var marker = _create_vision_marker_node(_current_vision_anchor, target_point)
 			vision_meshes.insert(insert_index, marker)
 
-			vision_point_added.emit(_current_vision_anchor, direction)
-			print("[PathDrawer] Vision point added for %s at ratio %.2f" % [_active_edit_character.name, _current_vision_ratio])
+			vision_point_added.emit(_current_vision_anchor, target_point)
+			print("[PathDrawer] Vision point (target mode) added for %s at ratio %.2f" % [_active_edit_character.name, _current_vision_ratio])
 			return
 
 	# シングルモードの場合は従来通り
@@ -384,10 +387,10 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	_vision_points.insert(insert_index, new_point)
 
 	# 視線マーカーを作成（同じ挿入位置に）
-	_create_vision_marker_at_index(_current_vision_anchor, direction, insert_index)
+	_create_vision_marker_at_index(_current_vision_anchor, target_point, insert_index)
 
-	vision_point_added.emit(_current_vision_anchor, direction)
-	print("[PathDrawer] Vision point added at ratio %.2f" % _current_vision_ratio)
+	vision_point_added.emit(_current_vision_anchor, target_point)
+	print("[PathDrawer] Vision point (target mode) added at ratio %.2f" % _current_vision_ratio)
 
 
 ## 視線マーカーを作成（末尾に追加）
@@ -395,17 +398,21 @@ func _create_vision_marker(anchor: Vector3, direction: Vector3) -> void:
 	_create_vision_marker_at_index(anchor, direction, _vision_meshes.size())
 
 
-## 視線マーカーノードを作成して返す（マルチキャラクター用）
-func _create_vision_marker_node(anchor: Vector3, direction: Vector3) -> MeshInstance3D:
+## 視線マーカーノードを作成して返す（ターゲットポイントモード対応）
+## @param anchor: パス上のアンカー位置
+## @param target_point: ターゲット地点（キャラクターが見続ける位置）
+func _create_vision_marker_node(anchor: Vector3, target_point: Vector3) -> MeshInstance3D:
 	var marker = MeshInstance3D.new()
 	marker.set_script(VisionMarkerScript)
 	add_child(marker)
 
-	# マーカーの位置と方向を設定
-	marker.set_position_and_direction(anchor, direction)
+	# マーカーの位置とターゲットを設定（ターゲットポイントモード）
+	marker.set_position_and_target(anchor, target_point)
 
 	# キャラクター色を適用
 	marker.set_colors(_character_color, Color.WHITE)
+	# ターゲット線の色もキャラクター色に基づいて設定
+	marker.set_target_line_color(Color(_character_color.r, _character_color.g * 0.7, _character_color.b * 0.5, 0.8))
 
 	return marker
 
@@ -424,21 +431,25 @@ func _remove_temp_vision_marker() -> void:
 		temp_marker.queue_free()
 
 
-## 一時的な視線マーカーを更新（ドラッグ中）
-func _update_temp_vision_marker(anchor: Vector3, direction: Vector3) -> void:
+## 一時的な視線マーカーを更新（ドラッグ中）- ターゲットポイントモード
+## @param anchor: パス上のアンカー位置
+## @param target_point: ターゲット地点（ドラッグ先）
+func _update_temp_vision_marker(anchor: Vector3, target_point: Vector3) -> void:
 	# 最後のマーカーが一時的なものかチェック
 	if _vision_meshes.size() > _vision_points.size():
 		var temp_marker = _vision_meshes[-1]
-		temp_marker.set_position_and_direction(anchor, direction)
+		temp_marker.set_position_and_target(anchor, target_point)
 	else:
 		# 一時的なマーカーを作成
 		var marker = MeshInstance3D.new()
 		marker.set_script(VisionMarkerScript)
 		add_child(marker)
 		_vision_meshes.append(marker)
-		marker.set_position_and_direction(anchor, direction)
+		marker.set_position_and_target(anchor, target_point)
 		# キャラクター色を適用
 		marker.set_colors(_character_color, Color.WHITE)
+		# ターゲット線の色もキャラクター色に基づいて設定
+		marker.set_target_line_color(Color(_character_color.r, _character_color.g * 0.7, _character_color.b * 0.5, 0.8))
 
 
 func _start_drawing(start_pos: Vector3) -> void:
@@ -563,7 +574,7 @@ func get_relative_path() -> PackedVector3Array:
 	return relative
 
 
-## 相対視線ポイントを取得（アンカー位置を相対座標に変換）
+## 相対視線ポイントを取得（アンカー位置とターゲット位置を相対座標に変換）
 func get_relative_vision_points() -> Array[Dictionary]:
 	if _pending_path.size() < 2:
 		return []
@@ -573,7 +584,7 @@ func get_relative_vision_points() -> Array[Dictionary]:
 		relative_points.append({
 			"path_ratio": vp.path_ratio,
 			"anchor": vp.anchor - start,  # 相対座標に変換
-			"direction": vp.direction  # 方向はそのまま
+			"target_point": vp.target_point - start  # ターゲット地点も相対座標に変換
 		})
 	return relative_points
 
@@ -623,7 +634,9 @@ func get_drawing_mode() -> DrawingMode:
 ## 視線ポイントモード API
 ## ========================================
 
-## 視線ポイント設定モードに切り替え
+## 視線ポイント設定モードに切り替え（ターゲットポイントモード）
+## パス上をクリック→ドラッグでターゲット地点を設定
+## キャラクターはマーカー到達後、移動しながらターゲット地点を見続ける
 func start_vision_mode() -> bool:
 	if _pending_path.size() < 2:
 		print("[PathDrawer] Cannot start vision mode: no movement path set")
@@ -632,7 +645,7 @@ func start_vision_mode() -> bool:
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
 	mode_changed.emit(int(DrawingMode.VISION_POINT))
-	print("[PathDrawer] Switched to vision point mode - click on path to set look direction")
+	print("[PathDrawer] Switched to vision point mode - click on path and drag to set target point")
 	return true
 
 

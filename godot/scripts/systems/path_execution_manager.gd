@@ -380,7 +380,7 @@ func _calculate_path_length(path: Array[Vector3]) -> float:
 	return length
 
 
-## 接続線を考慮して視線ポイントの比率を調整
+## 接続線を考慮して視線ポイントの比率を調整（ターゲットポイントモード対応）
 func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
 	if connect_length < 0.01 or base_length < 0.01:
 		return vision_points.duplicate()
@@ -392,11 +392,21 @@ func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_len
 		var old_ratio: float = vp.path_ratio
 		# 新しい比率 = (接続線の長さ + 元の比率 * 元のパス長さ) / 新しいパス長さ
 		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
-		adjusted.append({
-			"path_ratio": new_ratio,
-			"anchor": vp.anchor,
-			"direction": vp.direction
-		})
+
+		# ターゲットポイントモードか固定方向モードかをチェック
+		if vp.has("target_point"):
+			adjusted.append({
+				"path_ratio": new_ratio,
+				"anchor": vp.anchor,
+				"target_point": vp.target_point  # ターゲット地点はそのまま（絶対座標）
+			})
+		elif vp.has("direction"):
+			# 後方互換: 固定方向モード
+			adjusted.append({
+				"path_ratio": new_ratio,
+				"anchor": vp.anchor,
+				"direction": vp.direction
+			})
 
 	return adjusted
 
@@ -475,7 +485,7 @@ func _calculate_position_on_path(path: Array[Vector3], ratio: float) -> Vector3:
 	return path[path.size() - 1]
 
 
-## 調整済み視線ポイントから新しいVisionMarkerを生成
+## 調整済み視線ポイントから新しいVisionMarkerを生成（ターゲットポイントモード対応）
 func _create_vision_markers_for_path(
 	path: Array[Vector3],
 	adjusted_vision_points: Array[Dictionary],
@@ -485,7 +495,6 @@ func _create_vision_markers_for_path(
 
 	for vp in adjusted_vision_points:
 		var ratio: float = vp.path_ratio
-		var direction: Vector3 = vp.direction
 
 		# パス上の位置を計算
 		var anchor = _calculate_position_on_path(path, ratio)
@@ -495,13 +504,21 @@ func _create_vision_markers_for_path(
 		marker.set_script(VisionMarkerScript)
 		_mesh_parent.add_child(marker)
 
-		# 位置と方向を設定
-		marker.set_position_and_direction(anchor, direction)
-
-		# キャラクター色を適用
+		# キャラクター色を取得
 		var char_color = CharacterColorManager.get_character_color(character)
-		# 背景は暗い色、矢印はキャラクター色
 		var bg_color = Color(char_color.r * 0.3, char_color.g * 0.3, char_color.b * 0.3, 0.95)
+
+		# ターゲットポイントモードか固定方向モードかをチェック
+		if vp.has("target_point"):
+			# ターゲットポイントモード
+			marker.set_position_and_target(anchor, vp.target_point)
+			# ターゲット線の色を設定
+			marker.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
+		elif vp.has("direction"):
+			# 後方互換: 固定方向モード
+			marker.set_position_and_direction(anchor, vp.direction)
+
+		# 背景は暗い色、矢印はキャラクター色
 		marker.set_colors(bg_color, char_color)
 
 		markers.append(marker)

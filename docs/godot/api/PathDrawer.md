@@ -14,7 +14,7 @@
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `drawing_finished` | `points: PackedVector3Array` | パス描画完了時 |
-| `vision_point_added` | `anchor: Vector3, direction: Vector3` | 視線ポイント追加時 |
+| `vision_point_added` | `anchor: Vector3, target_point: Vector3` | 視線ポイント追加時（target_pointはターゲット地点） |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
 | `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER） |
 
@@ -84,9 +84,9 @@ PathDrawerを無効化する。
 **戻り値:** パスの最初のポイントを原点とした相対座標の配列
 
 #### get_relative_vision_points() -> Array[Dictionary]
-相対視線ポイントを取得する（アンカー位置を相対座標に変換）。
+相対視線ポイントを取得する（アンカー位置とターゲット位置を相対座標に変換）。
 
-**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "direction": Vector3 }` の配列（anchorは相対座標）
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }` の配列（anchor, target_pointは相対座標）
 
 #### is_drawing() -> bool
 現在描画中か確認する。
@@ -112,7 +112,8 @@ path_drawer.set_character_color(char_color)
 ### Vision Point API
 
 #### start_vision_mode() -> bool
-視線ポイント設定モードに切り替える。
+視線ポイント設定モード（ターゲットポイントモード）に切り替える。
+パス上をクリック→ドラッグでターゲット地点を設定する。キャラクターはマーカー到達後、移動しながらターゲット地点を見続ける。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
@@ -125,7 +126,7 @@ path_drawer.set_character_color(char_color)
 #### get_vision_points() -> Array[Dictionary]
 視線ポイントを取得する。
 
-**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "direction": Vector3 }` の配列
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }` の配列
 
 #### get_vision_point_count() -> int
 視線ポイント数を取得する。
@@ -305,14 +306,16 @@ path_execution_manager.confirm_path(selected_characters, path_drawer, char_a)
 
 ## データ形式
 
-### 視線ポイント
+### 視線ポイント（ターゲットポイントモード）
 ```gdscript
 {
     "path_ratio": 0.5,      # パス上の位置（0.0〜1.0）
-    "anchor": Vector3(...), # アンカー位置
-    "direction": Vector3(...)  # 視線方向（正規化済み）
+    "anchor": Vector3(...), # アンカー位置（マーカーの位置）
+    "target_point": Vector3(...)  # ターゲット地点（キャラクターが見続ける位置）
 }
 ```
+
+キャラクターはマーカー到達後、`target_point`を動的に見続ける。移動中も常に`target_point`への方向を計算し直す。
 
 ### Run区間
 ```gdscript

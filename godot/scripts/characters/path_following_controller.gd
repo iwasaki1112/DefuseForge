@@ -31,6 +31,7 @@ var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
+var _active_target_point: Vector3 = Vector3.ZERO  # ターゲットポイントモード用
 
 ## スタック検出用
 var _last_position: Vector3 = Vector3.ZERO
@@ -78,6 +79,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_is_running = run
 	_is_following = true
 	_forced_look_direction = Vector3.ZERO
+	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
 	_last_move_direction = Vector3.ZERO
 	_last_position = _character.global_position
 	_stuck_time = 0.0
@@ -116,6 +118,7 @@ func cancel() -> void:
 	_vision_points.clear()
 	_run_segments.clear()
 	_forced_look_direction = Vector3.ZERO
+	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 
 	path_cancelled.emit()
@@ -264,10 +267,14 @@ func process(delta: float) -> void:
 	_character.move_and_slide()
 
 
-## 視線方向を更新
+## 視線方向を更新（ターゲットポイントモード対応）
 func _update_vision_direction() -> void:
 	if _vision_points.size() == 0:
-		_forced_look_direction = Vector3.ZERO
+		# ターゲットポイントが設定されている場合、動的に方向を計算
+		if _active_target_point.length_squared() > 0.001:
+			_calculate_direction_to_target()
+		else:
+			_forced_look_direction = Vector3.ZERO
 		return
 
 	var progress = _calculate_path_progress()
@@ -275,11 +282,39 @@ func _update_vision_direction() -> void:
 	while _vision_index < _vision_points.size():
 		var vp = _vision_points[_vision_index]
 		if progress >= vp.path_ratio:
-			_forced_look_direction = vp.direction
-			vision_point_reached.emit(_vision_index, vp.direction)
+			# ターゲットポイントモードかどうかをチェック
+			if vp.has("target_point"):
+				# ターゲットポイントを保存（毎フレーム方向を再計算）
+				_active_target_point = vp.target_point
+				_calculate_direction_to_target()
+				vision_point_reached.emit(_vision_index, _forced_look_direction)
+			elif vp.has("direction"):
+				# 後方互換: 固定方向モード
+				_forced_look_direction = vp.direction
+				_active_target_point = Vector3.ZERO
+				vision_point_reached.emit(_vision_index, vp.direction)
 			_vision_index += 1
 		else:
 			break
+
+	# ターゲットポイントが設定されている場合、毎フレーム方向を再計算
+	if _active_target_point.length_squared() > 0.001:
+		_calculate_direction_to_target()
+
+
+## キャラクター位置からターゲット地点への方向を計算
+func _calculate_direction_to_target() -> void:
+	if not _character:
+		return
+	var char_pos = _character.global_position
+	char_pos.y = 0
+	var target = _active_target_point
+	target.y = 0
+
+	var direction = (target - char_pos)
+	if direction.length_squared() > 0.001:
+		_forced_look_direction = direction.normalized()
+	# ターゲットに非常に近い場合は現在の方向を維持
 
 
 ## パス長キャッシュを構築
@@ -378,6 +413,7 @@ func _finish() -> void:
 	_vision_points.clear()
 	_run_segments.clear()
 	_forced_look_direction = Vector3.ZERO
+	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 
 	path_completed.emit()

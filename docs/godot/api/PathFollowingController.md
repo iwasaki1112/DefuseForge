@@ -58,7 +58,7 @@ CombatAwarenessComponentを設定する。
 
 **引数:**
 - `path` - 追従するパス（Vector3の配列、最低2点必要）
-- `vision_points` - 視線ポイント配列（`path_ratio`と`direction`を含むDictionary）
+- `vision_points` - 視線ポイント配列（`path_ratio`と`target_point`を含むDictionary、後方互換で`direction`も対応）
 - `run_segments` - Run区間配列（`start_ratio`と`end_ratio`を含むDictionary）
 - `run` - 全体を走行モードで移動するか
 
@@ -89,8 +89,9 @@ path_controller.path_completed.connect(_on_path_completed)
 # パス追従開始
 path_controller.setup(character)
 var path: Array[Vector3] = [Vector3(0,0,0), Vector3(5,0,0), Vector3(5,0,5)]
+# ターゲットポイントモード: キャラクターはこの地点を見続ける
 var vision_points = [
-    {"path_ratio": 0.5, "direction": Vector3(1, 0, 0)}
+    {"path_ratio": 0.5, "target_point": Vector3(10, 0, 5)}
 ]
 var run_segments = [
     {"start_ratio": 0.3, "end_ratio": 0.6}  # 30%〜60%の区間を走る
@@ -105,7 +106,17 @@ func _physics_process(delta):
 
 ## データ形式
 
-### 視線ポイント
+### 視線ポイント（ターゲットポイントモード）
+```gdscript
+{
+    "path_ratio": 0.5,       # パス上の位置（0.0〜1.0）
+    "target_point": Vector3(...)  # ターゲット地点（キャラクターが見続ける位置）
+}
+```
+
+キャラクターはマーカー到達後、`target_point`を動的に見続ける。移動中も毎フレーム方向を再計算する。
+
+### 視線ポイント（後方互換: 固定方向モード）
 ```gdscript
 {
     "path_ratio": 0.5,       # パス上の位置（0.0〜1.0）
@@ -128,6 +139,16 @@ func _physics_process(delta):
 - 視線ポイントはパスの進行率（0.0〜1.0）で管理
 - 完了時は最後の移動方向または視線方向を維持
 - `CharacterAnimationController`と連携してアニメーションを更新
+
+### ターゲットポイントモード
+
+視線ポイントに`target_point`が設定されている場合、キャラクターは移動しながらその地点を見続ける:
+
+1. 視線ポイントに到達すると`_active_target_point`にターゲット位置を保存
+2. 毎フレーム、キャラクターの現在位置からターゲットへの方向を再計算
+3. 次の視線ポイントが有効になるまで、または移動完了まで追従を継続
+
+これにより、固定方向ではなく「特定の地点を見続ける」自然な動きが実現される。
 
 ### パス進行率の計算
 
