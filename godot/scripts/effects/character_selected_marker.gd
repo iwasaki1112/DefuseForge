@@ -13,6 +13,7 @@ var _target_character: Node = null
 
 func _ready() -> void:
 	_setup_sprite()
+	_update_position()
 
 
 func _setup_sprite() -> void:
@@ -48,6 +49,10 @@ func _process(delta: float) -> void:
 		rotation_degrees.y -= 360.0
 
 	# ターゲットキャラクターの位置を追従
+	_update_position()
+
+
+func _update_position() -> void:
 	if _target_character and is_instance_valid(_target_character):
 		var char_pos: Vector3 = _target_character.global_position
 		global_position = Vector3(char_pos.x, height_offset, char_pos.z)
@@ -56,9 +61,8 @@ func _process(delta: float) -> void:
 ## キャラクターにマーカーをアタッチ
 func attach_to_character(character: Node) -> void:
 	_target_character = character
-	if character and is_inside_tree():
-		var char_pos: Vector3 = character.global_position
-		global_position = Vector3(char_pos.x, height_offset, char_pos.z)
+	if is_inside_tree():
+		_update_position()
 
 
 ## マーカーを表示

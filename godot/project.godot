@@ -61,8 +61,7 @@ common/physics_interpolation=true
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
 lights_and_shadows/directional_shadow/size=2048
 lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1

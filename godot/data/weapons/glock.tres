@@ -15,3 +15,5 @@ recoil_strength = 0.05
 recoil_recovery = 12.0
 price = 200
 model_scene = ExtResource("2")
+attach_offset = Vector3(-0.1, 9.4, 2.9)
+attach_rotation = Vector3(-90, -81.5, 0)
