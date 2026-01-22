@@ -6,7 +6,7 @@ extends Node3D
 ## Slice the Pie: パス上の任意の点から視線方向を設定可能
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER }
 
 ## 視線ポイントデータ（ターゲットポイントモード）
 ## { "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }
@@ -22,6 +22,9 @@ signal mode_changed(mode: int)  # 0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER
 
 ## Runマーカー用シグナル
 signal run_segment_added(start_ratio: float, end_ratio: float)
+
+## Clearマーカー用シグナル
+signal clear_point_added(path_ratio: float)
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -41,6 +44,7 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
 const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
+const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 
 var _camera: Camera3D
 var _character: Node3D
@@ -62,6 +66,10 @@ var _is_drawing_vision: bool = false
 var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _run_meshes: Array[MeshInstance3D] = []
 var _current_run_start: Dictionary = {}  # 未完成のrun開始点 { ratio, position }
+
+## Clearマーカー用
+var _clear_points: Array[Dictionary] = []  # { path_ratio }
+var _clear_meshes: Array[MeshInstance3D] = []
 
 ## キャラクター別マーカー管理（マルチセレクト対応）
 ## { char_id: { "vision_points": Array[Dictionary], "vision_meshes": Array[MeshInstance3D],
@@ -108,6 +116,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_vision_point_input(event)
 		DrawingMode.RUN_MARKER:
 			_handle_run_marker_input(event)
+		DrawingMode.CLEAR_MARKER:
+			_handle_clear_marker_input(event)
 
 
 ## 移動パス描画の入力処理
@@ -227,6 +237,71 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 				_current_run_start = {}
 
 			get_viewport().set_input_as_handled()
+
+
+## Clearマーカー設定の入力処理
+func _handle_clear_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			# パス上の最も近い点を見つける
+			var ground_pos = _get_ground_position(mouse_event.position)
+			if ground_pos == null:
+				return
+
+			var result = _find_closest_point_on_path(ground_pos)
+			if result.distance > path_click_threshold:
+				print("[PathDrawer] Click too far from path for clear marker")
+				return
+
+			# Clearポイントを追加
+			var new_point = { "path_ratio": result.ratio }
+
+			# マルチキャラクターモードの場合、アクティブキャラクターのデータに追加
+			if _multi_character_mode and _active_edit_character:
+				var char_id = _active_edit_character.get_instance_id()
+				if _character_markers.has(char_id):
+					var char_data = _character_markers[char_id]
+					# ソート位置を見つけて挿入
+					var insert_index = 0
+					for i in range(char_data.clear_points.size()):
+						if char_data.clear_points[i].path_ratio > result.ratio:
+							break
+						insert_index = i + 1
+					char_data.clear_points.insert(insert_index, new_point)
+					# マーカーを作成
+					var marker = _create_clear_marker_node(result.point)
+					char_data.clear_meshes.insert(insert_index, marker)
+			else:
+				# シングルモードの場合
+				var insert_index = 0
+				for i in range(_clear_points.size()):
+					if _clear_points[i].path_ratio > result.ratio:
+						break
+					insert_index = i + 1
+				_clear_points.insert(insert_index, new_point)
+				# マーカーを作成
+				_create_clear_marker(result.point, insert_index)
+
+			clear_point_added.emit(result.ratio)
+			print("[PathDrawer] Clear point added at ratio %.2f" % result.ratio)
+			get_viewport().set_input_as_handled()
+
+
+## Clearマーカーノードを作成して返す
+func _create_clear_marker_node(pos: Vector3) -> MeshInstance3D:
+	var marker = MeshInstance3D.new()
+	marker.set_script(ClearMarkerScript)
+	add_child(marker)
+	marker.set_marker_position(pos)
+	marker.set_colors(_character_color, Color.WHITE)
+	return marker
+
+
+## Clearマーカーを指定位置に作成
+func _create_clear_marker(pos: Vector3, index: int) -> void:
+	var marker = _create_clear_marker_node(pos)
+	_clear_meshes.insert(index, marker)
 
 
 ## Runマーカーを作成
@@ -520,6 +595,7 @@ func clear() -> void:
 	_pending_character = null
 	_clear_vision_points()
 	_clear_run_markers()
+	_clear_clear_markers()
 	# マルチキャラクターモードもクリア
 	_clear_multi_character_markers()
 
@@ -539,6 +615,13 @@ func _clear_run_markers() -> void:
 	_run_meshes.clear()
 
 
+func _clear_clear_markers() -> void:
+	_clear_points.clear()
+	for mesh in _clear_meshes:
+		mesh.queue_free()
+	_clear_meshes.clear()
+
+
 ## 視線マーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_vision_markers() -> Array[MeshInstance3D]:
 	var markers = _vision_meshes.duplicate()
@@ -550,6 +633,13 @@ func take_vision_markers() -> Array[MeshInstance3D]:
 func take_run_markers() -> Array[MeshInstance3D]:
 	var markers = _run_meshes.duplicate()
 	_run_meshes.clear()
+	return markers
+
+
+## Clearマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
+func take_clear_markers() -> Array[MeshInstance3D]:
+	var markers = _clear_meshes.duplicate()
+	_clear_meshes.clear()
 	return markers
 
 
@@ -787,6 +877,66 @@ func has_incomplete_run_start() -> bool:
 
 
 ## ========================================
+## Clearマーカーモード API
+## ========================================
+
+## Clearマーカー設定モードに切り替え
+## パス上をクリックでClearポイントを設定
+## このポイント以降はVision/Runがクリアされ、進行方向を向く
+func start_clear_mode() -> bool:
+	if _pending_path.size() < 2:
+		print("[PathDrawer] Cannot start clear mode: no movement path set")
+		return false
+
+	_drawing_mode = DrawingMode.CLEAR_MARKER
+	_is_enabled = true
+	mode_changed.emit(int(DrawingMode.CLEAR_MARKER))
+	print("[PathDrawer] Switched to clear marker mode - click to set clear points")
+	return true
+
+
+## Clearポイントがあるか
+func has_clear_points() -> bool:
+	return _clear_points.size() > 0
+
+
+## Clearポイントを取得
+func get_clear_points() -> Array[Dictionary]:
+	return _clear_points
+
+
+## Clearポイント数を取得（マルチモードの場合はアクティブキャラクターのカウント）
+func get_clear_point_count() -> int:
+	if _multi_character_mode and _active_edit_character:
+		return get_clear_point_count_for_character(_active_edit_character)
+	return _clear_points.size()
+
+
+## 最後のClearポイントを削除
+func remove_last_clear_point() -> void:
+	# マルチキャラクターモードの場合、アクティブキャラクターのデータから削除
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.clear_points.size() > 0:
+				char_data.clear_points.pop_back()
+				if char_data.clear_meshes.size() > 0:
+					var mesh = char_data.clear_meshes.pop_back()
+					mesh.queue_free()
+				print("[PathDrawer] Last clear point removed for %s" % _active_edit_character.name)
+		return
+
+	# シングルモード
+	if _clear_points.size() > 0:
+		_clear_points.pop_back()
+		if _clear_meshes.size() > 0:
+			var mesh = _clear_meshes.pop_back()
+			mesh.queue_free()
+		print("[PathDrawer] Last clear point removed")
+
+
+## ========================================
 ## パス実行 API
 ## ========================================
 
@@ -849,6 +999,7 @@ func clear_pending() -> void:
 	_pending_character = null
 	_clear_vision_points()
 	_clear_run_markers()
+	_clear_clear_markers()
 
 
 func _on_path_completed() -> void:
@@ -879,7 +1030,9 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 			"vision_points": [] as Array[Dictionary],
 			"vision_meshes": [] as Array[MeshInstance3D],
 			"run_segments": [] as Array[Dictionary],
-			"run_meshes": [] as Array[MeshInstance3D]
+			"run_meshes": [] as Array[MeshInstance3D],
+			"clear_points": [] as Array[Dictionary],
+			"clear_meshes": [] as Array[MeshInstance3D]
 		}
 
 	# 最初のキャラクターをアクティブに設定
@@ -971,6 +1124,26 @@ func get_run_segments_for_character(character: Node) -> Array[Dictionary]:
 	return []
 
 
+## キャラクター別のClearポイント数を取得
+func get_clear_point_count_for_character(character: Node) -> int:
+	if not character:
+		return 0
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id):
+		return _character_markers[char_id].clear_points.size()
+	return 0
+
+
+## キャラクター別のClearポイントを取得
+func get_clear_points_for_character(character: Node) -> Array[Dictionary]:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id):
+		return _character_markers[char_id].clear_points
+	return []
+
+
 ## 全キャラクターの視線ポイントを取得
 ## @return { char_id: Array[Dictionary] }
 func get_all_vision_points() -> Dictionary:
@@ -1000,6 +1173,20 @@ func get_all_run_segments() -> Dictionary:
 	return result
 
 
+## 全キャラクターのClearポイントを取得
+## @return { char_id: Array[Dictionary] }
+func get_all_clear_points() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			return { _active_edit_character.get_instance_id(): _clear_points }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		result[char_id] = _character_markers[char_id].clear_points
+	return result
+
+
 ## マルチキャラクターモードで全マーカーをクリア
 func _clear_multi_character_markers() -> void:
 	for char_id in _character_markers:
@@ -1008,6 +1195,9 @@ func _clear_multi_character_markers() -> void:
 			if is_instance_valid(mesh):
 				mesh.queue_free()
 		for mesh in data.run_meshes:
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+		for mesh in data.clear_meshes:
 			if is_instance_valid(mesh):
 				mesh.queue_free()
 	_character_markers.clear()
@@ -1046,4 +1236,21 @@ func take_all_run_markers() -> Dictionary:
 	for char_id in _character_markers:
 		result[char_id] = _character_markers[char_id].run_meshes.duplicate()
 		_character_markers[char_id].run_meshes.clear()
+	return result
+
+
+## 全キャラクターのClearMarkersを移譲
+## @return { char_id: Array[MeshInstance3D] }
+func take_all_clear_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			var markers = _clear_meshes.duplicate()
+			_clear_meshes.clear()
+			return { _active_edit_character.get_instance_id(): markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		result[char_id] = _character_markers[char_id].clear_meshes.duplicate()
+		_character_markers[char_id].clear_meshes.clear()
 	return result

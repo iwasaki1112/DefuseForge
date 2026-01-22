@@ -12,6 +12,7 @@ signal paths_cleared()
 signal mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
+signal clear_point_added(path_ratio: float)
 
 var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
@@ -42,6 +43,7 @@ func setup(
 		path_drawer.mode_changed.connect(_on_path_mode_changed)
 		path_drawer.vision_point_added.connect(_on_vision_point_added)
 		path_drawer.run_segment_added.connect(_on_run_segment_added)
+		path_drawer.clear_point_added.connect(_on_clear_point_added)
 
 	if path_mode_controller:
 		path_mode_controller.mode_started.connect(_on_path_mode_started)
@@ -55,6 +57,8 @@ func setup(
 		marker_edit_panel.vision_undo_requested.connect(_on_marker_panel_vision_undo)
 		marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
 		marker_edit_panel.run_undo_requested.connect(_on_marker_panel_run_undo)
+		marker_edit_panel.clear_add_requested.connect(_on_marker_panel_clear_add)
+		marker_edit_panel.clear_undo_requested.connect(_on_marker_panel_clear_undo)
 		marker_edit_panel.confirm_requested.connect(_on_marker_panel_confirm)
 		marker_edit_panel.cancel_requested.connect(_on_marker_panel_cancel)
 
@@ -196,12 +200,26 @@ func remove_last_run_segment() -> void:
 		path_drawer.remove_last_run_segment()
 
 
+func start_clear_mode() -> void:
+	if path_drawer:
+		path_drawer.start_clear_mode()
+
+
+func remove_last_clear_point() -> void:
+	if path_drawer:
+		path_drawer.remove_last_clear_point()
+
+
 func get_vision_point_count() -> int:
 	return path_drawer.get_vision_point_count() if path_drawer else 0
 
 
 func get_run_segment_count() -> int:
 	return path_drawer.get_run_segment_count() if path_drawer else 0
+
+
+func get_clear_point_count() -> int:
+	return path_drawer.get_clear_point_count() if path_drawer else 0
 
 
 func has_incomplete_run_start() -> bool:
@@ -295,6 +313,12 @@ func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
 	run_segment_added.emit(start_ratio, end_ratio)
 
 
+func _on_clear_point_added(path_ratio: float) -> void:
+	if marker_edit_panel:
+		marker_edit_panel.on_clear_point_added()
+	clear_point_added.emit(path_ratio)
+
+
 func _on_marker_panel_character_selected(character: Node) -> void:
 	var char_color = CharacterColorManager.get_character_color(character)
 	set_path_drawer_color(char_color)
@@ -316,6 +340,15 @@ func _on_marker_panel_run_add(_character: Node) -> void:
 
 func _on_marker_panel_run_undo(_character: Node) -> void:
 	remove_last_run_segment()
+
+
+func _on_marker_panel_clear_add(_character: Node) -> void:
+	if has_pending_path():
+		start_clear_mode()
+
+
+func _on_marker_panel_clear_undo(_character: Node) -> void:
+	remove_last_clear_point()
 
 
 func _on_marker_panel_confirm() -> void:

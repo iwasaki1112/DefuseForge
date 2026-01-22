@@ -28,6 +28,8 @@ var _path_index: int = 0
 var _vision_points: Array[Dictionary] = []
 var _vision_index: int = 0
 var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
+var _clear_points: Array[Dictionary] = []  # { path_ratio }
+var _clear_index: int = 0
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
@@ -61,9 +63,11 @@ func set_combat_awareness(component: Node) -> void:
 ## @param vision_points: 視線ポイント配列（path_ratio, directionを含むDictionary）
 ## @param run_segments: Run区間配列（start_ratio, end_ratioを含むDictionary）
 ## @param run: 走行モードか（全体を走る場合）
+## @param clear_points: Clearポイント配列（path_ratioを含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
-		run_segments: Array[Dictionary] = [], run: bool = false) -> bool:
+		run_segments: Array[Dictionary] = [], run: bool = false,
+		clear_points: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -75,7 +79,9 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_current_path = path.duplicate()
 	_vision_points = vision_points.duplicate()
 	_run_segments = run_segments.duplicate()
+	_clear_points = clear_points.duplicate()
 	_vision_index = 0
+	_clear_index = 0
 	_is_running = run
 	_is_following = true
 	_forced_look_direction = Vector3.ZERO
@@ -117,6 +123,7 @@ func cancel() -> void:
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()
+	_clear_points.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
@@ -227,6 +234,9 @@ func process(delta: float) -> void:
 	# 最後の移動方向を保存（完了時の向き保持用）
 	if move_dir.length_squared() > 0.1:
 		_last_move_direction = move_dir
+
+	# Clearポイントのチェック（視線・Runをリセット）
+	_check_clear_points(progress)
 
 	# 視線方向を更新（Run区間外のみ）
 	if not in_run_segment:
@@ -381,6 +391,21 @@ func _is_in_run_segment(progress: float) -> bool:
 	return false
 
 
+## Clearポイントのチェックと処理
+## Clearポイント到達時に視線・Runをリセットして進行方向を向く
+func _check_clear_points(progress: float) -> void:
+	while _clear_index < _clear_points.size():
+		var cp = _clear_points[_clear_index]
+		if progress >= cp.path_ratio:
+			# Clearポイントに到達: 視線とRun状態をリセット
+			_forced_look_direction = Vector3.ZERO
+			_active_target_point = Vector3.ZERO
+			print("[PathFollowingController] %s: Clear point reached at ratio %.2f - vision/run reset" % [_character.name, cp.path_ratio])
+			_clear_index += 1
+		else:
+			break
+
+
 ## パス追従完了
 func _finish() -> void:
 	# キャラクターの速度を停止
@@ -412,6 +437,7 @@ func _finish() -> void:
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()
+	_clear_points.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO

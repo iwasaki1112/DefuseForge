@@ -7,6 +7,7 @@ const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
 const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
+const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -18,7 +19,7 @@ signal all_paths_completed()
 signal paths_cleared()
 
 ## 保留中のパス（キャラクターごと）
-## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array } }
+## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array, "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array, "clear_markers": Array } }
 var pending_paths: Dictionary = {}
 
 ## パス追従コントローラー { character_id -> PathFollowingController }
@@ -65,32 +66,42 @@ func confirm_path(
 	# マルチモードの場合、キャラクター別のマーカーを取得
 	var all_vision_points: Dictionary = {}
 	var all_run_segments: Dictionary = {}
+	var all_clear_points: Dictionary = {}
 	var all_vision_markers: Dictionary = {}
 	var all_run_markers: Dictionary = {}
+	var all_clear_markers: Dictionary = {}
 
 	if is_multi_mode:
 		all_vision_points = path_drawer.get_all_vision_points()
 		all_run_segments = path_drawer.get_all_run_segments()
+		all_clear_points = path_drawer.get_all_clear_points()
 		all_vision_markers = path_drawer.take_all_vision_markers()
 		all_run_markers = path_drawer.take_all_run_markers()
+		all_clear_markers = path_drawer.take_all_clear_markers()
 	else:
 		# シングルモードの場合、従来通り
 		var base_vision = path_drawer.get_vision_points().duplicate()
 		var base_run = path_drawer.get_run_segments().duplicate()
+		var base_clear = path_drawer.get_clear_points().duplicate()
 		var original_vision_markers = path_drawer.take_vision_markers()
 		var original_run_markers = path_drawer.take_run_markers()
+		var original_clear_markers = path_drawer.take_clear_markers()
 
 		# 全キャラクターに同じマーカーを適用するため、一時的に格納
 		for character in target_characters:
 			var cid = character.get_instance_id()
 			all_vision_points[cid] = base_vision.duplicate()
 			all_run_segments[cid] = base_run.duplicate()
+			all_clear_points[cid] = base_clear.duplicate()
 
 		# 元のマーカーは後で削除
 		for marker in original_vision_markers:
 			if is_instance_valid(marker):
 				marker.queue_free()
 		for marker in original_run_markers:
+			if is_instance_valid(marker):
+				marker.queue_free()
+		for marker in original_clear_markers:
 			if is_instance_valid(marker):
 				marker.queue_free()
 
@@ -133,9 +144,15 @@ func confirm_path(
 			for seg in all_run_segments[char_id]:
 				char_run_segments.append(seg)
 
-		# 視線ポイントとRun区間の比率を再計算
+		var char_clear_points: Array[Dictionary] = []
+		if all_clear_points.has(char_id):
+			for cp in all_clear_points[char_id]:
+				char_clear_points.append(cp)
+
+		# 視線ポイントとRun区間とClearポイントの比率を再計算
 		var adjusted_vision_points = _adjust_ratios_for_connection(char_vision_points, connect_length, base_length)
 		var adjusted_run_segments = _adjust_run_ratios_for_connection(char_run_segments, connect_length, base_length)
+		var adjusted_clear_points = _adjust_clear_ratios_for_connection(char_clear_points, connect_length, base_length)
 
 		# パスメッシュを作成（表示用の生パスを使用）
 		var path_mesh = _create_path_mesh(full_display_path, character)
@@ -149,6 +166,10 @@ func confirm_path(
 			for marker in all_run_markers[char_id]:
 				if is_instance_valid(marker):
 					marker.queue_free()
+		if is_multi_mode and all_clear_markers.has(char_id):
+			for marker in all_clear_markers[char_id]:
+				if is_instance_valid(marker):
+					marker.queue_free()
 
 		# 各キャラクター用にマーカーを新規生成
 		var char_vision_markers = _create_vision_markers_for_path(
@@ -157,21 +178,26 @@ func confirm_path(
 		var char_run_markers = _create_run_markers_for_path(
 			full_path, adjusted_run_segments, character
 		)
+		var char_clear_markers = _create_clear_markers_for_path(
+			full_path, adjusted_clear_points, character
+		)
 
 		pending_paths[char_id] = {
 			"character": character,
 			"path": full_path,
 			"vision_points": adjusted_vision_points,
 			"run_segments": adjusted_run_segments,
+			"clear_points": adjusted_clear_points,
 			"path_mesh": path_mesh,
 			"vision_markers": char_vision_markers,
-			"run_markers": char_run_markers
+			"run_markers": char_run_markers,
+			"clear_markers": char_clear_markers
 		}
 
 		processed_count += 1
-		print("[PathExecution] Saved path for %s (%d points, connect: %.2f, vision: %d, run: %d)" % [
+		print("[PathExecution] Saved path for %s (%d points, connect: %.2f, vision: %d, run: %d, clear: %d)" % [
 			character.name, full_path.size(), connect_length,
-			char_vision_markers.size(), char_run_markers.size()
+			char_vision_markers.size(), char_run_markers.size(), char_clear_markers.size()
 		])
 
 	print("[PathExecution] Applied path to %d characters (%s mode)" % [
@@ -214,6 +240,12 @@ func execute_all_paths(run: bool) -> int:
 			for seg in data["run_segments"]:
 				run_segments.append(seg)
 
+		# Clearポイントを明示的にArray[Dictionary]に変換
+		var clear_points: Array[Dictionary] = []
+		if data.has("clear_points"):
+			for cp in data["clear_points"]:
+				clear_points.append(cp)
+
 		if not is_instance_valid(character):
 			continue
 
@@ -221,9 +253,9 @@ func execute_all_paths(run: bool) -> int:
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
 
-		if controller.start_path(path, vision_points, run_segments, run):
+		if controller.start_path(path, vision_points, run_segments, run, clear_points):
 			executed_count += 1
-			print("[PathExecution] Started path for %s (%d points, run_segments: %d)" % [character.name, path.size(), run_segments.size()])
+			print("[PathExecution] Started path for %s (%d points, run_segments: %d, clear_points: %d)" % [character.name, path.size(), run_segments.size(), clear_points.size()])
 		else:
 			print("[PathExecution] Failed to start path for %s" % character.name)
 
@@ -233,6 +265,7 @@ func execute_all_paths(run: bool) -> int:
 		data.erase("path")
 		data.erase("vision_points")
 		data.erase("run_segments")
+		data.erase("clear_points")
 		data.erase("character")
 
 	paths_execution_started.emit(executed_count)
@@ -352,11 +385,15 @@ func _clear_pending_path_for_character(char_id: int) -> void:
 		for marker in old_data["run_markers"]:
 			if is_instance_valid(marker):
 				marker.queue_free()
+	if old_data.has("clear_markers"):
+		for marker in old_data["clear_markers"]:
+			if is_instance_valid(marker):
+				marker.queue_free()
 
 	pending_paths.erase(char_id)
 
 
-## 全てのパスメッシュと視線マーカーとRunマーカーを削除
+## 全てのパスメッシュと視線マーカーとRunマーカーとClearマーカーを削除
 func _clear_all_path_meshes() -> void:
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
@@ -368,6 +405,10 @@ func _clear_all_path_meshes() -> void:
 					marker.queue_free()
 		if data.has("run_markers"):
 			for marker in data["run_markers"]:
+				if is_instance_valid(marker):
+					marker.queue_free()
+		if data.has("clear_markers"):
+			for marker in data["clear_markers"]:
 				if is_instance_valid(marker):
 					marker.queue_free()
 
@@ -562,5 +603,54 @@ func _create_run_markers_for_path(
 		var end_bg_color = Color(char_color.r * 0.8, char_color.g * 0.5, char_color.b * 0.3, 0.95)
 		end_marker.set_colors(end_bg_color, Color.WHITE)
 		markers.append(end_marker)
+
+	return markers
+
+
+## 接続線を考慮してClearポイントの比率を調整
+func _adjust_clear_ratios_for_connection(clear_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+	if connect_length < 0.01 or base_length < 0.01:
+		return clear_points.duplicate()
+
+	var new_length = connect_length + base_length
+	var adjusted: Array[Dictionary] = []
+
+	for cp in clear_points:
+		var old_ratio: float = cp.path_ratio
+		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
+		adjusted.append({
+			"path_ratio": new_ratio
+		})
+
+	return adjusted
+
+
+## 調整済みClearポイントから新しいClearMarkerを生成
+func _create_clear_markers_for_path(
+	path: Array[Vector3],
+	adjusted_clear_points: Array[Dictionary],
+	character: Node
+) -> Array[MeshInstance3D]:
+	var markers: Array[MeshInstance3D] = []
+
+	for cp in adjusted_clear_points:
+		var ratio: float = cp.path_ratio
+
+		# パス上の位置を計算
+		var pos = _calculate_position_on_path(path, ratio)
+
+		# ClearMarkerを作成
+		var marker = MeshInstance3D.new()
+		marker.set_script(ClearMarkerScript)
+		_mesh_parent.add_child(marker)
+
+		# 位置を設定
+		marker.set_marker_position(pos)
+
+		# キャラクター色を取得して適用
+		var char_color = CharacterColorManager.get_character_color(character)
+		marker.set_colors(char_color, Color.WHITE)
+
+		markers.append(marker)
 
 	return markers

@@ -53,7 +53,7 @@ CombatAwarenessComponentを設定する。
 **引数:**
 - `component` - 敵自動追跡用のコンポーネント
 
-### start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run_segments: Array[Dictionary] = [], run: bool = false) -> bool
+### start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run_segments: Array[Dictionary] = [], run: bool = false, clear_points: Array[Dictionary] = []) -> bool
 パス追従を開始する。
 
 **引数:**
@@ -61,6 +61,7 @@ CombatAwarenessComponentを設定する。
 - `vision_points` - 視線ポイント配列（`path_ratio`と`target_point`を含むDictionary、後方互換で`direction`も対応）
 - `run_segments` - Run区間配列（`start_ratio`と`end_ratio`を含むDictionary）
 - `run` - 全体を走行モードで移動するか
+- `clear_points` - Clearポイント配列（`path_ratio`を含むDictionary）
 
 **戻り値:** 開始成功なら`true`
 
@@ -96,7 +97,10 @@ var vision_points = [
 var run_segments = [
     {"start_ratio": 0.3, "end_ratio": 0.6}  # 30%〜60%の区間を走る
 ]
-path_controller.start_path(path, vision_points, run_segments, false)
+var clear_points = [
+    {"path_ratio": 0.8}  # 80%の位置で視線・Run効果をリセット
+]
+path_controller.start_path(path, vision_points, run_segments, false, clear_points)
 
 # 毎フレーム処理
 func _physics_process(delta):
@@ -131,6 +135,15 @@ func _physics_process(delta):
     "end_ratio": 0.6     # 終了位置（0.0〜1.0）
 }
 ```
+
+### Clearポイント
+```gdscript
+{
+    "path_ratio": 0.8    # パス上の位置（0.0〜1.0）
+}
+```
+
+このポイントに到達すると、現在の視線方向とRun状態がリセットされ、キャラクターは進行方向を向く。
 
 ## 内部動作
 
@@ -170,6 +183,15 @@ Run区間内では以下の特殊処理が適用される：
 3. **視線ポイント無視**: 視線方向は常に移動方向と一致（振り向かない）
 
 これにより、Run区間内ではキャラクターは前方を向いたまま全力で走り抜ける。
+
+### Clearポイントの動作
+
+Clearポイントに到達すると、以下の処理が行われる：
+
+1. **視線方向リセット**: `_forced_look_direction`をクリア（進行方向を向く）
+2. **ターゲットポイントリセット**: `_active_target_point`をクリア
+
+これにより、Clearポイント以降はVision/Runの効果がリセットされ、キャラクターは単純に進行方向を向いて歩く状態に戻る。
 
 ### スタック検出と回避
 

@@ -16,7 +16,8 @@
 | `drawing_finished` | `points: PackedVector3Array` | パス描画完了時 |
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` | 視線ポイント追加時（target_pointはターゲット地点） |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER） |
+| `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
+| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER） |
 
 ## Enums
 
@@ -28,6 +29,7 @@
 | `MOVEMENT` | 移動パス描画モード |
 | `VISION_POINT` | 視線ポイント設定モード |
 | `RUN_MARKER` | Runマーカー設定モード |
+| `CLEAR_MARKER` | Clearマーカー設定モード |
 
 ## Export Properties
 
@@ -70,7 +72,7 @@ PathDrawerを無効化する。
 有効状態を確認する。
 
 #### clear() -> void
-パスと視線ポイントとRunマーカーをすべてクリアする。
+パスと視線ポイントとRunマーカーとClearマーカーをすべてクリアする。
 
 #### get_drawn_path() -> PackedVector3Array
 描画されたパス（生パス）を取得する。
@@ -164,6 +166,30 @@ Run区間数を取得する。
 #### take_run_markers() -> Array[MeshInstance3D]
 Runマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
 
+### Clear Marker API
+
+#### start_clear_mode() -> bool
+Clearマーカー設定モードに切り替える。パス上をクリックでClearポイントを設定する。このポイント以降はVision/Runがクリアされ、キャラクターは進行方向を向く。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_clear_points() -> bool
+Clearポイントがあるか確認する。
+
+#### get_clear_points() -> Array[Dictionary]
+Clearポイントを取得する。
+
+**戻り値:** `{ "path_ratio": float }` の配列
+
+#### get_clear_point_count() -> int
+Clearポイント数を取得する。
+
+#### remove_last_clear_point() -> void
+最後のClearポイントを削除する。
+
+#### take_clear_markers() -> Array[MeshInstance3D]
+Clearマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+
 ### Multi-Character Mode API
 
 マルチセレクト時に各キャラクターに個別のマーカーを設定できるモード。
@@ -205,6 +231,12 @@ Runマーカーの所有権を移譲する（呼び出し元が管理責任を�
 #### get_run_segments_for_character(character: Node) -> Array[Dictionary]
 指定キャラクターのRun区間を取得する。
 
+#### get_clear_point_count_for_character(character: Node) -> int
+指定キャラクターのClearポイント数を取得する。
+
+#### get_clear_points_for_character(character: Node) -> Array[Dictionary]
+指定キャラクターのClearポイントを取得する。
+
 #### get_all_vision_points() -> Dictionary
 全キャラクターの視線ポイントを取得する。
 
@@ -215,6 +247,11 @@ Runマーカーの所有権を移譲する（呼び出し元が管理責任を�
 
 **戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたRun区間の辞書
 
+#### get_all_clear_points() -> Dictionary
+全キャラクターのClearポイントを取得する。
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたClearポイントの辞書
+
 #### take_all_vision_markers() -> Dictionary
 全キャラクターのVisionMarkersの所有権を移譲する。
 
@@ -222,6 +259,11 @@ Runマーカーの所有権を移譲する（呼び出し元が管理責任を�
 
 #### take_all_run_markers() -> Dictionary
 全キャラクターのRunMarkersの所有権を移譲する。
+
+**戻り値:** `{ char_id: Array[MeshInstance3D] }`
+
+#### take_all_clear_markers() -> Dictionary
+全キャラクターのClearMarkersの所有権を移譲する。
 
 **戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
@@ -274,6 +316,12 @@ if path_drawer.start_run_mode():
     print("Now in run marker mode")
     # パス上をクリックして開始点、再度クリックして終点を設置
 
+# Clearマーカーモードに切り替え
+if path_drawer.start_clear_mode():
+    print("Now in clear marker mode")
+    # パス上をクリックでClearポイントを設置
+    # このポイント以降は視線・Run効果がリセットされる
+
 # パス実行
 path_drawer.execute_with_vision(false)  # 歩行で実行（Run区間だけ走る）
 ```
@@ -325,12 +373,22 @@ path_execution_manager.confirm_path(selected_characters, path_drawer, char_a)
 }
 ```
 
+### Clearポイント
+```gdscript
+{
+    "path_ratio": 0.7    # パス上の位置（0.0〜1.0）
+}
+```
+
+このポイントに到達すると、現在の視線方向とRun状態がリセットされ、キャラクターは進行方向を向く。
+
 ## 内部動作
 
 - `PathLineMesh`でパスを描画（破線+終点ドーナツ）
 - `VisionMarker`で視線ポイントを可視化
 - `RunMarker`でRun区間の開始/終点を可視化
-- パス上クリックで最近接点を計算し、そこから視線方向やRun区間を設定
+- `ClearMarker`でClearポイントを可視化（リセットマーカー）
+- パス上クリックで最近接点を計算し、そこから視線方向やRun区間、Clearポイントを設定
 - **パススムージング**: 描画完了時に`PathSmoother`で手ブレを補正
 
 ## パススムージング

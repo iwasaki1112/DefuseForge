@@ -13,6 +13,10 @@ signal vision_undo_requested(character: Node)
 signal run_add_requested(character: Node)
 ## Run Undo要求シグナル
 signal run_undo_requested(character: Node)
+## Clear追加要求シグナル
+signal clear_add_requested(character: Node)
+## Clear Undo要求シグナル
+signal clear_undo_requested(character: Node)
 ## 確定要求シグナル
 signal confirm_requested()
 ## キャンセル要求シグナル
@@ -34,6 +38,12 @@ var _run_label: Label = null
 var _run_hbox: HBoxContainer = null
 var _add_run_button: Button = null
 var _undo_run_button: Button = null
+
+## Clearマーカー部分
+var _clear_label: Label = null
+var _clear_hbox: HBoxContainer = null
+var _add_clear_button: Button = null
+var _undo_clear_button: Button = null
 
 ## 確定/キャンセル
 var _confirm_button: Button = null
@@ -117,6 +127,30 @@ func _build_ui() -> void:
 	# セパレータ3
 	var sep3 = HSeparator.new()
 	add_child(sep3)
+
+	# Clearマーカーラベル
+	_clear_label = Label.new()
+	_clear_label.text = "Clear Points: 0"
+	add_child(_clear_label)
+
+	# Clearマーカーボタン
+	_clear_hbox = HBoxContainer.new()
+	_clear_hbox.add_theme_constant_override("separation", 4)
+	add_child(_clear_hbox)
+
+	_add_clear_button = Button.new()
+	_add_clear_button.text = "Add Clear"
+	_add_clear_button.pressed.connect(_on_add_clear_pressed)
+	_clear_hbox.add_child(_add_clear_button)
+
+	_undo_clear_button = Button.new()
+	_undo_clear_button.text = "Undo"
+	_undo_clear_button.pressed.connect(_on_undo_clear_pressed)
+	_clear_hbox.add_child(_undo_clear_button)
+
+	# セパレータ4
+	var sep4 = HSeparator.new()
+	add_child(sep4)
 
 	# 確定ボタン
 	_confirm_button = Button.new()
@@ -277,6 +311,12 @@ func _update_labels() -> void:
 			incomplete = " (setting...)"
 	_run_label.text = "Run Segments (%s): %d%s" % [char_label, run_count, incomplete]
 
+	# Clearポイント数
+	var clear_count = 0
+	if _path_drawer and _path_drawer.has_method("get_clear_point_count_for_character"):
+		clear_count = _path_drawer.get_clear_point_count_for_character(_active_character)
+	_clear_label.text = "Clear Points (%s): %d" % [char_label, clear_count]
+
 
 ## 視線ポイントが追加された時に呼ぶ
 func on_vision_point_added() -> void:
@@ -285,6 +325,11 @@ func on_vision_point_added() -> void:
 
 ## Run区間が追加された時に呼ぶ
 func on_run_segment_added() -> void:
+	_update_labels()
+
+
+## Clearポイントが追加された時に呼ぶ
+func on_clear_point_added() -> void:
 	_update_labels()
 
 
@@ -319,6 +364,19 @@ func _on_undo_run_pressed() -> void:
 		_update_labels()
 
 
+## Add Clear押下時
+func _on_add_clear_pressed() -> void:
+	if _active_character:
+		clear_add_requested.emit(_active_character)
+
+
+## Undo Clear押下時
+func _on_undo_clear_pressed() -> void:
+	if _active_character:
+		clear_undo_requested.emit(_active_character)
+		_update_labels()
+
+
 ## Confirm押下時
 func _on_confirm_pressed() -> void:
 	confirm_requested.emit()
@@ -343,3 +401,4 @@ func clear() -> void:
 	_character_buttons.clear()
 	_vision_label.text = "Vision Points: 0"
 	_run_label.text = "Run Segments: 0"
+	_clear_label.text = "Clear Points: 0"
