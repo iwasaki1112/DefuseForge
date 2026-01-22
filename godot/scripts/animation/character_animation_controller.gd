@@ -19,8 +19,8 @@ signal fired()
 @export var rotation_speed := 15.0
 
 @export_group("Recoil")
-@export var rifle_recoil_strength := 0.08
-@export var pistol_recoil_strength := 0.12
+@export var rifle_recoil_strength := 0.16
+@export var pistol_recoil_strength := 0.24
 @export var rifle_fire_rate := 0.1
 @export var pistol_fire_rate := 0.2
 @export var recoil_recovery := 10.0
@@ -286,6 +286,7 @@ func _find_skeleton(node: Node) -> Skeleton3D:
 func _setup_recoil_modifier() -> void:
 	_recoil_modifier = RecoilModifierScript.new()
 	_recoil_modifier.spine_bone_name = spine_bone
+	_recoil_modifier.active = true
 	_skeleton.add_child(_recoil_modifier)
 
 func _setup_lean_modifier() -> void:

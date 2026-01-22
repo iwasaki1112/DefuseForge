@@ -24,8 +24,14 @@ func trigger_recoil(strength: float = -1.0) -> void:
 
 func _process_modification() -> void:
 	var skeleton := get_skeleton()
-	if not skeleton or _spine_bone_idx < 0:
+	if not skeleton:
 		return
+
+	# ボーンが見つかっていない場合は再検索
+	if _spine_bone_idx < 0:
+		_find_bone()
+		if _spine_bone_idx < 0:
+			return
 
 	# Apply recoil rotation (tilt upward/backward around local X axis)
 	if _current_recoil > 0.001:

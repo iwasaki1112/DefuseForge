@@ -28,7 +28,7 @@ enum WeaponCategory { RIFLE, PISTOL, SMG, SHOTGUN, SNIPER }
 # Recoil
 # ============================================
 @export_group("Recoil")
-@export var recoil_strength: float = 0.08  ## Recoil animation strength
+@export var recoil_strength: float = 0.15  ## Recoil animation strength
 @export var recoil_recovery: float = 10.0  ## Recoil recovery speed
 
 # ============================================

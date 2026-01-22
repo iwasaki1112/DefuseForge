@@ -59,11 +59,13 @@
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `rifle_recoil_strength` | `float` | `0.08` | ライフルのリコイル強度 |
-| `pistol_recoil_strength` | `float` | `0.12` | ピストルのリコイル強度 |
+| `rifle_recoil_strength` | `float` | `0.16` | ライフルのリコイル強度 |
+| `pistol_recoil_strength` | `float` | `0.24` | ピストルのリコイル強度 |
 | `rifle_fire_rate` | `float` | `0.1` | ライフルの発射間隔 |
 | `pistol_fire_rate` | `float` | `0.2` | ピストルの発射間隔 |
 | `recoil_recovery` | `float` | `10.0` | リコイル回復速度 |
+
+> **重要:** 武器装備時、`WeaponPreset.recoil_strength`がこれらのデフォルト値を上書きします。リコイル強度を調整する場合は、各武器の`.tres`ファイル（`data/weapons/`配下）を編集してください。
 
 ### Lean
 | プロパティ | 型 | デフォルト | 説明 |
