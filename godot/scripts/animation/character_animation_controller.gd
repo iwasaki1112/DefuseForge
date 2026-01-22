@@ -58,6 +58,7 @@ var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0
 var _crouch_blend := 0.0
 var _weapon_blend := 0.0
+var _run_blend := 0.0
 var _fire_cooldown := 0.0
 
 # Internal nodes
@@ -552,10 +553,11 @@ func _update_animation_tree() -> void:
 	var target_crouch := 1.0 if _stance == Stance.CROUCH else 0.0
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
 
+	_run_blend = lerp(_run_blend, target_run, 0.15)
 	_crouch_blend = lerp(_crouch_blend, target_crouch, 0.15)
 	_weapon_blend = lerp(_weapon_blend, target_weapon, 0.2)
 
-	_anim_tree.set("parameters/WalkRunBlend/blend_amount", target_run)
+	_anim_tree.set("parameters/WalkRunBlend/blend_amount", _run_blend)
 	_anim_tree.set("parameters/StandingBlend/blend_amount", _movement_blend)
 	_anim_tree.set("parameters/CrouchingBlend/blend_amount", _movement_blend)
 	_anim_tree.set("parameters/StandCrouchBlend/blend_amount", _crouch_blend)
