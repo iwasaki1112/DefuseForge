@@ -24,6 +24,11 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 @export var pistol_fire_rate := 0.2
 @export var recoil_recovery := 10.0
 
+@export_group("Lean")
+@export var max_lean_degrees := 25.0
+@export var lean_speed := 10.0
+@export var lean_deadzone := 0.15
+
 @export_group("Bone Names")
 @export var upper_body_root := GameConstants.BONE_SPINE_1
 @export var spine_bone := GameConstants.BONE_SPINE_2
@@ -34,6 +39,7 @@ var _anim_player: AnimationPlayer
 var _anim_tree: AnimationTree
 var _skeleton: Skeleton3D
 var _recoil_modifier: SkeletonModifier3D
+var _lean_modifier: SkeletonModifier3D
 
 # State
 var _stance := Stance.STAND
@@ -41,6 +47,7 @@ var _weapon := Weapon.RIFLE
 var _is_running := false
 var _is_dead := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
+var _lean_amount := 0.0  # ロール角（ラジアン）
 
 # Animation visual speeds at 1x playback (1-second/30-frame animations at 30fps)
 # Different directions have different stride lengths
@@ -64,6 +71,7 @@ var _fire_cooldown := 0.0
 # Internal nodes
 
 const RecoilModifierScript = preload("res://scripts/modifiers/recoil_modifier.gd")
+const LeanModifierScript = preload("res://scripts/modifiers/lean_modifier.gd")
 
 #region Public API
 
@@ -75,6 +83,7 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 
 	if _skeleton:
 		_setup_recoil_modifier()
+		_setup_lean_modifier()
 		# Set AnimationPlayer root_node to model node (parent of Skeleton3D)
 		# Animation tracks use paths like "Skeleton3D:bonename"
 		if _anim_player:
@@ -112,6 +121,8 @@ func update_animation(
 		_aim_direction = aim_direction.normalized()
 
 	_is_running = is_running and _stance != Stance.CROUCH
+
+	_update_lean(movement_direction, aim_direction, delta)
 
 	# Update model rotation
 	_update_model_rotation(aim_direction, delta)
@@ -274,6 +285,12 @@ func _setup_recoil_modifier() -> void:
 	_recoil_modifier = RecoilModifierScript.new()
 	_recoil_modifier.spine_bone_name = spine_bone
 	_skeleton.add_child(_recoil_modifier)
+
+func _setup_lean_modifier() -> void:
+	_lean_modifier = LeanModifierScript.new()
+	_lean_modifier.spine_bone_name = spine_bone
+	_lean_modifier.recovery_speed = lean_speed
+	_skeleton.add_child(_lean_modifier)
 
 func _setup_animation_loops() -> void:
 	var loop_anims := [
@@ -503,6 +520,26 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 		var current_quat := Quaternion(_model.transform.basis)
 		var new_quat := current_quat.slerp(target_quat, rotation_speed * delta)
 		_model.transform.basis = Basis(new_quat)
+
+func _update_lean(movement_direction: Vector3, aim_direction: Vector3, delta: float) -> void:
+	var target_lean := 0.0
+	if _stance != Stance.CROUCH and not _is_running:
+		var move_dir := movement_direction
+		move_dir.y = 0
+		if move_dir.length() > 0.1:
+			var look_dir := aim_direction
+			look_dir.y = 0
+			if look_dir.length() > 0.1:
+				var forward := -look_dir.normalized()
+				var right := forward.cross(Vector3.UP).normalized()
+				var side_amount := move_dir.normalized().dot(right)
+				if absf(side_amount) > lean_deadzone:
+					var max_lean := deg_to_rad(max_lean_degrees)
+					target_lean = clampf(side_amount, -1.0, 1.0) * max_lean
+
+	_lean_amount = lerpf(_lean_amount, target_lean, 1.0 - exp(-lean_speed * delta))
+	if _lean_modifier and _lean_modifier.has_method("set_target_lean"):
+		_lean_modifier.set_target_lean(_lean_amount)
 
 func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	var move_dir := movement_direction
