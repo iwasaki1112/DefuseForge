@@ -105,11 +105,6 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 			# キャラクターがパスの最初のポイントにいる場合、次のポイントを目指す
 			_path_index = 1
 
-	print("[PathFollowingController] %s: Started with %d points, starting from index %d, first target: %s" % [
-		_character.name, _current_path.size(), _path_index,
-		str(_current_path[_path_index]) if _path_index < _current_path.size() else "none"
-	])
-
 	path_started.emit()
 	return true
 
@@ -184,7 +179,6 @@ func process(delta: float) -> void:
 		_stuck_time += delta
 		if _stuck_time >= stuck_timeout:
 			# 中間地点でスタック → 次のポイントにスキップ
-			print("[PathFollowingController] %s: STUCK at point %d, skipping to %d" % [_character.name, _path_index, _path_index + 1])
 			_path_index += 1
 			_stuck_time = 0.0
 			if _path_index >= _current_path.size():
@@ -196,7 +190,6 @@ func process(delta: float) -> void:
 
 	# 目標点に到達したら次へ
 	if distance < 0.15:
-		print("[PathFollowingController] %s: Reached point %d, moving to %d" % [_character.name, _path_index, _path_index + 1])
 		_path_index += 1
 		if _path_index >= _current_path.size():
 			_finish()
@@ -414,7 +407,6 @@ func _check_clear_points(progress: float) -> void:
 			# Clearポイントに到達: 視線とRun状態をリセット
 			_forced_look_direction = Vector3.ZERO
 			_active_target_point = Vector3.ZERO
-			print("[PathFollowingController] %s: Clear point reached at ratio %.2f - vision/run reset" % [_character.name, cp.path_ratio])
 			_clear_index += 1
 		else:
 			break

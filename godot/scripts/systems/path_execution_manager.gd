@@ -40,13 +40,12 @@ func setup(mesh_parent: Node3D) -> void:
 func confirm_path(
 	target_characters: Array[Node],
 	path_drawer: Node,
-	primary_character: Node
+	_primary_character: Node
 ) -> bool:
 	if not path_drawer.has_pending_path():
 		return false
 
 	if target_characters.is_empty():
-		print("[PathExecution] No target characters for path")
 		return false
 
 	# 表示用パス（生パス）を取得
@@ -196,15 +195,6 @@ func confirm_path(
 		}
 
 		processed_count += 1
-		print("[PathExecution] Saved path for %s (%d points, connect: %.2f, vision: %d, run: %d, clear: %d)" % [
-			character.name, full_path.size(), connect_length,
-			char_vision_markers.size(), char_run_markers.size(), char_clear_markers.size()
-		])
-
-	print("[PathExecution] Applied path to %d characters (%s mode)" % [
-		processed_count,
-		"multi-character" if is_multi_mode else "formation"
-	])
 	path_confirmed.emit(processed_count)
 	return true
 
@@ -212,7 +202,6 @@ func confirm_path(
 ## 全キャラクターのパスを同時実行
 func execute_all_paths(run: bool) -> int:
 	if pending_paths.is_empty():
-		print("[PathExecution] No pending paths to execute")
 		return 0
 
 	var executed_count = 0
@@ -256,11 +245,6 @@ func execute_all_paths(run: bool) -> int:
 
 		if controller.start_path(path, vision_points, run_segments, run, clear_points):
 			executed_count += 1
-			print("[PathExecution] Started path for %s (%d points, run_segments: %d, clear_points: %d)" % [
-				character.name, path.size(), run_segments.size(), clear_points.size()
-			])
-		else:
-			print("[PathExecution] Failed to start path for %s" % character.name)
 
 	# パスデータのみクリア（メッシュは残す）
 	for char_id in pending_paths:
@@ -272,7 +256,6 @@ func execute_all_paths(run: bool) -> int:
 		data.erase("character")
 
 	paths_execution_started.emit(executed_count)
-	print("[PathExecution] Executed %d paths" % executed_count)
 	return executed_count
 
 
@@ -281,7 +264,6 @@ func clear_all_pending_paths() -> void:
 	_clear_all_path_meshes()
 	pending_paths.clear()
 	paths_cleared.emit()
-	print("[PathExecution] Cleared all pending paths")
 
 
 ## 保留パス数を取得
@@ -312,7 +294,6 @@ func cancel_all_path_following() -> void:
 	for controller in _path_controllers.values():
 		if controller.is_following_path():
 			controller.cancel()
-	print("[PathExecution] Cancelled all path following")
 
 
 ## 全パス追従コントローラーを処理（毎フレーム呼ぶ）
@@ -323,8 +304,7 @@ func process_controllers(delta: float) -> void:
 
 
 ## パス追従完了時のコールバック（外部から呼ばれる）
-func on_path_following_completed(character: Node) -> void:
-	print("[PathExecution] Path following completed for %s" % character.name)
+func on_path_following_completed(_character: Node) -> void:
 	# 全てのコントローラーが完了したかチェック
 	var any_active = false
 	for controller in _path_controllers.values():
@@ -336,7 +316,6 @@ func on_path_following_completed(character: Node) -> void:
 		_clear_all_path_meshes()
 		pending_paths.clear()
 		all_paths_completed.emit()
-		print("[PathExecution] All paths completed, meshes cleared")
 
 
 ## キャラクター用のPathFollowingControllerを取得または作成
@@ -368,8 +347,8 @@ func _on_path_completed(character: Node) -> void:
 	on_path_following_completed(character)
 
 
-func _on_path_cancelled(character: Node) -> void:
-	print("[PathExecution] Path following cancelled for %s" % character.name)
+func _on_path_cancelled(_character: Node) -> void:
+	pass
 
 
 ## 特定キャラクターの保留パスをクリア

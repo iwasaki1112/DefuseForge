@@ -95,7 +95,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_label_manager()
 	_setup_character_setup_service()
 
-	print("[GameManager] Setup complete - 15 systems initialized")
 
 
 ## キャラクターを登録（視界・武器・色・ラベルも自動セットアップ）
@@ -111,7 +110,6 @@ func register_character(character: Node) -> void:
 	if character_setup_service:
 		character_setup_service.setup_character(character)
 
-	print("[GameManager] Registered character: %s" % character.name)
 
 
 ## キャラクターを登録解除
@@ -136,7 +134,6 @@ func unregister_character(character: Node) -> void:
 	if selection_manager:
 		selection_manager.remove_from_selection(character)
 
-	print("[GameManager] Unregistered character: %s" % character.name)
 
 
 ## ========================================
@@ -831,8 +828,8 @@ func _open_weapon_shop(character: CharacterBody3D) -> void:
 
 
 ## 武器購入完了時
-func _on_weapon_purchased(weapon: WeaponPreset, character: CharacterBody3D) -> void:
-	print("[GameManager] Weapon purchased: %s for %s" % [weapon.display_name, character.name])
+func _on_weapon_purchased(_weapon: WeaponPreset, _character: CharacterBody3D) -> void:
+	pass
 
 
 ## 武器ショップ閉じた時

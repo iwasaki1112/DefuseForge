@@ -69,11 +69,10 @@ func setup(
 
 func start_move_mode() -> bool:
 	if not selection_manager or not selection_manager.has_selection():
-		print("[PathService] No characters selected")
 		return false
 
 	if not path_drawer or not path_mode_controller:
-		print("[PathService] PathDrawer or PathModeController not set")
+		push_warning("[PathService] PathDrawer or PathModeController not set")
 		return false
 
 	# 選択中のキャラクター配列を取得

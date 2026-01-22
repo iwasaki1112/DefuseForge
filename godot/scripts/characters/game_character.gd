@@ -188,7 +188,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 
 	var model = get_node_or_null(GameConstants.NODE_CHARACTER_MODEL)
 	if not model:
-		print("GameCharacter: CharacterModel not found")
+		push_warning("GameCharacter: CharacterModel not found")
 		return null
 
 	var skeleton = _find_skeleton_in_node(model)
@@ -196,19 +196,10 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 		push_warning("GameCharacter: Skeleton not found")
 		return null
 
-	print("GameCharacter: Found skeleton: ", skeleton.name)
-	print("GameCharacter: Bone count: ", skeleton.get_bone_count())
-
 	var bone_idx = skeleton.find_bone(GameConstants.BONE_RIGHT_HAND)
 	if bone_idx < 0:
-		# Try alternative bone names
-		print("GameCharacter: mixamorig_RightHand not found, listing bones:")
-		for i in range(min(skeleton.get_bone_count(), 20)):
-			print("  Bone %d: %s" % [i, skeleton.get_bone_name(i)])
 		push_warning("GameCharacter: mixamorig_RightHand bone not found")
 		return null
-
-	print("GameCharacter: Found RightHand bone at index ", bone_idx)
 
 	_weapon_attachment = BoneAttachment3D.new()
 	_weapon_attachment.name = GameConstants.NODE_WEAPON_ATTACHMENT
@@ -237,7 +228,7 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 		_weapon_model = null
 
 	if not weapon or not weapon.model_scene:
-		print("GameCharacter: No model_scene for weapon")
+		push_warning("GameCharacter: No model_scene for weapon")
 		return
 
 	var attachment = _ensure_weapon_attachment()
@@ -270,7 +261,6 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 		# Default rotation for Mixamo right hand
 		socket.rotation_degrees = Vector3(-79, -66, -28)
 
-	print("GameCharacter: Attached weapon model: ", weapon.display_name)
 
 
 ## Equip a weapon from WeaponPreset

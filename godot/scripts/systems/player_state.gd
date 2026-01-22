@@ -35,7 +35,6 @@ func set_player_team(team: GameCharacter.Team) -> void:
 		return
 	_player_team = team
 	team_changed.emit(team)
-	print("[PlayerState] Team changed to: %s" % get_team_name(team))
 
 
 ## Get team name as string
@@ -103,7 +102,6 @@ func set_money(amount: int) -> void:
 		return
 	_money = clamped
 	money_changed.emit(_money)
-	print("[PlayerState] Money set to: $%d" % _money)
 
 
 ## Add money (e.g., round reward, kill reward)
@@ -119,7 +117,6 @@ func spend_money(amount: int) -> bool:
 	if amount <= 0:
 		return true
 	if _money < amount:
-		print("[PlayerState] Insufficient funds: have $%d, need $%d" % [_money, amount])
 		return false
 	set_money(_money - amount)
 	return true
@@ -133,7 +130,6 @@ func can_afford(amount: int) -> bool:
 ## Reset money to initial amount (e.g., game start)
 func reset_money() -> void:
 	set_money(INITIAL_MONEY)
-	print("[PlayerState] Money reset to initial: $%d" % INITIAL_MONEY)
 
 
 ## Add round reward
@@ -150,4 +146,3 @@ func add_round_reward(won: bool, loss_streak: int = 0) -> void:
 			3: reward = 2900
 			_: reward = 3400  # 最大
 	add_money(reward)
-	print("[PlayerState] Round reward: $%d (won=%s, loss_streak=%d)" % [reward, won, loss_streak])

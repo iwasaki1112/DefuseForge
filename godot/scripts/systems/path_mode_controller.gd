@@ -40,20 +40,18 @@ func setup(
 
 
 ## パスモード開始（選択中キャラクターを対象）
-func start(character: Node, char_color: Color = Color.WHITE) -> bool:
+func start(_character: Node, char_color: Color = Color.WHITE) -> bool:
 	if not selection_manager or not selection_manager.has_selection():
-		print("[PathMode] No characters selected")
 		return false
 
 	if not path_drawer:
-		print("[PathMode] PathDrawer not set")
 		return false
 
 	# MOVEモード開始時に対象キャラクターを確定（スナップショット）
 	selection_manager.capture_path_targets()
 
 	var primary = selection_manager.primary_character
-	var target_count = selection_manager.get_path_targets().size()
+	var _target_count = selection_manager.get_path_targets().size()
 
 	# プライマリキャラクターを基準にパス描画
 	is_active = true
@@ -62,7 +60,6 @@ func start(character: Node, char_color: Color = Color.WHITE) -> bool:
 	path_drawer.set_character_color(char_color)
 
 	mode_started.emit(primary)
-	print("[PathMode] Started for %d characters (primary: %s)" % [target_count, primary.name])
 	return true
 
 
@@ -74,7 +71,6 @@ func confirm() -> bool:
 
 	var targets = selection_manager.get_path_targets()
 	if targets.is_empty():
-		print("[PathMode] No target characters for path")
 		cancel()
 		return false
 
@@ -99,7 +95,6 @@ func cancel() -> void:
 
 	_cleanup()
 	mode_cancelled.emit()
-	print("[PathMode] Cancelled")
 
 
 ## パスモード中かどうか
@@ -144,7 +139,6 @@ func _on_drawing_finished(points: PackedVector3Array) -> void:
 		cancel()
 		return
 
-	print("[PathMode] Path drawn with %d points" % points.size())
 	path_ready.emit()
 
 

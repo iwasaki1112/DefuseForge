@@ -80,9 +80,17 @@ func _apply_rendering() -> void:
 	# 解像度スケーリング
 	get_viewport().scaling_3d_scale = preset.resolution_scale
 
+	# Compatibilityレンダラーでは一部機能が未対応
+	var rendering_method: String = ProjectSettings.get_setting("rendering/renderer/rendering_method", "")
+	if rendering_method == "gl_compatibility":
+		get_viewport().screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+
 	# FSRアップスケーリング
 	if preset.use_fsr:
-		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		if rendering_method == "forward_plus":
+			get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		else:
+			get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	else:
 		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 

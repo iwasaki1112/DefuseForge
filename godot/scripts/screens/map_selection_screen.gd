@@ -9,7 +9,7 @@ signal map_selected(preset_id: String)
 
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const GAME_SCENE := "res://scenes/screens/game.tscn"
-const ScreenLayout := preload("res://scripts/ui/screen_layout.gd")
+const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
 
 var _map_container: GridContainer
 var _selected_map_id: String = ""
@@ -24,7 +24,7 @@ func _ready() -> void:
 
 func _setup_ui() -> void:
 	# 背景色
-	ScreenLayout.add_solid_background(self)
+	ScreenLayoutScript.add_solid_background(self)
 
 	# メインコンテナ
 	var main_vbox := VBoxContainer.new()

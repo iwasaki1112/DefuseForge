@@ -56,7 +56,7 @@ func _process(delta: float) -> void:
 ## キャラクターにマーカーをアタッチ
 func attach_to_character(character: Node) -> void:
 	_target_character = character
-	if character:
+	if character and is_inside_tree():
 		var char_pos: Vector3 = character.global_position
 		global_position = Vector3(char_pos.x, height_offset, char_pos.z)
 

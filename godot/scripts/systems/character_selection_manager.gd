@@ -37,7 +37,6 @@ func add_to_selection(character: Node) -> void:
 	_apply_outline(character)
 	selection_changed.emit(selected_characters.duplicate(), primary_character)
 	primary_changed.emit(primary_character)
-	print("[Selection] Added %s (total: %d)" % [character.name, selected_characters.size()])
 
 
 ## 選択リストからキャラクターを削除
@@ -57,7 +56,6 @@ func remove_from_selection(character: Node) -> void:
 		primary_changed.emit(primary_character)
 
 	selection_changed.emit(selected_characters.duplicate(), primary_character)
-	print("[Selection] Removed %s (total: %d)" % [character.name, selected_characters.size()])
 
 
 ## キャラクターの選択をトグル（選択/解除を切り替え）
@@ -76,7 +74,6 @@ func deselect_all() -> void:
 	primary_character = null
 	selection_changed.emit(selected_characters.duplicate(), primary_character)
 	primary_changed.emit(primary_character)
-	print("[Selection] Deselected all")
 
 
 ## 選択中のキャラクターがいるか
@@ -92,7 +89,6 @@ func get_selection_count() -> int:
 ## パス適用対象を確定（MOVEモード開始時に呼ぶ）
 func capture_path_targets() -> void:
 	path_target_characters = selected_characters.duplicate()
-	print("[Selection] Captured %d path targets" % path_target_characters.size())
 
 
 ## パス適用対象をクリア
@@ -159,7 +155,6 @@ func _apply_outline(character: Node) -> void:
 	# 選択マーカーを作成
 	_create_selection_marker(character)
 
-	print("[Outline] Applied outline to %s (%d meshes)" % [character.name, outlined.size()])
 
 
 ## 特定キャラクターのアウトラインを削除
@@ -188,7 +183,6 @@ func _remove_outline(character: Node) -> void:
 	# 選択マーカーを削除
 	_remove_selection_marker(character)
 
-	print("[Outline] Removed outline from %s" % character.name)
 
 
 ## 全てのアウトラインを削除
@@ -248,7 +242,6 @@ func _create_selection_marker(character: Node) -> void:
 		add_child(marker)
 
 	_selection_markers[char_id] = marker
-	print("[SelectionMarker] Created marker for %s" % character.name)
 
 
 ## 選択マーカーを削除
@@ -263,7 +256,6 @@ func _remove_selection_marker(character: Node) -> void:
 		marker.queue_free()
 
 	_selection_markers.erase(char_id)
-	print("[SelectionMarker] Removed marker for %s" % character.name)
 
 
 ## 全ての選択マーカーを削除

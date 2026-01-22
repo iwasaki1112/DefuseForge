@@ -209,8 +209,8 @@ func _populate_weapon_list() -> void:
 		button.text = "%s - %s" % [preset.display_name, price_text]
 
 		# 購入可否で色分け
-		var can_buy := current_money >= preset.price
-		if not can_buy:
+		var _can_buy := current_money >= preset.price
+		if not _can_buy:
 			button.disabled = true
 			button.modulate = Color(0.5, 0.5, 0.5)
 		else:
@@ -232,11 +232,11 @@ func _on_weapon_selected(weapon: WeaponPreset, button: Button) -> void:
 	var current_money := PlayerState.get_money()
 	for btn in _weapon_buttons:
 		# 購入可否を再計算
-		var can_buy := true
+		var _can_buy := true
 		for w in WeaponRegistry.get_all():
 			var preset := w as WeaponPreset
 			if preset and btn.text.begins_with(preset.display_name):
-				can_buy = current_money >= preset.price
+				_can_buy = current_money >= preset.price
 				break
 
 		if btn.disabled:
@@ -291,7 +291,6 @@ func _on_buy_pressed() -> void:
 	if PlayerState.spend_money(_selected_weapon.price):
 		# 武器装備
 		_current_character.equip_weapon(_selected_weapon)
-		print("[WeaponShopModal] Purchased: %s for $%d" % [_selected_weapon.display_name, _selected_weapon.price])
 
 		# シグナル発火
 		var purchased_weapon := _selected_weapon

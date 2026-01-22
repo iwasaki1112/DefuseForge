@@ -27,7 +27,6 @@ extends Node
 # ============================================
 var _labels: Dictionary = {}  ## character_id -> Node3D (label container)
 var _label_index: int = 0  ## 次のラベル用インデックス（A=0, B=1...）
-var _tracked_characters: Array[Node] = []  ## 追跡中のキャラクター
 
 # ============================================
 # Public API

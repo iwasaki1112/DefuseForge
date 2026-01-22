@@ -56,12 +56,6 @@ func _complete_character_setup(character: Node) -> void:
 	# Combat awarenessセットアップ
 	character.setup_combat_awareness()
 	if character.combat_awareness:
-		character.combat_awareness.enemy_spotted.connect(
-			func(enemy): print("[Combat] %s spotted %s" % [character.name, enemy.name])
-		)
-		character.combat_awareness.enemy_lost.connect(
-			func(enemy): print("[Combat] %s lost sight of %s" % [character.name, enemy.name])
-		)
 		character.combat_awareness.enable_firing()
 
 	# 視界状態を適用

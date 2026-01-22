@@ -46,7 +46,6 @@ var _game_manager = null  # GameManager（循環参照回避のためvariant型�
 func setup(map_container: Node3D, game_manager) -> void:
 	_map_container = map_container
 	_game_manager = game_manager
-	print("[MapManager] Setup complete")
 
 
 # ============================================
@@ -97,13 +96,12 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 	# ロード完了シグナル
 	map_loaded.emit(map_id, map_instance)
 
-	print("[MapManager] Map loaded: %s (size: %s)" % [map_id, preset.map_size])
 	return map_instance
 
 
 ## マップをアンロード
-## cleanup_characters: trueの場合、キャラクターとパスもクリーンアップ
-func unload_map(cleanup_characters: bool = true) -> void:
+## cleanup_characters_on_unload: trueの場合、キャラクターとパスもクリーンアップ
+func unload_map(cleanup_characters_on_unload: bool = true) -> void:
 	if not has_map():
 		return
 
@@ -113,7 +111,7 @@ func unload_map(cleanup_characters: bool = true) -> void:
 	map_will_unload.emit(old_map_id)
 
 	# クリーンアップ
-	if cleanup_characters:
+	if cleanup_characters_on_unload:
 		cleanup_paths()
 		cleanup_characters()
 
@@ -129,13 +127,11 @@ func unload_map(cleanup_characters: bool = true) -> void:
 	# アンロード完了シグナル
 	map_unloaded.emit(old_map_id)
 
-	print("[MapManager] Map unloaded: %s" % old_map_id)
 
 
 ## マップを切り替え（アンロード→ロードを一括実行）
 ## Returns: 新しいマップインスタンス、失敗時はnull
 func switch_map(new_map_id: String) -> Node3D:
-	print("[MapManager] Switching map: %s -> %s" % [current_map_id, new_map_id])
 	return load_map(new_map_id, true)
 
 
@@ -154,7 +150,6 @@ func cleanup_characters() -> void:
 			_game_manager.unregister_character(character)
 			character.queue_free()
 
-	print("[MapManager] Cleaned up %d characters" % characters_to_remove.size())
 
 
 ## パス関連の状態をすべてクリア
@@ -176,7 +171,6 @@ func cleanup_paths() -> void:
 	if _game_manager.selection_manager:
 		_game_manager.selection_manager.deselect_all()
 
-	print("[MapManager] Cleaned up paths")
 
 
 # ============================================

@@ -60,7 +60,6 @@ func _load_presets_from_directory() -> void:
 		file_name = dir.get_next()
 
 	dir.list_dir_end()
-	print("WeaponRegistry: Loaded %d presets" % _presets.size())
 
 # ============================================
 # Registration API

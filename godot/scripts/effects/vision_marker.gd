@@ -230,12 +230,12 @@ func _build_line_to_target() -> void:
 	var indices = PackedInt32Array()
 
 	# アンカーからターゲットへの線を作成
-	var anchor_local = Vector3.ZERO  # ローカル座標での原点
+	var _anchor_local = Vector3.ZERO  # ローカル座標での原点
 	var target_local = _target_point - global_position
 	target_local.y = height_offset * 0.5  # 少し高めに
 
 	var direction = target_local.normalized()
-	var distance = target_local.length()
+	var _distance = target_local.length()
 
 	# 線を幅のある四角形として描画
 	var perpendicular = Vector3(-direction.z, 0, direction.x).normalized() * target_line_width

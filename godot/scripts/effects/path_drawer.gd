@@ -161,7 +161,6 @@ func _handle_vision_point_input(event: InputEvent) -> void:
 
 				var result = _find_closest_point_on_path(ground_pos)
 				if result.distance > path_click_threshold:
-					print("[PathDrawer] Click too far from path")
 					return
 
 				_current_vision_anchor = result.point
@@ -196,14 +195,12 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 
 			var result = _find_closest_point_on_path(ground_pos)
 			if result.distance > path_click_threshold:
-				print("[PathDrawer] Click too far from path for run marker")
 				return
 
 			if _current_run_start.is_empty():
 				# 開始点を設定
 				_current_run_start = { "ratio": result.ratio, "position": result.point }
 				_create_run_marker(result.point, RunMarkerScript.MarkerType.START)
-				print("[PathDrawer] Run start point set at ratio %.2f" % result.ratio)
 			else:
 				# 終点を設定してセグメントを完成
 				var start_ratio = _current_run_start.ratio
@@ -231,7 +228,6 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 				_create_run_marker(result.point, RunMarkerScript.MarkerType.END)
 
 				run_segment_added.emit(start_ratio, end_ratio)
-				print("[PathDrawer] Run segment added: %.2f - %.2f" % [start_ratio, end_ratio])
 
 				# 開始点をクリア
 				_current_run_start = {}
@@ -251,7 +247,6 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 
 			var result = _find_closest_point_on_path(ground_pos)
 			if result.distance > path_click_threshold:
-				print("[PathDrawer] Click too far from path for clear marker")
 				return
 
 			# Clearポイントを追加
@@ -263,28 +258,27 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 				if _character_markers.has(char_id):
 					var char_data = _character_markers[char_id]
 					# ソート位置を見つけて挿入
-					var insert_index = 0
+					var _insert_index = 0
 					for i in range(char_data.clear_points.size()):
 						if char_data.clear_points[i].path_ratio > result.ratio:
 							break
-						insert_index = i + 1
-					char_data.clear_points.insert(insert_index, new_point)
+						_insert_index = i + 1
+					char_data.clear_points.insert(_insert_index, new_point)
 					# マーカーを作成
 					var marker = _create_clear_marker_node(result.point)
-					char_data.clear_meshes.insert(insert_index, marker)
+					char_data.clear_meshes.insert(_insert_index, marker)
 			else:
 				# シングルモードの場合
-				var insert_index = 0
+				var _insert_index = 0
 				for i in range(_clear_points.size()):
 					if _clear_points[i].path_ratio > result.ratio:
 						break
-					insert_index = i + 1
-				_clear_points.insert(insert_index, new_point)
+					_insert_index = i + 1
+				_clear_points.insert(_insert_index, new_point)
 				# マーカーを作成
-				_create_clear_marker(result.point, insert_index)
+				_create_clear_marker(result.point, _insert_index)
 
 			clear_point_added.emit(result.ratio)
-			print("[PathDrawer] Clear point added at ratio %.2f" % result.ratio)
 			get_viewport().set_input_as_handled()
 
 
@@ -412,7 +406,6 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	direction.y = 0
 
 	if direction.length_squared() < 0.001:
-		print("[PathDrawer] Vision target too close to anchor")
 		# 一時マーカーがあれば削除
 		_remove_temp_vision_marker()
 		return
@@ -436,36 +429,34 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 			var vision_meshes: Array[MeshInstance3D] = char_data.vision_meshes
 
 			# 挿入位置を見つける
-			var insert_index = 0
+			var _insert_index = 0
 			for i in range(vision_points.size()):
 				if vision_points[i].path_ratio > _current_vision_ratio:
 					break
-				insert_index = i + 1
+				_insert_index = i + 1
 
-			vision_points.insert(insert_index, new_point)
+			vision_points.insert(_insert_index, new_point)
 
 			# 視線マーカーを作成（ターゲットポイントモード）
 			var marker = _create_vision_marker_node(_current_vision_anchor, target_point)
-			vision_meshes.insert(insert_index, marker)
+			vision_meshes.insert(_insert_index, marker)
 
 			vision_point_added.emit(_current_vision_anchor, target_point)
-			print("[PathDrawer] Vision point (target mode) added for %s at ratio %.2f" % [_active_edit_character.name, _current_vision_ratio])
 			return
 
 	# シングルモードの場合は従来通り
-	var insert_index = 0
+	var _insert_index = 0
 	for i in range(_vision_points.size()):
 		if _vision_points[i].path_ratio > _current_vision_ratio:
 			break
-		insert_index = i + 1
+		_insert_index = i + 1
 
-	_vision_points.insert(insert_index, new_point)
+	_vision_points.insert(_insert_index, new_point)
 
 	# 視線マーカーを作成（同じ挿入位置に）
-	_create_vision_marker_at_index(_current_vision_anchor, target_point, insert_index)
+	_create_vision_marker_at_index(_current_vision_anchor, target_point, _insert_index)
 
 	vision_point_added.emit(_current_vision_anchor, target_point)
-	print("[PathDrawer] Vision point (target mode) added at ratio %.2f" % _current_vision_ratio)
 
 
 ## 視線マーカーを作成（末尾に追加）
@@ -533,7 +524,6 @@ func _start_drawing(start_pos: Vector3) -> void:
 		var char_pos = Vector3(_character.global_position.x, ground_plane_height, _character.global_position.z)
 		var hit_result = _check_wall_between(char_pos, start_pos)
 		if hit_result.hit:
-			print("[PathDrawer] Cannot start drawing: wall between character and start position")
 			return  # 描画開始を拒否
 
 	_is_drawing = true
@@ -561,7 +551,6 @@ func _add_point(pos: Vector3) -> void:
 		safe_pos.y = ground_plane_height
 		_path_points.append(safe_pos)
 		_path_mesh.update_from_points(_path_points)
-		print("[PathDrawer] Path stopped at wall")
 		_finish_drawing()
 		return
 
@@ -581,7 +570,6 @@ func _finish_drawing() -> void:
 		_pending_character = _character as CharacterBody3D
 
 	drawing_finished.emit(_path_points)
-	print("[PathDrawer] Movement path finished with %d points (internal: %d)" % [_path_points.size(), _pending_path.size()])
 
 
 ## パスをクリア
@@ -702,14 +690,12 @@ func enable(character: Node3D) -> void:
 	_is_enabled = true
 	_drawing_mode = DrawingMode.MOVEMENT
 	clear()
-	print("[PathDrawer] Enabled for character (movement mode)")
 
 
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false
 	_is_drawing_vision = false
-	print("[PathDrawer] Disabled")
 
 
 func is_enabled() -> bool:
@@ -729,13 +715,11 @@ func get_drawing_mode() -> DrawingMode:
 ## キャラクターはマーカー到達後、移動しながらターゲット地点を見続ける
 func start_vision_mode() -> bool:
 	if _pending_path.size() < 2:
-		print("[PathDrawer] Cannot start vision mode: no movement path set")
 		return false
 
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
 	mode_changed.emit(int(DrawingMode.VISION_POINT))
-	print("[PathDrawer] Switched to vision point mode - click on path and drag to set target point")
 	return true
 
 
@@ -744,7 +728,6 @@ func start_movement_mode() -> void:
 	_drawing_mode = DrawingMode.MOVEMENT
 	_path_points.clear()
 	mode_changed.emit(int(DrawingMode.MOVEMENT))
-	print("[PathDrawer] Switched to movement mode")
 
 
 ## 視線ポイントがあるか
@@ -776,7 +759,6 @@ func remove_last_vision_point() -> void:
 				if char_data.vision_meshes.size() > 0:
 					var mesh = char_data.vision_meshes.pop_back()
 					mesh.queue_free()
-				print("[PathDrawer] Last vision point removed for %s" % _active_edit_character.name)
 		return
 
 	# シングルモード
@@ -785,7 +767,6 @@ func remove_last_vision_point() -> void:
 		if _vision_meshes.size() > 0:
 			var mesh = _vision_meshes.pop_back()
 			mesh.queue_free()
-		print("[PathDrawer] Last vision point removed")
 
 
 ## ========================================
@@ -795,14 +776,12 @@ func remove_last_vision_point() -> void:
 ## Runマーカー設定モードに切り替え
 func start_run_mode() -> bool:
 	if _pending_path.size() < 2:
-		print("[PathDrawer] Cannot start run mode: no movement path set")
 		return false
 
 	_drawing_mode = DrawingMode.RUN_MARKER
 	_is_enabled = true
 	_current_run_start = {}  # 未完成の開始点をクリア
 	mode_changed.emit(int(DrawingMode.RUN_MARKER))
-	print("[PathDrawer] Switched to run marker mode - click to set run start/end points")
 	return true
 
 
@@ -840,14 +819,12 @@ func remove_last_run_segment() -> void:
 				if char_data.run_meshes.size() > 0:
 					var mesh = char_data.run_meshes.pop_back()
 					mesh.queue_free()
-				print("[PathDrawer] Last run segment removed for %s" % _active_edit_character.name)
 			elif not _current_run_start.is_empty():
 				# 未完成の開始点がある場合はそれを削除
 				_current_run_start = {}
 				if char_data.run_meshes.size() > 0:
 					var mesh = char_data.run_meshes.pop_back()
 					mesh.queue_free()
-				print("[PathDrawer] Incomplete run start point removed for %s" % _active_edit_character.name)
 		return
 
 	# シングルモード
@@ -861,14 +838,12 @@ func remove_last_run_segment() -> void:
 		if _run_meshes.size() > 0:
 			var mesh = _run_meshes.pop_back()
 			mesh.queue_free()
-		print("[PathDrawer] Last run segment removed")
 	elif not _current_run_start.is_empty():
 		# 未完成の開始点がある場合はそれを削除
 		_current_run_start = {}
 		if _run_meshes.size() > 0:
 			var mesh = _run_meshes.pop_back()
 			mesh.queue_free()
-		print("[PathDrawer] Incomplete run start point removed")
 
 
 ## 未完成のRun開始点があるか
@@ -885,13 +860,11 @@ func has_incomplete_run_start() -> bool:
 ## このポイント以降はVision/Runがクリアされ、進行方向を向く
 func start_clear_mode() -> bool:
 	if _pending_path.size() < 2:
-		print("[PathDrawer] Cannot start clear mode: no movement path set")
 		return false
 
 	_drawing_mode = DrawingMode.CLEAR_MARKER
 	_is_enabled = true
 	mode_changed.emit(int(DrawingMode.CLEAR_MARKER))
-	print("[PathDrawer] Switched to clear marker mode - click to set clear points")
 	return true
 
 
@@ -924,7 +897,6 @@ func remove_last_clear_point() -> void:
 				if char_data.clear_meshes.size() > 0:
 					var mesh = char_data.clear_meshes.pop_back()
 					mesh.queue_free()
-				print("[PathDrawer] Last clear point removed for %s" % _active_edit_character.name)
 		return
 
 	# シングルモード
@@ -933,7 +905,6 @@ func remove_last_clear_point() -> void:
 		if _clear_meshes.size() > 0:
 			var mesh = _clear_meshes.pop_back()
 			mesh.queue_free()
-		print("[PathDrawer] Last clear point removed")
 
 
 ## ========================================
@@ -957,7 +928,6 @@ func execute(run: bool = false) -> bool:
 	_pending_path.clear()
 	_pending_character = null
 
-	print("[PathDrawer] Path execution started")
 	return true
 
 
@@ -981,12 +951,11 @@ func execute_with_vision(run: bool = false) -> bool:
 	if not _executing_character.path_completed.is_connected(_on_path_completed):
 		_executing_character.path_completed.connect(_on_path_completed)
 
-	var vision_count = _vision_points.size()
+	var _vision_count = _vision_points.size()
 	_pending_path.clear()
 	_vision_points.clear()
 	_pending_character = null
 
-	print("[PathDrawer] Path execution started with %d vision points" % vision_count)
 	return true
 
 
@@ -1009,7 +978,6 @@ func _on_path_completed() -> void:
 		_executing_character = null
 
 	clear()
-	print("[PathDrawer] Path execution completed")
 
 
 ## ========================================
@@ -1039,7 +1007,6 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 	if characters.size() > 0:
 		set_active_edit_character(characters[0])
 
-	print("[PathDrawer] Multi-character mode started with %d characters" % characters.size())
 
 
 ## マルチキャラクターモードを終了
@@ -1047,7 +1014,6 @@ func end_multi_character_mode() -> void:
 	_multi_character_mode = false
 	_active_edit_character = null
 	# マーカーデータはclear時にクリーンアップ
-	print("[PathDrawer] Multi-character mode ended")
 
 
 ## 編集対象キャラクターを設定
@@ -1062,7 +1028,6 @@ func set_active_edit_character(character: Node) -> void:
 
 	var char_id = character.get_instance_id()
 	if not _character_markers.has(char_id):
-		print("[PathDrawer] Character not in multi-character mode: %s" % character.name)
 		return
 
 	_active_edit_character = character
@@ -1071,7 +1036,6 @@ func set_active_edit_character(character: Node) -> void:
 	var char_color = CharacterColorManager.get_character_color(character)
 	_character_color = char_color
 
-	print("[PathDrawer] Active edit character: %s" % character.name)
 
 
 ## アクティブな編集キャラクターを取得
