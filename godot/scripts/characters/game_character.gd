@@ -43,7 +43,9 @@ var current_weapon: WeaponPreset = null  # WeaponPreset
 var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
 var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
-var _muzzle_flash: MeshInstance3D = null
+var _muzzle_flash: Node3D = null
+var _muzzle_flash_mat: StandardMaterial3D = null  # マテリアル参照用
+var _muzzle_flash_light: OmniLight3D = null  # マズルフラッシュ光源
 var _muzzle_flash_tween: Tween = null
 var _muzzle_flash_preview_enabled: bool = false
 
@@ -360,9 +362,10 @@ func _play_muzzle_flash() -> void:
 	if _muzzle_flash_tween and _muzzle_flash_tween.is_running():
 		_muzzle_flash_tween.kill()
 
-	var mat = _muzzle_flash.material_override as StandardMaterial3D
-	if mat:
-		mat.albedo_color = Color(1, 1, 1, 1)
+	if _muzzle_flash_mat:
+		_muzzle_flash_mat.albedo_color = Color(1, 1, 1, 1)
+	if _muzzle_flash_light:
+		_muzzle_flash_light.light_energy = 3.0
 
 	_muzzle_flash_tween = create_tween()
 	_muzzle_flash_tween.tween_property(
@@ -371,11 +374,18 @@ func _play_muzzle_flash() -> void:
 		Vector3.ONE * base_scale * 1.2,
 		MUZZLE_FLASH_DURATION
 	)
-	if mat:
+	if _muzzle_flash_mat:
 		_muzzle_flash_tween.parallel().tween_property(
-			mat,
+			_muzzle_flash_mat,
 			"albedo_color",
 			Color(1, 1, 1, 0),
+			MUZZLE_FLASH_DURATION
+		)
+	if _muzzle_flash_light:
+		_muzzle_flash_tween.parallel().tween_property(
+			_muzzle_flash_light,
+			"light_energy",
+			0.0,
 			MUZZLE_FLASH_DURATION
 		)
 	_muzzle_flash_tween.tween_callback(func(): _muzzle_flash.visible = false)
@@ -392,9 +402,10 @@ func _ensure_muzzle_flash_visible() -> void:
 	_muzzle_flash.position = _get_muzzle_flash_offset()
 	_muzzle_flash.rotation_degrees = _get_muzzle_flash_rotation()
 	_muzzle_flash.scale = Vector3.ONE * _get_muzzle_flash_scale()
-	var mat = _muzzle_flash.material_override as StandardMaterial3D
-	if mat:
-		mat.albedo_color = Color(1, 1, 1, 1)
+	if _muzzle_flash_mat:
+		_muzzle_flash_mat.albedo_color = Color(1, 1, 1, 1)
+	if _muzzle_flash_light:
+		_muzzle_flash_light.light_energy = 3.0
 	_muzzle_flash.visible = true
 
 
@@ -402,24 +413,45 @@ func _create_muzzle_flash() -> void:
 	if not _weapon_socket or not is_instance_valid(_weapon_socket):
 		return
 
-	_muzzle_flash = MeshInstance3D.new()
+	# 親ノードを作成
+	_muzzle_flash = Node3D.new()
 	_muzzle_flash.name = "MuzzleFlash"
 
-	var quad = QuadMesh.new()
-	quad.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
-	_muzzle_flash.mesh = quad
+	# 共通マテリアル作成
+	_muzzle_flash_mat = StandardMaterial3D.new()
+	_muzzle_flash_mat.albedo_texture = MUZZLE_FLASH_TEXTURE
+	_muzzle_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_muzzle_flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_muzzle_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_muzzle_flash_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_muzzle_flash_mat.emission_enabled = true
+	_muzzle_flash_mat.emission_texture = MUZZLE_FLASH_TEXTURE
+	_muzzle_flash_mat.emission_energy_multiplier = 1.2
 
-	var mat = StandardMaterial3D.new()
-	mat.albedo_texture = MUZZLE_FLASH_TEXTURE
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_DISABLED
-	mat.emission_enabled = true
-	mat.emission_texture = MUZZLE_FLASH_TEXTURE
-	mat.emission_energy_multiplier = 1.2
-	_muzzle_flash.material_override = mat
+	# Quad 1 (XY平面 - 正面向き)
+	var quad1 = MeshInstance3D.new()
+	var mesh1 = QuadMesh.new()
+	mesh1.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
+	quad1.mesh = mesh1
+	quad1.material_override = _muzzle_flash_mat
+	_muzzle_flash.add_child(quad1)
+
+	# Quad 2 (YZ平面 - Y軸で90度回転)
+	var quad2 = MeshInstance3D.new()
+	var mesh2 = QuadMesh.new()
+	mesh2.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
+	quad2.mesh = mesh2
+	quad2.rotation_degrees.y = 90  # Y軸で90度回転
+	quad2.material_override = _muzzle_flash_mat
+	_muzzle_flash.add_child(quad2)
+
+	# オレンジ光源
+	_muzzle_flash_light = OmniLight3D.new()
+	_muzzle_flash_light.light_color = Color(1.0, 0.6, 0.2)  # オレンジ
+	_muzzle_flash_light.light_energy = 3.0
+	_muzzle_flash_light.omni_range = 2.0
+	_muzzle_flash_light.omni_attenuation = 2.0
+	_muzzle_flash.add_child(_muzzle_flash_light)
 
 	_muzzle_flash.visible = false
 	_weapon_socket.add_child(_muzzle_flash)
