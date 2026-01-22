@@ -166,6 +166,13 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				# 敵キャラクターは無視
 				if PlayerState.is_enemy(clicked_character):
 					return false
+				# 移動中キャラクターを選択したら、移動を停止してメニュー表示
+				if path_service and path_service.is_character_following_path(clicked_character):
+					path_service.cancel_path_following(clicked_character, true)
+					if selection_manager and not selection_manager.selected_characters.has(clicked_character):
+						selection_manager.add_to_selection(clicked_character)
+					_show_context_menu(screen_pos, clicked_character)
+					return true
 				# 味方キャラクタークリック: トグル選択 + コンテキストメニュー表示
 				selection_manager.toggle_selection(clicked_character)
 				# 選択中の場合のみコンテキストメニュー表示

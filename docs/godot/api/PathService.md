@@ -44,6 +44,15 @@
 ### `clear_all_pending_paths() -> void`
 保留中のパスをクリアする。
 
+### `cancel_all_path_following() -> void`
+全キャラクターのパス追従をキャンセルする。
+
+### `cancel_path_following(character: Node, clear_pending: bool = true) -> void`
+指定キャラクターのパス追従をキャンセルする。
+
+### `is_character_following_path(character: Node) -> bool`
+指定キャラクターがパス追従中か判定する。
+
 ### `is_marker_mode() -> bool`
 視線/Runマーカー設定モードか判定する。
 

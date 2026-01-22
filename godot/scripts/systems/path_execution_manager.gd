@@ -296,6 +296,19 @@ func cancel_all_path_following() -> void:
 			controller.cancel()
 
 
+## 指定キャラクターのパス追従をキャンセル
+func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.is_following_path():
+			controller.cancel()
+	if clear_pending:
+		_clear_pending_path_for_character(char_id)
+
+
 ## 全パス追従コントローラーを処理（毎フレーム呼ぶ）
 func process_controllers(delta: float) -> void:
 	for controller in _path_controllers.values():

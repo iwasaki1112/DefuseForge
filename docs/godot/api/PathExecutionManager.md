@@ -88,6 +88,10 @@ func is_character_following_path(character: Node) -> bool
 
 # 全てのパス追従をキャンセル
 func cancel_all_path_following() -> void
+
+# 指定キャラクターのパス追従をキャンセル
+# clear_pending: trueの場合、該当キャラの保留パス/マーカーも削除
+func cancel_path_following(character: Node, clear_pending: bool = true) -> void
 ```
 
 ### フレーム処理

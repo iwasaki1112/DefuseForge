@@ -133,6 +133,11 @@ func cancel_all_path_following() -> void:
 		path_execution_manager.cancel_all_path_following()
 
 
+func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
+	if path_execution_manager:
+		path_execution_manager.cancel_path_following(character, clear_pending)
+
+
 func process_controllers(delta: float) -> void:
 	if path_execution_manager:
 		path_execution_manager.process_controllers(delta)
