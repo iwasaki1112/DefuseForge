@@ -19,7 +19,8 @@ signal all_paths_completed()
 signal paths_cleared()
 
 ## 保留中のパス（キャラクターごと）
-## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array, "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array, "clear_markers": Array } }
+## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
+##                   "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array, "clear_markers": Array } }
 var pending_paths: Dictionary = {}
 
 ## パス追従コントローラー { character_id -> PathFollowingController }
@@ -255,7 +256,9 @@ func execute_all_paths(run: bool) -> int:
 
 		if controller.start_path(path, vision_points, run_segments, run, clear_points):
 			executed_count += 1
-			print("[PathExecution] Started path for %s (%d points, run_segments: %d, clear_points: %d)" % [character.name, path.size(), run_segments.size(), clear_points.size()])
+			print("[PathExecution] Started path for %s (%d points, run_segments: %d, clear_points: %d)" % [
+				character.name, path.size(), run_segments.size(), clear_points.size()
+			])
 		else:
 			print("[PathExecution] Failed to start path for %s" % character.name)
 

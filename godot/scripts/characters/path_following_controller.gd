@@ -327,6 +327,20 @@ func _calculate_direction_to_target() -> void:
 	# ターゲットに非常に近い場合は現在の方向を維持
 
 
+## パス完了時に残りの視線ポイントを全て処理
+## 終点付近の視線ポイントを適用するため
+func _process_remaining_vision_points() -> void:
+	while _vision_index < _vision_points.size():
+		var vp = _vision_points[_vision_index]
+		if vp.has("target_point"):
+			_active_target_point = vp.target_point
+			_calculate_direction_to_target()
+		elif vp.has("direction"):
+			_forced_look_direction = vp.direction
+			_active_target_point = Vector3.ZERO
+		_vision_index += 1
+
+
 ## パス長キャッシュを構築
 func _build_path_length_cache() -> void:
 	_cached_segment_lengths.clear()
@@ -412,6 +426,9 @@ func _finish() -> void:
 	if _character:
 		_character.velocity = Vector3.ZERO
 
+	# 残りの視線ポイントを全て処理（終点付近の視線ポイントを適用するため）
+	_process_remaining_vision_points()
+
 	# 完了時に最後の向きを維持してアイドル状態に
 	# 優先順位: 敵視認 > 視線ポイント > 移動方向
 	if _character:
@@ -419,12 +436,12 @@ func _finish() -> void:
 		if anim_ctrl:
 			var final_dir: Vector3 = Vector3.ZERO
 
-			# 敵を追跡中なら敵方向を維持
+			# 1. 敵を追跡中なら敵方向を維持（最優先）
 			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
 				if _combat_awareness.is_tracking_enemy():
 					final_dir = _combat_awareness.get_override_look_direction()
 
-			# 視線ポイント or 移動方向
+			# 2. 視線ポイント or 3. 最後の移動方向
 			if final_dir.length_squared() < 0.1:
 				final_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _last_move_direction
 

@@ -280,6 +280,7 @@ func _on_path_mode_cancelled() -> void:
 
 func _on_path_ready() -> void:
 	# 視線ポイントモードへ移行
+	# パス終点付近にVisionマーカーを追加すると、その方向で最終向きが固定される
 	if start_vision_mode():
 		_show_marker_panel()
 	path_ready.emit()
