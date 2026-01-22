@@ -59,6 +59,13 @@
 | `attach_offset` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の位置オフセット（WeaponSocketに適用） |
 | `attach_rotation` | `Vector3` | `Vector3.ZERO` | 右手アタッチ時の回転オフセット（度、WeaponSocketに適用） |
 
+### Muzzle Flash
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `muzzle_flash_offset` | `Vector3` | `Vector3.ZERO` | マズルフラッシュ位置オフセット（WeaponSocket基準） |
+| `muzzle_flash_scale` | `float` | `1.0` | マズルフラッシュのスケール倍率 |
+| `muzzle_flash_rotation` | `Vector3` | `Vector3.ZERO` | マズルフラッシュの回転（度） |
+
 ## 使用例
 
 ### GDScriptでの作成

@@ -38,6 +38,12 @@
 | `LEFT` | 左から |
 | `RIGHT` | 右から |
 
+## Signals
+
+| シグナル | 引数 | 説明 |
+|---------|------|------|
+| `fired` | なし | 発射アクションが実行されたタイミング |
+
 ## Export Properties
 
 ### Movement Speed

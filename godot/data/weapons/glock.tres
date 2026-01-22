@@ -17,3 +17,6 @@ price = 200
 model_scene = ExtResource("2")
 attach_offset = Vector3(-0.1, 9.4, 2.9)
 attach_rotation = Vector3(-90, -81.5, 0)
+muzzle_flash_offset = Vector3(0.3, 7.8, 20.1)
+muzzle_flash_scale = 0.28
+muzzle_flash_rotation = Vector3(91.0, -164.5, 22.0)

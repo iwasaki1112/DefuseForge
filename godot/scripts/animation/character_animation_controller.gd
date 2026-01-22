@@ -8,7 +8,8 @@ enum Stance { STAND, CROUCH }
 enum Weapon { NONE, RIFLE, PISTOL }
 enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
-# Signals (reserved for future use)
+# Signals
+signal fired()
 
 # Export settings
 @export_group("Movement Speed")
@@ -181,6 +182,7 @@ func fire() -> void:
 	if _recoil_modifier:
 		_recoil_modifier.recovery_speed = recoil_recovery
 		_recoil_modifier.trigger_recoil(strength)
+	fired.emit()
 
 ## Get current movement speed based on state and direction
 ## Returns the animation's visual speed for the current blend direction

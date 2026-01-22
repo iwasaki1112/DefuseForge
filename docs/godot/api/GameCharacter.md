@@ -133,6 +133,14 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 **戻り値:** `WeaponSocket`ノードまたは`null`
 
+### Muzzle Flash API
+
+#### set_muzzle_flash_preview(enabled: bool) -> void
+マズルフラッシュの常時プレビュー表示を切り替える（調整用）。
+
+#### update_muzzle_flash_preview() -> void
+現在のWeaponPreset値でマズルフラッシュのプレビュー表示を更新する。
+
 ## ライフサイクル
 
 - `_ready()`: HP初期化、`"characters"`グループに追加
@@ -169,3 +177,6 @@ character.equip_weapon(weapon)
 - 武器装備時は`CharacterModel`配下のSkeleton3Dを再帰検索
 - 武器モデルは`BoneAttachment3D`配下の`WeaponSocket`に配置される
 - 新しい武器装備時は古い武器モデルを自動削除
+- `CharacterAnimationController.fired`に連動してマズルフラッシュを表示
+- マズルフラッシュ位置は`WeaponPreset.muzzle_flash_offset`を優先して使用
+- マズルフラッシュ回転は`WeaponPreset.muzzle_flash_rotation`を使用

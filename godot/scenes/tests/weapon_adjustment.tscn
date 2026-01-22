@@ -23,18 +23,208 @@ material = SubResource("StandardMaterial3D_1")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
+[node name="PanelLeft" type="PanelContainer" parent="UI"]
+anchors_preset = 10
+anchor_left = 0.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_right = 280.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="VBoxLeft" type="VBoxContainer" parent="UI/PanelLeft"]
+layout_mode = 2
+theme_override_constants/separation = 6
+theme_override_font_sizes/font_size = 12
+
+[node name="Title" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Muzzle Flash"
+horizontal_alignment = 1
+
+[node name="MuzzlePreviewToggle" type="CheckBox" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Preview Always On"
+button_pressed = true
+
+[node name="LabelMuzzle" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Muzzle Flash Offset"
+
+[node name="MuzzlePosX" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzlePosX"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzlePosX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzlePosX"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="MuzzlePosY" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzlePosY"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzlePosY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzlePosY"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="MuzzlePosZ" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzlePosZ"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzlePosZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzlePosZ"]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+step = 0.1
+
+[node name="LabelMuzzleScale" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Muzzle Flash Scale"
+
+[node name="MuzzleScale" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzleScale"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "S"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzleScale"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.1
+max_value = 5.0
+step = 0.01
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzleScale"]
+layout_mode = 2
+min_value = 0.1
+max_value = 5.0
+step = 0.01
+
+[node name="HSeparatorLeft" type="HSeparator" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="LabelMuzzleRot" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Muzzle Flash Rotation"
+
+[node name="MuzzleRotX" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzleRotX"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzleRotX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzleRotX"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="MuzzleRotY" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzleRotY"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzleRotY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzleRotY"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="MuzzleRotZ" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/MuzzleRotZ"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/MuzzleRotZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 0.5
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/MuzzleRotZ"]
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 0.5
+
+[node name="HSeparatorLeft2" type="HSeparator" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
 [node name="Panel" type="PanelContainer" parent="UI"]
 anchors_preset = 11
 anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -300.0
+offset_left = -280.0
 grow_horizontal = 0
 grow_vertical = 2
 
 [node name="VBox" type="VBoxContainer" parent="UI/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 6
+theme_override_font_sizes/font_size = 12
 
 [node name="Title" type="Label" parent="UI/Panel/VBox"]
 layout_mode = 2
@@ -54,6 +244,10 @@ text = "Weapon"
 
 [node name="WeaponOption" type="OptionButton" parent="UI/Panel/VBox"]
 layout_mode = 2
+
+[node name="FireButton" type="Button" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Fire"
 
 [node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
 layout_mode = 2
@@ -197,13 +391,3 @@ step = 0.5
 
 [node name="HSeparator3" type="HSeparator" parent="UI/Panel/VBox"]
 layout_mode = 2
-
-[node name="CopyButton" type="Button" parent="UI/Panel/VBox"]
-layout_mode = 2
-text = "Copy to Clipboard"
-
-[node name="OutputText" type="TextEdit" parent="UI/Panel/VBox"]
-custom_minimum_size = Vector2(0, 80)
-layout_mode = 2
-editable = false
-wrap_mode = 1

@@ -2,23 +2,24 @@ extends Node3D
 ## 武器位置調整用ツールシーン
 ##
 ## キャラクターに武器を持たせ、位置・回転オフセットをリアルタイムに調整する機能を提供する。
-## 調整した値はクリップボードにコピー可能。
+## マズルフラッシュの位置/回転/スケール調整も可能。
 ## 
 ## 主な機能:
 ## - キャラクターの切り替え
 ## - 武器の切り替え
 ## - 武器のアタッチ位置(Offset)・回転(Rotation)の調整
 ## - カメラアングル操作
-## - 調整値のテキスト出力とコピー
+## - マズルフラッシュ調整
 
 const GameCharacterScript = preload("res://scripts/characters/game_character.gd")
 const CharacterPresetScript = preload("res://scripts/resources/character_preset.gd")
 const WeaponPresetScript = preload("res://scripts/resources/weapon_preset.gd")
-const CharacterAnimationController = preload("res://scripts/animation/character_animation_controller.gd")
+const CharacterAnimationControllerScript = preload("res://scripts/animation/character_animation_controller.gd")
 
 # UI References
 @onready var character_option: OptionButton = $UI/Panel/VBox/CharacterOption
 @onready var weapon_option: OptionButton = $UI/Panel/VBox/WeaponOption
+@onready var fire_button: Button = $UI/Panel/VBox/FireButton
 @onready var pos_x_spin: SpinBox = $UI/Panel/VBox/PosX/SpinBox
 @onready var pos_x_slider: HSlider = $UI/Panel/VBox/PosX/HSlider
 @onready var pos_y_spin: SpinBox = $UI/Panel/VBox/PosY/SpinBox
@@ -32,9 +33,21 @@ const CharacterAnimationController = preload("res://scripts/animation/character_
 @onready var rot_y_slider: HSlider = $UI/Panel/VBox/RotY/HSlider
 @onready var rot_z_spin: SpinBox = $UI/Panel/VBox/RotZ/SpinBox
 @onready var rot_z_slider: HSlider = $UI/Panel/VBox/RotZ/HSlider
-
-@onready var copy_button: Button = $UI/Panel/VBox/CopyButton
-@onready var output_text: TextEdit = $UI/Panel/VBox/OutputText
+@onready var muzzle_pos_x_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzlePosX/SpinBox
+@onready var muzzle_pos_x_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzlePosX/HSlider
+@onready var muzzle_pos_y_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzlePosY/SpinBox
+@onready var muzzle_pos_y_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzlePosY/HSlider
+@onready var muzzle_pos_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzlePosZ/SpinBox
+@onready var muzzle_pos_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzlePosZ/HSlider
+@onready var muzzle_scale_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzleScale/SpinBox
+@onready var muzzle_scale_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleScale/HSlider
+@onready var muzzle_rot_x_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzleRotX/SpinBox
+@onready var muzzle_rot_x_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleRotX/HSlider
+@onready var muzzle_rot_y_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzleRotY/SpinBox
+@onready var muzzle_rot_y_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleRotY/HSlider
+@onready var muzzle_rot_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzleRotZ/SpinBox
+@onready var muzzle_rot_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleRotZ/HSlider
+@onready var muzzle_preview_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/MuzzlePreviewToggle
 @onready var camera: Camera3D = $Camera3D
 
 # Data
@@ -116,10 +129,11 @@ func _setup_scene(preset: CharacterPresetScript) -> void:
 			anim_player.remove_animation_library("")
 		anim_player.add_animation_library("", _animation_library)
 
-	var anim_ctrl = CharacterAnimationController.new()
+	var anim_ctrl = CharacterAnimationControllerScript.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 	anim_ctrl.setup(model, anim_player)
+	character.set_muzzle_flash_preview(muzzle_preview_toggle.button_pressed)
 
 	character.position = Vector3(0, 0, 0)
 
@@ -195,6 +209,7 @@ func _setup_ui() -> void:
 	for w in weapons:
 		weapon_option.add_item(w.display_name)
 	weapon_option.item_selected.connect(_select_weapon)
+	fire_button.pressed.connect(_on_fire_pressed)
 	
 	# Connect signals for Position
 	pos_x_slider.value_changed.connect(func(v): pos_x_spin.value = v; _update_transform())
@@ -211,8 +226,23 @@ func _setup_ui() -> void:
 	rot_y_spin.value_changed.connect(func(v): rot_y_slider.value = v; _update_transform())
 	rot_z_slider.value_changed.connect(func(v): rot_z_spin.value = v; _update_transform())
 	rot_z_spin.value_changed.connect(func(v): rot_z_slider.value = v; _update_transform())
-	
-	copy_button.pressed.connect(_copy_values)
+
+	# Connect signals for Muzzle Flash
+	muzzle_pos_x_slider.value_changed.connect(func(v): muzzle_pos_x_spin.value = v; _update_muzzle_flash())
+	muzzle_pos_x_spin.value_changed.connect(func(v): muzzle_pos_x_slider.value = v; _update_muzzle_flash())
+	muzzle_pos_y_slider.value_changed.connect(func(v): muzzle_pos_y_spin.value = v; _update_muzzle_flash())
+	muzzle_pos_y_spin.value_changed.connect(func(v): muzzle_pos_y_slider.value = v; _update_muzzle_flash())
+	muzzle_pos_z_slider.value_changed.connect(func(v): muzzle_pos_z_spin.value = v; _update_muzzle_flash())
+	muzzle_pos_z_spin.value_changed.connect(func(v): muzzle_pos_z_slider.value = v; _update_muzzle_flash())
+	muzzle_scale_slider.value_changed.connect(func(v): muzzle_scale_spin.value = v; _update_muzzle_flash())
+	muzzle_scale_spin.value_changed.connect(func(v): muzzle_scale_slider.value = v; _update_muzzle_flash())
+	muzzle_rot_x_slider.value_changed.connect(func(v): muzzle_rot_x_spin.value = v; _update_muzzle_flash())
+	muzzle_rot_x_spin.value_changed.connect(func(v): muzzle_rot_x_slider.value = v; _update_muzzle_flash())
+	muzzle_rot_y_slider.value_changed.connect(func(v): muzzle_rot_y_spin.value = v; _update_muzzle_flash())
+	muzzle_rot_y_spin.value_changed.connect(func(v): muzzle_rot_y_slider.value = v; _update_muzzle_flash())
+	muzzle_rot_z_slider.value_changed.connect(func(v): muzzle_rot_z_spin.value = v; _update_muzzle_flash())
+	muzzle_rot_z_spin.value_changed.connect(func(v): muzzle_rot_z_slider.value = v; _update_muzzle_flash())
+	muzzle_preview_toggle.toggled.connect(_on_muzzle_preview_toggled)
 
 func _select_character(idx: int) -> void:
 	if idx < 0 or idx >= characters.size():
@@ -245,6 +275,9 @@ func _select_weapon(idx: int) -> void:
 			anim_ctrl.update_animation(Vector3.ZERO, Vector3.BACK, false, 0.0)
 
 	_set_ui_values(weapon.attach_offset, weapon.attach_rotation)
+	_set_muzzle_ui_values(weapon.muzzle_flash_offset, weapon.muzzle_flash_scale, weapon.muzzle_flash_rotation)
+	if character:
+		character.update_muzzle_flash_preview()
 
 func _set_ui_values(pos: Vector3, rot: Vector3) -> void:
 	pos_x_spin.set_value_no_signal(pos.x)
@@ -260,8 +293,23 @@ func _set_ui_values(pos: Vector3, rot: Vector3) -> void:
 	rot_y_slider.set_value_no_signal(rot.y)
 	rot_z_spin.set_value_no_signal(rot.z)
 	rot_z_slider.set_value_no_signal(rot.z)
-	
-	_update_text(pos, rot)
+
+
+func _set_muzzle_ui_values(pos: Vector3, scale: float, rot: Vector3) -> void:
+	muzzle_pos_x_spin.set_value_no_signal(pos.x)
+	muzzle_pos_x_slider.set_value_no_signal(pos.x)
+	muzzle_pos_y_spin.set_value_no_signal(pos.y)
+	muzzle_pos_y_slider.set_value_no_signal(pos.y)
+	muzzle_pos_z_spin.set_value_no_signal(pos.z)
+	muzzle_pos_z_slider.set_value_no_signal(pos.z)
+	muzzle_scale_spin.set_value_no_signal(scale)
+	muzzle_scale_slider.set_value_no_signal(scale)
+	muzzle_rot_x_spin.set_value_no_signal(rot.x)
+	muzzle_rot_x_slider.set_value_no_signal(rot.x)
+	muzzle_rot_y_spin.set_value_no_signal(rot.y)
+	muzzle_rot_y_slider.set_value_no_signal(rot.y)
+	muzzle_rot_z_spin.set_value_no_signal(rot.z)
+	muzzle_rot_z_slider.set_value_no_signal(rot.z)
 
 func _update_transform() -> void:
 	if not character:
@@ -276,16 +324,55 @@ func _update_transform() -> void:
 	
 	socket.position = pos
 	socket.rotation_degrees = rot
-	
-	_update_text(pos, rot)
 
-func _update_text(pos: Vector3, rot: Vector3) -> void:
-	var text = "attach_offset = Vector3(%.3f, %.3f, %.3f)\n" % [pos.x, pos.y, pos.z]
-	text += "attach_rotation = Vector3(%.3f, %.3f, %.3f)" % [rot.x, rot.y, rot.z]
-	output_text.text = text
+func _update_muzzle_flash() -> void:
+	var weapon = _get_current_weapon()
+	if not weapon:
+		return
+	weapon.muzzle_flash_offset = _get_muzzle_offset()
+	weapon.muzzle_flash_scale = _get_muzzle_scale()
+	weapon.muzzle_flash_rotation = _get_muzzle_rotation()
+	if character:
+		character.update_muzzle_flash_preview()
 
-func _copy_values() -> void:
-	DisplayServer.clipboard_set(output_text.text)
+
+func _get_current_weapon() -> WeaponPresetScript:
+	if current_weapon_idx < 0 or current_weapon_idx >= weapons.size():
+		return null
+	return weapons[current_weapon_idx]
+
+
+func _get_attach_offset() -> Vector3:
+	return Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
+
+
+func _get_attach_rotation() -> Vector3:
+	return Vector3(rot_x_spin.value, rot_y_spin.value, rot_z_spin.value)
+
+
+func _get_muzzle_offset() -> Vector3:
+	return Vector3(muzzle_pos_x_spin.value, muzzle_pos_y_spin.value, muzzle_pos_z_spin.value)
+
+
+func _get_muzzle_scale() -> float:
+	return muzzle_scale_spin.value
+
+
+func _get_muzzle_rotation() -> Vector3:
+	return Vector3(muzzle_rot_x_spin.value, muzzle_rot_y_spin.value, muzzle_rot_z_spin.value)
+
+
+func _on_fire_pressed() -> void:
+	if not character:
+		return
+	var anim_ctrl = character.get_anim_controller()
+	if anim_ctrl:
+		anim_ctrl.fire()
+
+
+func _on_muzzle_preview_toggled(enabled: bool) -> void:
+	if character:
+		character.set_muzzle_flash_preview(enabled)
 
 
 ## Setup camera position buttons (created dynamically)

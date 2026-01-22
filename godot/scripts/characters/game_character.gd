@@ -4,6 +4,11 @@ class_name GameCharacter
 ## Provides HP, death state, and team management
 ## Works with CharacterAnimationController for animations
 
+const MUZZLE_FLASH_TEXTURE = preload("res://assets/effects/muzzle_flash.png")
+const MUZZLE_FLASH_BASE_SIZE: float = 0.25
+const MUZZLE_FLASH_SCALE_MULTIPLIER: float = 200.0
+const MUZZLE_FLASH_DURATION: float = 0.06
+
 # ============================================
 # Team Definition
 # ============================================
@@ -38,6 +43,9 @@ var current_weapon: WeaponPreset = null  # WeaponPreset
 var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
 var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
+var _muzzle_flash: MeshInstance3D = null
+var _muzzle_flash_tween: Tween = null
+var _muzzle_flash_preview_enabled: bool = false
 
 # ============================================
 # Lifecycle
@@ -98,7 +106,11 @@ func is_enemy_of(other: GameCharacter) -> bool:
 
 ## Set CharacterAnimationController
 func set_anim_controller(controller: CharacterAnimationController) -> void:
+	if anim_ctrl and anim_ctrl.fired.is_connected(_on_anim_fired):
+		anim_ctrl.fired.disconnect(_on_anim_fired)
 	anim_ctrl = controller
+	if anim_ctrl and not anim_ctrl.fired.is_connected(_on_anim_fired):
+		anim_ctrl.fired.connect(_on_anim_fired)
 
 ## Get CharacterAnimationController
 func get_anim_controller() -> CharacterAnimationController:
@@ -302,6 +314,199 @@ func get_current_weapon() -> WeaponPreset:
 ## Get weapon socket node (for adjustment/tools)
 func get_weapon_socket() -> Node3D:
 	return _weapon_socket
+
+# ============================================
+# Muzzle Flash
+# ============================================
+
+func _on_anim_fired() -> void:
+	_play_muzzle_flash()
+
+func set_muzzle_flash_preview(enabled: bool) -> void:
+	_muzzle_flash_preview_enabled = enabled
+	if not enabled:
+		if _muzzle_flash:
+			_muzzle_flash.visible = false
+		if _muzzle_flash_tween and _muzzle_flash_tween.is_running():
+			_muzzle_flash_tween.kill()
+		return
+	_ensure_muzzle_flash_visible()
+
+
+func update_muzzle_flash_preview() -> void:
+	if not _muzzle_flash_preview_enabled:
+		return
+	_ensure_muzzle_flash_visible()
+
+
+func _play_muzzle_flash() -> void:
+	if _muzzle_flash_preview_enabled:
+		_ensure_muzzle_flash_visible()
+		return
+	if not _weapon_socket:
+		return
+	if not _muzzle_flash or not is_instance_valid(_muzzle_flash):
+		_create_muzzle_flash()
+	if not _muzzle_flash:
+		return
+
+	_muzzle_flash.position = _get_muzzle_flash_offset()
+	_muzzle_flash.rotation_degrees = _get_muzzle_flash_rotation()
+
+	var base_scale = _get_muzzle_flash_scale()
+	_muzzle_flash.scale = Vector3.ONE * base_scale
+	_muzzle_flash.visible = true
+
+	if _muzzle_flash_tween and _muzzle_flash_tween.is_running():
+		_muzzle_flash_tween.kill()
+
+	var mat = _muzzle_flash.material_override as StandardMaterial3D
+	if mat:
+		mat.albedo_color = Color(1, 1, 1, 1)
+
+	_muzzle_flash_tween = create_tween()
+	_muzzle_flash_tween.tween_property(
+		_muzzle_flash,
+		"scale",
+		Vector3.ONE * base_scale * 1.2,
+		MUZZLE_FLASH_DURATION
+	)
+	if mat:
+		_muzzle_flash_tween.parallel().tween_property(
+			mat,
+			"albedo_color",
+			Color(1, 1, 1, 0),
+			MUZZLE_FLASH_DURATION
+		)
+	_muzzle_flash_tween.tween_callback(func(): _muzzle_flash.visible = false)
+
+
+func _ensure_muzzle_flash_visible() -> void:
+	if not _weapon_socket:
+		return
+	if not _muzzle_flash or not is_instance_valid(_muzzle_flash):
+		_create_muzzle_flash()
+	if not _muzzle_flash:
+		return
+
+	_muzzle_flash.position = _get_muzzle_flash_offset()
+	_muzzle_flash.rotation_degrees = _get_muzzle_flash_rotation()
+	_muzzle_flash.scale = Vector3.ONE * _get_muzzle_flash_scale()
+	var mat = _muzzle_flash.material_override as StandardMaterial3D
+	if mat:
+		mat.albedo_color = Color(1, 1, 1, 1)
+	_muzzle_flash.visible = true
+
+
+func _create_muzzle_flash() -> void:
+	if not _weapon_socket or not is_instance_valid(_weapon_socket):
+		return
+
+	_muzzle_flash = MeshInstance3D.new()
+	_muzzle_flash.name = "MuzzleFlash"
+
+	var quad = QuadMesh.new()
+	quad.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
+	_muzzle_flash.mesh = quad
+
+	var mat = StandardMaterial3D.new()
+	mat.albedo_texture = MUZZLE_FLASH_TEXTURE
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_DISABLED
+	mat.emission_enabled = true
+	mat.emission_texture = MUZZLE_FLASH_TEXTURE
+	mat.emission_energy_multiplier = 1.2
+	_muzzle_flash.material_override = mat
+
+	_muzzle_flash.visible = false
+	_weapon_socket.add_child(_muzzle_flash)
+
+
+func _get_muzzle_flash_scale() -> float:
+	if current_weapon:
+		return maxf(0.01, current_weapon.muzzle_flash_scale) * MUZZLE_FLASH_SCALE_MULTIPLIER
+	return MUZZLE_FLASH_SCALE_MULTIPLIER
+
+
+func _get_muzzle_flash_rotation() -> Vector3:
+	if current_weapon:
+		return current_weapon.muzzle_flash_rotation
+	return Vector3.ZERO
+
+
+func _get_muzzle_flash_offset() -> Vector3:
+	if current_weapon and current_weapon.muzzle_flash_offset != Vector3.ZERO:
+		return current_weapon.muzzle_flash_offset
+	var auto_offset = _calculate_muzzle_offset_from_model()
+	if auto_offset != Vector3.ZERO:
+		return auto_offset
+	# Fallback: weapon forward is usually -Z in Godot
+	return Vector3(0, 0, -0.25)
+
+
+func _calculate_muzzle_offset_from_model() -> Vector3:
+	if not _weapon_model:
+		return Vector3.ZERO
+
+	var meshes: Array[MeshInstance3D] = []
+	_collect_mesh_instances(_weapon_model, meshes)
+	if meshes.is_empty():
+		return Vector3.ZERO
+
+	var combined := AABB()
+	var has_aabb := false
+	for mesh in meshes:
+		var local_aabb = mesh.get_aabb()
+		var transformed = _transform_aabb(local_aabb, mesh.transform)
+		if not has_aabb:
+			combined = transformed
+			has_aabb = true
+		else:
+			combined = combined.merge(transformed)
+
+	if not has_aabb:
+		return Vector3.ZERO
+
+	var center = combined.position + combined.size * 0.5
+	var min_z = combined.position.z
+	var max_z = combined.position.z + combined.size.z
+	var muzzle_z = min_z if absf(min_z) >= absf(max_z) else max_z
+	var muzzle_local = Vector3(center.x, center.y, muzzle_z)
+	var model_scale = _weapon_model.scale
+	return Vector3(muzzle_local.x * model_scale.x, muzzle_local.y * model_scale.y, muzzle_local.z * model_scale.z)
+
+
+func _collect_mesh_instances(node: Node, results: Array[MeshInstance3D]) -> void:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			results.append(child)
+		_collect_mesh_instances(child, results)
+
+
+func _transform_aabb(aabb: AABB, xform: Transform3D) -> AABB:
+	var corners = [
+		Vector3(aabb.position.x, aabb.position.y, aabb.position.z),
+		Vector3(aabb.position.x + aabb.size.x, aabb.position.y, aabb.position.z),
+		Vector3(aabb.position.x, aabb.position.y + aabb.size.y, aabb.position.z),
+		Vector3(aabb.position.x, aabb.position.y, aabb.position.z + aabb.size.z),
+		Vector3(aabb.position.x + aabb.size.x, aabb.position.y + aabb.size.y, aabb.position.z),
+		Vector3(aabb.position.x + aabb.size.x, aabb.position.y, aabb.position.z + aabb.size.z),
+		Vector3(aabb.position.x, aabb.position.y + aabb.size.y, aabb.position.z + aabb.size.z),
+		Vector3(aabb.position.x + aabb.size.x, aabb.position.y + aabb.size.y, aabb.position.z + aabb.size.z)
+	]
+
+	var transformed := AABB()
+	for i in corners.size():
+		var p = xform * corners[i]
+		if i == 0:
+			transformed.position = p
+			transformed.size = Vector3.ZERO
+		else:
+			transformed = transformed.expand(p)
+	return transformed
 
 # ============================================
 # Death Processing

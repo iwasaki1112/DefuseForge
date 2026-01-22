@@ -50,3 +50,11 @@ enum WeaponCategory { RIFLE, PISTOL, SMG, SHOTGUN, SNIPER }
 @export_group("Attachment")
 @export var attach_offset: Vector3 = Vector3.ZERO  ## Position offset when attached to hand
 @export var attach_rotation: Vector3 = Vector3.ZERO  ## Rotation offset in degrees when attached to hand
+
+# ============================================
+# Muzzle Flash
+# ============================================
+@export_group("Muzzle Flash")
+@export var muzzle_flash_offset: Vector3 = Vector3.ZERO  ## Local offset from WeaponSocket
+@export var muzzle_flash_scale: float = 1.0  ## Muzzle flash scale multiplier
+@export var muzzle_flash_rotation: Vector3 = Vector3.ZERO  ## Muzzle flash rotation in degrees
