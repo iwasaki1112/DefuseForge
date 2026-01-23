@@ -20,6 +20,13 @@
 | `SHOTGUN` (3) | ショットガン |
 | `SNIPER` (4) | スナイパーライフル |
 
+### FiringMode
+| 値 | 説明 |
+|----|------|
+| `SINGLE` (0) | 単発射撃 |
+| `BURST` (1) | バースト射撃（指定数発を連続発射） |
+| `FULL_AUTO` (2) | フルオート射撃（連続発射） |
+
 ## Export Properties
 
 ### Basic Info
@@ -76,6 +83,54 @@
 | `muzzle_flash_offset` | `Vector3` | `Vector3.ZERO` | マズルフラッシュ位置オフセット（WeaponSocket基準） |
 | `muzzle_flash_scale` | `float` | `1.0` | マズルフラッシュのスケール倍率 |
 | `muzzle_flash_rotation` | `Vector3` | `Vector3.ZERO` | マズルフラッシュの回転（度） |
+
+### Auto Firing Mode（RIFLE/SMG専用）
+
+距離に応じて射撃モードを自動切り替えするシステム。CQB（近距離）、Medium（中距離）、Long（長距離）の3レンジで異なる射撃パターンを使用。
+
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `auto_firing_mode_enabled` | `bool` | `false` | 距離ベース射撃モード切替の有効化 |
+
+#### CQB Range（近距離）
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `cqb_max_distance` | `float` | `5.0` | CQBレンジの最大距離（メートル） |
+| `cqb_firing_mode` | `FiringMode` | `FULL_AUTO` | CQBレンジの射撃モード |
+| `cqb_shots_per_burst` | `int` | `0` | バースト発数（0=連続、FULL_AUTO用） |
+| `cqb_burst_interval` | `float` | `0.08` | バースト内の発射間隔（秒） |
+| `cqb_pause_after_burst` | `float` | `0.0` | バースト後の待機時間（秒） |
+| `cqb_accuracy_modifier` | `float` | `0.85` | 精度倍率（1.0=標準） |
+| `cqb_critical_rate` | `float` | `0.1` | クリティカルヒット確率（0.0-1.0） |
+
+#### Medium Range（中距離）
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `medium_max_distance` | `float` | `15.0` | Mediumレンジの最大距離（メートル） |
+| `medium_firing_mode` | `FiringMode` | `BURST` | Mediumレンジの射撃モード |
+| `medium_shots_per_burst` | `int` | `3` | バースト発数 |
+| `medium_burst_interval` | `float` | `0.10` | バースト内の発射間隔（秒） |
+| `medium_pause_after_burst` | `float` | `0.40` | バースト後の待機時間（秒） |
+| `medium_accuracy_modifier` | `float` | `1.0` | 精度倍率 |
+| `medium_critical_rate` | `float` | `0.25` | クリティカルヒット確率 |
+
+#### Long Range（長距離）
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `long_firing_mode` | `FiringMode` | `SINGLE` | Longレンジの射撃モード |
+| `long_shots_per_burst` | `int` | `1` | バースト発数（SINGLEの場合1） |
+| `long_burst_interval` | `float` | `0.0` | バースト内の発射間隔（SINGLE時未使用） |
+| `long_pause_after_burst` | `float` | `0.60` | 射撃後の待機時間（秒） |
+| `long_accuracy_modifier` | `float` | `1.15` | 精度倍率 |
+| `long_critical_rate` | `float` | `0.5` | クリティカルヒット確率 |
+
+#### 距離別推奨設定
+
+| 距離 | モード | 動作 | 精度倍率 | クリ率 |
+|------|--------|------|----------|--------|
+| 0-5m (CQB) | フルオート | 高速連射、制圧用 | 0.85x | 10% |
+| 5-15m (Medium) | バースト(3発) | 精度重視連射 | 1.0x | 25% |
+| 15m+ (Long) | 単発 | 高精度シングル | 1.15x | 50% |
 
 ## 使用例
 

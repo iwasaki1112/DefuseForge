@@ -17,6 +17,7 @@
 | `enemy_lost` | `enemy: Node` | 敵を見失ったとき |
 | `target_changed` | `new_target: Node, old_target: Node` | ターゲットが変更されたとき |
 | `shot_missed` | `target: Node, miss_offset: Vector3` | 射撃が外れたとき |
+| `critical_hit` | `target: Node, damage: float` | クリティカルヒット発生時 |
 
 ## Constants
 
@@ -84,6 +85,7 @@
 **戻り値:** 以下のキーを含むDictionary
 - `hit: bool` - 命中したかどうか
 - `miss_offset: Vector3` - 外れた場合のオフセットベクトル
+- `critical: bool` - クリティカルヒットだったかどうか
 
 ### process(delta: float) -> void
 毎フレームの処理を行う。所有者の`_physics_process`から呼び出す。
@@ -254,4 +256,69 @@ is_hit = randf() < final_accuracy
 var shot_result = combat_awareness.get_last_shot_result()
 if not shot_result.hit:
     target_pos += shot_result.miss_offset
+```
+
+## 距離ベース射撃モードシステム（Auto Firing Mode）
+
+RIFLE/SMG専用の機能。距離に応じて射撃モード（フルオート/バースト/単発）を自動切り替えする。
+
+### 対象武器
+
+- **対象**: `WeaponCategory.RIFLE`, `WeaponCategory.SMG`
+- **非対象**: `PISTOL`, `SHOTGUN`, `SNIPER`（従来の発砲ロジック使用）
+
+### 距離レンジ
+
+| レンジ | 距離 | モード | 特徴 |
+|--------|------|--------|------|
+| CQB | 0-5m | フルオート | 高速連射、制圧用、精度低下 |
+| Medium | 5-15m | バースト(3発) | 精度重視の連射 |
+| Long | 15m+ | 単発 | 高精度、クリティカル率高 |
+
+### クリティカルヒット
+
+- 武器の`auto_firing_mode_enabled`がtrueの場合のみ発生
+- 距離レンジに応じたクリティカル率（CQB: 10%, Medium: 25%, Long: 50%）
+- クリティカル時は2倍ダメージ
+- `critical_hit`シグナルが発火
+
+### 動作フロー
+
+```
+1. 敵を検出
+2. 距離を計算 → レンジ判定
+3. 射撃モード決定：
+   - FULL_AUTO: 高速連続発射
+   - BURST: 指定数発を連射後、一時停止
+   - SINGLE: 1発射撃後、一時停止
+4. 精度倍率適用
+5. 命中判定（成功時はクリティカル判定）
+6. ダメージ適用（クリティカル時2倍）
+7. 次の射撃サイクルへ
+```
+
+### 設定例（AK-47）
+
+```
+auto_firing_mode_enabled = true
+
+# CQB (0-5m): フルオート
+cqb_max_distance = 5.0
+cqb_firing_mode = FULL_AUTO
+cqb_burst_interval = 0.08  # 高速連射
+cqb_accuracy_modifier = 0.85  # 精度低下
+cqb_critical_rate = 0.1  # 低クリ率
+
+# Medium (5-15m): 3点バースト
+medium_max_distance = 15.0
+medium_firing_mode = BURST
+medium_shots_per_burst = 3
+medium_pause_after_burst = 0.40
+medium_critical_rate = 0.25
+
+# Long (15m+): 単発
+long_firing_mode = SINGLE
+long_pause_after_burst = 0.60
+long_accuracy_modifier = 1.15  # 精度向上
+long_critical_rate = 0.5  # 高クリ率
 ```
