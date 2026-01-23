@@ -2,6 +2,19 @@
 
 キャラクターアニメーションを管理するコントローラークラス。移動、戦闘、デスアニメーションを統合的に制御する。
 
+> **重要: Mixamoモデルの向きについて**
+>
+> | 項目 | 方向 |
+> |------|------|
+> | Mixamoモデルの前方向 | **+Z** |
+> | Godotの`look_at()`/`Basis.looking_at()`がターゲットに向ける軸 | **-Z** |
+>
+> この180度の差により、キャラクターの向きを変更する際は以下のAPIを使用してください：
+> - `GameCharacter.face_towards(target_pos)` - ターゲット位置を向く
+> - `GameCharacter.set_facing_direction_vec(direction)` - 方向ベクトルで設定
+>
+> `CharacterBody3D.look_at()`を直接使用するとモデルが逆方向を向きます。
+
 ## 基本情報
 
 | 項目 | 値 |

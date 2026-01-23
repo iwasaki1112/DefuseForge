@@ -135,11 +135,17 @@ func get_character_parent() -> Node3D
 func handle_click(screen_pos: Vector2, button_index: int) -> bool
 ```
 マウス/タッチクリック処理。選択・コンテキストメニュー表示を行う。
+キャラクター選択中にドアをクリックするとドアキックを開始する。
 
 ```gdscript
 func raycast_character(screen_pos: Vector2) -> Node
 ```
 画面座標からキャラクターを検出。
+
+```gdscript
+func raycast_door(screen_pos: Vector2) -> Node3D
+```
+画面座標からドアを検出（`doors`グループに属するノード）。
 
 ### パスモード操作
 
@@ -184,6 +190,32 @@ func get_spawn_points(is_ct: bool) -> Array[Vector3]
 func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]
 ```
 
+### ドアキック処理
+
+キャラクター選択中にドア（`doors`グループ）をクリックすると自動的に発動。
+
+**フロー:**
+1. ドアの前後にアンカー位置を計算（ドアのローカルZ軸方向±1m）
+2. キャラクターに近い方のアンカーを選択
+3. キャラクターがアンカー位置まで移動
+4. `GameCharacter.face_towards()`でドア方向を向く
+5. ドアキックアニメーション再生（`CharacterAnimationController.play_door_kick()`）
+6. アニメーション完了後、ドアをY軸で170度回転（Tween、キャラクターから離れる方向）
+
+**アンカーベースのアプローチ:**
+- `anchor_front`: `door_pos + door_forward * 1.0`（+Z側）
+- `anchor_back`: `door_pos - door_forward * 1.0`（-Z側）
+- キャラクターに近い方を自動選択
+
+**キャラクターの向き設定:**
+> **重要:** `CharacterBody3D.look_at()`を使用せず、`GameCharacter.face_towards()`を使用すること。
+> Mixamoモデルは+Z方向が前方のため、`look_at()`を直接使用すると180度ずれる。
+
+**内部メソッド:**
+- `_start_door_kick(character, door)`: ドアキック開始、アンカー選択
+- `_on_door_approach_completed(character, door)`: ドア前到達完了、向き設定
+- `_on_door_kick_done(door, character)`: アニメーション完了、ドア回転開始
+
 ### 毎フレーム処理
 
 ```gdscript
@@ -191,6 +223,7 @@ func process_frame(delta: float) -> void
 ```
 
 - コンテキストメニューの追従更新を含む
+- ドアキック用パス追従コントローラーの処理を含む
 
 ### 状態取得
 
