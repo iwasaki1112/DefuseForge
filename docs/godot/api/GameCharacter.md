@@ -38,6 +38,7 @@
 |------|-----|----------|------|
 | `current_health` | `float` | `100.0` | 現在のHP |
 | `is_alive` | `bool` | `true` | 生存状態 |
+| `_facing_direction` | `Vector3` | `Vector3.FORWARD` | キャラクターの向き（VisionComponent参照用） |
 | `anim_ctrl` | `Node` | `null` | CharacterAnimationControllerへの参照 |
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
@@ -103,6 +104,35 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 - `view_dist` - 視界距離
 
 **戻り値:** VisionComponentインスタンス
+
+### Facing Direction API
+
+キャラクターの向きを一元管理する。VisionComponentはこの値を参照して視界の向きを決定する。
+
+#### set_facing_direction_vec(direction: Vector3) -> void
+キャラクターの向きをベクトルで設定する。AnimationControllerのモデル向きも同時に更新。
+
+**引数:**
+- `direction` - 向きベクトル（XZ平面、自動正規化）
+
+#### set_facing_direction(y_rotation: float) -> void
+キャラクターの向きをY軸回転（ラジアン）で設定する。
+
+**引数:**
+- `y_rotation` - Y軸回転（0 = +Z方向）
+
+#### face_towards(target_pos: Vector3) -> void
+指定位置の方向を向く。
+
+**引数:**
+- `target_pos` - ターゲット位置
+
+#### get_facing_direction() -> Vector3
+現在の向きを取得する。VisionComponentがこれを参照。
+
+**戻り値:** 正規化された向きベクトル
+
+**重要**: PathFollowingControllerは移動中に`_facing_direction`を直接更新する。これにより、移動中も視界の向きが正しく追従する。
 
 ### Weapon API
 

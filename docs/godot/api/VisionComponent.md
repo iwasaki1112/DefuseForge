@@ -135,5 +135,43 @@ vision.vision_updated.connect(_on_vision_updated)
 - **テンポラルスムージング**: 位置・角度を平滑化して歩行揺れを吸収
 
 ### 壁検出
-- `"walls"`グループのStaticBody3D（BoxShape3D）
-- collision_layer 2のCSGBox3D
+
+視界を遮る壁として検出されるには、以下の条件を満たす必要がある：
+
+| 条件 | 必須 | 説明 |
+|------|------|------|
+| `collision_layer` | **2** | `wall_collision_mask`と一致する必要がある |
+| コリジョン形状 | BoxShape3D または ConcavePolygonShape3D | コーナー座標の取得に使用 |
+
+**検出対象:**
+- `"walls"`グループに属するStaticBody3D
+- `collision_layer = 2`のCSGBox3D
+- `collision_layer = 2`のStaticBody3D（GLTFインポート壁）
+
+**GLTFマップでの壁設定:**
+GLTFからインポートされたStaticBody3Dは`collision_layer`がデフォルト（1）のため、スクリプトで2に変更する必要がある。
+
+```gdscript
+# マップスクリプト例（bank.gd）
+const WALL_COLLISION_LAYER: int = 2
+
+func _ready() -> void:
+    _setup_wall_collisions(self)
+    VisionComponent.invalidate_wall_cache()
+
+func _setup_wall_collisions(node: Node) -> void:
+    if node is StaticBody3D:
+        var parent = node.get_parent()
+        if parent and "wall" in parent.name.to_lower():
+            node.collision_layer = WALL_COLLISION_LAYER
+    for child in node.get_children():
+        _setup_wall_collisions(child)
+```
+
+### 壁コーナー検出の仕組み
+
+1. **CSGBox3D**: `size`プロパティから4コーナーを計算
+2. **BoxShape3D**: `shape.size`から4コーナーを計算
+3. **ConcavePolygonShape3D**: 全頂点のAABB（Axis-Aligned Bounding Box）から4コーナーを計算
+
+コーナー座標はXZ平面（Y=0）で計算され、グローバル座標に変換される。

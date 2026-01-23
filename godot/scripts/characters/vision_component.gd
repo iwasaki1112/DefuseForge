@@ -330,6 +330,9 @@ func _rebuild_wall_corners_cache() -> void:
 	# Also check CSGBox3D nodes with collision layer 2
 	_collect_csg_corners_to_cache(get_tree().root)
 
+	# Also check StaticBody3D nodes with collision layer 2 (GLTF walls)
+	_collect_static_body_corners_to_cache(get_tree().root)
+
 
 ## Recursively collect corners from CSGBox3D nodes (for cache building)
 func _collect_csg_corners_to_cache(node: Node) -> void:
@@ -341,6 +344,18 @@ func _collect_csg_corners_to_cache(node: Node) -> void:
 
 	for child in node.get_children():
 		_collect_csg_corners_to_cache(child)
+
+
+## Recursively collect corners from StaticBody3D nodes (for GLTF walls)
+func _collect_static_body_corners_to_cache(node: Node) -> void:
+	if node is StaticBody3D:
+		var static_body: StaticBody3D = node
+		if (static_body.collision_layer & wall_collision_mask) != 0:
+			var corners := _get_node_corners(static_body)
+			_wall_corners_cache.append_array(corners)
+
+	for child in node.get_children():
+		_collect_static_body_corners_to_cache(child)
 
 
 ## Get corners from CSGBox3D
@@ -363,7 +378,7 @@ func _get_csg_box_corners(csg: CSGBox3D) -> Array[Vector3]:
 	return result
 
 
-## Get corners from StaticBody3D with BoxShape3D
+## Get corners from StaticBody3D with BoxShape3D or ConcavePolygonShape3D
 func _get_node_corners(wall: Node) -> Array[Vector3]:
 	var corners: Array[Vector3] = []
 
@@ -373,6 +388,8 @@ func _get_node_corners(wall: Node) -> Array[Vector3]:
 			if child is CollisionShape3D:
 				var col_shape: CollisionShape3D = child
 				var shape = col_shape.shape
+				var combined_transform: Transform3D = static_body.global_transform * col_shape.transform
+
 				if shape is BoxShape3D:
 					var box_shape: BoxShape3D = shape
 					var half_size: Vector3 = box_shape.size / 2.0
@@ -382,9 +399,29 @@ func _get_node_corners(wall: Node) -> Array[Vector3]:
 						Vector3(half_size.x, 0, half_size.z),
 						Vector3(-half_size.x, 0, half_size.z),
 					]
-					var combined_transform: Transform3D = static_body.global_transform * col_shape.transform
 					for local_corner in local_corners:
 						corners.append(combined_transform * local_corner)
+
+				elif shape is ConcavePolygonShape3D:
+					# ConcavePolygonShape3D: AABBからコーナーを取得
+					var concave: ConcavePolygonShape3D = shape
+					var faces = concave.get_faces()
+					if faces.size() > 0:
+						var min_pt := Vector3(INF, INF, INF)
+						var max_pt := Vector3(-INF, -INF, -INF)
+						for vertex in faces:
+							min_pt.x = minf(min_pt.x, vertex.x)
+							min_pt.z = minf(min_pt.z, vertex.z)
+							max_pt.x = maxf(max_pt.x, vertex.x)
+							max_pt.z = maxf(max_pt.z, vertex.z)
+						var local_corners: Array[Vector3] = [
+							Vector3(min_pt.x, 0, min_pt.z),
+							Vector3(max_pt.x, 0, min_pt.z),
+							Vector3(max_pt.x, 0, max_pt.z),
+							Vector3(min_pt.x, 0, max_pt.z),
+						]
+						for local_corner in local_corners:
+							corners.append(combined_transform * local_corner)
 
 	return corners
 

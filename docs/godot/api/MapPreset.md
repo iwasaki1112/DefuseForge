@@ -109,7 +109,71 @@ MapRoot (Node3D)
 | 1 | `1` | キャラクター、床 |
 | 2 | `2` | 壁・障害物（VisionComponent用） |
 
-壁（collision_layer=2）は自動的に"walls"グループに追加され、VisionComponentの視界計算で使用される。
+壁（collision_layer=2）はVisionComponentの視界計算で遮蔽物として検出される。
+
+## GLTFマップの作成
+
+BlenderでGLTFマップを作成する際の注意点：
+
+### コリジョン自動生成
+
+Godotはメッシュ名のサフィックスでコリジョンを自動生成する：
+
+| サフィックス | 生成されるコリジョン | 用途 |
+|-------------|---------------------|------|
+| `-col` | ConvexPolygonShape3D | 壁、障害物 |
+| `-colonly` | ConvexPolygonShape3D（メッシュ非表示） | 不可視コリジョン |
+| `-trimesh` | ConcavePolygonShape3D | 複雑な形状 |
+
+**例:**
+```
+Map_Ground-col    → 床メッシュ + コリジョン
+Wall_Center-col   → 壁メッシュ + コリジョン
+```
+
+### 壁のcollision_layer設定
+
+**重要**: GLTFインポート時に生成されるStaticBody3Dの`collision_layer`はデフォルト（1）。
+VisionComponentで壁として検出するには`collision_layer = 2`に変更が必要。
+
+マップシーン（.tscn）にスクリプトをアタッチして設定する：
+
+```gdscript
+# scripts/maps/my_map.gd
+extends Node3D
+
+const WALL_COLLISION_LAYER: int = 2
+
+func _ready() -> void:
+    _setup_wall_collisions(self)
+    VisionComponent.invalidate_wall_cache()
+
+func _setup_wall_collisions(node: Node) -> void:
+    if node is StaticBody3D:
+        var parent = node.get_parent()
+        # 親ノード名に"wall"を含むStaticBody3Dを壁として扱う
+        if parent and "wall" in parent.name.to_lower():
+            node.collision_layer = WALL_COLLISION_LAYER
+    for child in node.get_children():
+        _setup_wall_collisions(child)
+```
+
+### GLTFマップのシーン構造例
+
+```
+scenes/maps/my_map.tscn
+├── [instance: my_map.gltf]
+└── script: scripts/maps/my_map.gd
+
+my_map.gltf (Blenderからエクスポート)
+├── Map_Ground-col (床 + コリジョン)
+├── Wall_North-col (壁 + コリジョン)
+├── Wall_South-col (壁 + コリジョン)
+├── spawn_ct_1 (Empty → スポーン位置)
+├── spawn_ct_2
+├── spawn_t_1
+└── spawn_t_2
+```
 
 ## 関連クラス
 

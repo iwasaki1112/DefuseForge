@@ -260,6 +260,10 @@ func process(delta: float) -> void:
 
 		anim_ctrl.update_animation(move_dir, look_dir, is_running_now, delta)
 
+		# VisionComponent用にGameCharacterの向きを同期
+		if look_dir.length_squared() > 0.001:
+			_character._facing_direction = look_dir.normalized()
+
 	# 物理移動
 	_character.velocity.x = move_dir.x * speed
 	_character.velocity.z = move_dir.z * speed

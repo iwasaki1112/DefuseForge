@@ -152,6 +152,21 @@ func _physics_process(delta):
 - 視線ポイントはパスの進行率（0.0〜1.0）で管理
 - `CharacterAnimationController`と連携してアニメーションを更新
 
+### facing_directionの同期
+
+PathFollowingControllerは移動中に`GameCharacter._facing_direction`を更新する。これは`VisionComponent`が視界の向きを決定するために参照する。
+
+```gdscript
+# PathFollowingController内部
+anim_ctrl.update_animation(move_dir, look_dir, is_running_now, delta)
+
+# VisionComponent用にGameCharacterの向きを同期
+if look_dir.length_squared() > 0.001:
+    _character._facing_direction = look_dir.normalized()
+```
+
+**重要**: この同期がないと、移動中に視界の向きが更新されず、初期向きのままになる。
+
 ### パス完了時の向き（優先順位）
 
 パス追従完了時のキャラクターの向きは、以下の優先順位で決定される：

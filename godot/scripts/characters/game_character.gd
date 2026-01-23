@@ -737,12 +737,12 @@ func _create_bullet_trail(start: Vector3, end: Vector3) -> void:
 		get_tree().root.add_child(_bullet_trail)
 
 	# Quadサイズを長さに合わせて更新
-	var mesh1 = _bullet_trail_quad1.mesh as QuadMesh
-	var mesh2 = _bullet_trail_quad2.mesh as QuadMesh
-	if mesh1:
-		mesh1.size = Vector2(BULLET_TRAIL_WIDTH, length)
-	if mesh2:
-		mesh2.size = Vector2(BULLET_TRAIL_WIDTH, length)
+	var quad1_mesh = _bullet_trail_quad1.mesh as QuadMesh
+	var quad2_mesh = _bullet_trail_quad2.mesh as QuadMesh
+	if quad1_mesh:
+		quad1_mesh.size = Vector2(BULLET_TRAIL_WIDTH, length)
+	if quad2_mesh:
+		quad2_mesh.size = Vector2(BULLET_TRAIL_WIDTH, length)
 
 	# トレイルの位置（中点）と向き
 	_bullet_trail.global_position = (start + end) * 0.5

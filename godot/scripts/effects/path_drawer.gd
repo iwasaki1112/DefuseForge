@@ -258,25 +258,25 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 				if _character_markers.has(char_id):
 					var char_data = _character_markers[char_id]
 					# ソート位置を見つけて挿入
-					var _insert_index = 0
+					var multi_insert_idx = 0
 					for i in range(char_data.clear_points.size()):
 						if char_data.clear_points[i].path_ratio > result.ratio:
 							break
-						_insert_index = i + 1
-					char_data.clear_points.insert(_insert_index, new_point)
+						multi_insert_idx = i + 1
+					char_data.clear_points.insert(multi_insert_idx, new_point)
 					# マーカーを作成
 					var marker = _create_clear_marker_node(result.point)
-					char_data.clear_meshes.insert(_insert_index, marker)
+					char_data.clear_meshes.insert(multi_insert_idx, marker)
 			else:
 				# シングルモードの場合
-				var _insert_index = 0
+				var single_insert_idx = 0
 				for i in range(_clear_points.size()):
 					if _clear_points[i].path_ratio > result.ratio:
 						break
-					_insert_index = i + 1
-				_clear_points.insert(_insert_index, new_point)
+					single_insert_idx = i + 1
+				_clear_points.insert(single_insert_idx, new_point)
 				# マーカーを作成
-				_create_clear_marker(result.point, _insert_index)
+				_create_clear_marker(result.point, single_insert_idx)
 
 			clear_point_added.emit(result.ratio)
 			get_viewport().set_input_as_handled()
@@ -429,32 +429,32 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 			var vision_meshes: Array[MeshInstance3D] = char_data.vision_meshes
 
 			# 挿入位置を見つける
-			var _insert_index = 0
+			var multi_vision_idx = 0
 			for i in range(vision_points.size()):
 				if vision_points[i].path_ratio > _current_vision_ratio:
 					break
-				_insert_index = i + 1
+				multi_vision_idx = i + 1
 
-			vision_points.insert(_insert_index, new_point)
+			vision_points.insert(multi_vision_idx, new_point)
 
 			# 視線マーカーを作成（ターゲットポイントモード）
 			var marker = _create_vision_marker_node(_current_vision_anchor, target_point)
-			vision_meshes.insert(_insert_index, marker)
+			vision_meshes.insert(multi_vision_idx, marker)
 
 			vision_point_added.emit(_current_vision_anchor, target_point)
 			return
 
 	# シングルモードの場合は従来通り
-	var _insert_index = 0
+	var single_vision_idx = 0
 	for i in range(_vision_points.size()):
 		if _vision_points[i].path_ratio > _current_vision_ratio:
 			break
-		_insert_index = i + 1
+		single_vision_idx = i + 1
 
-	_vision_points.insert(_insert_index, new_point)
+	_vision_points.insert(single_vision_idx, new_point)
 
 	# 視線マーカーを作成（同じ挿入位置に）
-	_create_vision_marker_at_index(_current_vision_anchor, target_point, _insert_index)
+	_create_vision_marker_at_index(_current_vision_anchor, target_point, single_vision_idx)
 
 	vision_point_added.emit(_current_vision_anchor, target_point)
 
