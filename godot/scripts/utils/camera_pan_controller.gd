@@ -1,6 +1,7 @@
 class_name CameraPanController
 extends RefCounted
-## 右ドラッグでカメラを平行移動、スクロール/ピンチでズームする簡易コントローラー
+## 左ドラッグでカメラを平行移動、スクロール/ピンチでズームする簡易コントローラー
+## ドラッグ判定: 閾値以上移動したらドラッグ成立
 
 var camera: Camera3D = null
 var pan_speed: float = 0.05
@@ -11,10 +12,17 @@ var zoom_min: float = 12.0
 var zoom_max: float = 20.0
 var zoom_smoothing: float = 10.0
 
+## ドラッグ判定の閾値（ピクセル）
+const DRAG_THRESHOLD: float = 5.0
+
 ## 内部状態（パン）
 var _drag_active: bool = false
 var _drag_start: Vector2 = Vector2.ZERO
 var _camera_start_pos: Vector3 = Vector3.ZERO
+
+## ドラッグ候補状態（閾値判定前）
+var _pending_drag: bool = false
+var _pending_start: Vector2 = Vector2.ZERO
 
 ## 内部状態（ズーム）
 var _target_zoom: float = 0.0
@@ -35,20 +43,12 @@ func setup(target_camera: Camera3D, speed: float = 0.05) -> void:
 
 
 ## 入力処理。処理した場合はtrueを返す
+## 注: 左クリックドラッグはInputControllerから呼び出されるAPIを使用
 func handle_input(event: InputEvent) -> bool:
 	if not camera:
 		return false
 
-	# 右ドラッグでパン
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		if event.pressed:
-			_drag_active = true
-			_drag_start = event.position
-			_camera_start_pos = camera.global_position
-		else:
-			_drag_active = false
-		return true
-
+	# ドラッグ中のマウス移動処理
 	if event is InputEventMouseMotion and _drag_active:
 		var delta = event.position - _drag_start
 		var move_x = -delta.x * pan_speed
@@ -73,6 +73,54 @@ func handle_input(event: InputEvent) -> bool:
 		return _handle_touch_drag(event)
 
 	return false
+
+
+## ドラッグ候補を開始（左クリック押下時に呼び出す）
+func start_potential_drag(pos: Vector2) -> void:
+	if not camera:
+		return
+	_pending_drag = true
+	_pending_start = pos
+
+
+## ドラッグが成立したかチェックし、成立したらドラッグモードに移行
+## @param current_pos: 現在のマウス位置
+## @return: ドラッグが成立した場合true
+func check_and_start_drag(current_pos: Vector2) -> bool:
+	if not _pending_drag:
+		return false
+
+	var distance = _pending_start.distance_to(current_pos)
+	if distance >= DRAG_THRESHOLD:
+		# ドラッグ成立
+		_drag_active = true
+		_drag_start = _pending_start
+		_camera_start_pos = camera.global_position
+		_pending_drag = false
+		return true
+
+	return false
+
+
+## ドラッグ中かどうか
+func is_dragging() -> bool:
+	return _drag_active
+
+
+## ドラッグ候補中かどうか（閾値判定前）
+func is_pending_drag() -> bool:
+	return _pending_drag
+
+
+## ドラッグを終了
+func end_drag() -> void:
+	_drag_active = false
+	_pending_drag = false
+
+
+## ドラッグ候補をキャンセル（閾値未達でクリックとして処理する場合）
+func cancel_potential_drag() -> void:
+	_pending_drag = false
 
 
 ## マウスホイールによるズーム

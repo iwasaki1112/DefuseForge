@@ -93,6 +93,19 @@ PathDrawerを無効化する。
 #### is_drawing() -> bool
 現在描画中か確認する。
 
+#### is_point_on_path(ground_pos: Vector3) -> bool
+指定座標がパス上にあるかどうか判定する。
+
+**引数:**
+- `ground_pos` - 地面上の座標
+
+**戻り値:** `path_click_threshold`（0.5m）以内なら`true`
+
+#### is_marker_mode() -> bool
+マーカーモード（VISION_POINT, RUN_MARKER, CLEAR_MARKER）かどうかを確認する。
+
+**戻り値:** MOVEMENTモード以外なら`true`
+
 #### set_line_color(color: Color) -> void
 ライン色を変更する。
 

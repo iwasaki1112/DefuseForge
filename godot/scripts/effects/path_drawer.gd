@@ -671,6 +671,21 @@ func is_drawing() -> bool:
 	return _is_drawing or _is_drawing_vision
 
 
+## 指定座標がパス上にあるかどうか判定
+## @param ground_pos: 地面上の座標
+## @return: path_click_threshold以内ならtrue
+func is_point_on_path(ground_pos: Vector3) -> bool:
+	if _pending_path.size() < 2:
+		return false
+	var result = _find_closest_point_on_path(ground_pos)
+	return result.distance <= path_click_threshold
+
+
+## マーカーモード（VISION_POINT, RUN_MARKER, CLEAR_MARKER）かどうか
+func is_marker_mode() -> bool:
+	return _drawing_mode != DrawingMode.MOVEMENT
+
+
 func set_line_color(color: Color) -> void:
 	line_color = color
 	if _path_mesh:
