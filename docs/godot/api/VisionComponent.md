@@ -1,6 +1,6 @@
 # VisionComponent
 
-Fog of Warシステム用の視界コンポーネント。シャドウキャスト法を使用して安定した可視性計算を行う。
+Fog of Warシステム用の視界コンポーネント。等間隔レイキャスト方式で動的障害物（ドア等）にも即時対応する。
 
 ## 基本情報
 
@@ -18,13 +18,13 @@ Fog of Warシステム用の視界コンポーネント。シャドウキャス�
 ## Enums
 
 ### Quality
-品質プリセット。
+品質プリセット（FogOfWarSystem.Qualityと連動）。
 
-| 値 | ray_count | update_interval | corner_rays | 説明 |
-|----|-----------|-----------------|-------------|------|
-| `LOW` | 45 | 0.05 | 1 | モバイル向け |
-| `MEDIUM` | 90 | 0.033 | 3 | バランス |
-| `HIGH` | 180 | 0.033 | 5 | PC向け |
+| 値 | ray_count | update_hz | 説明 |
+|----|-----------|-----------|------|
+| `LOW` | 36 | 15 | モバイル向け |
+| `MEDIUM` | 54 | 20 | バランス |
+| `HIGH` | 72 | 30 | PC向け |
 
 ## Export Properties
 
@@ -33,10 +33,8 @@ Fog of Warシステム用の視界コンポーネント。シャドウキャス�
 |-----------|-----|----------|------|
 | `fov_degrees` | `float` | `90.0` | 視野角（度） |
 | `view_distance` | `float` | `15.0` | 視界距離（メートル） |
-| `edge_ray_count` | `int` | `90` | FOVエッジ用レイ数 |
-| `update_interval` | `float` | `0.033` | 更新間隔（秒） |
+| `ray_count` | `int` | `36` | FOV範囲のレイ数（等間隔） |
 | `eye_height` | `float` | `1.5` | 目の高さ |
-| `corner_extra_rays` | `int` | `3` | コーナーごとの追加レイ数 |
 
 ### Collision Settings
 | プロパティ | 型 | デフォルト | 説明 |
@@ -58,6 +56,12 @@ Fog of Warシステム用の視界コンポーネント。シャドウキャス�
 
 **引数:**
 - `q` - 品質レベル（LOW/MEDIUM/HIGH）
+
+### apply_quality_settings(settings: Dictionary) -> void
+辞書形式で品質設定を適用する（FogOfWarSystemとの同期用）。
+
+**引数:**
+- `settings` - `ray_count`と`update_hz`を含む辞書
 
 ### set_fov(degrees: float) -> void
 視野角を設定する。
@@ -123,16 +127,20 @@ vision.vision_updated.connect(_on_vision_updated)
 
 ## 内部動作
 
-### シャドウキャスト法
-1. 視点位置からFOV範囲にレイをキャスト
-2. 壁コーナーに向けて追加レイをキャスト（影のエッジ精度向上）
-3. ヒットポイントで可視ポリゴンを構築
+### 等間隔レイキャスト方式
+1. 視点位置からFOV範囲に等間隔でレイをキャスト
+2. 壁・ドア等の障害物との交点を取得
+3. 交点で可視ポリゴンを構築
+4. `vision_updated`シグナルを発火
+
+**特徴:**
+- **動的障害物対応**: 壁コーナーキャッシュを使用しないため、ドア開閉時に即時更新される
+- **シンプルな実装**: 等間隔レイキャストのみで視界を計算
 
 ### 最適化
-- **壁コーナーキャッシュ**: 1秒間隔で再構築
-- **静止時最適化**: 3フレーム連続で変化なしなら100ms間隔に
-- **角度スナップ**: 0.5度単位でスナップしてフリッカー防止
+- **静止時最適化**: 3フレーム連続で変化なしなら更新間隔を3倍に延長
 - **テンポラルスムージング**: 位置・角度を平滑化して歩行揺れを吸収
+- **RIDキャッシュ**: キャラクターのRIDをキャッシュしてレイキャスト除外を高速化
 
 ### 壁検出
 
@@ -141,12 +149,11 @@ vision.vision_updated.connect(_on_vision_updated)
 | 条件 | 必須 | 説明 |
 |------|------|------|
 | `collision_layer` | **2** | `wall_collision_mask`と一致する必要がある |
-| コリジョン形状 | BoxShape3D または ConcavePolygonShape3D | コーナー座標の取得に使用 |
 
 **検出対象:**
-- `"walls"`グループに属するStaticBody3D
-- `collision_layer = 2`のCSGBox3D
 - `collision_layer = 2`のStaticBody3D（GLTFインポート壁）
+- `collision_layer = 2`のCSGBox3D
+- `collision_layer = 2`のドア（開閉状態も即時反映）
 
 **GLTFマップでの壁設定:**
 GLTFからインポートされたStaticBody3Dは`collision_layer`がデフォルト（1）のため、スクリプトで2に変更する必要がある。
@@ -157,7 +164,6 @@ const WALL_COLLISION_LAYER: int = 2
 
 func _ready() -> void:
     _setup_wall_collisions(self)
-    VisionComponent.invalidate_wall_cache()
 
 func _setup_wall_collisions(node: Node) -> void:
     if node is StaticBody3D:
@@ -167,14 +173,6 @@ func _setup_wall_collisions(node: Node) -> void:
     for child in node.get_children():
         _setup_wall_collisions(child)
 ```
-
-### 壁コーナー検出の仕組み
-
-1. **CSGBox3D**: `size`プロパティから4コーナーを計算
-2. **BoxShape3D**: `shape.size`から4コーナーを計算
-3. **ConcavePolygonShape3D**: 全頂点のAABB（Axis-Aligned Bounding Box）から4コーナーを計算
-
-コーナー座標はXZ平面（Y=0）で計算され、グローバル座標に変換される。
 
 ## APIリファレンス
 
@@ -187,6 +185,7 @@ func _setup_wall_collisions(node: Node) -> void:
 - `get_visible_polygon() -> PackedVector3Array`
 - `force_update() -> void`
 - `set_quality(q: Quality) -> void`
+- `apply_quality_settings(settings: Dictionary) -> void`
 - `set_fov(degrees: float) -> void`
 - `set_view_distance(distance: float) -> void`
 - `disable() -> void`

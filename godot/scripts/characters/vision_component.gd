@@ -1,19 +1,20 @@
 class_name VisionComponent
 extends Node3D
 
-## Vision Component for Fog of War System (Shadow Cast Method)
-## Uses wall corner points for stable visibility calculation
+## Vision Component for Fog of War System (Simplified Raycast Method)
+## Uses equal-interval raycasting without wall corner caching
+## Ensures immediate response to dynamic obstacles (doors, etc.)
 
 signal vision_updated(visible_points: PackedVector3Array)
 
 # ============================================
-# Quality Presets (FogOfWarSystem.Qualityと連動)
+# Quality Presets (synced with FogOfWarSystem.Quality)
 # ============================================
 enum Quality { LOW, MEDIUM, HIGH }
 const QUALITY_PRESETS := {
-	Quality.LOW: { "ray_count": 45, "update_interval": 0.05, "corner_rays": 1 },     # モバイル
-	Quality.MEDIUM: { "ray_count": 90, "update_interval": 0.033, "corner_rays": 3 }, # バランス
-	Quality.HIGH: { "ray_count": 180, "update_interval": 0.033, "corner_rays": 5 },  # PC
+	Quality.LOW: { "ray_count": 36, "update_hz": 15 },     # Mobile
+	Quality.MEDIUM: { "ray_count": 54, "update_hz": 20 }, # Balanced
+	Quality.HIGH: { "ray_count": 72, "update_hz": 30 },   # PC
 }
 
 # ============================================
@@ -22,10 +23,8 @@ const QUALITY_PRESETS := {
 @export_group("Vision Settings")
 @export var fov_degrees: float = 90.0  ## Field of view in degrees
 @export var view_distance: float = 15.0  ## Vision distance in meters
-@export var edge_ray_count: int = 90  ## Number of rays for FOV edges
-@export var update_interval: float = 0.033  ## Update interval in seconds
+@export var ray_count: int = 36  ## Number of rays across FOV (equal interval)
 @export var eye_height: float = 1.5  ## Eye height from ground
-@export var corner_extra_rays: int = 3  ## Extra rays per corner
 
 @export_group("Collision Settings")
 @export_flags_3d_physics var wall_collision_mask: int = 2  ## Collision mask for walls
@@ -35,37 +34,30 @@ const QUALITY_PRESETS := {
 # ============================================
 var _enabled: bool = true
 var _visible_polygon: PackedVector3Array = PackedVector3Array()
+var _update_interval: float = 0.067  # ~15Hz default
 var _time_since_update: float = 0.0
 
-# スナップ用（ピクピク防止）
-var _last_snapped_position: Vector3 = Vector3.ZERO
-var _last_snapped_angle: float = 0.0
-var _has_valid_vision: bool = false  # 初回計算フラグ
-
-# テンポラルスムージング用（歩行揺れ防止）
+# Temporal smoothing (prevents jitter)
 var _smoothed_eye_position: Vector3 = Vector3.ZERO
 var _smoothed_angle: float = 0.0
 var _smoothed_initialized: bool = false
 
-const ANGLE_SNAP_DEGREES: float = 0.5  # 角度を0.5度単位でスナップ（より滑らか）
-const EYE_POSITION_SMOOTHING: float = 0.3  # 視点位置の平滑化係数（小さいほど滑らか）
-const ANGLE_SMOOTHING: float = 0.3  # 角度の平滑化係数（小さいほど滑らか）
+const EYE_POSITION_SMOOTHING: float = 0.3  # Position smoothing factor
+const ANGLE_SMOOTHING: float = 0.3  # Angle smoothing factor
 
-# 壁コーナーキャッシュ（パフォーマンス最適化）
-# 壁は静的なので初回構築後は再構築しない（invalidate_wall_cache()で手動更新可能）
-static var _wall_corners_cache: Array[Vector3] = []
-static var _wall_corners_dirty: bool = true
-
-# 静止時最適化
+# Stationary optimization
+var _last_position: Vector3 = Vector3.ZERO
+var _last_angle: float = 0.0
 var _stationary_frames: int = 0
-const STATIONARY_UPDATE_INTERVAL: float = 0.1  # 静止時は100ms間隔
-const STATIONARY_THRESHOLD: int = 3  # この回数連続で変化なしなら静止とみなす
+const STATIONARY_THRESHOLD: int = 3
+const STATIONARY_UPDATE_MULTIPLIER: float = 3.0  # Update slower when stationary
 
 # ============================================
 # References
 # ============================================
 var _character: Node3D = null
-var _character_rid: RID  # RIDキャッシュ（毎フレーム取得を回避）
+var _character_rid: RID  # Cached RID for raycast exclusion
+
 
 # ============================================
 # Lifecycle
@@ -73,7 +65,7 @@ var _character_rid: RID  # RIDキャッシュ（毎フレーム取得を回避�
 
 func _ready() -> void:
 	_character = get_parent()
-	# RIDをキャッシュ（毎レイキャストで取得を回避）
+	# Cache RID for raycast exclusion
 	if _character is CollisionObject3D:
 		_character_rid = _character.get_rid()
 
@@ -82,13 +74,15 @@ func _physics_process(delta: float) -> void:
 	if not _enabled:
 		return
 
-	# 静止時は更新間隔を長くする
-	var current_interval := update_interval if _stationary_frames < STATIONARY_THRESHOLD else STATIONARY_UPDATE_INTERVAL
+	# Use longer interval when stationary
+	var current_interval := _update_interval
+	if _stationary_frames >= STATIONARY_THRESHOLD:
+		current_interval *= STATIONARY_UPDATE_MULTIPLIER
 
 	_time_since_update += delta
 	if _time_since_update >= current_interval:
 		_time_since_update = 0.0
-		_calculate_shadow_cast_vision()
+		_calculate_vision()
 
 
 # ============================================
@@ -102,15 +96,22 @@ func get_visible_polygon() -> PackedVector3Array:
 
 ## Force immediate vision update
 func force_update() -> void:
-	_calculate_shadow_cast_vision()
+	_calculate_vision()
 
 
-## Set quality preset (call before _ready or use apply_quality)
+## Set quality preset
 func set_quality(q: Quality) -> void:
 	var preset: Dictionary = QUALITY_PRESETS[q]
-	edge_ray_count = preset["ray_count"]
-	update_interval = preset["update_interval"]
-	corner_extra_rays = preset["corner_rays"]
+	ray_count = preset["ray_count"]
+	_update_interval = 1.0 / float(preset["update_hz"])
+
+
+## Apply quality settings from dictionary (for FogOfWarSystem sync)
+func apply_quality_settings(settings: Dictionary) -> void:
+	if settings.has("ray_count"):
+		ray_count = settings["ray_count"]
+	if settings.has("update_hz"):
+		_update_interval = 1.0 / float(settings["update_hz"])
 
 
 ## Set field of view
@@ -123,16 +124,10 @@ func set_view_distance(distance: float) -> void:
 	view_distance = max(1.0, distance)
 
 
-## 壁コーナーキャッシュを無効化（壁が動的に変更された場合に呼び出す）
-static func invalidate_wall_cache() -> void:
-	_wall_corners_dirty = true
-
-
 ## Disable vision (for death, etc.)
 func disable() -> void:
 	_enabled = false
 	_visible_polygon = PackedVector3Array()
-	_has_valid_vision = false
 	_smoothed_initialized = false
 	vision_updated.emit(_visible_polygon)
 
@@ -140,7 +135,7 @@ func disable() -> void:
 ## Enable vision
 func enable() -> void:
 	_enabled = true
-	_calculate_shadow_cast_vision()
+	_calculate_vision()
 
 
 ## Check if vision is enabled
@@ -148,13 +143,13 @@ func is_enabled() -> bool:
 	return _enabled
 
 
-## Check if a world position is within FOV (lightweight check with single raycast)
+## Check if a world position is within FOV (lightweight single raycast check)
 ## Used for enemy visibility detection without full polygon calculation
 func is_position_in_view(world_pos: Vector3) -> bool:
 	if not _character:
 		return false
 
-	var origin := _get_eye_position()
+	var origin := _get_eye_position_raw()  # Use raw position for accuracy
 	var to_target := world_pos - origin
 	var distance := to_target.length()
 
@@ -168,7 +163,7 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 	var look_dir_xz := Vector3(look_dir.x, 0, look_dir.z).normalized()
 
 	if to_target_xz.length_squared() < 0.001 or look_dir_xz.length_squared() < 0.001:
-		return true  # Target is directly above/below or look direction is vertical
+		return true  # Target directly above/below or vertical look direction
 
 	var angle := rad_to_deg(look_dir_xz.angle_to(to_target_xz))
 	if angle > fov_degrees / 2.0:
@@ -184,15 +179,14 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 		query.exclude = [_character_rid]
 
 	var result := space_state.intersect_ray(query)
-
 	return result.is_empty()
 
 
 # ============================================
-# Shadow Cast Vision Calculation
+# Vision Calculation (Equal Interval Raycast)
 # ============================================
 
-func _calculate_shadow_cast_vision() -> void:
+func _calculate_vision() -> void:
 	if not _character:
 		return
 
@@ -200,84 +194,34 @@ func _calculate_shadow_cast_vision() -> void:
 	if not space_state:
 		return
 
-	# スムージング済みの位置と角度を取得
+	# Get smoothed position and angle
 	var origin := _get_eye_position()
 	var char_rotation := _get_look_angle()
 
-	# 角度のみスナップ（位置はスムージングで対応）
-	var snapped_rotation := _snap_angle(char_rotation)
+	# Check if position/angle changed significantly
+	var pos_changed := origin.distance_to(_last_position) >= 0.05
+	var angle_changed := absf(char_rotation - _last_angle) > 0.01
 
-	# 角度が変わっていなければスキップ（位置は常に更新）
-	if _has_valid_vision:
-		var angle_changed: bool = absf(snapped_rotation - _last_snapped_angle) > 0.001
-		var pos_changed: bool = origin.distance_to(_last_snapped_position) >= 0.05
-		if not angle_changed and not pos_changed:
-			_stationary_frames += 1  # 静止カウント増加
-			return
-		else:
-			_stationary_frames = 0  # 動いたのでリセット
+	if not pos_changed and not angle_changed:
+		_stationary_frames += 1
+		return
+	else:
+		_stationary_frames = 0
 
-	_last_snapped_position = origin
-	_last_snapped_angle = snapped_rotation
-	char_rotation = snapped_rotation
+	_last_position = origin
+	_last_angle = char_rotation
 
 	var half_fov := deg_to_rad(fov_degrees / 2.0)
+	var fov_min := char_rotation - half_fov
+	var fov_max := char_rotation + half_fov
 
-	# FOV boundary angles
-	var fov_min_angle := char_rotation - half_fov
-	var fov_max_angle := char_rotation + half_fov
-
-	# Collect wall corners
-	var wall_corners := _collect_wall_corners(origin)
-
-	# Build list of ray angles
-	var ray_angles: Array[float] = []
-
-	# 1. Evenly distributed rays across FOV
-	for i in range(edge_ray_count + 1):
-		var t := float(i) / float(edge_ray_count)
-		var angle := fov_min_angle + t * (fov_max_angle - fov_min_angle)
-		ray_angles.append(angle)
-
-	# 2. Rays toward wall corners (with multiple offsets for precise shadow edges)
-	const CORNER_OFFSET_DEGREES: float = 0.8  # コーナー周辺のオフセット角度
-	var corner_offset_rad := deg_to_rad(CORNER_OFFSET_DEGREES)
-
-	for corner in wall_corners:
-		var to_corner := Vector2(corner.x - origin.x, corner.z - origin.z)
-		var corner_angle := atan2(to_corner.x, -to_corner.y)  # -Z is forward
-
-		# Only corners within FOV
-		var relative_angle := _wrap_angle(corner_angle - char_rotation)
-		if abs(relative_angle) <= half_fov + 0.02:
-			# コーナーの両側に複数のレイを追加（影のエッジを精密に）
-			if corner_extra_rays > 0:
-				for i in range(-corner_extra_rays, corner_extra_rays + 1):
-					var offset := corner_offset_rad * float(i) / float(corner_extra_rays)
-					ray_angles.append(corner_angle + offset)
-			else:
-				ray_angles.append(corner_angle)
-
-	# Sort angles
-	ray_angles.sort()
-
-	# Remove duplicates
-	var unique_angles: Array[float] = []
-	for angle in ray_angles:
-		if unique_angles.is_empty() or abs(angle - unique_angles[-1]) > 0.0001:
-			unique_angles.append(angle)
-
-	# Cast rays at each angle
+	# Cast rays at equal intervals across FOV
 	_visible_polygon.clear()
+	_visible_polygon.append(origin)  # First point is origin
 
-	# First point is the origin
-	_visible_polygon.append(origin)
-
-	for angle in unique_angles:
-		# Check if within FOV range
-		var relative := _wrap_angle(angle - char_rotation)
-		if abs(relative) > half_fov:
-			continue
+	for i in range(ray_count + 1):
+		var t := float(i) / float(ray_count)
+		var angle := fov_min + t * (fov_max - fov_min)
 
 		var direction := Vector3(sin(angle), 0, -cos(angle))
 		var end_point := origin + direction * view_distance
@@ -293,144 +237,75 @@ func _calculate_shadow_cast_vision() -> void:
 		else:
 			_visible_polygon.append(end_point)
 
-	# スナップ済み位置/角度が変化した場合のみここに到達するのでシグナル発火
-	_has_valid_vision = true
 	vision_updated.emit(_visible_polygon)
 
 
-## Collect wall corner points from scene (with caching)
-func _collect_wall_corners(origin: Vector3) -> Array[Vector3]:
-	# キャッシュが古い場合は再構築
-	if _wall_corners_dirty:
-		_rebuild_wall_corners_cache()
-		_wall_corners_dirty = false
+# ============================================
+# Position and Direction Helpers
+# ============================================
 
-	# キャッシュから視界範囲内のコーナーだけを返す
-	var corners: Array[Vector3] = []
-	var max_dist := view_distance * 1.5
-
-	for corner in _wall_corners_cache:
-		var dist := Vector2(corner.x - origin.x, corner.z - origin.z).length()
-		if dist <= max_dist:
-			corners.append(corner)
-
-	return corners
+## Get raw eye position (no smoothing, for is_position_in_view)
+func _get_eye_position_raw() -> Vector3:
+	if not _character:
+		return global_position
+	var pos := _character.global_position
+	pos.y += eye_height
+	return pos
 
 
-## 壁コーナーキャッシュを再構築（全コーナーを収集）
-func _rebuild_wall_corners_cache() -> void:
-	_wall_corners_cache.clear()
+## Get smoothed eye position (for vision calculation)
+func _get_eye_position() -> Vector3:
+	if not _character:
+		return global_position
 
-	# Search for walls in "walls" group
-	var walls := get_tree().get_nodes_in_group("walls")
-	for wall in walls:
-		var wall_corners := _get_node_corners(wall)
-		_wall_corners_cache.append_array(wall_corners)
+	var target_pos := _character.global_position
+	target_pos.y += eye_height
 
-	# Also check CSGBox3D nodes with collision layer 2
-	_collect_csg_corners_to_cache(get_tree().root)
+	# Temporal smoothing to prevent jitter
+	if not _smoothed_initialized:
+		_smoothed_eye_position = target_pos
+	else:
+		_smoothed_eye_position = _smoothed_eye_position.lerp(target_pos, EYE_POSITION_SMOOTHING)
 
-	# Also check StaticBody3D nodes with collision layer 2 (GLTF walls)
-	_collect_static_body_corners_to_cache(get_tree().root)
-
-
-## Recursively collect corners from CSGBox3D nodes (for cache building)
-func _collect_csg_corners_to_cache(node: Node) -> void:
-	if node is CSGBox3D:
-		var csg: CSGBox3D = node
-		if csg.use_collision and (csg.collision_layer & wall_collision_mask) != 0:
-			var box_corners := _get_csg_box_corners(csg)
-			_wall_corners_cache.append_array(box_corners)
-
-	for child in node.get_children():
-		_collect_csg_corners_to_cache(child)
+	return _smoothed_eye_position
 
 
-## Recursively collect corners from StaticBody3D nodes (for GLTF walls)
-func _collect_static_body_corners_to_cache(node: Node) -> void:
-	if node is StaticBody3D:
-		var static_body: StaticBody3D = node
-		if (static_body.collision_layer & wall_collision_mask) != 0:
-			var corners := _get_node_corners(static_body)
-			_wall_corners_cache.append_array(corners)
+## Get smoothed look angle
+func _get_look_angle() -> float:
+	var direction := _get_look_direction()
+	var target_angle := atan2(direction.x, -direction.z)
 
-	for child in node.get_children():
-		_collect_static_body_corners_to_cache(child)
+	# Temporal smoothing for angle
+	if not _smoothed_initialized:
+		_smoothed_angle = target_angle
+		_smoothed_initialized = true
+	else:
+		# Normalize angle difference to -PI ~ PI before interpolation
+		var angle_diff := _wrap_angle(target_angle - _smoothed_angle)
+		_smoothed_angle = _wrap_angle(_smoothed_angle + angle_diff * ANGLE_SMOOTHING)
 
-
-## Get corners from CSGBox3D
-func _get_csg_box_corners(csg: CSGBox3D) -> Array[Vector3]:
-	var result: Array[Vector3] = []
-	var half_size := csg.size / 2.0
-
-	# Local XZ plane corners
-	var local_corners := [
-		Vector3(-half_size.x, 0, -half_size.z),
-		Vector3(half_size.x, 0, -half_size.z),
-		Vector3(half_size.x, 0, half_size.z),
-		Vector3(-half_size.x, 0, half_size.z),
-	]
-
-	# Convert to global coordinates
-	for local_corner in local_corners:
-		result.append(csg.global_transform * local_corner)
-
-	return result
+	return _smoothed_angle
 
 
-## Get corners from StaticBody3D with BoxShape3D or ConcavePolygonShape3D
-func _get_node_corners(wall: Node) -> Array[Vector3]:
-	var corners: Array[Vector3] = []
+## Get look direction from character
+func _get_look_direction() -> Vector3:
+	if not _character:
+		return Vector3.FORWARD
 
-	if wall is StaticBody3D:
-		var static_body: StaticBody3D = wall
-		for child in static_body.get_children():
-			if child is CollisionShape3D:
-				var col_shape: CollisionShape3D = child
-				var shape = col_shape.shape
-				var combined_transform: Transform3D = static_body.global_transform * col_shape.transform
+	# Use GameCharacter's facing direction (single source of truth)
+	if _character.has_method("get_facing_direction"):
+		var dir: Vector3 = _character.get_facing_direction()
+		if dir.length_squared() > 0.001:
+			return dir.normalized()
 
-				if shape is BoxShape3D:
-					var box_shape: BoxShape3D = shape
-					var half_size: Vector3 = box_shape.size / 2.0
-					var local_corners: Array[Vector3] = [
-						Vector3(-half_size.x, 0, -half_size.z),
-						Vector3(half_size.x, 0, -half_size.z),
-						Vector3(half_size.x, 0, half_size.z),
-						Vector3(-half_size.x, 0, half_size.z),
-					]
-					for local_corner in local_corners:
-						corners.append(combined_transform * local_corner)
+	# Fallback: character's forward direction
+	var forward := _character.global_transform.basis.z
+	forward.y = 0
 
-				elif shape is ConcavePolygonShape3D:
-					# ConcavePolygonShape3D: AABBからコーナーを取得
-					var concave: ConcavePolygonShape3D = shape
-					var faces = concave.get_faces()
-					if faces.size() > 0:
-						var min_pt := Vector3(INF, INF, INF)
-						var max_pt := Vector3(-INF, -INF, -INF)
-						for vertex in faces:
-							min_pt.x = minf(min_pt.x, vertex.x)
-							min_pt.z = minf(min_pt.z, vertex.z)
-							max_pt.x = maxf(max_pt.x, vertex.x)
-							max_pt.z = maxf(max_pt.z, vertex.z)
-						var local_corners: Array[Vector3] = [
-							Vector3(min_pt.x, 0, min_pt.z),
-							Vector3(max_pt.x, 0, min_pt.z),
-							Vector3(max_pt.x, 0, max_pt.z),
-							Vector3(min_pt.x, 0, max_pt.z),
-						]
-						for local_corner in local_corners:
-							corners.append(combined_transform * local_corner)
+	if forward.length_squared() < 0.001:
+		return Vector3.FORWARD
 
-	return corners
-
-
-## 角度をスナップ（度単位）
-func _snap_angle(angle_rad: float) -> float:
-	var angle_deg := rad_to_deg(angle_rad)
-	var snapped_deg := snappedf(angle_deg, ANGLE_SNAP_DEGREES)
-	return deg_to_rad(snapped_deg)
+	return forward.normalized()
 
 
 ## Wrap angle to -PI to PI range
@@ -440,56 +315,3 @@ func _wrap_angle(angle: float) -> float:
 	while angle < -PI:
 		angle += TAU
 	return angle
-
-
-func _get_eye_position() -> Vector3:
-	if not _character:
-		return global_position
-
-	# 現在の目の位置を計算
-	var target_pos := _character.global_position
-	target_pos.y += eye_height
-
-	# テンポラルスムージング（全軸に適用してカクカクを防止）
-	if not _smoothed_initialized:
-		_smoothed_eye_position = target_pos
-	else:
-		_smoothed_eye_position = _smoothed_eye_position.lerp(target_pos, EYE_POSITION_SMOOTHING)
-
-	return _smoothed_eye_position
-
-
-func _get_look_angle() -> float:
-	var direction := _get_look_direction()
-	var target_angle := atan2(direction.x, -direction.z)
-
-	# 角度のテンポラルスムージング（体の揺れを吸収）
-	if not _smoothed_initialized:
-		_smoothed_angle = target_angle
-		_smoothed_initialized = true
-	else:
-		# 角度の差分を -PI ~ PI に正規化してから補間
-		var angle_diff := _wrap_angle(target_angle - _smoothed_angle)
-		_smoothed_angle = _wrap_angle(_smoothed_angle + angle_diff * ANGLE_SMOOTHING)
-
-	return _smoothed_angle
-
-
-func _get_look_direction() -> Vector3:
-	if not _character:
-		return Vector3.FORWARD
-
-	# GameCharacterの向きを直接参照（一元管理）
-	if _character.has_method("get_facing_direction"):
-		var dir: Vector3 = _character.get_facing_direction()
-		if dir.length_squared() > 0.001:
-			return dir.normalized()
-
-	# フォールバック: キャラクターの前方向
-	var forward := _character.global_transform.basis.z
-	forward.y = 0
-
-	if forward.length_squared() < 0.001:
-		return Vector3.FORWARD
-
-	return forward.normalized()
