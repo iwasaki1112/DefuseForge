@@ -4,10 +4,18 @@ class_name GameCharacter
 ## Provides HP, death state, and team management
 ## Works with CharacterAnimationController for animations
 
-const MUZZLE_FLASH_TEXTURE = preload("res://assets/effects/muzzle_flash.png")
+const MUZZLE_FLASH_TEXTURE = preload("res://assets/effects/muzzle_flash_sprite_sheet.jpg")
 const MUZZLE_FLASH_BASE_SIZE: float = 0.25
 const MUZZLE_FLASH_SCALE_MULTIPLIER: float = 200.0
-const MUZZLE_FLASH_DURATION: float = 0.06
+const MUZZLE_FLASH_DURATION: float = 0.09  # 3フレーム × 0.03秒/フレーム
+const MUZZLE_FLASH_FRAME_COUNT: int = 3
+const MUZZLE_FLASH_FRAME_TIME: float = 0.03  # 各フレームの表示時間
+
+# Bullet Trail (Shader-based)
+const BULLET_TRAIL_SHADER = preload("res://shaders/bullet_trail.gdshader")
+const BULLET_TRAIL_DURATION: float = 0.15
+const BULLET_TRAIL_WIDTH: float = 0.01  # トレイルの幅
+const BULLET_TRAIL_MAX_DISTANCE: float = 50.0
 
 # ============================================
 # Team Definition
@@ -48,6 +56,14 @@ var _muzzle_flash_mat: StandardMaterial3D = null  # マテリアル参照用
 var _muzzle_flash_light: OmniLight3D = null  # マズルフラッシュ光源
 var _muzzle_flash_tween: Tween = null
 var _muzzle_flash_preview_enabled: bool = false
+var _muzzle_flash_quad1: MeshInstance3D = null  # Quad1参照用
+var _muzzle_flash_quad1_x_offset: float = 0.032  # Quad1のX位置オフセット
+var _muzzle_flash_quad1_z_offset: float = 0.026  # Quad1のZ位置オフセット
+var _bullet_trail: Node3D = null
+var _bullet_trail_mat: ShaderMaterial = null
+var _bullet_trail_tween: Tween = null
+var _bullet_trail_quad1: MeshInstance3D = null
+var _bullet_trail_quad2: MeshInstance3D = null
 
 # ============================================
 # Lifecycle
@@ -323,6 +339,7 @@ func get_weapon_socket() -> Node3D:
 
 func _on_anim_fired() -> void:
 	_play_muzzle_flash()
+	_play_bullet_trail()
 
 func set_muzzle_flash_preview(enabled: bool) -> void:
 	_muzzle_flash_preview_enabled = enabled
@@ -364,16 +381,32 @@ func _play_muzzle_flash() -> void:
 
 	if _muzzle_flash_mat:
 		_muzzle_flash_mat.albedo_color = Color(1, 1, 1, 1)
+		# フレーム0（左上）から開始
+		_muzzle_flash_mat.uv1_offset = Vector3(0.0, 0.0, 0.0)
 	if _muzzle_flash_light:
 		_muzzle_flash_light.light_energy = 3.0
 
 	_muzzle_flash_tween = create_tween()
-	_muzzle_flash_tween.tween_property(
+
+	# スプライトシートアニメーション（上の行3フレーム）
+	if _muzzle_flash_mat:
+		# フレーム0→フレーム1（中央上）
+		_muzzle_flash_tween.tween_callback(func():
+			_muzzle_flash_mat.uv1_offset = Vector3(1.0 / 3.0, 0.0, 0.0)
+		).set_delay(MUZZLE_FLASH_FRAME_TIME)
+		# フレーム1→フレーム2（右上）
+		_muzzle_flash_tween.tween_callback(func():
+			_muzzle_flash_mat.uv1_offset = Vector3(2.0 / 3.0, 0.0, 0.0)
+		).set_delay(MUZZLE_FLASH_FRAME_TIME)
+
+	# スケールアニメーション
+	_muzzle_flash_tween.parallel().tween_property(
 		_muzzle_flash,
 		"scale",
 		Vector3.ONE * base_scale * 1.2,
 		MUZZLE_FLASH_DURATION
 	)
+	# フェードアウト
 	if _muzzle_flash_mat:
 		_muzzle_flash_tween.parallel().tween_property(
 			_muzzle_flash_mat,
@@ -404,6 +437,8 @@ func _ensure_muzzle_flash_visible() -> void:
 	_muzzle_flash.scale = Vector3.ONE * _get_muzzle_flash_scale()
 	if _muzzle_flash_mat:
 		_muzzle_flash_mat.albedo_color = Color(1, 1, 1, 1)
+		# プレビュー時は最初のフレーム（左上）を表示
+		_muzzle_flash_mat.uv1_offset = Vector3(0.0, 0.0, 0.0)
 	if _muzzle_flash_light:
 		_muzzle_flash_light.light_energy = 3.0
 	_muzzle_flash.visible = true
@@ -417,7 +452,7 @@ func _create_muzzle_flash() -> void:
 	_muzzle_flash = Node3D.new()
 	_muzzle_flash.name = "MuzzleFlash"
 
-	# 共通マテリアル作成
+	# 共通マテリアル作成（スプライトシート用）
 	_muzzle_flash_mat = StandardMaterial3D.new()
 	_muzzle_flash_mat.albedo_texture = MUZZLE_FLASH_TEXTURE
 	_muzzle_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -427,21 +462,27 @@ func _create_muzzle_flash() -> void:
 	_muzzle_flash_mat.emission_enabled = true
 	_muzzle_flash_mat.emission_texture = MUZZLE_FLASH_TEXTURE
 	_muzzle_flash_mat.emission_energy_multiplier = 1.2
+	# スプライトシート用UV設定（3×3グリッドの1コマ分）
+	_muzzle_flash_mat.uv1_scale = Vector3(1.0 / 3.0, 1.0 / 3.0, 1.0)
+	_muzzle_flash_mat.uv1_offset = Vector3(0.0, 0.0, 0.0)  # 左上から開始
 
-	# Quad 1 (XY平面 - 正面向き)
-	var quad1 = MeshInstance3D.new()
+	# Quad 1 (XY平面 - 正面向き、Z軸で-90度回転してテクスチャ向き補正)
+	_muzzle_flash_quad1 = MeshInstance3D.new()
 	var mesh1 = QuadMesh.new()
 	mesh1.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
-	quad1.mesh = mesh1
-	quad1.material_override = _muzzle_flash_mat
-	_muzzle_flash.add_child(quad1)
+	_muzzle_flash_quad1.mesh = mesh1
+	_muzzle_flash_quad1.position = Vector3(_muzzle_flash_quad1_x_offset, 0, _muzzle_flash_quad1_z_offset)
+	_muzzle_flash_quad1.rotation_degrees.z = -90  # テクスチャが横向きなので補正
+	_muzzle_flash_quad1.material_override = _muzzle_flash_mat
+	_muzzle_flash.add_child(_muzzle_flash_quad1)
 
-	# Quad 2 (YZ平面 - Y軸で90度回転)
+	# Quad 2 (Quad1と同じ + Y軸90度で十字配置)
 	var quad2 = MeshInstance3D.new()
 	var mesh2 = QuadMesh.new()
 	mesh2.size = Vector2(MUZZLE_FLASH_BASE_SIZE, MUZZLE_FLASH_BASE_SIZE)
 	quad2.mesh = mesh2
-	quad2.rotation_degrees.y = 90  # Y軸で90度回転
+	quad2.position = Vector3.ZERO
+	quad2.rotation_degrees = Vector3(0, 90, -90)  # Y軸90度 + Z軸-90度
 	quad2.material_override = _muzzle_flash_mat
 	_muzzle_flash.add_child(quad2)
 
@@ -467,6 +508,30 @@ func _get_muzzle_flash_rotation() -> Vector3:
 	if current_weapon:
 		return current_weapon.muzzle_flash_rotation
 	return Vector3.ZERO
+
+
+## Set Quad1 X offset for muzzle flash adjustment
+func set_muzzle_flash_quad1_x(x_offset: float) -> void:
+	_muzzle_flash_quad1_x_offset = x_offset
+	if _muzzle_flash_quad1 and is_instance_valid(_muzzle_flash_quad1):
+		_muzzle_flash_quad1.position.x = x_offset
+
+
+## Get Quad1 X offset
+func get_muzzle_flash_quad1_x() -> float:
+	return _muzzle_flash_quad1_x_offset
+
+
+## Set Quad1 Z offset for muzzle flash adjustment
+func set_muzzle_flash_quad1_z(z_offset: float) -> void:
+	_muzzle_flash_quad1_z_offset = z_offset
+	if _muzzle_flash_quad1 and is_instance_valid(_muzzle_flash_quad1):
+		_muzzle_flash_quad1.position.z = z_offset
+
+
+## Get Quad1 Z offset
+func get_muzzle_flash_quad1_z() -> float:
+	return _muzzle_flash_quad1_z_offset
 
 
 func _get_muzzle_flash_offset() -> Vector3:
@@ -539,6 +604,125 @@ func _transform_aabb(aabb: AABB, xform: Transform3D) -> AABB:
 		else:
 			transformed = transformed.expand(p)
 	return transformed
+
+# ============================================
+# Bullet Trail
+# ============================================
+
+func _play_bullet_trail() -> void:
+	if not _weapon_socket:
+		return
+
+	var muzzle_world_pos = _get_muzzle_world_position()
+	var target_pos = _get_bullet_target_position()
+
+	if muzzle_world_pos == Vector3.ZERO or target_pos == Vector3.ZERO:
+		return
+
+	_create_bullet_trail(muzzle_world_pos, target_pos)
+
+
+func _get_muzzle_world_position() -> Vector3:
+	if not _weapon_socket or not is_instance_valid(_weapon_socket):
+		return Vector3.ZERO
+
+	# マズルフラッシュが存在すればその位置を使用（最も正確）
+	if _muzzle_flash and is_instance_valid(_muzzle_flash):
+		return _muzzle_flash.global_position
+
+	# フォールバック: オフセットから計算
+	var muzzle_offset = _get_muzzle_flash_offset()
+	return _weapon_socket.to_global(muzzle_offset)
+
+
+func _get_bullet_target_position() -> Vector3:
+	# 1. CombatAwarenessから現在のターゲットを取得
+	if combat_awareness:
+		var target = combat_awareness.get_current_target()
+		if target and is_instance_valid(target) and target is Node3D:
+			# ターゲットの中心（胸あたり）を狙う
+			return target.global_position + Vector3(0, 1.2, 0)
+
+	# 2. フォールバック: キャラクターの視線方向に延長
+	var forward = global_transform.basis.z  # +Zが前方
+	return global_position + Vector3(0, 1.5, 0) + forward * BULLET_TRAIL_MAX_DISTANCE
+
+
+func _create_bullet_trail(start: Vector3, end: Vector3) -> void:
+	# 既存のトレイルがあればTweenを止める
+	if _bullet_trail_tween and _bullet_trail_tween.is_running():
+		_bullet_trail_tween.kill()
+
+	# トレイルの長さを計算
+	var length = start.distance_to(end)
+	if length < 0.1:
+		return
+
+	# 親ノードとメッシュが存在しなければ作成
+	if not _bullet_trail or not is_instance_valid(_bullet_trail):
+		_bullet_trail = Node3D.new()
+		_bullet_trail.name = "BulletTrail"
+
+		# シェーダーマテリアル作成
+		_bullet_trail_mat = ShaderMaterial.new()
+		_bullet_trail_mat.shader = BULLET_TRAIL_SHADER
+		_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.95, 0.85, 1.0))
+		_bullet_trail_mat.set_shader_parameter("edge_softness", 1.5)
+		_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.12)
+		_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
+		_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)
+		_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.8)
+		_bullet_trail_mat.set_shader_parameter("overall_alpha", 1.0)
+
+		# Quad 1（水平面）- X軸90度回転でXZ平面に配置
+		_bullet_trail_quad1 = MeshInstance3D.new()
+		var mesh1 = QuadMesh.new()
+		mesh1.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
+		_bullet_trail_quad1.mesh = mesh1
+		_bullet_trail_quad1.rotation_degrees.x = 90  # XY平面→XZ平面
+		_bullet_trail_quad1.material_override = _bullet_trail_mat
+		_bullet_trail.add_child(_bullet_trail_quad1)
+
+		# Quad 2（垂直面）- Quad1と同じ回転 + ローカルY軸で90度回転
+		_bullet_trail_quad2 = MeshInstance3D.new()
+		var mesh2 = QuadMesh.new()
+		mesh2.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
+		_bullet_trail_quad2.mesh = mesh2
+		_bullet_trail_quad2.rotation_degrees.x = 90  # Quad1と同じ
+		_bullet_trail_quad2.rotate_object_local(Vector3.UP, deg_to_rad(90))  # ローカルY軸（弾道方向）周りに90度
+		_bullet_trail_quad2.material_override = _bullet_trail_mat
+		_bullet_trail.add_child(_bullet_trail_quad2)
+
+		# ワールド空間に追加
+		get_tree().root.add_child(_bullet_trail)
+
+	# Quadサイズを長さに合わせて更新
+	var mesh1 = _bullet_trail_quad1.mesh as QuadMesh
+	var mesh2 = _bullet_trail_quad2.mesh as QuadMesh
+	if mesh1:
+		mesh1.size = Vector2(BULLET_TRAIL_WIDTH, length)
+	if mesh2:
+		mesh2.size = Vector2(BULLET_TRAIL_WIDTH, length)
+
+	# トレイルの位置（中点）と向き
+	_bullet_trail.global_position = (start + end) * 0.5
+	_bullet_trail.look_at(end, Vector3.UP)
+
+	# 表示・アルファリセット
+	_bullet_trail.visible = true
+	if _bullet_trail_mat:
+		_bullet_trail_mat.set_shader_parameter("overall_alpha", 1.0)
+
+	# Tweenでフェードアウト
+	_bullet_trail_tween = create_tween()
+	_bullet_trail_tween.tween_method(
+		func(alpha: float): _bullet_trail_mat.set_shader_parameter("overall_alpha", alpha),
+		1.0,
+		0.0,
+		BULLET_TRAIL_DURATION
+	)
+	_bullet_trail_tween.tween_callback(func(): _bullet_trail.visible = false)
+
 
 # ============================================
 # Death Processing
