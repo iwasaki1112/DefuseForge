@@ -681,7 +681,15 @@ func _get_bullet_target_position() -> Vector3:
 		var target = combat_awareness.get_current_target()
 		if target and is_instance_valid(target) and target is Node3D:
 			# ターゲットの中心（胸あたり）を狙う
-			return target.global_position + Vector3(0, 1.2, 0)
+			var target_pos: Vector3 = target.global_position + Vector3(0, 1.2, 0)
+
+			# 命中判定結果を取得し、外れた場合はオフセットを適用
+			var shot_result: Dictionary = combat_awareness.get_last_shot_result()
+			if not shot_result.get("hit", true):
+				var miss_offset: Vector3 = shot_result.get("miss_offset", Vector3.ZERO)
+				target_pos += miss_offset
+
+			return target_pos
 
 	# 2. フォールバック: キャラクターの視線方向に延長
 	var forward = global_transform.basis.z  # +Zが前方

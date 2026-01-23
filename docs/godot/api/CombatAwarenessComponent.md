@@ -16,6 +16,7 @@
 | `enemy_spotted` | `enemy: Node` | 敵を発見したとき |
 | `enemy_lost` | `enemy: Node` | 敵を見失ったとき |
 | `target_changed` | `new_target: Node, old_target: Node` | ターゲットが変更されたとき |
+| `shot_missed` | `target: Node, miss_offset: Vector3` | 射撃が外れたとき |
 
 ## Constants
 
@@ -24,6 +25,8 @@
 | `SCAN_INTERVAL` | `0.05` | 敵スキャン間隔（50ms、EnemyVisibilitySystemと同等） |
 | `TRACKING_TIMEOUT` | `0.75` | 視界離脱後の追跡継続時間（秒） |
 | `FIRE_INTERVAL` | `0.5` | 発砲間隔（500ms） |
+| `MOVEMENT_ACCURACY_PENALTY` | `0.3` | 移動中の精度ペナルティ |
+| `MOVEMENT_THRESHOLD` | `0.5` | 移動判定の速度閾値（m/s） |
 
 ## Public API
 
@@ -74,6 +77,13 @@
 自動発砲が有効か確認する。
 
 **戻り値:** 自動発砲が有効なら`true`
+
+### get_last_shot_result() -> Dictionary
+最後の射撃結果を取得する。
+
+**戻り値:** 以下のキーを含むDictionary
+- `hit: bool` - 命中したかどうか
+- `miss_offset: Vector3` - 外れた場合のオフセットベクトル
 
 ### process(delta: float) -> void
 毎フレームの処理を行う。所有者の`_physics_process`から呼び出す。
@@ -199,3 +209,49 @@ func _on_rotation_confirmed(final_direction: Vector3) -> void:
 - スキャン間隔: 50ms（EnemyVisibilitySystemと同等）
 - 想定コスト: 5味方 × 10敵 = 最大50レイキャスト/50ms
 - VisionComponentの軽量判定を使用（is_position_in_view）
+
+## 命中判定システム
+
+### 命中率計算アルゴリズム
+
+```
+# 基本精度
+base_accuracy = weapon.accuracy
+
+# 散布によるペナルティ（ランダム要素）
+spread_penalty = spread × randf() × 0.5
+
+# 距離によるペナルティ
+distance_factor = 1.0
+if distance > effective_range:
+    distance_factor = effective_range / distance  # 射程の2倍で50%
+
+# 移動によるペナルティ
+movement_penalty = 0.0
+if character.velocity.length() > MOVEMENT_THRESHOLD:
+    movement_penalty = MOVEMENT_ACCURACY_PENALTY (0.3)
+
+# 最終命中率
+final_accuracy = (base_accuracy - spread_penalty - movement_penalty) × distance_factor
+final_accuracy = clamp(final_accuracy, 0.05, 1.0)  # 最低5%は当たる
+
+# 判定
+is_hit = randf() < final_accuracy
+```
+
+### 外れ時の弾道オフセット
+
+外れた場合、着弾点にランダムオフセットが適用される：
+- XZ平面でランダム角度（0〜360度）
+- オフセット距離: 0.5〜2.0メートル
+- 垂直方向: -0.5〜+0.5メートル
+
+### GameCharacterとの連携
+
+弾道トレイルは`get_last_shot_result()`を使用して外れ時のオフセットを反映：
+
+```gdscript
+var shot_result = combat_awareness.get_last_shot_result()
+if not shot_result.hit:
+    target_pos += shot_result.miss_offset
+```

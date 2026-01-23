@@ -10,6 +10,7 @@ class_name CombatAwarenessComponent
 signal enemy_spotted(enemy: Node)
 signal enemy_lost(enemy: Node)
 signal target_changed(new_target: Node, old_target: Node)
+signal shot_missed(target: Node, miss_offset: Vector3)
 
 # ============================================
 # Configuration
@@ -18,6 +19,8 @@ const SCAN_INTERVAL: float = 0.05  ## Scan every 50ms (matches EnemyVisibilitySy
 const TRACKING_TIMEOUT: float = 0.75  ## Time to track last known position after losing sight
 const CHARACTERS_CACHE_INTERVAL: float = 0.2  ## キャラクターキャッシュ更新間隔（200ms）
 const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
+const MOVEMENT_ACCURACY_PENALTY: float = 0.3  ## Accuracy penalty when moving
+const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
 
 # ============================================
 # State
@@ -35,6 +38,10 @@ var _fire_timer: float = 0.0  ## 発砲タイマー
 # キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
+
+# 命中判定結果（最後の射撃）
+var _last_shot_hit: bool = true
+var _last_shot_miss_offset: Vector3 = Vector3.ZERO
 
 
 # ============================================
@@ -120,6 +127,14 @@ func disable_firing() -> void:
 ## Check if automatic firing is enabled
 func is_firing_enabled() -> bool:
 	return _firing_enabled
+
+
+## Get last shot result (hit status and miss offset)
+func get_last_shot_result() -> Dictionary:
+	return {
+		"hit": _last_shot_hit,
+		"miss_offset": _last_shot_miss_offset
+	}
 
 
 ## Process function - call from owner's _physics_process
@@ -307,7 +322,56 @@ func _try_fire() -> void:
 		_apply_damage_to_target()
 
 
-## Apply damage to the current target
+## Calculate hit chance based on weapon stats, distance, and movement
+func _calculate_hit_chance(weapon: WeaponPreset, distance: float) -> float:
+	if not weapon:
+		return 0.5  # Default 50% if no weapon
+
+	# Base accuracy from weapon
+	var base_accuracy: float = weapon.accuracy
+
+	# Spread penalty (random factor)
+	var spread_penalty: float = weapon.spread * randf() * 0.5
+
+	# Distance factor
+	var distance_factor: float = 1.0
+	if distance > weapon.effective_range:
+		distance_factor = weapon.effective_range / distance  # e.g., 2x range = 50%
+
+	# Movement penalty
+	var movement_penalty: float = 0.0
+	if _character is CharacterBody3D:
+		var velocity: Vector3 = _character.velocity
+		if velocity.length() > MOVEMENT_THRESHOLD:
+			movement_penalty = MOVEMENT_ACCURACY_PENALTY
+
+	# Final accuracy calculation
+	var final_accuracy: float = (base_accuracy - spread_penalty - movement_penalty) * distance_factor
+	return clampf(final_accuracy, 0.05, 1.0)  # Minimum 5% hit chance
+
+
+## Roll hit check and return true if hit
+func _roll_hit_check(weapon: WeaponPreset, distance: float) -> bool:
+	var hit_chance: float = _calculate_hit_chance(weapon, distance)
+	return randf() < hit_chance
+
+
+## Calculate miss offset vector (random direction)
+func _calculate_miss_offset() -> Vector3:
+	# Random angle on XZ plane
+	var angle: float = randf() * TAU
+	# Random distance (0.5 - 2.0 meters)
+	var offset_distance: float = randf_range(0.5, 2.0)
+
+	var offset := Vector3(
+		cos(angle) * offset_distance,
+		randf_range(-0.5, 0.5),  # Slight vertical variance
+		sin(angle) * offset_distance
+	)
+	return offset
+
+
+## Apply damage to the current target (with hit check)
 func _apply_damage_to_target() -> void:
 	if not _current_target or not is_instance_valid(_current_target):
 		return
@@ -315,8 +379,24 @@ func _apply_damage_to_target() -> void:
 		return
 
 	var damage: float = 10.0  # Default damage
-	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if weapon and "damage" in weapon:
 		damage = weapon.damage
 
-	_current_target.take_damage(damage, _character, false)
+	# Calculate distance to target
+	var distance: float = _character.global_position.distance_to(_current_target.global_position)
+
+	# Perform hit check
+	var is_hit: bool = _roll_hit_check(weapon, distance)
+
+	# Store result for bullet trail
+	_last_shot_hit = is_hit
+
+	if is_hit:
+		# Hit - apply damage
+		_last_shot_miss_offset = Vector3.ZERO
+		_current_target.take_damage(damage, _character, false)
+	else:
+		# Miss - calculate miss offset and emit signal
+		_last_shot_miss_offset = _calculate_miss_offset()
+		shot_missed.emit(_current_target, _last_shot_miss_offset)

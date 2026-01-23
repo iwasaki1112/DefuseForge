@@ -23,6 +23,8 @@ enum WeaponCategory { RIFLE, PISTOL, SMG, SHOTGUN, SNIPER }
 @export var damage: float = 30.0  ## Damage per hit
 @export var fire_rate: float = 0.1  ## Fire interval in seconds
 @export var accuracy: float = 0.9  ## Accuracy (0.0 - 1.0)
+@export var spread: float = 0.1  ## Spread (0.0 - 1.0, lower is tighter grouping)
+@export var effective_range: float = 20.0  ## Effective range in meters
 
 # ============================================
 # Recoil
