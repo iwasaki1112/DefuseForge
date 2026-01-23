@@ -237,20 +237,24 @@ func set_look_direction(direction: Vector3) -> void:
 	if direction.length_squared() > 0.001:
 		_aim_direction = direction.normalized()
 		_aim_direction.y = 0
-		# モデルの向きを即座に更新（_update_model_rotationと同じ計算）
 		if _model:
+			# -_aim_direction 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
 			var target_basis := Basis.looking_at(-_aim_direction, Vector3.UP)
 			_model.transform.basis = target_basis
 
 
 ## モデルの向きを設定（GameCharacterから呼ばれる）
 ## directionはキャラクターが向きたい方向（正規化済み）
+## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+## !! 警告: -direction を変更しないこと！                            !!
+## !! Mixamoモデルは+Zが前方向、looking_at()は-Zをターゲットに向ける !!
+## !! この反転は必須。削除するとモデルが逆方向を向く                 !!
+## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 func set_model_direction(direction: Vector3) -> void:
 	if not _model or direction.length_squared() < 0.001:
 		return
-	# Mixamoモデルは+Zが前方向
-	# looking_at()は-Zを前とするため、-directionを渡す
-	var target_basis := Basis.looking_at(-direction, Vector3.UP)
+	_aim_direction = direction.normalized()
+	var target_basis := Basis.looking_at(-direction, Vector3.UP)  # ← -direction 必須！
 	_model.transform.basis = target_basis
 
 ## Play death animation
@@ -524,6 +528,7 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	look_dir.y = 0
 
 	if look_dir.length() > 0.1:
+		# -look_dir 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
 		var target_basis := Basis.looking_at(-look_dir.normalized(), Vector3.UP)
 		var target_quat := target_basis.get_rotation_quaternion()
 		var current_quat := Quaternion(_model.transform.basis)

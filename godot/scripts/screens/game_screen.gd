@@ -169,6 +169,8 @@ func _on_clear_paths_button_pressed() -> void:
 
 func _physics_process(delta: float) -> void:
 	game_manager.process_frame(delta)
+	if _camera_pan_controller:
+		_camera_pan_controller.process(delta)
 
 
 ## ========================================

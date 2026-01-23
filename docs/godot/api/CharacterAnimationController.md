@@ -162,3 +162,22 @@ anim_ctrl.fire()
 - 8方向ストレイフアニメーションを`BlendSpace2D`で管理
 - `RecoilModifier`でプロシージャルリコイルを適用
 - Mixamoリグ専用設計
+
+## 重要: モデル向き制御の注意点
+
+> **警告: 絶対に変更しないこと**
+>
+> モデルの向き制御で `Basis.looking_at(-direction)` を使用している箇所がある。
+> この **マイナス符号は必須** であり、削除してはならない。
+>
+> **理由:**
+> - Mixamoモデルの前方向: **+Z**
+> - `Basis.looking_at()` がターゲットに向ける軸: **-Z**
+>
+> この仕様の違いを吸収するために `-direction` を渡している。
+> マイナスを削除するとモデルが意図した方向と **逆を向く**。
+>
+> 該当箇所:
+> - `set_model_direction()`
+> - `set_look_direction()`
+> - `_update_model_rotation()`
