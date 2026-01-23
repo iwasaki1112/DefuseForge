@@ -239,6 +239,11 @@ func get_look_direction() -> Vector3:
 	return _aim_direction
 
 
+## Get the model node (for external rotation control)
+func get_model() -> Node3D:
+	return _model
+
+
 ## Set aim direction directly (for rotation mode)
 ## 非推奨: GameCharacter.set_facing_direction_vec()を使用してください
 func set_look_direction(direction: Vector3) -> void:
@@ -337,6 +342,7 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 ## Check if door kick animation is playing
 func is_door_kicking() -> bool:
 	return _is_door_kicking
+
 
 #endregion
 
