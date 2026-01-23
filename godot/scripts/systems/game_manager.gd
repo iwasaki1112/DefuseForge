@@ -944,9 +944,9 @@ func _start_door_kick(character: CharacterBody3D, door: Node3D) -> void:
 	door_forward.y = 0.0
 	door_forward = door_forward.normalized()
 
-	# 前後アンカー位置（ドアから1m離れた位置）
-	var anchor_front := door_pos + door_forward * 1.0  # +Z側
-	var anchor_back := door_pos - door_forward * 1.0   # -Z側
+	# 前後アンカー位置（ドアから0.65m離れた位置）
+	var anchor_front := door_pos + door_forward * 0.65  # +Z側
+	var anchor_back := door_pos - door_forward * 0.65   # -Z側
 
 	# キャラクターに近い方のアンカーを選択
 	var dist_front := char_pos.distance_to(anchor_front)
