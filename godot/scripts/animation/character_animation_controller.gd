@@ -98,14 +98,8 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 	_setup_animation_tree()
 	_update_weapon_idle_blend()
 
-	# 初期のエイム方向をモデルの前方向に設定
-	if _model:
-		_aim_direction = _model.global_transform.basis.z
-		_aim_direction.y = 0
-		if _aim_direction.length_squared() > 0.001:
-			_aim_direction = _aim_direction.normalized()
-		else:
-			_aim_direction = Vector3.FORWARD
+	# 注意: 初期の向きはGameCharacter.set_facing_direction()で設定される
+	# ここでは_aim_directionを初期化しない（デフォルトのVector3.FORWARDを使用）
 
 ## Main update function - call every frame
 func update_animation(
@@ -238,6 +232,7 @@ func get_look_direction() -> Vector3:
 
 
 ## Set aim direction directly (for rotation mode)
+## 非推奨: GameCharacter.set_facing_direction_vec()を使用してください
 func set_look_direction(direction: Vector3) -> void:
 	if direction.length_squared() > 0.001:
 		_aim_direction = direction.normalized()
@@ -246,6 +241,17 @@ func set_look_direction(direction: Vector3) -> void:
 		if _model:
 			var target_basis := Basis.looking_at(-_aim_direction, Vector3.UP)
 			_model.transform.basis = target_basis
+
+
+## モデルの向きを設定（GameCharacterから呼ばれる）
+## directionはキャラクターが向きたい方向（正規化済み）
+func set_model_direction(direction: Vector3) -> void:
+	if not _model or direction.length_squared() < 0.001:
+		return
+	# Mixamoモデルは+Zが前方向
+	# looking_at()は-Zを前とするため、-directionを渡す
+	var target_basis := Basis.looking_at(-direction, Vector3.UP)
+	_model.transform.basis = target_basis
 
 ## Play death animation
 ## hit_direction: Direction the hit came FROM (reserved for future use)

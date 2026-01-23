@@ -214,7 +214,14 @@ func create_character_from_preset(preset: CharacterPresetScript, position: Vecto
 	var anim_ctrl := CharAnimCtrl.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
+
 	# Defer setup until character is in scene tree
-	character.ready.connect(func(): anim_ctrl.setup(model, anim_player), CONNECT_ONE_SHOT)
+	# 初期向きはGameCharacter.set_facing_direction()で設定される
+	character.ready.connect(func():
+		anim_ctrl.setup(model, anim_player)
+		# _facing_directionが設定されていればモデルを回転
+		if character._facing_direction.length_squared() > 0.001:
+			anim_ctrl.set_model_direction(character._facing_direction)
+	, CONNECT_ONE_SHOT)
 
 	return character

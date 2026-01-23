@@ -442,14 +442,11 @@ func _get_look_direction() -> Vector3:
 	if not _character:
 		return Vector3.FORWARD
 
-	# アニメーションコントローラーからエイム方向を取得
-	if _character.has_method("get_anim_controller"):
-		var anim_ctrl = _character.get_anim_controller()
-		if anim_ctrl and anim_ctrl.has_method("get_look_direction"):
-			var dir = anim_ctrl.get_look_direction()
-			dir.y = 0
-			if dir.length_squared() > 0.001:
-				return dir.normalized()
+	# GameCharacterの向きを直接参照（一元管理）
+	if _character.has_method("get_facing_direction"):
+		var dir: Vector3 = _character.get_facing_direction()
+		if dir.length_squared() > 0.001:
+			return dir.normalized()
 
 	# フォールバック: キャラクターの前方向
 	var forward := _character.global_transform.basis.z

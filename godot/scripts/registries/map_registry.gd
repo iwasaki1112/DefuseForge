@@ -126,6 +126,9 @@ func instantiate_map_from_preset(preset: MapPresetScript) -> Node3D:
 	# Setup wall groups for VisionComponent
 	_setup_wall_groups(map_instance)
 
+	# Extract spawn points from scene markers if available
+	_extract_spawn_points(map_instance, preset)
+
 	return map_instance
 
 # ============================================
@@ -143,3 +146,63 @@ func _setup_wall_groups(node: Node) -> void:
 	# Recursively process children
 	for child in node.get_children():
 		_setup_wall_groups(child)
+
+# ============================================
+# Spawn Point Extraction
+# ============================================
+
+## Spawn marker naming patterns
+const SPAWN_CT_PATTERNS := ["spawn_ct_", "SpawnCT"]
+const SPAWN_T_PATTERNS := ["spawn_t_", "SpawnT"]
+
+## Extract spawn points and rotations from scene markers and update preset
+## Markers should be named: spawn_ct_1, spawn_ct_2, ... or SpawnCT1, SpawnCT2, ...
+## For T side: spawn_t_1, spawn_t_2, ... or SpawnT1, SpawnT2, ...
+func _extract_spawn_points(map_instance: Node3D, preset: MapPresetScript) -> void:
+	var ct_spawns: Array[Vector3] = []
+	var ct_rotations: Array[float] = []
+	var t_spawns: Array[Vector3] = []
+	var t_rotations: Array[float] = []
+
+	# Recursively find spawn markers
+	_find_spawn_markers(map_instance, ct_spawns, ct_rotations, t_spawns, t_rotations)
+
+	# Update preset if markers were found
+	if ct_spawns.size() > 0:
+		preset.spawn_points_ct = ct_spawns
+		preset.spawn_rotations_ct = ct_rotations
+	if t_spawns.size() > 0:
+		preset.spawn_points_t = t_spawns
+		preset.spawn_rotations_t = t_rotations
+
+## Recursively find spawn marker nodes
+func _find_spawn_markers(
+	node: Node,
+	ct_spawns: Array[Vector3],
+	ct_rotations: Array[float],
+	t_spawns: Array[Vector3],
+	t_rotations: Array[float]
+) -> void:
+	var node_name := node.name.to_lower()
+
+	# Check for CT spawn markers
+	for pattern in SPAWN_CT_PATTERNS:
+		if node_name.begins_with(pattern.to_lower()):
+			if node is Node3D:
+				var node3d := node as Node3D
+				ct_spawns.append(node3d.position)
+				ct_rotations.append(node3d.rotation.y)
+			break
+
+	# Check for T spawn markers
+	for pattern in SPAWN_T_PATTERNS:
+		if node_name.begins_with(pattern.to_lower()):
+			if node is Node3D:
+				var node3d := node as Node3D
+				t_spawns.append(node3d.position)
+				t_rotations.append(node3d.rotation.y)
+			break
+
+	# Recursively process children
+	for child in node.get_children():
+		_find_spawn_markers(child, ct_spawns, ct_rotations, t_spawns, t_rotations)

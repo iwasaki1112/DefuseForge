@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MapPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/maps/bank.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+id = "bank"
+display_name = "Bank"
+description = "Bank heist tactical map"
+map_scene = ExtResource("2_scene")
+map_size = Vector2(15, 15)
+spawn_points_ct = Array[Vector3]([])
+spawn_points_t = Array[Vector3]([])

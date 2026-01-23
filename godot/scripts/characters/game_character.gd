@@ -42,6 +42,13 @@ var current_health: float = 100.0
 var is_alive: bool = true
 
 # ============================================
+# Facing Direction (一元管理)
+# ============================================
+## キャラクターの向き（正規化済みXZ平面ベクトル）
+## すべてのコンポーネント（Animation, Vision）はこれを参照する
+var _facing_direction: Vector3 = Vector3.FORWARD
+
+# ============================================
 # References
 # ============================================
 var anim_ctrl: CharacterAnimationController = null  # CharacterAnimationController
@@ -133,6 +140,39 @@ func set_anim_controller(controller: CharacterAnimationController) -> void:
 ## Get CharacterAnimationController
 func get_anim_controller() -> CharacterAnimationController:
 	return anim_ctrl
+
+# ============================================
+# Facing Direction API (一元管理)
+# ============================================
+
+## キャラクターの向きを設定（ベクトル）
+## Animation、Visionすべてがこの向きを参照する
+func set_facing_direction_vec(direction: Vector3) -> void:
+	direction.y = 0
+	if direction.length_squared() < 0.001:
+		return
+	_facing_direction = direction.normalized()
+	# AnimationControllerのモデル向きを更新
+	if anim_ctrl:
+		anim_ctrl.set_model_direction(_facing_direction)
+
+
+## キャラクターの向きを設定（Y軸回転、ラジアン）
+func set_facing_direction(y_rotation: float) -> void:
+	# y_rotation=0 → +Z方向（Mixamoモデルの前方向）
+	var direction := Vector3(sin(y_rotation), 0, cos(y_rotation))
+	set_facing_direction_vec(direction)
+
+
+## ターゲット位置の方向を向く
+func face_towards(target_pos: Vector3) -> void:
+	var dir := target_pos - global_position
+	set_facing_direction_vec(dir)
+
+
+## 現在の向きを取得（すべてのコンポーネントはこれを参照すべき）
+func get_facing_direction() -> Vector3:
+	return _facing_direction
 
 # ============================================
 # Stance API

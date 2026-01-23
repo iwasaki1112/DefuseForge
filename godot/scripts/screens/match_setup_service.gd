@@ -48,12 +48,14 @@ func spawn_characters() -> void:
 	# CT側キャラクターをスポーン
 	var ct_presets = CharacterRegistry.get_counter_terrorists()
 	var ct_spawns = preset.spawn_points_ct
-	_spawn_team_characters(ct_presets, ct_spawns)
+	var ct_rotations = preset.spawn_rotations_ct
+	_spawn_team_characters(ct_presets, ct_spawns, ct_rotations)
 
 	# T側キャラクターをスポーン
 	var t_presets = CharacterRegistry.get_terrorists()
 	var t_spawns = preset.spawn_points_t
-	_spawn_team_characters(t_presets, t_spawns)
+	var t_rotations = preset.spawn_rotations_t
+	_spawn_team_characters(t_presets, t_spawns, t_rotations)
 
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
@@ -79,13 +81,18 @@ func setup_camera_for_player() -> void:
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
 
 
-func _spawn_team_characters(presets: Array, spawn_points: Array) -> void:
+func _spawn_team_characters(presets: Array, spawn_points: Array, spawn_rotations: Array) -> void:
 	var count := mini(presets.size(), spawn_points.size())
 	for i in range(count):
 		var char_preset = presets[i]
 		var spawn_pos: Vector3 = spawn_points[i]
 		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
 		if character:
+			# add_child()前に向きを設定（readyコールバックで適用される）
+			if i < spawn_rotations.size():
+				var spawn_rot: float = spawn_rotations[i]
+				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
+				character._facing_direction = direction
 			var character_parent = game_manager.get_character_parent()
 			character_parent.add_child(character)
 			game_manager.register_character(character)

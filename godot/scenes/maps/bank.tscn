@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/maps/bank.gltf" id="1_gltf"]
+
+[node name="Bank" instance=ExtResource("1_gltf")]
