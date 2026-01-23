@@ -986,6 +986,10 @@ func _start_door_kick(character: CharacterBody3D, door: Node3D) -> void:
 		_on_door_approach_completed(character, door)
 		return
 
+	# 移動開始前にキャラクターを移動方向に向ける（ストレイフアニメーション防止）
+	if character.has_method("face_towards"):
+		character.face_towards(approach_pos)
+
 	# PathFollowingControllerを取得または作成してパス追従開始
 	var path: Array[Vector3] = [char_pos, approach_pos]
 	var controller = _get_or_create_door_kick_controller(character)
