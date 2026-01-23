@@ -777,13 +777,86 @@ func _create_bullet_trail(start: Vector3, end: Vector3) -> void:
 # Death Processing
 # ============================================
 
+## 壁検出用定数
+const WALL_DETECT_DISTANCE := 1.2  # 壁検出レイキャスト距離
+const WALL_COLLISION_MASK := 2  # 壁コリジョンマスク
+
+## 4方向の壁を検出（死亡アニメーション選択用）
+## @return Dictionary { HitDirection(int) -> bool } 壁があればtrue
+func _detect_nearby_walls() -> Dictionary:
+	# HitDirection: FRONT=0, BACK=1, LEFT=2, RIGHT=3
+	var result := { 0: false, 1: false, 2: false, 3: false }
+
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return result
+
+	var origin := global_position + Vector3(0, 0.8, 0)  # 胴体高さ
+	var forward := global_transform.basis.z.normalized()
+	forward.y = 0
+	var right := forward.cross(Vector3.UP).normalized()
+
+	var directions := {
+		0: forward,    # FRONT
+		1: -forward,   # BACK
+		2: -right,     # LEFT
+		3: right,      # RIGHT
+	}
+
+	for dir_idx in directions:
+		var direction: Vector3 = directions[dir_idx]
+		var query := PhysicsRayQueryParameters3D.create(
+			origin, origin + direction * WALL_DETECT_DISTANCE, WALL_COLLISION_MASK
+		)
+		query.exclude = [get_rid()]
+		if space_state.intersect_ray(query):
+			result[dir_idx] = true
+
+	return result
+
+
+## 壁を避けた最適な死亡方向を選択
+## @param hit_direction 被弾方向（HitDirection）
+## @param walls 壁検出結果（_detect_nearby_walls()の戻り値）
+## @return 安全な被弾方向（HitDirection）
+func _select_safe_death_direction(hit_direction: int, walls: Dictionary) -> int:
+	# 被弾方向 → 倒れる方向のマッピング
+	# FRONT(0)から撃たれた → BACK(1)方向に倒れる（death_forwardアニメ）
+	# BACK(1)から撃たれた → FRONT(0)方向に倒れる（death_backwardアニメ）
+	# LEFT(2)から撃たれた → RIGHT(3)方向に倒れる（death_leftがないので注意）
+	# RIGHT(3)から撃たれた → LEFT(2)方向に倒れる（death_rightアニメ）
+	var fall_map := { 0: 1, 1: 0, 2: 3, 3: 2 }
+	var fall_dir: int = fall_map[hit_direction]
+
+	# 第1候補: 被弾方向の反対側に倒れる（壁がなければOK）
+	if not walls[fall_dir]:
+		return hit_direction
+
+	# 第2候補: 他の安全な方向を探す
+	# 優先順位: 後ろ(1) > 前(0) > 右(3)
+	# LEFT(2)への被弾はdeath_leftがないのでスキップ
+	var priority := [1, 0, 3]  # BACK, FRONT, RIGHT
+	for check_hit_dir in priority:
+		if check_hit_dir == hit_direction:
+			continue
+		var check_fall_dir: int = fall_map[check_hit_dir]
+		if not walls[check_fall_dir]:
+			return check_hit_dir
+
+	# 全方向に壁 → 元の方向をそのまま使用
+	return hit_direction
+
+
 func _die(killer: Node3D = null, is_headshot: bool = false) -> void:
 	is_alive = false
 
 	# Play death animation via CharacterAnimationController
 	if anim_ctrl and anim_ctrl.has_method("play_death"):
 		var hit_dir := _calculate_hit_direction(killer)
-		anim_ctrl.play_death(hit_dir, is_headshot)
+		# 壁を検出して安全な方向を選択
+		var walls := _detect_nearby_walls()
+		var safe_hit_dir := _select_safe_death_direction(hit_dir, walls)
+		anim_ctrl.play_death(safe_hit_dir, is_headshot)
 
 	# Disable vision on death
 	if vision:

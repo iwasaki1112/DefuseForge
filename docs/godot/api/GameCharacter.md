@@ -219,8 +219,13 @@ character.equip_weapon(weapon)
 
 ## 内部動作
 
+### 死亡処理と壁検出
+
 - 死亡時は`CharacterAnimationController.play_death()`を呼び出し
 - 被弾方向は攻撃者位置から自動計算（前/後/左/右）
+- **壁検出による方向調整**: 死亡アニメーションでキャラクターが壁に埋まらないよう、4方向の壁を検出して安全な倒れ方向を選択
+  - `_detect_nearby_walls()`: レイキャストで4方向の壁を検出
+  - `_select_safe_death_direction()`: 壁のない方向に倒れるアニメーションを選択
 - 死亡時はVisionを無効化し、コリジョンも無効化
 - 武器装備時は`CharacterModel`配下のSkeleton3Dを再帰検索
 - 武器モデルは`BoneAttachment3D`配下の`WeaponSocket`に配置される

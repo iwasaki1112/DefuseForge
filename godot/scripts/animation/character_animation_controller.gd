@@ -61,8 +61,11 @@ const ANIM_SPEED_DIAGONAL := 1.6  # Diagonal: medium strides
 const ANIM_REF_RUN := 5.5         # Sprint animation (15 frames at 30fps = 0.5s)
 const ANIM_REF_CROUCH := 1.5      # Crouch walk
 
-# Death animation name
+# Death animation names
 const DEATH_ANIM := GameConstants.ANIM_DEATH
+const DEATH_ANIM_FORWARD := GameConstants.ANIM_DEATH_FORWARD
+const DEATH_ANIM_BACKWARD := GameConstants.ANIM_DEATH_BACKWARD
+const DEATH_ANIM_RIGHT := GameConstants.ANIM_DEATH_RIGHT
 
 # Door kick animation names
 const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
@@ -271,9 +274,9 @@ func set_model_direction(direction: Vector3) -> void:
 	_model.transform.basis = target_basis
 
 ## Play death animation
-## hit_direction: Direction the hit came FROM (reserved for future use)
+## hit_direction: Direction the hit came FROM (determines fall direction)
 ## headshot: Reserved for future use
-func play_death(_hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void:
+func play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void:
 	if _is_dead:
 		return
 
@@ -283,12 +286,31 @@ func play_death(_hit_direction: HitDirection = HitDirection.FRONT, _headshot: bo
 	if _anim_tree:
 		_anim_tree.active = false
 
-	# Play death animation
-	if _anim_player.has_animation(DEATH_ANIM):
+	# 方向別アニメーション選択
+	var anim_name: String
+	match hit_direction:
+		HitDirection.FRONT:
+			anim_name = DEATH_ANIM_FORWARD
+		HitDirection.BACK:
+			anim_name = DEATH_ANIM_BACKWARD
+		HitDirection.RIGHT:
+			anim_name = DEATH_ANIM_RIGHT
+		HitDirection.LEFT:
+			# death_leftがないのでデフォルトにフォールバック
+			anim_name = DEATH_ANIM_FORWARD
+		_:
+			anim_name = DEATH_ANIM_FORWARD
+
+	# Play death animation with fallback
+	if _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name)
+		_anim_player.animation_finished.connect(_on_death_animation_finished, CONNECT_ONE_SHOT)
+	elif _anim_player.has_animation(DEATH_ANIM):
+		# フォールバック: デフォルトアニメーション
 		_anim_player.play(DEATH_ANIM)
 		_anim_player.animation_finished.connect(_on_death_animation_finished, CONNECT_ONE_SHOT)
 	else:
-		push_warning("CharacterAnimationController: Death animation not found: %s" % DEATH_ANIM)
+		push_warning("CharacterAnimationController: Death animation not found: %s" % anim_name)
 
 func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
