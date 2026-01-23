@@ -54,11 +54,9 @@ func setup(
 	if marker_edit_panel:
 		marker_edit_panel.character_selected.connect(_on_marker_panel_character_selected)
 		marker_edit_panel.vision_add_requested.connect(_on_marker_panel_vision_add)
-		marker_edit_panel.vision_undo_requested.connect(_on_marker_panel_vision_undo)
 		marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
-		marker_edit_panel.run_undo_requested.connect(_on_marker_panel_run_undo)
 		marker_edit_panel.clear_add_requested.connect(_on_marker_panel_clear_add)
-		marker_edit_panel.clear_undo_requested.connect(_on_marker_panel_clear_undo)
+		marker_edit_panel.undo_requested.connect(_on_marker_panel_undo)
 		marker_edit_panel.confirm_requested.connect(_on_marker_panel_confirm)
 		marker_edit_panel.cancel_requested.connect(_on_marker_panel_cancel)
 
@@ -214,6 +212,12 @@ func remove_last_clear_point() -> void:
 		path_drawer.remove_last_clear_point()
 
 
+## 最後に追加したマーカーを削除（統一Undo）
+func undo_last_marker() -> void:
+	if path_drawer:
+		path_drawer.undo_last_marker()
+
+
 func get_vision_point_count() -> int:
 	return path_drawer.get_vision_point_count() if path_drawer else 0
 
@@ -334,17 +338,9 @@ func _on_marker_panel_vision_add(_character: Node) -> void:
 		start_vision_mode()
 
 
-func _on_marker_panel_vision_undo(_character: Node) -> void:
-	remove_last_vision_point()
-
-
 func _on_marker_panel_run_add(_character: Node) -> void:
 	if has_pending_path():
 		start_run_mode()
-
-
-func _on_marker_panel_run_undo(_character: Node) -> void:
-	remove_last_run_segment()
 
 
 func _on_marker_panel_clear_add(_character: Node) -> void:
@@ -352,8 +348,8 @@ func _on_marker_panel_clear_add(_character: Node) -> void:
 		start_clear_mode()
 
 
-func _on_marker_panel_clear_undo(_character: Node) -> void:
-	remove_last_clear_point()
+func _on_marker_panel_undo(_character: Node) -> void:
+	undo_last_marker()
 
 
 func _on_marker_panel_confirm() -> void:

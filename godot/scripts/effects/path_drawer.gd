@@ -26,6 +26,9 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 ## Clearマーカー用シグナル
 signal clear_point_added(path_ratio: float)
 
+## マーカー履歴用の種別
+enum MarkerType { VISION, RUN, CLEAR }
+
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
 @export var vision_line_color: Color = Color(0.7, 0.3, 0.9, 0.9)  # 紫
@@ -70,6 +73,11 @@ var _current_run_start: Dictionary = {}  # 未完成のrun開始点 { ratio, pos
 ## Clearマーカー用
 var _clear_points: Array[Dictionary] = []  # { path_ratio }
 var _clear_meshes: Array[MeshInstance3D] = []
+
+## マーカー追加履歴（Undo用）- キャラクターID別に管理
+## シングルモード: _marker_history に追加
+## マルチモード: _character_markers[char_id].marker_history に追加
+var _marker_history: Array[int] = []  # MarkerType の配列
 
 ## キャラクター別マーカー管理（マルチセレクト対応）
 ## { char_id: { "vision_points": Array[Dictionary], "vision_meshes": Array[MeshInstance3D],
@@ -221,8 +229,12 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 					if _character_markers.has(char_id):
 						var char_data = _character_markers[char_id]
 						char_data.run_segments.append(new_segment)
+						# 履歴に追加
+						char_data.marker_history.append(MarkerType.RUN)
 				else:
 					_run_segments.append(new_segment)
+					# 履歴に追加
+					_marker_history.append(MarkerType.RUN)
 
 				# 終点マーカーを作成
 				_create_run_marker(result.point, RunMarkerScript.MarkerType.END)
@@ -267,6 +279,8 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 					# マーカーを作成
 					var marker = _create_clear_marker_node(result.point)
 					char_data.clear_meshes.insert(multi_insert_idx, marker)
+					# 履歴に追加
+					char_data.marker_history.append(MarkerType.CLEAR)
 			else:
 				# シングルモードの場合
 				var single_insert_idx = 0
@@ -277,6 +291,8 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 				_clear_points.insert(single_insert_idx, new_point)
 				# マーカーを作成
 				_create_clear_marker(result.point, single_insert_idx)
+				# 履歴に追加
+				_marker_history.append(MarkerType.CLEAR)
 
 			clear_point_added.emit(result.ratio)
 			get_viewport().set_input_as_handled()
@@ -441,6 +457,9 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 			var marker = _create_vision_marker_node(_current_vision_anchor, target_point)
 			vision_meshes.insert(multi_vision_idx, marker)
 
+			# 履歴に追加
+			char_data.marker_history.append(MarkerType.VISION)
+
 			vision_point_added.emit(_current_vision_anchor, target_point)
 			return
 
@@ -455,6 +474,9 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 
 	# 視線マーカーを作成（同じ挿入位置に）
 	_create_vision_marker_at_index(_current_vision_anchor, target_point, single_vision_idx)
+
+	# 履歴に追加
+	_marker_history.append(MarkerType.VISION)
 
 	vision_point_added.emit(_current_vision_anchor, target_point)
 
@@ -584,6 +606,7 @@ func clear() -> void:
 	_clear_vision_points()
 	_clear_run_markers()
 	_clear_clear_markers()
+	_marker_history.clear()
 	# マルチキャラクターモードもクリア
 	_clear_multi_character_markers()
 
@@ -922,6 +945,119 @@ func remove_last_clear_point() -> void:
 			mesh.queue_free()
 
 
+## 最後に追加したマーカーを削除（種別を問わない統一Undo）
+## @return: 削除したマーカーの種別（何もなければ-1）
+func undo_last_marker() -> int:
+	var history: Array[int]
+
+	# マルチキャラクターモードの場合、アクティブキャラクターの履歴を使用
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			history = _character_markers[char_id].marker_history
+		else:
+			return -1
+	else:
+		history = _marker_history
+
+	if history.size() == 0:
+		return -1
+
+	var last_type = history.pop_back()
+
+	match last_type:
+		MarkerType.VISION:
+			_undo_vision_marker()
+		MarkerType.RUN:
+			_undo_run_marker()
+		MarkerType.CLEAR:
+			_undo_clear_marker()
+
+	return last_type
+
+
+## Vision マーカーをUndo（内部用、履歴は操作しない）
+func _undo_vision_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.vision_points.size() > 0:
+				char_data.vision_points.pop_back()
+				if char_data.vision_meshes.size() > 0:
+					var mesh = char_data.vision_meshes.pop_back()
+					mesh.queue_free()
+		return
+
+	if _vision_points.size() > 0:
+		_vision_points.pop_back()
+		if _vision_meshes.size() > 0:
+			var mesh = _vision_meshes.pop_back()
+			mesh.queue_free()
+
+
+## Run マーカーをUndo（内部用、履歴は操作しない）
+func _undo_run_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.run_segments.size() > 0:
+				char_data.run_segments.pop_back()
+				# 終点マーカーを削除
+				if char_data.run_meshes.size() > 0:
+					var mesh = char_data.run_meshes.pop_back()
+					mesh.queue_free()
+				# 開始点マーカーも削除
+				if char_data.run_meshes.size() > 0:
+					var mesh = char_data.run_meshes.pop_back()
+					mesh.queue_free()
+			elif not _current_run_start.is_empty():
+				# 未完成の開始点がある場合はそれを削除
+				_current_run_start = {}
+				if char_data.run_meshes.size() > 0:
+					var mesh = char_data.run_meshes.pop_back()
+					mesh.queue_free()
+		return
+
+	if _run_segments.size() > 0:
+		_run_segments.pop_back()
+		# 終点マーカーを削除
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+		# 開始点マーカーも削除
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+	elif not _current_run_start.is_empty():
+		# 未完成の開始点がある場合はそれを削除
+		_current_run_start = {}
+		if _run_meshes.size() > 0:
+			var mesh = _run_meshes.pop_back()
+			mesh.queue_free()
+
+
+## Clear マーカーをUndo（内部用、履歴は操作しない）
+func _undo_clear_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.clear_points.size() > 0:
+				char_data.clear_points.pop_back()
+				if char_data.clear_meshes.size() > 0:
+					var mesh = char_data.clear_meshes.pop_back()
+					mesh.queue_free()
+		return
+
+	if _clear_points.size() > 0:
+		_clear_points.pop_back()
+		if _clear_meshes.size() > 0:
+			var mesh = _clear_meshes.pop_back()
+			mesh.queue_free()
+
+
 ## ========================================
 ## パス実行 API
 ## ========================================
@@ -1015,7 +1151,8 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 			"run_segments": [] as Array[Dictionary],
 			"run_meshes": [] as Array[MeshInstance3D],
 			"clear_points": [] as Array[Dictionary],
-			"clear_meshes": [] as Array[MeshInstance3D]
+			"clear_meshes": [] as Array[MeshInstance3D],
+			"marker_history": [] as Array[int]
 		}
 
 	# 最初のキャラクターをアクティブに設定

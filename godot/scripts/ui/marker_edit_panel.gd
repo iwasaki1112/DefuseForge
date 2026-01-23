@@ -7,16 +7,12 @@ class_name MarkerEditPanel
 signal character_selected(character: Node)
 ## Vision追加要求シグナル
 signal vision_add_requested(character: Node)
-## Vision Undo要求シグナル
-signal vision_undo_requested(character: Node)
 ## Run追加要求シグナル
 signal run_add_requested(character: Node)
-## Run Undo要求シグナル
-signal run_undo_requested(character: Node)
 ## Clear追加要求シグナル
 signal clear_add_requested(character: Node)
-## Clear Undo要求シグナル
-signal clear_undo_requested(character: Node)
+## 統一Undo要求シグナル
+signal undo_requested(character: Node)
 ## 確定要求シグナル
 signal confirm_requested()
 ## キャンセル要求シグナル
@@ -29,21 +25,18 @@ var _character_buttons: Dictionary = {}  # { char_id: Button }
 
 ## 視線ポイント部分
 var _vision_label: Label = null
-var _vision_hbox: HBoxContainer = null
 var _add_vision_button: Button = null
-var _undo_vision_button: Button = null
 
 ## Runマーカー部分
 var _run_label: Label = null
-var _run_hbox: HBoxContainer = null
 var _add_run_button: Button = null
-var _undo_run_button: Button = null
 
 ## Clearマーカー部分
 var _clear_label: Label = null
-var _clear_hbox: HBoxContainer = null
 var _add_clear_button: Button = null
-var _undo_clear_button: Button = null
+
+## 統一Undoボタン
+var _undo_button: Button = null
 
 ## 確定/キャンセル
 var _confirm_button: Button = null
@@ -80,73 +73,52 @@ func _build_ui() -> void:
 	var sep1 = HSeparator.new()
 	add_child(sep1)
 
-	# 視線ポイントラベル
-	_vision_label = Label.new()
-	_vision_label.text = "Vision Points: 0"
-	add_child(_vision_label)
-
-	# 視線ポイントボタン
-	_vision_hbox = HBoxContainer.new()
-	_vision_hbox.add_theme_constant_override("separation", 4)
-	add_child(_vision_hbox)
+	# マーカー追加ボタン（横並び）
+	var marker_buttons_hbox = HBoxContainer.new()
+	marker_buttons_hbox.add_theme_constant_override("separation", 4)
+	add_child(marker_buttons_hbox)
 
 	_add_vision_button = Button.new()
 	_add_vision_button.text = "Add Vision"
 	_add_vision_button.pressed.connect(_on_add_vision_pressed)
-	_vision_hbox.add_child(_add_vision_button)
+	marker_buttons_hbox.add_child(_add_vision_button)
 
-	_undo_vision_button = Button.new()
-	_undo_vision_button.text = "Undo"
-	_undo_vision_button.pressed.connect(_on_undo_vision_pressed)
-	_vision_hbox.add_child(_undo_vision_button)
+	_add_run_button = Button.new()
+	_add_run_button.text = "Add Run"
+	_add_run_button.pressed.connect(_on_add_run_pressed)
+	marker_buttons_hbox.add_child(_add_run_button)
+
+	_add_clear_button = Button.new()
+	_add_clear_button.text = "Add Clear"
+	_add_clear_button.pressed.connect(_on_add_clear_pressed)
+	marker_buttons_hbox.add_child(_add_clear_button)
 
 	# セパレータ2
 	var sep2 = HSeparator.new()
 	add_child(sep2)
 
-	# Runマーカーラベル
+	# マーカーカウントラベル
+	_vision_label = Label.new()
+	_vision_label.text = "Vision Points: 0"
+	add_child(_vision_label)
+
 	_run_label = Label.new()
 	_run_label.text = "Run Segments: 0"
 	add_child(_run_label)
 
-	# Runマーカーボタン
-	_run_hbox = HBoxContainer.new()
-	_run_hbox.add_theme_constant_override("separation", 4)
-	add_child(_run_hbox)
-
-	_add_run_button = Button.new()
-	_add_run_button.text = "Add Run"
-	_add_run_button.pressed.connect(_on_add_run_pressed)
-	_run_hbox.add_child(_add_run_button)
-
-	_undo_run_button = Button.new()
-	_undo_run_button.text = "Undo"
-	_undo_run_button.pressed.connect(_on_undo_run_pressed)
-	_run_hbox.add_child(_undo_run_button)
+	_clear_label = Label.new()
+	_clear_label.text = "Clear Points: 0"
+	add_child(_clear_label)
 
 	# セパレータ3
 	var sep3 = HSeparator.new()
 	add_child(sep3)
 
-	# Clearマーカーラベル
-	_clear_label = Label.new()
-	_clear_label.text = "Clear Points: 0"
-	add_child(_clear_label)
-
-	# Clearマーカーボタン
-	_clear_hbox = HBoxContainer.new()
-	_clear_hbox.add_theme_constant_override("separation", 4)
-	add_child(_clear_hbox)
-
-	_add_clear_button = Button.new()
-	_add_clear_button.text = "Add Clear"
-	_add_clear_button.pressed.connect(_on_add_clear_pressed)
-	_clear_hbox.add_child(_add_clear_button)
-
-	_undo_clear_button = Button.new()
-	_undo_clear_button.text = "Undo"
-	_undo_clear_button.pressed.connect(_on_undo_clear_pressed)
-	_clear_hbox.add_child(_undo_clear_button)
+	# 統一Undoボタン
+	_undo_button = Button.new()
+	_undo_button.text = "Undo"
+	_undo_button.pressed.connect(_on_undo_pressed)
+	add_child(_undo_button)
 
 	# セパレータ4
 	var sep4 = HSeparator.new()
@@ -344,24 +316,10 @@ func _on_add_vision_pressed() -> void:
 		vision_add_requested.emit(_active_character)
 
 
-## Undo Vision押下時
-func _on_undo_vision_pressed() -> void:
-	if _active_character:
-		vision_undo_requested.emit(_active_character)
-		_update_labels()
-
-
 ## Add Run押下時
 func _on_add_run_pressed() -> void:
 	if _active_character:
 		run_add_requested.emit(_active_character)
-
-
-## Undo Run押下時
-func _on_undo_run_pressed() -> void:
-	if _active_character:
-		run_undo_requested.emit(_active_character)
-		_update_labels()
 
 
 ## Add Clear押下時
@@ -370,10 +328,10 @@ func _on_add_clear_pressed() -> void:
 		clear_add_requested.emit(_active_character)
 
 
-## Undo Clear押下時
-func _on_undo_clear_pressed() -> void:
+## 統一Undo押下時
+func _on_undo_pressed() -> void:
 	if _active_character:
-		clear_undo_requested.emit(_active_character)
+		undo_requested.emit(_active_character)
 		_update_labels()
 
 

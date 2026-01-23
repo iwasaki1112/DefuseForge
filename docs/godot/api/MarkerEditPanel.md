@@ -19,16 +19,20 @@
 │ │  A  │ │  B  │  ← キャラクター選択  │
 │ └─────┘ └─────┘                    │
 ├─────────────────────────────────────┤
-│ Vision Points (A): 2               │
-│ [Add Vision] [Undo]                │
+│ [Add Vision] [Add Run] [Add Clear] │
 ├─────────────────────────────────────┤
+│ Vision Points (A): 2               │
 │ Run Segments (A): 1                │
-│ [Add Run] [Undo]                   │
+│ Clear Points (A): 0                │
+├─────────────────────────────────────┤
+│ [Undo]                             │
 ├─────────────────────────────────────┤
 │ [Confirm Path]                     │
 │ [Cancel]                           │
 └─────────────────────────────────────┘
 ```
+
+Undoボタンは1つで、最後に追加したマーカー（種別を問わず）を削除します。
 
 ## シグナル
 
@@ -36,9 +40,9 @@
 |---------|------|------|
 | `character_selected` | `character: Node` | キャラクター選択時 |
 | `vision_add_requested` | `character: Node` | Vision追加ボタン押下時 |
-| `vision_undo_requested` | `character: Node` | Vision Undoボタン押下時 |
 | `run_add_requested` | `character: Node` | Run追加ボタン押下時 |
-| `run_undo_requested` | `character: Node` | Run Undoボタン押下時 |
+| `clear_add_requested` | `character: Node` | Clear追加ボタン押下時 |
+| `undo_requested` | `character: Node` | 統一Undoボタン押下時 |
 | `confirm_requested` | なし | 確定ボタン押下時 |
 | `cancel_requested` | なし | キャンセルボタン押下時 |
 
@@ -155,11 +159,9 @@ func _on_confirm() -> void:
 |---------|------|
 | `character_selected` | `character: Node` |
 | `vision_add_requested` | `character: Node` |
-| `vision_undo_requested` | `character: Node` |
 | `run_add_requested` | `character: Node` |
-| `run_undo_requested` | `character: Node` |
 | `clear_add_requested` | `character: Node` |
-| `clear_undo_requested` | `character: Node` |
+| `undo_requested` | `character: Node` |
 | `confirm_requested` | なし |
 | `cancel_requested` | なし |
 

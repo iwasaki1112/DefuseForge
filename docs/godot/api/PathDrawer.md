@@ -31,6 +31,15 @@
 | `RUN_MARKER` | Runマーカー設定モード |
 | `CLEAR_MARKER` | Clearマーカー設定モード |
 
+### MarkerType
+マーカー種別（Undo履歴用）。
+
+| 値 | 説明 |
+|----|------|
+| `VISION` | 視線ポイント |
+| `RUN` | Run区間 |
+| `CLEAR` | Clearポイント |
+
 ## Export Properties
 
 | プロパティ | 型 | デフォルト | 説明 |
@@ -202,6 +211,27 @@ Clearポイント数を取得する。
 
 #### take_clear_markers() -> Array[MeshInstance3D]
 Clearマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+
+### Unified Undo API
+
+#### undo_last_marker() -> int
+最後に追加したマーカーを種別を問わず削除する（統一Undo）。
+
+**戻り値:** 削除したマーカーの種別（MarkerType）。何も削除しなかった場合は`-1`
+
+```gdscript
+# 使用例
+var removed_type = path_drawer.undo_last_marker()
+match removed_type:
+    PathDrawer.MarkerType.VISION:
+        print("Vision marker removed")
+    PathDrawer.MarkerType.RUN:
+        print("Run marker removed")
+    PathDrawer.MarkerType.CLEAR:
+        print("Clear marker removed")
+    -1:
+        print("Nothing to undo")
+```
 
 ### Multi-Character Mode API
 
@@ -497,6 +527,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `get_clear_points() -> Array[Dictionary]`
 - `get_clear_point_count() -> int`
 - `remove_last_clear_point() -> void`
+- `undo_last_marker() -> int`
 - `execute(run: bool = false) -> bool`
 - `execute_with_vision(run: bool = false) -> bool`
 - `has_pending_path() -> bool`
