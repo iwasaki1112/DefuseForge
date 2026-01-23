@@ -72,3 +72,13 @@ path_mesh.clear()
 - `emission_enabled`: 発光エフェクト（energy 1.5）
 - `TRANSPARENCY_ALPHA`: アルファブレンディング
 - `CULL_DISABLED`: 両面描画
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `update_from_points(points: PackedVector3Array) -> void`
+- `set_line_color(color: Color) -> void`
+- `clear() -> void`

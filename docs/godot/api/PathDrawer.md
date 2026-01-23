@@ -449,3 +449,72 @@ path_drawer.smoothing_segments = 5   # より滑らかな曲線
 # 壁検出を別のレイヤーに変更する場合
 path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 ```
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `drawing_finished` | `points: PackedVector3Array` |
+| `vision_point_added` | `anchor: Vector3, target_point: Vector3` |
+| `mode_changed` | `mode: int` |
+| `run_segment_added` | `start_ratio: float, end_ratio: float` |
+| `clear_point_added` | `path_ratio: float` |
+
+### メソッド
+- `setup(camera: Camera3D, character: Node3D = null) -> void`
+- `clear() -> void`
+- `take_vision_markers() -> Array[MeshInstance3D]`
+- `take_run_markers() -> Array[MeshInstance3D]`
+- `take_clear_markers() -> Array[MeshInstance3D]`
+- `get_drawn_path() -> PackedVector3Array`
+- `get_smoothed_path() -> PackedVector3Array`
+- `get_relative_path() -> PackedVector3Array`
+- `get_relative_vision_points() -> Array[Dictionary]`
+- `is_drawing() -> bool`
+- `is_point_on_path(ground_pos: Vector3) -> bool`
+- `is_marker_mode() -> bool`
+- `set_line_color(color: Color) -> void`
+- `set_character_color(color: Color) -> void`
+- `enable(character: Node3D) -> void`
+- `disable() -> void`
+- `is_enabled() -> bool`
+- `get_drawing_mode() -> DrawingMode`
+- `start_vision_mode() -> bool`
+- `start_movement_mode() -> void`
+- `has_vision_points() -> bool`
+- `get_vision_points() -> Array[Dictionary]`
+- `get_vision_point_count() -> int`
+- `remove_last_vision_point() -> void`
+- `start_run_mode() -> bool`
+- `has_run_segments() -> bool`
+- `get_run_segments() -> Array[Dictionary]`
+- `get_run_segment_count() -> int`
+- `remove_last_run_segment() -> void`
+- `has_incomplete_run_start() -> bool`
+- `start_clear_mode() -> bool`
+- `has_clear_points() -> bool`
+- `get_clear_points() -> Array[Dictionary]`
+- `get_clear_point_count() -> int`
+- `remove_last_clear_point() -> void`
+- `execute(run: bool = false) -> bool`
+- `execute_with_vision(run: bool = false) -> bool`
+- `has_pending_path() -> bool`
+- `clear_pending() -> void`
+- `start_multi_character_mode(characters: Array[Node]) -> void`
+- `end_multi_character_mode() -> void`
+- `set_active_edit_character(character: Node) -> void`
+- `get_active_edit_character() -> Node`
+- `is_multi_character_mode() -> bool`
+- `get_vision_point_count_for_character(character: Node) -> int`
+- `get_run_segment_count_for_character(character: Node) -> int`
+- `get_vision_points_for_character(character: Node) -> Array[Dictionary]`
+- `get_run_segments_for_character(character: Node) -> Array[Dictionary]`
+- `get_clear_point_count_for_character(character: Node) -> int`
+- `get_clear_points_for_character(character: Node) -> Array[Dictionary]`
+- `get_all_vision_points() -> Dictionary`
+- `get_all_run_segments() -> Dictionary`
+- `get_all_clear_points() -> Dictionary`
+- `take_all_vision_markers() -> Dictionary`
+- `take_all_run_markers() -> Dictionary`
+- `take_all_clear_markers() -> Dictionary`

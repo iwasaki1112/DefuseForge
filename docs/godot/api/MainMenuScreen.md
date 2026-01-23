@@ -50,3 +50,11 @@ Optionボタン押下時にオプション画面へ遷移。
 - [MapSelectionScreen](MapSelectionScreen.md)
 - [OptionScreen](OptionScreen.md)
 - [SettingsManager](SettingsManager.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

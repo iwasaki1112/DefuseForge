@@ -56,3 +56,11 @@ skeleton.set_bone_pose_rotation(bone_idx, current_pose * recoil_rotation)
 ```
 
 Mixamoリグの場合、Spine2ボーンに適用することで自然な反動表現が可能。
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `trigger_recoil(strength: float = -1.0) -> void`

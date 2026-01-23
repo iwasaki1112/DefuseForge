@@ -105,3 +105,21 @@ data/weapons/
 ├── glock.tres
 └── ...
 ```
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `register(preset: WeaponPresetScript) -> void`
+- `unregister(id: String) -> void`
+- `get_preset(id: String) -> WeaponPresetScript`
+- `has_preset(id: String) -> bool`
+- `get_all() -> Array`
+- `get_by_category(category: WeaponPresetScript.WeaponCategory) -> Array`
+- `get_rifles() -> Array`
+- `get_pistols() -> Array`
+- `get_smgs() -> Array`
+- `get_shotguns() -> Array`
+- `get_snipers() -> Array`

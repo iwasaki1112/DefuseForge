@@ -91,3 +91,17 @@ name="PlayerName"
 
 - `MainMenuScreen` - プレイヤー名を表示
 - `OptionScreen` - プレイヤー名を編集
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `settings_changed` | なし |
+
+### メソッド
+- `get_player_name() -> String`
+- `set_player_name(value: String) -> void`
+- `get_selected_map() -> String`
+- `set_selected_map(map_id: String) -> void`
+- `clear_selected_map() -> void`

@@ -193,3 +193,24 @@ func _unhandled_input(event: InputEvent) -> void:
 - [PathDrawer](PathDrawer.md) - パス描画UI
 - [CharacterSelectionManager](CharacterSelectionManager.md) - 選択状態管理
 - [PathExecutionManager](PathExecutionManager.md) - パス実行管理
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `mode_started` | `character: Node` |
+| `mode_ended` | なし |
+| `mode_cancelled` | なし |
+| `path_ready` | なし |
+
+### メソッド
+- `setup(`
+- `start(_character: Node, char_color: Color = Color.WHITE) -> bool`
+- `confirm() -> bool`
+- `cancel() -> void`
+- `is_path_mode() -> bool`
+- `has_pending_path() -> bool`
+- `get_editing_character() -> Node`
+- `get_target_count() -> int`
+- `handle_click_to_cancel(clicked_character: Node) -> bool`

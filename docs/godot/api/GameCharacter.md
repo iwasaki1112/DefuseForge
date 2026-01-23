@@ -228,3 +228,39 @@ character.equip_weapon(weapon)
 - `CharacterAnimationController.fired`に連動してマズルフラッシュを表示
 - マズルフラッシュ位置は`WeaponPreset.muzzle_flash_offset`を優先して使用
 - マズルフラッシュ回転は`WeaponPreset.muzzle_flash_rotation`を使用
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `died` | `character: GameCharacter` |
+
+### メソッド
+- `take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void`
+- `heal(amount: float) -> void`
+- `get_health_ratio() -> float`
+- `reset_health() -> void`
+- `is_enemy_of(other: GameCharacter) -> bool`
+- `set_anim_controller(controller: CharacterAnimationController) -> void`
+- `get_anim_controller() -> CharacterAnimationController`
+- `set_facing_direction_vec(direction: Vector3) -> void`
+- `set_facing_direction(y_rotation: float) -> void`
+- `face_towards(target_pos: Vector3) -> void`
+- `get_facing_direction() -> Vector3`
+- `is_crouching() -> bool`
+- `toggle_crouch() -> void`
+- `set_vision_component(component: VisionComponent) -> void`
+- `get_vision_component() -> VisionComponent`
+- `setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent`
+- `setup_combat_awareness() -> CombatAwarenessComponent`
+- `get_combat_awareness() -> CombatAwarenessComponent`
+- `equip_weapon(weapon: WeaponPreset) -> void`
+- `get_current_weapon() -> WeaponPreset`
+- `get_weapon_socket() -> Node3D`
+- `set_muzzle_flash_preview(enabled: bool) -> void`
+- `update_muzzle_flash_preview() -> void`
+- `set_muzzle_flash_quad1_x(x_offset: float) -> void`
+- `get_muzzle_flash_quad1_x() -> float`
+- `set_muzzle_flash_quad1_z(z_offset: float) -> void`
+- `get_muzzle_flash_quad1_z() -> float`

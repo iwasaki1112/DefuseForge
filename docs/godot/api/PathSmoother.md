@@ -153,3 +153,11 @@ var smooth_curve = PathSmoother.interpolate_catmull_rom(simplified_path, 6)
 ## 関連クラス
 
 - [PathDrawer](PathDrawer.md) - パス描画中にリアルタイムでスムージングを適用
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

@@ -128,3 +128,17 @@ fow.set_map_size(Vector2(20, 20))
 - **シグナル駆動**: `vision_updated`シグナルで変更時のみ更新
 - **手動レンダリング**: `UPDATE_ONCE`モードで必要時のみ描画
 - **複数視界対応**: 複数のVisionComponentを同時に処理可能
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `register_vision(vision) -> void`
+- `unregister_vision(vision) -> void`
+- `set_fog_visible(fog_visible: bool) -> void`
+- `force_update() -> void`
+- `set_fog_color(color: Color) -> void`
+- `get_visibility_texture() -> ViewportTexture`
+- `set_map_size(new_size: Vector2) -> void`

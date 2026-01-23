@@ -107,3 +107,14 @@ gl_compatibilityレンダラーでは、直交投影（Orthogonal）カメラで
 
 - `EnvironmentPreset` - 環境設定のプリセット定義
 - `GameScreen` - EnvironmentSetupを使用してマップ環境を設定
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `set_preset(new_preset: EnvironmentPreset) -> void`
+- `get_directional_light() -> DirectionalLight3D`
+- `get_environment() -> Environment`
+- `get_world_environment() -> WorldEnvironment`

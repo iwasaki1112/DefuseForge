@@ -182,3 +182,11 @@ my_map.gltf (Blenderからエクスポート)
 - [VisionComponent](VisionComponent.md) - 壁グループを使用した視界計算
 - [FogOfWarSystem](FogOfWarSystem.md) - map_sizeを使用
 - [EnvironmentSetup](EnvironmentSetup.md) - 環境設定の自動適用
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

@@ -106,3 +106,22 @@ func _on_cancel_button_pressed():
 - `process`内で`CharacterAnimationController`を通じてスムーズに回転
 - 確定時は`set_look_direction`で即座に方向を設定
 - キャンセル時は元の方向に戻す
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `rotation_started` | `original_direction: Vector3` |
+| `rotation_confirmed` | `final_direction: Vector3` |
+| `rotation_cancelled` | なし |
+
+### メソッド
+- `setup(character: CharacterBody3D, camera: Camera3D) -> void`
+- `start_rotation() -> void`
+- `confirm() -> void`
+- `cancel() -> void`
+- `is_rotation_active() -> bool`
+- `get_character() -> CharacterBody3D`
+- `handle_input(screen_pos: Vector2) -> void`
+- `process(delta: float) -> void`

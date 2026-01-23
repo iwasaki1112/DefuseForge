@@ -72,3 +72,11 @@ max_health = 100.0
 1. `data/characters/`に`.tres`ファイルを配置
 2. `CharacterRegistry`が自動的に読み込み
 3. `CharacterRegistry.create_character("bomber")`で使用
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

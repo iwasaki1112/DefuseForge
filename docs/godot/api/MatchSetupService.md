@@ -33,3 +33,15 @@
 - [GameScreen](GameScreen.md)
 - [GameManager](GameManager.md)
 - [MapManager](MapManager.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(manager: GameManager, cam: Camera3D) -> void`
+- `determine_player_team() -> void`
+- `load_selected_map(map_id: String) -> bool`
+- `spawn_characters() -> void`
+- `setup_camera_for_player() -> void`

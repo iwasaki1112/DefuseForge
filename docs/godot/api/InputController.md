@@ -84,3 +84,11 @@ input_controller.setup(game_manager, camera_pan_controller)
 - [GameManager](GameManager.md)
 - [CameraPanController](CameraPanController.md)
 - [PathDrawer](PathDrawer.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(manager: GameManager, pan_controller: CameraPanController) -> void`

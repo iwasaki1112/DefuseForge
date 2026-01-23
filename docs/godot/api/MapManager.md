@@ -217,3 +217,24 @@ game_manager.map_manager.unload_map(false)  # マップのみアンロード（�
 - [GameManager](GameManager.md) - MapManagerを内包、システム全体の統括
 - [PathExecutionManager](PathExecutionManager.md) - パス実行管理
 - [CharacterSelectionManager](CharacterSelectionManager.md) - キャラクター選択管理
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `map_will_load` | `map_id: String` |
+| `map_loaded` | `map_id: String, map_instance: Node3D` |
+| `map_will_unload` | `map_id: String` |
+| `map_unloaded` | `map_id: String` |
+
+### メソッド
+- `setup(map_container: Node3D, game_manager) -> void`
+- `load_map(map_id: String, auto_cleanup: bool = true) -> Node3D`
+- `unload_map(cleanup_characters_on_unload: bool = true) -> void`
+- `switch_map(new_map_id: String) -> Node3D`
+- `cleanup_characters() -> void`
+- `cleanup_paths() -> void`
+- `has_map() -> bool`
+- `get_map_size() -> Vector2`
+- `get_spawn_points(is_ct: bool) -> Array[Vector3]`

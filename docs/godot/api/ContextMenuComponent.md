@@ -180,3 +180,26 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 ### エディタプレビュー
 - `@tool` + `Engine.is_editor_hint()` の場合はデフォルト項目で描画して表示する
 - プロパティ変更時は自動でプレビューを再構築する
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `item_selected` | `action_id: String, character: CharacterBody3D` |
+| `background_clicked` | `character: CharacterBody3D` |
+
+### メソッド
+- `open(screen_position: Vector2, character: CharacterBody3D, is_multi_select: bool = false) -> void`
+- `close() -> void`
+- `add_item(item: Resource) -> void`
+- `remove_item(action_id: String) -> void`
+- `set_item_enabled(action_id: String, enabled: bool) -> void`
+- `set_item_display_name(action_id: String, display_name: String) -> void`
+- `clear_items() -> void`
+- `setup_default_items() -> void`
+- `setup_multi_select_items() -> void`
+- `is_open() -> bool`
+- `get_current_character() -> CharacterBody3D`
+- `get_panel_rect() -> Rect2`
+- `update_screen_position(screen_position: Vector2) -> void`

@@ -62,3 +62,13 @@ selection_manager.remove_from_selection(character)  # マーカーが自動削�
 ## 関連クラス
 
 - `CharacterSelectionManager` - マーカーのライフサイクル管理
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `attach_to_character(character: Node) -> void`
+- `show_marker() -> void`
+- `hide_marker() -> void`

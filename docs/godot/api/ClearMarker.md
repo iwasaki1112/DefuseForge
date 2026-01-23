@@ -65,3 +65,12 @@ marker.set_colors(Color.BLUE, Color.WHITE)
 - `PathDrawer` - Clearマーカー設定モードでClearMarkerを生成
 - `PathFollowingController` - Clearポイントで視線・Run状態をリセット
 - `CharacterColorManager` - キャラクター個別色の取得
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `set_marker_position(pos: Vector3) -> void`
+- `set_colors(bg_color: Color, fg_color: Color) -> void`

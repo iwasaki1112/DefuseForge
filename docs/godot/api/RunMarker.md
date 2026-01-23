@@ -92,3 +92,13 @@ marker.set_position_and_type(
 - `PathDrawer` - Run区間設定モードでRunMarkerを生成
 - `PathFollowingController` - Run区間内で走行速度を適用
 - `CharacterColorManager` - キャラクター個別色の取得
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `set_position_and_type(pos: Vector3, type: MarkerType) -> void`
+- `get_marker_type() -> MarkerType`
+- `set_colors(bg_color: Color, fg_color: Color) -> void`

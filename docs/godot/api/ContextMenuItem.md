@@ -83,3 +83,11 @@ context_menu.add_item(item)
 ## ContextMenuComponentとの連携
 
 `ContextMenuComponent`の`add_item()`で追加し、`item_selected`シグナルで`action_id`を受け取る。
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `to_dict() -> Dictionary`

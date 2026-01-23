@@ -100,3 +100,13 @@ MainMenu → [Training] → MapSelectionScreen → [Start Game] → GameScene
 - [MapRegistry](./MapRegistry.md)
 - [MapPreset](./MapPreset.md)
 - [SettingsManager](./SettingsManager.md)
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `map_selected` | `preset_id: String` |
+
+### メソッド
+なし

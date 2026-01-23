@@ -4,7 +4,7 @@
 コアゲームシステムの初期化・更新・入力処理・UI管理を一元管理するマネージャークラス。テストシーンとゲームロジックを完全に分離し、14個のサブシステムを統合制御する。
 
 ## ファイル
-`godot/scripts/systems/game_manager.gd`
+`scripts/systems/game_manager.gd`
 
 ## 責務
 - 14個のシステムの初期化を正しい順序で実行
@@ -305,3 +305,78 @@ GameManagerはゲームロジックを担当。以下はシーン固有：
 - [ContextMenuComponent](ContextMenuComponent.md)
 - [MarkerEditPanel](MarkerEditPanel.md)
 - [CharacterLabelManager](CharacterLabelManager.md)
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `selection_changed` | `selected: Array[Node], primary: Node` |
+| `primary_changed` | `character: Node` |
+| `path_mode_started` | `character: Node` |
+| `path_mode_ended` | なし |
+| `path_mode_cancelled` | なし |
+| `path_ready` | なし |
+| `path_confirmed` | `count: int` |
+| `all_paths_completed` | なし |
+| `paths_cleared` | なし |
+| `rotation_confirmed` | `direction: Vector3` |
+| `rotation_cancelled` | なし |
+| `path_mode_changed` | `mode: int` |
+| `vision_point_added` | `anchor: Vector3, direction: Vector3` |
+| `run_segment_added` | `start_ratio: float, end_ratio: float` |
+| `context_action_requested` | `action_id: String, character: Node` |
+
+### メソッド
+- `setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: Vector2 = Vector2(50, 50), map_container: Node3D = null) -> void`
+- `register_character(character: Node) -> void`
+- `unregister_character(character: Node) -> void`
+- `handle_click(screen_pos: Vector2, button_index: int) -> bool`
+- `raycast_character(screen_pos: Vector2) -> Node`
+- `raycast_door(screen_pos: Vector2) -> Node3D`
+- `start_move_mode() -> bool`
+- `start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool`
+- `confirm_path() -> void`
+- `cancel_path() -> void`
+- `execute_all_paths(run: bool) -> int`
+- `clear_all_pending_paths() -> void`
+- `cancel_all_path_following() -> void`
+- `start_rotation_mode(character: Node) -> void`
+- `handle_rotation_input(screen_pos: Vector2) -> void`
+- `confirm_rotation() -> void`
+- `cancel_rotation() -> void`
+- `set_vision_enabled(enabled: bool) -> void`
+- `load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D`
+- `unload_map(cleanup_characters: bool = true) -> void`
+- `switch_map(new_map_id: String) -> Node3D`
+- `has_map() -> bool`
+- `get_current_map_id() -> String`
+- `get_current_map_preset() -> MapPreset`
+- `get_map_size() -> Vector2`
+- `get_spawn_points(is_ct: bool) -> Array[Vector3]`
+- `get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]`
+- `get_character_parent() -> Node3D`
+- `process_frame(delta: float) -> void`
+- `is_rotation_active() -> bool`
+- `is_path_mode() -> bool`
+- `is_any_path_following_active() -> bool`
+- `is_character_following_path(character: Node) -> bool`
+- `get_pending_path_count() -> int`
+- `get_rotating_character() -> Node`
+- `get_path_target_count() -> int`
+- `get_primary_character() -> Node`
+- `get_selection_count() -> int`
+- `has_pending_path() -> bool`
+- `start_vision_mode() -> bool`
+- `remove_last_vision_point() -> void`
+- `start_run_mode() -> void`
+- `remove_last_run_segment() -> void`
+- `get_vision_point_count() -> int`
+- `get_run_segment_count() -> int`
+- `has_incomplete_run_start() -> bool`
+- `is_multi_character_mode() -> bool`
+- `start_multi_character_mode(selected_chars: Array[Node]) -> void`
+- `set_active_edit_character(character: Node) -> void`
+- `set_path_drawer_color(color: Color) -> void`
+- `is_context_menu_open() -> bool`
+- `refresh_character_colors() -> void`

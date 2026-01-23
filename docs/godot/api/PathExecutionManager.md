@@ -215,3 +215,28 @@ PathDrawerが通常モード（`is_multi_character_mode() == false`）の場合�
 - [PathDrawer](PathDrawer.md) - パス描画
 - [PathFollowingController](PathFollowingController.md) - パス追従
 - [PathLineMesh](PathLineMesh.md) - パスメッシュ描画
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `path_confirmed` | `character_count: int` |
+| `paths_execution_started` | `count: int` |
+| `all_paths_completed` | なし |
+| `paths_cleared` | なし |
+| `character_path_completed` | `character: Node` |
+
+### メソッド
+- `setup(mesh_parent: Node3D) -> void`
+- `confirm_path(`
+- `execute_all_paths(run: bool) -> int`
+- `clear_all_pending_paths() -> void`
+- `get_pending_path_count() -> int`
+- `is_any_path_following_active() -> bool`
+- `is_character_following_path(character: Node) -> bool`
+- `cancel_all_path_following() -> void`
+- `cancel_path_following(character: Node, clear_pending: bool = true) -> void`
+- `process_controllers(delta: float) -> void`
+- `on_path_following_completed(_character: Node) -> void`
+- `execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: bool = false) -> bool`

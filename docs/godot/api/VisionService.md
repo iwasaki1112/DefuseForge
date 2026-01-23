@@ -33,3 +33,13 @@ FoW表示と敵可視性モードを切り替える。
 - [GameManager](GameManager.md)
 - [FogOfWarSystem](FogOfWarSystem.md)
 - [EnemyVisibilitySystem](EnemyVisibilitySystem.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(map_size: Vector2, vision_enabled: bool) -> void`
+- `set_enabled(enabled: bool) -> void`
+- `unregister_character(character: Node) -> void`

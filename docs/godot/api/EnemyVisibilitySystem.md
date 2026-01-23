@@ -170,3 +170,24 @@ func _on_enemy_visibility_changed(enemy: Node, is_visible: bool) -> void:
 - キャッシュによる変更検出（変化時のみ`visible`を更新）
 - シグナル駆動で必要時のみ更新
 - LIGHTWEIGHTモードで97%のレイキャスト削減
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `visibility_changed` | `enemy: Node, is_visible: bool` |
+
+### メソッド
+- `setup(fog_of_war: Node3D) -> void`
+- `register_character(character: Node) -> void`
+- `unregister_character(character: Node) -> void`
+- `enable() -> void`
+- `disable() -> void`
+- `enable_full() -> void`
+- `enable_lightweight() -> void`
+- `is_enabled() -> bool`
+- `get_mode() -> VisibilityMode`
+- `update_visibility() -> void`
+- `is_position_visible(world_pos: Vector3) -> bool`
+- `get_visibility(character: Node) -> bool`

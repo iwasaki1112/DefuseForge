@@ -120,3 +120,20 @@ data/characters/
 ├── breacher.tres
 └── ...
 ```
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `register(preset: CharacterPresetScript) -> void`
+- `unregister(id: String) -> void`
+- `get_preset(id: String) -> CharacterPresetScript`
+- `has_preset(id: String) -> bool`
+- `get_all() -> Array`
+- `get_by_team(team: GameCharacterScript.Team) -> Array`
+- `get_terrorists() -> Array`
+- `get_counter_terrorists() -> Array`
+- `create_character(preset_id: String, position: Vector3 = Vector3.ZERO) -> Node`
+- `create_character_from_preset(preset: CharacterPresetScript, position: Vector3 = Vector3.ZERO) -> Node`

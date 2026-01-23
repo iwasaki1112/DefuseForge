@@ -165,3 +165,18 @@ func remove_character(character: Node) -> void:
 
 - `PlayerState` - 敵味方判定（`is_enemy()`）
 - `CharacterColorManager` - キャラクター個別色取得（オプション連携）
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `add_label(character: Node) -> bool`
+- `remove_label(character: Node) -> void`
+- `clear_all() -> void`
+- `refresh_labels(characters: Array) -> void`
+- `has_label(character: Node) -> bool`
+- `get_label_count() -> int`
+- `set_label_color(character: Node, color: Color) -> void`
+- `set_label_text(character: Node, label_char: String) -> void`

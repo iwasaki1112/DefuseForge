@@ -322,3 +322,27 @@ long_pause_after_burst = 0.60
 long_accuracy_modifier = 1.15  # 精度向上
 long_critical_rate = 0.5  # 高クリ率
 ```
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `enemy_spotted` | `enemy: Node` |
+| `enemy_lost` | `enemy: Node` |
+| `target_changed` | `new_target: Node, old_target: Node` |
+| `shot_missed` | `target: Node, miss_offset: Vector3` |
+| `critical_hit` | `target: Node, damage: float` |
+
+### メソッド
+- `setup(character: Node) -> void`
+- `get_override_look_direction() -> Vector3`
+- `is_tracking_enemy() -> bool`
+- `get_current_target() -> Node`
+- `clear_target() -> void`
+- `dismiss_current_target() -> void`
+- `enable_firing() -> void`
+- `disable_firing() -> void`
+- `is_firing_enabled() -> bool`
+- `get_last_shot_result() -> Dictionary`
+- `process(delta: float) -> void`

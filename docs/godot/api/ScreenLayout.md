@@ -34,3 +34,11 @@ var vbox := ScreenLayout.create_centered_vbox(self, 30)
 
 - [MainMenuScreen](MainMenuScreen.md)
 - [OptionScreen](OptionScreen.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

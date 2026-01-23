@@ -222,3 +222,21 @@ Clearポイントに到達すると、以下の処理が行われる：
 1. **最終目的地への到達判定**: 最終ポイントへの距離が`final_destination_radius`（0.1m）以内になれば即座に完了
 2. **中間地点でのスタック回避**: `stuck_timeout`（1.0秒）以上進めない場合、その中間ポイントをスキップして次へ
 3. **すれ違い衝突の許容**: 一時的な衝突は次のポイントへスキップで対応し、パス追従を継続
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `path_started` | なし |
+| `path_completed` | なし |
+| `path_cancelled` | なし |
+| `vision_point_reached` | `index: int, direction: Vector3` |
+
+### メソッド
+- `setup(character: CharacterBody3D) -> void`
+- `set_combat_awareness(component: Node) -> void`
+- `start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],`
+- `cancel() -> void`
+- `is_following_path() -> bool`
+- `process(delta: float) -> void`

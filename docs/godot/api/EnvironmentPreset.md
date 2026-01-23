@@ -129,3 +129,11 @@ print(preset.get_shadow_size_value())  # 2048
 ## 関連クラス
 
 - `EnvironmentSetup` - プリセットを適用するコンポーネント
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `get_shadow_size_value() -> int`

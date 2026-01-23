@@ -6,7 +6,7 @@
 
 - **クラス名**: `WeaponShopModal`
 - **継承**: `Control`
-- **ファイル**: `godot/scripts/ui/weapon_shop_modal.gd`
+- **ファイル**: `scripts/ui/weapon_shop_modal.gd`
 
 ## シグナル
 
@@ -122,3 +122,16 @@ func _on_weapon_purchased(weapon: WeaponPreset, character: CharacterBody3D) -> v
 - **PlayerState**: 所持金管理（can_afford, spend_money）
 - **GameCharacter**: 武器装備（equip_weapon）
 - **GameManager**: モーダル統合・コンテキストメニュー連携
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `weapon_purchased` | `weapon: WeaponPreset, character: CharacterBody3D` |
+| `closed` | `character: CharacterBody3D` |
+
+### メソッド
+- `open(character: CharacterBody3D) -> void`
+- `close() -> void`
+- `is_open() -> bool`

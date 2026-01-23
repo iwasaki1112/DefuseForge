@@ -195,3 +195,24 @@ func _on_team_changed():
 - **PathDrawer**: 色をパス線・VisionMarker・RunMarkerに伝播
 - **VisionMarker**: `set_colors()`で色を設定
 - **RunMarker**: `set_colors()`で色を設定
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `color_assigned` | `character: Node, color: Color, index: int` |
+| `color_released` | `character: Node` |
+
+### メソッド
+- `assign_color(character: Node) -> int`
+- `release_color(character: Node) -> void`
+- `get_character_color(character: Node) -> Color`
+- `get_character_color_index(character: Node) -> int`
+- `get_color_by_index(index: int) -> Color`
+- `get_label_char(index: int) -> String`
+- `get_character_label(character: Node) -> String`
+- `has_color(character: Node) -> bool`
+- `clear_all() -> void`
+- `get_assigned_count() -> int`
+- `get_palette_size() -> int`

@@ -114,3 +114,19 @@ func _physics_process(delta: float) -> void:
 
 - [GameScreen](GameScreen.md)
 - [InputController](InputController.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(target_camera: Camera3D, speed: float = 0.05) -> void`
+- `handle_input(event: InputEvent) -> bool`
+- `start_potential_drag(pos: Vector2) -> void`
+- `check_and_start_drag(current_pos: Vector2) -> bool`
+- `is_dragging() -> bool`
+- `is_pending_drag() -> bool`
+- `end_drag() -> void`
+- `cancel_potential_drag() -> void`
+- `process(delta: float) -> void`

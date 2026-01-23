@@ -37,3 +37,15 @@ hud.clear_paths_requested.connect(_on_clear)
 ## 関連クラス
 
 - [GameScreen](GameScreen.md)
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `execute_all_requested` | なし |
+| `clear_paths_requested` | なし |
+
+### メソッド
+- `setup() -> void`
+- `set_pending_paths(count: int) -> void`

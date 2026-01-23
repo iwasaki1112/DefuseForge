@@ -175,3 +175,21 @@ func _setup_wall_collisions(node: Node) -> void:
 3. **ConcavePolygonShape3D**: 全頂点のAABB（Axis-Aligned Bounding Box）から4コーナーを計算
 
 コーナー座標はXZ平面（Y=0）で計算され、グローバル座標に変換される。
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `vision_updated` | `visible_points: PackedVector3Array` |
+
+### メソッド
+- `get_visible_polygon() -> PackedVector3Array`
+- `force_update() -> void`
+- `set_quality(q: Quality) -> void`
+- `set_fov(degrees: float) -> void`
+- `set_view_distance(distance: float) -> void`
+- `disable() -> void`
+- `enable() -> void`
+- `is_enabled() -> bool`
+- `is_position_in_view(world_pos: Vector3) -> bool`

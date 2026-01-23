@@ -117,3 +117,24 @@ selection_manager.deselect_all()
 ## 関連クラス
 
 - [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `selection_changed` | `selected: Array[Node], primary: Node` |
+| `primary_changed` | `character: Node` |
+
+### メソッド
+- `add_to_selection(character: Node) -> void`
+- `remove_from_selection(character: Node) -> void`
+- `toggle_selection(character: Node) -> void`
+- `deselect_all() -> void`
+- `has_selection() -> bool`
+- `get_selection_count() -> int`
+- `capture_path_targets() -> void`
+- `clear_path_targets() -> void`
+- `get_path_targets() -> Array[Node]`
+- `has_path_targets() -> bool`
+- `clear_all_outlines() -> void`

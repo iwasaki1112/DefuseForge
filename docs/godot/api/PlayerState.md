@@ -196,3 +196,27 @@ func _on_money_changed(new_amount: int) -> void:
 - **シグナル駆動**: チーム変更・所持金変更時に各システムが自動的に反応可能
 - **分類ロジックの集約**: 味方/敵判定を一箇所に集約してコードの重複を防止
 - **お金管理**: CS:GOスタイルのラウンド報酬システム（連敗ボーナス対応）
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `team_changed` | `new_team: GameCharacter.Team` |
+| `money_changed` | `new_amount: int` |
+
+### メソッド
+- `get_player_team() -> GameCharacter.Team`
+- `set_player_team(team: GameCharacter.Team) -> void`
+- `get_team_name(team: GameCharacter.Team = _player_team) -> String`
+- `is_friendly(character: Node) -> bool`
+- `is_enemy(character: Node) -> bool`
+- `filter_friendlies(characters: Array) -> Array[Node]`
+- `filter_enemies(characters: Array) -> Array[Node]`
+- `get_money() -> int`
+- `set_money(amount: int) -> void`
+- `add_money(amount: int) -> void`
+- `spend_money(amount: int) -> bool`
+- `can_afford(amount: int) -> bool`
+- `reset_money() -> void`
+- `add_round_reward(won: bool, loss_streak: int = 0) -> void`

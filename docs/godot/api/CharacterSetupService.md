@@ -38,3 +38,13 @@
 - [CharacterLabelManager](CharacterLabelManager.md)
 - [EnemyVisibilitySystem](EnemyVisibilitySystem.md)
 - [FogOfWarSystem](FogOfWarSystem.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(`
+- `setup_character(character: Node) -> void`
+- `assign_color_and_label(character: Node) -> void`

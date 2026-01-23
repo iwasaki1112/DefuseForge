@@ -48,3 +48,11 @@ UIを生成する。
 
 - [MainMenuScreen](MainMenuScreen.md)
 - [SettingsManager](SettingsManager.md)
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

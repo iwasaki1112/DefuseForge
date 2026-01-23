@@ -147,3 +147,27 @@ func _on_confirm() -> void:
 - [PathDrawer](PathDrawer.md) - パス描画＋マーカー管理
 - [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
 - [CharacterColorManager](CharacterColorManager.md) - キャラクター色管理
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `character_selected` | `character: Node` |
+| `vision_add_requested` | `character: Node` |
+| `vision_undo_requested` | `character: Node` |
+| `run_add_requested` | `character: Node` |
+| `run_undo_requested` | `character: Node` |
+| `clear_add_requested` | `character: Node` |
+| `clear_undo_requested` | `character: Node` |
+| `confirm_requested` | なし |
+| `cancel_requested` | なし |
+
+### メソッド
+- `setup(characters: Array[Node], path_drawer: Node) -> void`
+- `set_active_character(character: Node) -> void`
+- `on_vision_point_added() -> void`
+- `on_run_segment_added() -> void`
+- `on_clear_point_added() -> void`
+- `get_active_character() -> Node`
+- `clear() -> void`

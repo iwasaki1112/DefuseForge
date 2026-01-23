@@ -116,3 +116,16 @@ marker.set_target_line_color(Color.ORANGE)
 - `PathDrawer` - 視線ポイント設定モードでVisionMarkerを生成
 - `CharacterColorManager` - キャラクター個別色の取得
 - `PathFollowingController` - ターゲットポイントに基づいて動的に視線方向を計算
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `set_position_and_direction(anchor: Vector3, direction: Vector3) -> void`
+- `set_colors(bg_color: Color, fg_color: Color) -> void`
+- `set_position_and_target(anchor: Vector3, target: Vector3) -> void`
+- `get_target_point() -> Vector3`
+- `has_target_point() -> bool`
+- `set_target_line_color(color: Color) -> void`

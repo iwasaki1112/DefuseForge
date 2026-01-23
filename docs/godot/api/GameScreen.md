@@ -99,3 +99,11 @@ func _on_start_pressed() -> void:
 - [InputController](InputController.md) - 入力処理
 - [GameHUD](GameHUD.md) - 画面操作UI
 - [MatchSetupService](MatchSetupService.md) - マッチ初期化
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+なし

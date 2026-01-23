@@ -174,3 +174,18 @@ func spawn_characters(map_id: String):
 - [GameManager](GameManager.md) - load_map()でMapRegistry使用
 - [CharacterRegistry](CharacterRegistry.md) - 同様のRegistryパターン
 - [VisionComponent](VisionComponent.md) - "walls"グループを使用
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `register(preset: MapPresetScript) -> void`
+- `unregister(id: String) -> void`
+- `get_preset(id: String) -> MapPresetScript`
+- `has_preset(id: String) -> bool`
+- `get_all() -> Array`
+- `get_all_ids() -> Array`
+- `instantiate_map(preset_id: String) -> Node3D`
+- `instantiate_map_from_preset(preset: MapPresetScript) -> Node3D`

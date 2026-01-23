@@ -28,3 +28,11 @@
 
 - 毎フレーム`_target_lean`へ補間し、`spine_bone_name`のローカル前方軸まわりに回転を適用
 - `CharacterAnimationController` から利用される前提
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `set_target_lean(angle_radians: float) -> void`

@@ -217,3 +217,30 @@ func _on_door_kick_done():
 > - `set_model_direction()`
 > - `set_look_direction()`
 > - `_update_model_rotation()`
+
+## APIリファレンス
+
+### シグナル
+| シグナル | 引数 |
+|---------|------|
+| `fired` | なし |
+| `door_kick_impact` | なし |
+| `door_kick_finished` | なし |
+
+### メソッド
+- `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
+- `update_animation(`
+- `set_stance(stance: Stance) -> void`
+- `get_stance() -> Stance`
+- `set_weapon(weapon: Weapon) -> void`
+- `fire() -> void`
+- `get_current_speed() -> float`
+- `is_dead() -> bool`
+- `set_animation_tree_active(active: bool) -> void`
+- `get_look_direction() -> Vector3`
+- `get_model() -> Node3D`
+- `set_look_direction(direction: Vector3) -> void`
+- `set_model_direction(direction: Vector3) -> void`
+- `play_death(_hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void`
+- `play_door_kick() -> void`
+- `is_door_kicking() -> bool`

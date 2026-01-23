@@ -135,3 +135,16 @@ func _physics_process(delta: float) -> void:
 - [CharacterSelectionManager](CharacterSelectionManager.md) - 選択状態管理
 - [PathExecutionManager](PathExecutionManager.md) - パス実行管理
 - [CombatAwarenessComponent](CombatAwarenessComponent.md) - 敵検出・自動照準
+
+## APIリファレンス
+
+### シグナル
+なし
+
+### メソッド
+- `setup(`
+- `add_character(character: Node) -> void`
+- `remove_character(character: Node) -> void`
+- `set_characters(char_list: Array[Node]) -> void`
+- `process_idle_characters(delta: float) -> void`
+- `process_primary_idle(character: Node, delta: float) -> void`
