@@ -17,6 +17,7 @@
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` | 視線ポイント追加時（target_pointはターゲット地点） |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
 | `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
+| `path_undone` | なし | パス描画がUndoされた時 |
 | `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER） |
 
 ## Enums
@@ -39,6 +40,7 @@
 | `VISION` | 視線ポイント |
 | `RUN` | Run区間 |
 | `CLEAR` | Clearポイント |
+| `PATH` | パス描画自体 |
 
 ## Export Properties
 
@@ -229,9 +231,13 @@ match removed_type:
         print("Run marker removed")
     PathDrawer.MarkerType.CLEAR:
         print("Clear marker removed")
+    PathDrawer.MarkerType.PATH:
+        print("Path removed - back to initial state")
     -1:
         print("Nothing to undo")
 ```
+
+PATHがUndoされると、パスとすべてのマーカーがクリアされ、`path_undone`シグナルが発火されます。PathServiceはこのシグナルを受けてマーカーパネルを非表示にしつつ、PathDrawerを再度有効化するため、ユーザーは新しいパスを描き直すことができます。
 
 ### Multi-Character Mode API
 
@@ -490,6 +496,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 | `mode_changed` | `mode: int` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
+| `path_undone` | なし |
 
 ### メソッド
 - `setup(camera: Camera3D, character: Node3D = null) -> void`

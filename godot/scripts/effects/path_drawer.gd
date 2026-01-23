@@ -26,8 +26,11 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 ## Clearマーカー用シグナル
 signal clear_point_added(path_ratio: float)
 
-## マーカー履歴用の種別
-enum MarkerType { VISION, RUN, CLEAR }
+## パスがUndoされた時のシグナル
+signal path_undone()
+
+## マーカー履歴用の種別（PATH = パス描画自体）
+enum MarkerType { VISION, RUN, CLEAR, PATH }
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -591,6 +594,9 @@ func _finish_drawing() -> void:
 			_pending_path = _path_points.duplicate()
 		_pending_character = _character as CharacterBody3D
 
+		# パス描画を履歴に追加（マルチモードでもシングル履歴に追加）
+		_marker_history.append(MarkerType.PATH)
+
 	drawing_finished.emit(_path_points)
 
 
@@ -948,22 +954,26 @@ func remove_last_clear_point() -> void:
 ## 最後に追加したマーカーを削除（種別を問わない統一Undo）
 ## @return: 削除したマーカーの種別（何もなければ-1）
 func undo_last_marker() -> int:
-	var history: Array[int]
+	var last_type: int = -1
 
-	# マルチキャラクターモードの場合、アクティブキャラクターの履歴を使用
+	# マルチキャラクターモードの場合
 	if _multi_character_mode and _active_edit_character:
 		var char_id = _active_edit_character.get_instance_id()
 		if _character_markers.has(char_id):
-			history = _character_markers[char_id].marker_history
-		else:
-			return -1
+			var char_history: Array[int] = _character_markers[char_id].marker_history
+			# キャラクター別履歴にマーカーがあればそれをUndo
+			if char_history.size() > 0:
+				last_type = char_history.pop_back()
+			# キャラクター別履歴が空なら、共通履歴（PATH）をチェック
+			elif _marker_history.size() > 0:
+				last_type = _marker_history.pop_back()
 	else:
-		history = _marker_history
+		# シングルモードは共通履歴を使用
+		if _marker_history.size() > 0:
+			last_type = _marker_history.pop_back()
 
-	if history.size() == 0:
+	if last_type == -1:
 		return -1
-
-	var last_type = history.pop_back()
 
 	match last_type:
 		MarkerType.VISION:
@@ -972,6 +982,8 @@ func undo_last_marker() -> int:
 			_undo_run_marker()
 		MarkerType.CLEAR:
 			_undo_clear_marker()
+		MarkerType.PATH:
+			_undo_path()
 
 	return last_type
 
@@ -1056,6 +1068,48 @@ func _undo_clear_marker() -> void:
 		if _clear_meshes.size() > 0:
 			var mesh = _clear_meshes.pop_back()
 			mesh.queue_free()
+
+
+## パス描画をUndo（内部用、履歴は操作しない）
+## パスとすべてのマーカーをクリアする
+func _undo_path() -> void:
+	# パスをクリア
+	_path_points.clear()
+	_path_mesh.clear()
+	_pending_path.clear()
+	_pending_character = null
+	_is_drawing = false
+	_is_drawing_vision = false
+	_drawing_mode = DrawingMode.MOVEMENT
+
+	# すべてのマーカーをクリア
+	_clear_vision_points()
+	_clear_run_markers()
+	_clear_clear_markers()
+
+	# マルチキャラクターモードのマーカーもクリア
+	if _multi_character_mode:
+		for char_id in _character_markers:
+			var data = _character_markers[char_id]
+			for mesh in data.vision_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+			for mesh in data.run_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+			for mesh in data.clear_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+			data.vision_points.clear()
+			data.vision_meshes.clear()
+			data.run_segments.clear()
+			data.run_meshes.clear()
+			data.clear_points.clear()
+			data.clear_meshes.clear()
+			data.marker_history.clear()
+
+	# シグナルを発火
+	path_undone.emit()
 
 
 ## ========================================

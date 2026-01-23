@@ -44,6 +44,7 @@ func setup(
 		path_drawer.vision_point_added.connect(_on_vision_point_added)
 		path_drawer.run_segment_added.connect(_on_run_segment_added)
 		path_drawer.clear_point_added.connect(_on_clear_point_added)
+		path_drawer.path_undone.connect(_on_path_undone)
 
 	if path_mode_controller:
 		path_mode_controller.mode_started.connect(_on_path_mode_started)
@@ -290,6 +291,15 @@ func _on_path_ready() -> void:
 	# 視線ポイントモードへ移行
 	# パス終点付近にVisionマーカーを追加すると、その方向で最終向きが固定される
 	if start_vision_mode():
+		# マーカーパネルを再セットアップ（パスUndo後の再描画に対応）
+		if marker_edit_panel and selection_manager and selection_manager.has_selection():
+			var selected_chars: Array[Node] = []
+			for c in selection_manager.selected_characters:
+				selected_chars.append(c)
+			# マルチキャラクターモードを再設定
+			if path_drawer and not path_drawer.is_multi_character_mode():
+				path_drawer.start_multi_character_mode(selected_chars)
+			marker_edit_panel.setup(selected_chars, path_drawer)
 		_show_marker_panel()
 	path_ready.emit()
 
@@ -326,6 +336,18 @@ func _on_clear_point_added(path_ratio: float) -> void:
 	if marker_edit_panel:
 		marker_edit_panel.on_clear_point_added()
 	clear_point_added.emit(path_ratio)
+
+
+func _on_path_undone() -> void:
+	# パスがUndoされたらマーカーパネルを非表示にするが、
+	# パスモードは維持して再度パスを描けるようにする
+	_hide_marker_panel()
+
+	# PathDrawerを再度描画可能な状態にする
+	if path_drawer and selection_manager and selection_manager.has_selection():
+		var primary = selection_manager.primary_character
+		if primary:
+			path_drawer.enable(primary)
 
 
 func _on_marker_panel_character_selected(character: Node) -> void:
