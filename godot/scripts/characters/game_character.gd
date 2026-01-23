@@ -23,8 +23,9 @@ const BULLET_TRAIL_MAX_DISTANCE: float = 50.0
 enum Team { NONE = 0, COUNTER_TERRORIST = 1, TERRORIST = 2 }
 
 # ============================================
-# Signals (reserved for future use)
+# Signals
 # ============================================
+signal died(character: GameCharacter)
 
 # ============================================
 # Export Settings
@@ -792,8 +793,14 @@ func _die(killer: Node3D = null, is_headshot: bool = false) -> void:
 	if combat_awareness and combat_awareness.has_method("clear_target"):
 		combat_awareness.clear_target()
 
+	# Hide character label (A, B, etc.)
+	_hide_character_label()
+
 	# Make corpse passable by other characters but keep ground collision
 	_make_corpse_passable()
+
+	# Emit died signal for path cleanup
+	died.emit(self)
 
 ## Calculate HitDirection from attacker position
 func _calculate_hit_direction(attacker: Node3D) -> int:
@@ -819,6 +826,14 @@ func _calculate_hit_direction(attacker: Node3D) -> int:
 		return 2  # LEFT
 	else:
 		return 3  # RIGHT
+
+## Hide character label (A, B marker above head)
+func _hide_character_label() -> void:
+	for child in get_children():
+		if child.name.begins_with("CharacterLabel_"):
+			child.visible = false
+			break
+
 
 ## Make corpse passable by other characters while keeping ground collision
 func _make_corpse_passable() -> void:

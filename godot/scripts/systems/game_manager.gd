@@ -110,6 +110,10 @@ func register_character(character: Node) -> void:
 	if character_setup_service:
 		character_setup_service.setup_character(character)
 
+	# 死亡シグナル接続
+	if character.has_signal("died") and not character.died.is_connected(_on_character_died):
+		character.died.connect(_on_character_died)
+
 
 
 ## キャラクターを登録解除
@@ -844,3 +848,20 @@ func _on_weapon_shop_closed(character: CharacterBody3D) -> void:
 	# キャラクター選択を解除
 	if character and selection_manager:
 		selection_manager.remove_from_selection(character)
+
+
+## キャラクター死亡時の処理
+func _on_character_died(character: GameCharacter) -> void:
+	# パス追従をキャンセルしてパスメッシュ・マーカーをクリア
+	if path_service:
+		path_service.cancel_path_following(character, true)
+
+	# 選択解除
+	if selection_manager:
+		selection_manager.remove_from_selection(character)
+
+	# コンテキストメニューが開いている場合は閉じる
+	if context_menu and context_menu.is_open():
+		var menu_char = context_menu.get_current_character()
+		if menu_char == character:
+			context_menu.close()

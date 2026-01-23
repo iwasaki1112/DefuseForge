@@ -367,19 +367,28 @@ func _roll_hit_check(weapon: WeaponPreset, distance: float) -> bool:
 	return randf() < hit_chance
 
 
-## Calculate miss offset vector (random direction)
+## Calculate miss offset vector (perpendicular to target direction)
 func _calculate_miss_offset() -> Vector3:
-	# Random angle on XZ plane
-	var angle: float = randf() * TAU
-	# Random distance (0.5 - 2.0 meters)
-	var offset_distance: float = randf_range(0.5, 2.0)
+	if not _current_target or not is_instance_valid(_current_target):
+		return Vector3.ZERO
 
-	var offset := Vector3(
-		cos(angle) * offset_distance,
-		randf_range(-0.5, 0.5),  # Slight vertical variance
-		sin(angle) * offset_distance
-	)
-	return offset
+	# Direction from shooter to target
+	var to_target: Vector3 = _current_target.global_position - _character.global_position
+	to_target.y = 0
+	if to_target.length_squared() < 0.01:
+		return Vector3.ZERO
+	to_target = to_target.normalized()
+
+	# Perpendicular vector to target direction (horizontal)
+	var right: Vector3 = to_target.cross(Vector3.UP).normalized()
+
+	# Horizontal offset: left or right with random distance
+	var horizontal_offset: float = (randf() * 2.0 - 1.0) * randf_range(0.3, 1.2)
+
+	# Vertical offset (smaller range)
+	var vertical_offset: float = randf_range(-0.4, 0.4)
+
+	return right * horizontal_offset + Vector3.UP * vertical_offset
 
 
 ## Apply damage to the current target (with hit check)
