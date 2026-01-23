@@ -6,7 +6,6 @@ const WALL_COLLISION_LAYER: int = 2
 
 func _ready() -> void:
 	_setup_collisions(self)
-	VisionComponent.invalidate_wall_cache()
 
 
 func _setup_collisions(node: Node) -> void:

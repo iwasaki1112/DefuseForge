@@ -120,7 +120,6 @@ GameManager.load_map()の処理:
 1. MapRegistryからプリセット取得
 2. マップインスタンス化
 3. FogOfWarSystemのmap_size更新
-4. VisionComponent.invalidate_wall_cache()呼び出し
 
 ## 起動時の動作
 

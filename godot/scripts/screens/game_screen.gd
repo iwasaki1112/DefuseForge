@@ -29,6 +29,9 @@ var _camera_pan_controller: CameraPanController = null
 var _input_controller: InputController = null
 var _match_setup_service: MatchSetupService = null
 
+## デバッグ
+var _vision_debug_enabled: bool = false
+
 
 
 func _ready() -> void:
@@ -195,3 +198,16 @@ func _on_paths_cleared() -> void:
 
 func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
+
+
+## ========================================
+## デバッグ入力
+## ========================================
+
+func _unhandled_input(event: InputEvent) -> void:
+	# F3: 視界デバッグ表示の切り替え
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F3:
+			_vision_debug_enabled = not _vision_debug_enabled
+			game_manager.set_vision_debug_draw(_vision_debug_enabled)
+			print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))

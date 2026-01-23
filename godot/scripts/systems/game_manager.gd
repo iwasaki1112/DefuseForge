@@ -366,6 +366,24 @@ func set_vision_enabled(enabled: bool) -> void:
 		vision_service.set_enabled(enabled)
 
 
+## 視界デバッグ表示の切り替え（味方キャラクターの視界コーンを表示）
+func set_vision_debug_draw(enabled: bool) -> void:
+	for character in characters:
+		if PlayerState.is_friendly(character):
+			var game_char := character as GameCharacter
+			if game_char and game_char.vision:
+				game_char.vision.set_debug_draw(enabled)
+
+
+## 全味方キャラクターの視界を強制更新（ドア開閉時など）
+func _force_update_all_vision() -> void:
+	for character in characters:
+		if PlayerState.is_friendly(character):
+			var game_char := character as GameCharacter
+			if game_char and game_char.vision and game_char.vision.is_enabled():
+				game_char.vision.force_update()
+
+
 ## ========================================
 ## マップ管理（MapManager委譲）
 ## ========================================
@@ -1071,3 +1089,6 @@ func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
 	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.4) \
 		.set_ease(Tween.EASE_OUT) \
 		.set_trans(Tween.TRANS_BACK)
+
+	# ドアが開いた後に視界を強制更新
+	tween.tween_callback(_force_update_all_vision)

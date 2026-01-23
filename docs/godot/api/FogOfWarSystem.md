@@ -1,6 +1,6 @@
 # FogOfWarSystem
 
-Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描画し、シェーダーでフォグを表示。
+Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描画し、外部シェーダーでフォグを表示。
 
 ## 基本情報
 
@@ -8,17 +8,18 @@ Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描�
 |------|-----|
 | 継承元 | `Node3D` |
 | ファイルパス | `scripts/systems/fog_of_war_system.gd` |
+| シェーダー | `shaders/fow.gdshader` |
 
 ## Enums
 
 ### Quality
-品質設定。
+品質設定（VisionComponentと連動）。
 
-| 値 | resolution | msaa | 説明 |
-|----|-----------|------|------|
-| `LOW` | 512 | DISABLED | モバイル向け |
-| `MEDIUM` | 1024 | 2X | バランス |
-| `HIGH` | 2048 | 4X | PC向け |
+| 値 | resolution | msaa | ray_count | update_hz | 説明 |
+|----|-----------|------|-----------|-----------|------|
+| `LOW` | 128 | DISABLED | 36 | 15 | モバイル向け |
+| `MEDIUM` | 256 | 2X | 54 | 20 | バランス |
+| `HIGH` | 512 | 4X | 72 | 30 | PC向け |
 
 ## Export Properties
 
@@ -70,6 +71,17 @@ VisionComponentを解除する。
 ### force_update() -> void
 強制的に可視性テクスチャを更新する。VisionComponentの再登録後などに使用。
 
+### set_quality(q: Quality) -> void
+品質プリセットを実行時に変更する。ビューポートサイズとシェーダーパラメータを更新。
+
+**引数:**
+- `q` - 品質レベル（LOW/MEDIUM/HIGH）
+
+### get_quality_settings() -> Dictionary
+現在の品質設定を辞書形式で取得する（VisionComponentとの同期用）。
+
+**戻り値:** `resolution`, `msaa`, `ray_count`, `update_hz`を含む辞書
+
 ## 使用例
 
 ```gdscript
@@ -88,6 +100,9 @@ fow.set_map_size(Vector2(20, 20))
 
 # 色変更
 fow.set_fog_color(Color(0.1, 0.1, 0.2, 0.9))
+
+# 品質変更
+fow.set_quality(FogOfWarSystem.Quality.HIGH)
 
 # 非表示
 fow.set_fog_visible(false)
@@ -116,16 +131,17 @@ fow.set_map_size(Vector2(20, 20))
 ### アーキテクチャ
 1. **SubViewport**: 可視領域を白、不可視領域を黒で描画
 2. **Polygon2D**: 各VisionComponentの可視ポリゴンを2Dに変換して描画
-3. **PlaneMesh + Shader**: SubViewportテクスチャをサンプリングしてフォグを表示
+3. **PlaneMesh + 外部Shader**: SubViewportテクスチャをサンプリングしてフォグを表示
 
-### シェーダー処理
+### シェーダー処理（fow.gdshader）
 1. ワールド座標をUV座標に変換
-2. 3x3 Gaussianブラーでエッジを滑らかに
-3. `smoothstep(0.45, 0.55, ...)`で自然なグラデーション
+2. 5x5 Gaussianブラーでエッジを滑らかに（blur_radius設定可能）
+3. `smoothstep`で自然なグラデーション（edge_softness設定可能）
 4. 可視領域は透明、不可視領域はフォグ色
 
 ### 最適化
 - **シグナル駆動**: `vision_updated`シグナルで変更時のみ更新
+- **更新間隔制御**: 品質設定に基づく更新頻度（LOW: 15Hz, HIGH: 30Hz）
 - **手動レンダリング**: `UPDATE_ONCE`モードで必要時のみ描画
 - **複数視界対応**: 複数のVisionComponentを同時に処理可能
 
@@ -142,3 +158,5 @@ fow.set_map_size(Vector2(20, 20))
 - `set_fog_color(color: Color) -> void`
 - `get_visibility_texture() -> ViewportTexture`
 - `set_map_size(new_size: Vector2) -> void`
+- `set_quality(q: Quality) -> void`
+- `get_quality_settings() -> Dictionary`
