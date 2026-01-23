@@ -47,6 +47,10 @@ const CharacterAnimationControllerScript = preload("res://scripts/animation/char
 @onready var muzzle_rot_y_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleRotY/HSlider
 @onready var muzzle_rot_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/MuzzleRotZ/SpinBox
 @onready var muzzle_rot_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/MuzzleRotZ/HSlider
+@onready var quad1_x_spin: SpinBox = $UI/PanelLeft/VBoxLeft/Quad1X/SpinBox
+@onready var quad1_x_slider: HSlider = $UI/PanelLeft/VBoxLeft/Quad1X/HSlider
+@onready var quad1_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/Quad1Z/SpinBox
+@onready var quad1_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/Quad1Z/HSlider
 @onready var muzzle_preview_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/MuzzlePreviewToggle
 @onready var camera: Camera3D = $Camera3D
 
@@ -242,6 +246,10 @@ func _setup_ui() -> void:
 	muzzle_rot_y_spin.value_changed.connect(func(v): muzzle_rot_y_slider.value = v; _update_muzzle_flash())
 	muzzle_rot_z_slider.value_changed.connect(func(v): muzzle_rot_z_spin.value = v; _update_muzzle_flash())
 	muzzle_rot_z_spin.value_changed.connect(func(v): muzzle_rot_z_slider.value = v; _update_muzzle_flash())
+	quad1_x_slider.value_changed.connect(func(v): quad1_x_spin.value = v; _update_quad1_x())
+	quad1_x_spin.value_changed.connect(func(v): quad1_x_slider.value = v; _update_quad1_x())
+	quad1_z_slider.value_changed.connect(func(v): quad1_z_spin.value = v; _update_quad1_z())
+	quad1_z_spin.value_changed.connect(func(v): quad1_z_slider.value = v; _update_quad1_z())
 	muzzle_preview_toggle.toggled.connect(_on_muzzle_preview_toggled)
 
 func _select_character(idx: int) -> void:
@@ -373,6 +381,16 @@ func _on_fire_pressed() -> void:
 func _on_muzzle_preview_toggled(enabled: bool) -> void:
 	if character:
 		character.set_muzzle_flash_preview(enabled)
+
+
+func _update_quad1_x() -> void:
+	if character:
+		character.set_muzzle_flash_quad1_x(quad1_x_spin.value)
+
+
+func _update_quad1_z() -> void:
+	if character:
+		character.set_muzzle_flash_quad1_z(quad1_z_spin.value)
 
 
 ## Setup camera position buttons (created dynamically)
