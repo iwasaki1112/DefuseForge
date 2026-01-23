@@ -10,6 +10,7 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Signals
 signal fired()
+signal door_kick_finished()
 
 # Export settings
 @export_group("Movement Speed")
@@ -47,6 +48,7 @@ var _stance := Stance.STAND
 var _weapon := Weapon.RIFLE
 var _is_running := false
 var _is_dead := false
+var _is_door_kicking := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 
@@ -60,6 +62,10 @@ const ANIM_REF_CROUCH := 1.5      # Crouch walk
 
 # Death animation name
 const DEATH_ANIM := GameConstants.ANIM_DEATH
+
+# Door kick animation names
+const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
+const PISTOL_DOOR_KICK_ANIM := GameConstants.ANIM_PISTOL_DOOR_KICK
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -108,7 +114,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead:
+	if _is_dead or _is_door_kicking:
 		return
 
 	# エイム方向を保存（視界計算用）
@@ -181,7 +187,7 @@ func fire() -> void:
 ## Get current movement speed based on state and direction
 ## Returns the animation's visual speed for the current blend direction
 func get_current_speed() -> float:
-	if _is_dead:
+	if _is_dead or _is_door_kicking:
 		return 0.0
 	if _stance == Stance.CROUCH:
 		return crouch_speed
@@ -279,6 +285,49 @@ func play_death(_hit_direction: HitDirection = HitDirection.FRONT, _headshot: bo
 
 func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
+
+
+## Play door kick animation (weapon-appropriate version)
+func play_door_kick() -> void:
+	if _is_dead or _is_door_kicking:
+		return
+
+	_is_door_kicking = true
+
+	# Stop AnimationTree during door kick
+	if _anim_tree:
+		_anim_tree.active = false
+
+	# Select animation based on weapon type
+	var anim_name: String
+	match _weapon:
+		Weapon.PISTOL:
+			anim_name = PISTOL_DOOR_KICK_ANIM
+		_:
+			anim_name = RIFLE_DOOR_KICK_ANIM
+
+	# Play door kick animation
+	if _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name)
+		_anim_player.animation_finished.connect(_on_door_kick_finished, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Door kick animation not found: %s" % anim_name)
+		_is_door_kicking = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+func _on_door_kick_finished(_anim_name: String) -> void:
+	_is_door_kicking = false
+	# Resume AnimationTree
+	if _anim_tree and not _is_dead:
+		_anim_tree.active = true
+	door_kick_finished.emit()
+
+
+## Check if door kick animation is playing
+func is_door_kicking() -> bool:
+	return _is_door_kicking
 
 #endregion
 

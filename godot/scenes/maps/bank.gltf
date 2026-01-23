@@ -14,7 +14,8 @@
 				3,
 				4,
 				5,
-				6
+				6,
+				7
 			]
 		}
 	],
@@ -69,20 +70,35 @@
 		},
 		{
 			"mesh":1,
-			"name":"Wall_Center-col",
+			"name":"wall_01-col",
 			"translation":[
 				0,
 				0,
-				-2.4448652267456055
+				-3.83133864402771
 			]
 		},
 		{
 			"mesh":2,
-			"name":"Wall_Center-col.001",
+			"name":"wall_02-col",
 			"translation":[
 				0,
 				0,
-				4.460396766662598
+				3.070556163787842
+			]
+		},
+		{
+			"mesh":3,
+			"name":"door_01-col",
+			"rotation":[
+				0,
+				0.7071068286895752,
+				0,
+				0.7071068286895752
+			],
+			"translation":[
+				-0.06682106852531433,
+				0.012127816677093506,
+				-0.8297142386436462
 			]
 		}
 	],
@@ -128,6 +144,20 @@
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
 			}
+		},
+		{
+			"doubleSided":true,
+			"name":"Door_Material",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.4000000059604645,
+					0.25,
+					0.15000000596046448,
+					1
+				],
+				"metallicFactor":0,
+				"roughnessFactor":0.699999988079071
+			}
 		}
 	],
 	"meshes":[
@@ -170,6 +200,20 @@
 					},
 					"indices":7,
 					"material":2
+				}
+			]
+		},
+		{
+			"name":"Cube",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":11,
+						"NORMAL":12,
+						"TEXCOORD_0":13
+					},
+					"indices":7,
+					"material":3
 				}
 			]
 		}
@@ -270,6 +314,34 @@
 			"componentType":5126,
 			"count":24,
 			"type":"VEC2"
+		},
+		{
+			"bufferView":11,
+			"componentType":5126,
+			"count":24,
+			"max":[
+				2.384185791015625e-07,
+				2,
+				0.02500000037252903
+			],
+			"min":[
+				-0.8999998569488525,
+				0,
+				-0.02500000037252903
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":12,
+			"componentType":5126,
+			"count":24,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":13,
+			"componentType":5126,
+			"count":24,
+			"type":"VEC2"
 		}
 	],
 	"bufferViews":[
@@ -338,11 +410,29 @@
 			"byteLength":192,
 			"byteOffset":2256,
 			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":288,
+			"byteOffset":2448,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":288,
+			"byteOffset":2736,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":192,
+			"byteOffset":3024,
+			"target":34962
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":2448,
+			"byteLength":3216,
 			"uri":"bank.bin"
 		}
 	]

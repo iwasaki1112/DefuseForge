@@ -45,6 +45,8 @@ const BONE_SPINE_2 := "mixamorig_Spine2"
 # Animation Names
 # ========================================================
 const ANIM_DEATH := "death"
+const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
+const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
 
 # ========================================================
 # Scene Paths (Use with load/preload if class_name not available)

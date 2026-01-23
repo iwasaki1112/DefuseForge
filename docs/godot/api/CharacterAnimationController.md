@@ -43,6 +43,7 @@
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `fired` | なし | 発射アクションが実行されたタイミング |
+| `door_kick_finished` | なし | ドアキックアニメーション完了時 |
 
 ## Export Properties
 
@@ -137,6 +138,20 @@
 - `hit_direction` - 被弾方向
 - `headshot` - ヘッドショットか
 
+### play_door_kick() -> void
+ドアキックアニメーションを再生する。武器タイプに応じて適切なアニメーションが選択される。
+
+- `Weapon.RIFLE` → `rifle_door_kick`
+- `Weapon.PISTOL` → `pistol_door_kick`
+
+アニメーション再生中は`update_animation()`の更新がスキップされ、`get_current_speed()`は0を返す。
+アニメーション完了時に`door_kick_finished`シグナルが発火する。
+
+### is_door_kicking() -> bool
+ドアキックアニメーション再生中か確認する。
+
+**戻り値:** ドアキック中なら`true`
+
 ## 使用例
 
 ```gdscript
@@ -155,6 +170,13 @@ func _physics_process(delta):
 anim_ctrl.set_stance(CharacterAnimationController.Stance.CROUCH)
 anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
 anim_ctrl.fire()
+
+# ドアキック
+anim_ctrl.door_kick_finished.connect(_on_door_kick_done)
+anim_ctrl.play_door_kick()
+
+func _on_door_kick_done():
+    print("Door kick completed!")
 ```
 
 ## 内部動作
