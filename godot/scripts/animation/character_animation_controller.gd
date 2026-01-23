@@ -10,7 +10,8 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Signals
 signal fired()
-signal door_kick_finished()
+signal door_kick_impact()   # キックがドアに当たるタイミング（フレーム36/66）
+signal door_kick_finished() # アニメーション完了
 
 # Export settings
 @export_group("Movement Speed")
@@ -66,6 +67,7 @@ const DEATH_ANIM := GameConstants.ANIM_DEATH
 # Door kick animation names
 const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
 const PISTOL_DOOR_KICK_ANIM := GameConstants.ANIM_PISTOL_DOOR_KICK
+const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレーム36 / 30fps）
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -310,11 +312,18 @@ func play_door_kick() -> void:
 	if _anim_player.has_animation(anim_name):
 		_anim_player.play(anim_name)
 		_anim_player.animation_finished.connect(_on_door_kick_finished, CONNECT_ONE_SHOT)
+		# インパクトタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(DOOR_KICK_IMPACT_TIME).timeout.connect(_on_door_kick_impact, CONNECT_ONE_SHOT)
 	else:
 		push_warning("CharacterAnimationController: Door kick animation not found: %s" % anim_name)
 		_is_door_kicking = false
 		if _anim_tree:
 			_anim_tree.active = true
+
+
+func _on_door_kick_impact() -> void:
+	if _is_door_kicking:
+		door_kick_impact.emit()
 
 
 func _on_door_kick_finished(_anim_name: String) -> void:

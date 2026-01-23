@@ -200,7 +200,7 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 3. キャラクターがアンカー位置まで移動
 4. `GameCharacter.face_towards()`でドア方向を向く
 5. ドアキックアニメーション再生（`CharacterAnimationController.play_door_kick()`）
-6. アニメーション完了後、ドアをY軸で170度回転（Tween、キャラクターから離れる方向）
+6. **インパクトタイミング**（フレーム36/66、1.2秒）でドアをY軸で170度回転開始（Tween、キャラクターから離れる方向）
 
 **アンカーベースのアプローチ:**
 - `anchor_front`: `door_pos + door_forward * 1.0`（+Z側）

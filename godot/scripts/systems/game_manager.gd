@@ -1024,14 +1024,14 @@ func _on_door_approach_completed(character: CharacterBody3D, door: Node3D) -> vo
 	# ドアキックアニメーション再生
 	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
 	if anim_ctrl and anim_ctrl.has_method("play_door_kick"):
-		# door_kick_finishedシグナルに接続（キャラクター参照を渡してドア回転方向を決定）
-		if anim_ctrl.has_signal("door_kick_finished"):
-			if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_done.bind(door, character)):
-				anim_ctrl.door_kick_finished.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
+		# door_kick_impactシグナルに接続（キックがドアに当たるタイミングでドアを開く）
+		if anim_ctrl.has_signal("door_kick_impact"):
+			if not anim_ctrl.door_kick_impact.is_connected(_on_door_kick_done.bind(door, character)):
+				anim_ctrl.door_kick_impact.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
 		anim_ctrl.play_door_kick()
 
 
-## ドアキックアニメーション完了
+## ドアキックインパクト時（フレーム36/66）
 ## character: ドアをキックしたキャラクター（位置から回転方向を計算）
 func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
