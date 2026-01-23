@@ -109,6 +109,15 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 キャラクターの向きを一元管理する。VisionComponentはこの値を参照して視界の向きを決定する。
 
+> **重要: キャラクターの向きを変更する場合**
+>
+> `CharacterBody3D.look_at()`を直接使用しないでください。Mixamoモデルは+Z方向が前方ですが、Godotの`look_at()`は-Z軸をターゲットに向けるため、180度ずれます。
+>
+> 代わりに以下のメソッドを使用してください：
+> - `face_towards(target_pos)` - ターゲット位置を向く
+> - `set_facing_direction_vec(direction)` - 方向ベクトルで設定
+> - `set_facing_direction(y_rotation)` - Y軸回転で設定
+
 #### set_facing_direction_vec(direction: Vector3) -> void
 キャラクターの向きをベクトルで設定する。AnimationControllerのモデル向きも同時に更新。
 
@@ -122,10 +131,19 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 - `y_rotation` - Y軸回転（0 = +Z方向）
 
 #### face_towards(target_pos: Vector3) -> void
-指定位置の方向を向く。
+指定位置の方向を向く。内部で`set_facing_direction_vec()`を呼び出し、Mixamoモデルの向きを正しく処理する。
 
 **引数:**
 - `target_pos` - ターゲット位置
+
+**使用例:**
+```gdscript
+# ドアキック時にドアの方向を向く
+character.face_towards(door.global_position)
+
+# 敵の方向を向く
+character.face_towards(enemy.global_position)
+```
 
 #### get_facing_direction() -> Vector3
 現在の向きを取得する。VisionComponentがこれを参照。

@@ -163,6 +163,13 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				selection_manager.remove_from_selection(menu_character)
 			context_menu.close()
 			return true
+		# メニュー外をクリック（キャラクター以外）: ドアチェック
+		if not clicked_character and menu_character:
+			var clicked_door = raycast_door(screen_pos)
+			if clicked_door:
+				context_menu.close()
+				_start_door_kick(menu_character, clicked_door)
+				return true
 
 	match button_index:
 		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT:
@@ -184,6 +191,12 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 					_show_context_menu(screen_pos, clicked_character)
 				return true
 			else:
+				# キャラクター選択中 + ドアクリック → ドアキック開始
+				if selection_manager and selection_manager.primary_character:
+					var clicked_door = raycast_door(screen_pos)
+					if clicked_door:
+						_start_door_kick(selection_manager.primary_character, clicked_door)
+						return true
 				# キャラクター以外をクリック: メニューを閉じて全選択解除
 				if context_menu and context_menu.is_open():
 					context_menu.close()
@@ -215,6 +228,34 @@ func raycast_character(screen_pos: Vector2) -> Node:
 	for character in characters:
 		if _is_child_of(collider, character):
 			return character
+	return null
+
+
+## レイキャストでドアを検出
+func raycast_door(screen_pos: Vector2) -> Node3D:
+	if not camera:
+		return null
+
+	var ray_origin := camera.project_ray_origin(screen_pos)
+	var ray_dir := camera.project_ray_normal(screen_pos)
+	var ray_end := ray_origin + ray_dir * 100.0
+
+	var space_state := _mesh_parent.get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var result := space_state.intersect_ray(query)
+	if result.is_empty():
+		return null
+
+	# ドアを探す（衝突したコライダーの親を辿ってdoorsグループを確認）
+	var collider = result.collider
+	var node = collider
+	while node:
+		if node.is_in_group(GameConstants.GROUP_DOORS):
+			return node as Node3D
+		node = node.get_parent()
 	return null
 
 
@@ -590,6 +631,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
 		add_child(path_execution_manager)
 		path_execution_manager.setup(mesh_parent)
+		# ドアキック用: 個別キャラクターのパス完了シグナルを接続
+		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
 
 
 func _setup_idle_manager() -> void:
@@ -865,3 +908,166 @@ func _on_character_died(character: GameCharacter) -> void:
 		var menu_char = context_menu.get_current_character()
 		if menu_char == character:
 			context_menu.close()
+
+
+## ========================================
+## ドアキック処理
+## ========================================
+
+## ドアキック中のドア参照（キャラクターID -> ドア）
+var _door_kick_targets: Dictionary = {}
+
+
+## ドアキック開始
+func _start_door_kick(character: CharacterBody3D, door: Node3D) -> void:
+	# ドアキック中は無効
+	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
+	if anim_ctrl and anim_ctrl.has_method("is_door_kicking") and anim_ctrl.is_door_kicking():
+		return
+
+	# コンテキストメニューを閉じる
+	if context_menu and context_menu.is_open():
+		context_menu.close()
+
+	# 選択解除
+	if selection_manager:
+		selection_manager.deselect_all()
+
+	# キャラクター位置を取得
+	var char_pos := character.global_position
+	char_pos.y = 0.0
+
+	# ドアの前後アンカー位置を計算（ドアのローカルZ軸方向）
+	var door_pos := door.global_position
+	door_pos.y = 0.0
+	var door_forward := door.global_transform.basis.z.normalized()
+	door_forward.y = 0.0
+	door_forward = door_forward.normalized()
+
+	# 前後アンカー位置（ドアから0.65m離れた位置）
+	var anchor_front := door_pos + door_forward * 0.65  # +Z側
+	var anchor_back := door_pos - door_forward * 0.65   # -Z側
+
+	# キャラクターに近い方のアンカーを選択
+	var dist_front := char_pos.distance_to(anchor_front)
+	var dist_back := char_pos.distance_to(anchor_back)
+	var approach_pos := anchor_front if dist_front < dist_back else anchor_back
+
+	# ドア参照を保持（パス完了時にドアキックを実行するため）
+	_door_kick_targets[character.get_instance_id()] = door
+
+	# 距離チェック: 既に十分近ければ即座にドアキック
+	if char_pos.distance_to(approach_pos) < 0.3:
+		_execute_door_kick(character, door)
+		return
+
+	# PathExecutionManagerを使用してパス実行（通常のMove処理と同じ）
+	if path_execution_manager:
+		path_execution_manager.execute_direct_path(character, approach_pos, false)
+
+
+## キャラクターパス完了時のハンドラ（ドアキック用）
+func _on_character_path_completed(character: Node) -> void:
+	var char_id = character.get_instance_id()
+	if not _door_kick_targets.has(char_id):
+		return
+
+	var door = _door_kick_targets[char_id]
+	_door_kick_targets.erase(char_id)
+
+	if is_instance_valid(door):
+		_execute_door_kick(character as CharacterBody3D, door)
+
+
+## ドアキック実行（ドア前に到達後）
+## スムーズに回転してからキックアニメーションを再生
+func _execute_door_kick(character: CharacterBody3D, door: Node3D) -> void:
+	if not is_instance_valid(character) or not is_instance_valid(door):
+		return
+
+	var door_pos := door.global_position
+	door_pos.y = character.global_position.y
+
+	# モデルをTweenでスムーズに回転
+	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
+	if not anim_ctrl:
+		return
+
+	# 現在の回転と目標の回転を計算
+	var model = anim_ctrl.get_model() if anim_ctrl.has_method("get_model") else null
+	if not model:
+		# フォールバック: 即座に向きを変えてキック
+		if character.has_method("face_towards"):
+			character.face_towards(door_pos)
+		_play_door_kick_animation(character, door)
+		return
+
+	# 目標方向を計算（Mixamoモデルは+Zが前方）
+	var direction := (door_pos - character.global_position).normalized()
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		direction = Vector3.FORWARD
+
+	# Basis.looking_at(-direction) でMixamoモデルの向きを正しく設定
+	var target_basis := Basis.looking_at(-direction, Vector3.UP)
+	var target_quat := target_basis.get_rotation_quaternion()
+	var current_quat := Quaternion(model.transform.basis)
+
+	# Tweenでスムーズに回転（0.25秒）
+	var tween := create_tween()
+	tween.tween_method(
+		func(t: float):
+			if is_instance_valid(model):
+				var new_quat := current_quat.slerp(target_quat, t)
+				model.transform.basis = Basis(new_quat),
+		0.0, 1.0, 0.25
+	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+	# 回転完了後にキックアニメーション再生
+	tween.tween_callback(_play_door_kick_animation.bind(character, door))
+
+
+## ドアキックアニメーション再生
+func _play_door_kick_animation(character: CharacterBody3D, door: Node3D) -> void:
+	if not is_instance_valid(character) or not is_instance_valid(door):
+		return
+
+	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
+	if anim_ctrl and anim_ctrl.has_method("play_door_kick"):
+		# door_kick_impactシグナルに接続（キックがドアに当たるタイミングでドアを開く）
+		if anim_ctrl.has_signal("door_kick_impact"):
+			if not anim_ctrl.door_kick_impact.is_connected(_on_door_kick_done.bind(door, character)):
+				anim_ctrl.door_kick_impact.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
+		anim_ctrl.play_door_kick()
+
+
+## ドアキックインパクト時（フレーム36/66）
+## character: ドアをキックしたキャラクター（位置から回転方向を計算）
+func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# ドアからキャラクターへの方向ベクトル
+	var door_to_char := (character.global_position - door.global_position)
+	door_to_char.y = 0.0
+	door_to_char = door_to_char.normalized()
+
+	# ドアのローカルX軸（ドア表面に垂直、蝶番回転の基準）
+	var door_right := door.global_transform.basis.x.normalized()
+	door_right.y = 0.0
+	door_right = door_right.normalized()
+
+	# キャラクターがドアのどちら側にいるかを判定
+	var side_dot := door_right.dot(door_to_char)
+
+	# ドアはキャラクターから離れる方向に開く
+	# side_dot > 0: キャラクターはドアの右側 → ドアは左に開く（-方向）
+	# side_dot < 0: キャラクターはドアの左側 → ドアは右に開く（+方向）
+	var rotation_amount := -170.0 if side_dot > 0 else 170.0
+
+	# TweenでドアをY軸で回転（蝶番を軸に横開き）
+	var tween := create_tween()
+	var current_y := door.rotation_degrees.y
+	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.4) \
+		.set_ease(Tween.EASE_OUT) \
+		.set_trans(Tween.TRANS_BACK)

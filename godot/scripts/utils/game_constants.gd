@@ -33,6 +33,7 @@ const NODE_WEAPON_SHOP_MODAL := "WeaponShopModal"
 # Group Names
 # ========================================================
 const GROUP_CHARACTERS := "characters"
+const GROUP_DOORS := "doors"
 
 # ========================================================
 # Bone Names (Mixamo Standard)

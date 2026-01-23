@@ -459,11 +459,9 @@ func _gui_input(event: InputEvent) -> void:
 			var local_pos = _menu_root.get_local_mouse_position()
 			var panel_rect = Rect2(Vector2.ZERO, _menu_root.size)
 			if not panel_rect.has_point(local_pos):
-				# パネル外をクリックした場合は閉じて選択解除
-				var character = _current_character
-				close()
-				background_clicked.emit(character)
-				get_viewport().set_input_as_handled()
+				# パネル外をクリックした場合は入力を消費せず、GameManagerに処理を委譲
+				# GameManager.handle_clickでドアチェックやメニュークローズが行われる
+				return
 			elif not _is_point_over_any_button(local_pos):
 				# パネル内だがボタン以外（中央の穴など）をクリックした場合
 				var character = _current_character

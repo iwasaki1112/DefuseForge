@@ -17,6 +17,8 @@ signal paths_execution_started(count: int)
 signal all_paths_completed()
 ## パスクリア時のシグナル
 signal paths_cleared()
+## 個別キャラクターのパス完了シグナル
+signal character_path_completed(character: Node)
 
 ## 保留中のパス（キャラクターごと）
 ## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
@@ -357,11 +359,48 @@ func _get_or_create_path_controller(character: Node) -> Node:
 
 
 func _on_path_completed(character: Node) -> void:
+	character_path_completed.emit(character)
 	on_path_following_completed(character)
 
 
 func _on_path_cancelled(_character: Node) -> void:
 	pass
+
+
+## 直接パスを実行（UI経由せず、パスメッシュなし）
+## ドアキックなどの自動移動に使用
+## @param character: 移動するキャラクター
+## @param target_pos: 目標位置
+## @param run: 走るかどうか
+## @return: 成功したらtrue
+func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: bool = false) -> bool:
+	if not is_instance_valid(character):
+		return false
+
+	# パスを作成（現在位置から目標位置）
+	var char_pos := character.global_position
+	char_pos.y = 0.0
+	var target := target_pos
+	target.y = 0.0
+
+	# 既に目標に近い場合はスキップ
+	if char_pos.distance_to(target) < 0.3:
+		# 即座に完了シグナルを発火
+		character_path_completed.emit(character)
+		return true
+
+	var path: Array[Vector3] = [char_pos, target]
+
+	# コントローラーを取得または作成
+	var controller = _get_or_create_path_controller(character)
+	controller.setup(character)
+
+	# 空のビジョン/Run/Clearポイントでパス開始
+	var empty_vision: Array[Dictionary] = []
+	var empty_run: Array[Dictionary] = []
+	var empty_clear: Array[Dictionary] = []
+
+	return controller.start_path(path, empty_vision, empty_run, run, empty_clear)
 
 
 ## 特定キャラクターの保留パスをクリア

@@ -105,6 +105,30 @@
 - 既存クラス変更時: 対応するドキュメントを更新
 - docs/ai/COMMON_INSTRUCTION.mdのクラス一覧も必要に応じて更新
 
+## 実装時の重要な注意事項
+
+### キャラクターの向き制御
+
+> **警告: `CharacterBody3D.look_at()`を直接使用しないこと**
+
+| 項目 | 方向 |
+|------|------|
+| Mixamoモデルの前方向 | **+Z** |
+| Godotの`look_at()`がターゲットに向ける軸 | **-Z** |
+
+この180度の差により、キャラクターの向きを変更する際は以下のAPIを使用する：
+
+```gdscript
+# 正しい方法
+character.face_towards(target_pos)           # ターゲット位置を向く
+character.set_facing_direction_vec(direction) # 方向ベクトルで設定
+
+# 間違った方法（使用禁止）
+character.look_at(target_pos, Vector3.UP)    # 180度ずれる
+```
+
+詳細: `docs/godot/api/GameCharacter.md` および `docs/godot/api/CharacterAnimationController.md` を参照。
+
 ## Tool Priority
 1. **Godot MCP** (優先) - シーン作成・編集・実行
 2. **GDScript LSP** (`gdscript-lsp`) - シンボル検索、コード解析
