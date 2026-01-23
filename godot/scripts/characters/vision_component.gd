@@ -29,6 +29,12 @@ const QUALITY_PRESETS := {
 @export_group("Collision Settings")
 @export_flags_3d_physics var wall_collision_mask: int = 2  ## Collision mask for walls
 
+@export_group("Debug")
+@export var debug_draw: bool = false  ## Enable debug visualization
+@export var debug_color: Color = Color(0.2, 0.8, 0.2, 0.3)  ## Vision cone fill color
+@export var debug_line_color: Color = Color(0.2, 1.0, 0.2, 0.8)  ## Vision boundary line color
+@export var debug_hit_color: Color = Color(1.0, 0.3, 0.3, 1.0)  ## Raycast hit point color
+
 # ============================================
 # State
 # ============================================
@@ -52,11 +58,22 @@ var _stationary_frames: int = 0
 const STATIONARY_THRESHOLD: int = 3
 const STATIONARY_UPDATE_MULTIPLIER: float = 3.0  # Update slower when stationary
 
+# Force update flag (bypass change check)
+var _force_next_update: bool = true  # true for first calculation
+
 # ============================================
 # References
 # ============================================
 var _character: Node3D = null
 var _character_rid: RID  # Cached RID for raycast exclusion
+
+# ============================================
+# Debug Drawing
+# ============================================
+var _debug_mesh_instance: MeshInstance3D = null
+var _debug_immediate_mesh: ImmediateMesh = null
+var _debug_material: StandardMaterial3D = null
+var _debug_line_material: StandardMaterial3D = null
 
 
 # ============================================
@@ -68,6 +85,10 @@ func _ready() -> void:
 	# Cache RID for raycast exclusion
 	if _character is CollisionObject3D:
 		_character_rid = _character.get_rid()
+
+	# Setup debug drawing if enabled
+	if debug_draw:
+		_setup_debug_drawing()
 
 
 func _physics_process(delta: float) -> void:
@@ -130,6 +151,7 @@ func disable() -> void:
 	_visible_polygon = PackedVector3Array()
 	_smoothed_initialized = false
 	vision_updated.emit(_visible_polygon)
+	_clear_debug_drawing()
 
 
 ## Enable vision
@@ -141,6 +163,25 @@ func enable() -> void:
 ## Check if vision is enabled
 func is_enabled() -> bool:
 	return _enabled
+
+
+## Enable/disable debug drawing at runtime
+func set_debug_draw(enabled: bool) -> void:
+	debug_draw = enabled
+	if enabled:
+		# デバッグ表示時はVisionComponentを強制有効化（視界計算が必要）
+		_enabled = true
+		_force_next_update = true  # 強制的に初回計算を実行
+		_calculate_vision()
+		_setup_debug_drawing()
+		_update_debug_drawing()
+	else:
+		_clear_debug_drawing()
+		# デバッグ表示OFFで、デバッグメッシュも削除
+		if _debug_mesh_instance and is_instance_valid(_debug_mesh_instance):
+			_debug_mesh_instance.queue_free()
+			_debug_mesh_instance = null
+			_debug_immediate_mesh = null
 
 
 ## Check if a world position is within FOV (lightweight single raycast check)
@@ -198,14 +239,18 @@ func _calculate_vision() -> void:
 	var origin := _get_eye_position()
 	var char_rotation := _get_look_angle()
 
-	# Check if position/angle changed significantly
-	var pos_changed := origin.distance_to(_last_position) >= 0.05
-	var angle_changed := absf(char_rotation - _last_angle) > 0.01
+	# Check if position/angle changed significantly (skip if forced)
+	if not _force_next_update:
+		var pos_changed := origin.distance_to(_last_position) >= 0.05
+		var angle_changed := absf(char_rotation - _last_angle) > 0.01
 
-	if not pos_changed and not angle_changed:
-		_stationary_frames += 1
-		return
+		if not pos_changed and not angle_changed:
+			_stationary_frames += 1
+			return
+		else:
+			_stationary_frames = 0
 	else:
+		_force_next_update = false
 		_stationary_frames = 0
 
 	_last_position = origin
@@ -238,6 +283,131 @@ func _calculate_vision() -> void:
 			_visible_polygon.append(end_point)
 
 	vision_updated.emit(_visible_polygon)
+
+	# Update debug visualization
+	if debug_draw:
+		_update_debug_drawing()
+
+
+# ============================================
+# Debug Drawing
+# ============================================
+
+func _setup_debug_drawing() -> void:
+	if _debug_mesh_instance:
+		return  # Already setup
+
+	# Create ImmediateMesh for drawing
+	_debug_immediate_mesh = ImmediateMesh.new()
+
+	# Create MeshInstance3D
+	_debug_mesh_instance = MeshInstance3D.new()
+	_debug_mesh_instance.mesh = _debug_immediate_mesh
+	_debug_mesh_instance.name = "VisionDebugMesh"
+	_debug_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	# Create fill material (semi-transparent)
+	_debug_material = StandardMaterial3D.new()
+	_debug_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_debug_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_debug_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_debug_material.albedo_color = debug_color
+
+	# Create line material
+	_debug_line_material = StandardMaterial3D.new()
+	_debug_line_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_debug_line_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_debug_line_material.albedo_color = debug_line_color
+
+	# Add to scene (at root level for world-space drawing)
+	get_tree().root.add_child.call_deferred(_debug_mesh_instance)
+
+
+func _clear_debug_drawing() -> void:
+	if _debug_immediate_mesh:
+		_debug_immediate_mesh.clear_surfaces()
+
+
+func _update_debug_drawing() -> void:
+	if not _debug_immediate_mesh or not _debug_mesh_instance:
+		_setup_debug_drawing()
+		return
+
+	if _visible_polygon.size() < 3:
+		_debug_immediate_mesh.clear_surfaces()
+		return
+
+	_debug_immediate_mesh.clear_surfaces()
+
+	var origin := _visible_polygon[0]
+	var draw_height := origin.y + 0.05  # Slightly above ground to avoid z-fighting
+
+	# Update material colors in case they changed
+	_debug_material.albedo_color = debug_color
+	_debug_line_material.albedo_color = debug_line_color
+
+	# Draw filled vision cone (triangles from origin to each edge)
+	_debug_immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _debug_material)
+	for i in range(1, _visible_polygon.size() - 1):
+		var p1 := _visible_polygon[i]
+		var p2 := _visible_polygon[i + 1]
+
+		# Triangle: origin -> p1 -> p2
+		_debug_immediate_mesh.surface_add_vertex(Vector3(origin.x, draw_height, origin.z))
+		_debug_immediate_mesh.surface_add_vertex(Vector3(p1.x, draw_height, p1.z))
+		_debug_immediate_mesh.surface_add_vertex(Vector3(p2.x, draw_height, p2.z))
+	_debug_immediate_mesh.surface_end()
+
+	# Draw vision boundary lines
+	_debug_immediate_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _debug_line_material)
+
+	# FOV boundary edges (first and last rays)
+	if _visible_polygon.size() >= 2:
+		var first_point := _visible_polygon[1]
+		var last_point := _visible_polygon[_visible_polygon.size() - 1]
+
+		# Left edge
+		_debug_immediate_mesh.surface_add_vertex(Vector3(origin.x, draw_height, origin.z))
+		_debug_immediate_mesh.surface_add_vertex(Vector3(first_point.x, draw_height, first_point.z))
+
+		# Right edge
+		_debug_immediate_mesh.surface_add_vertex(Vector3(origin.x, draw_height, origin.z))
+		_debug_immediate_mesh.surface_add_vertex(Vector3(last_point.x, draw_height, last_point.z))
+
+	# Outer arc (connecting all hit points)
+	for i in range(1, _visible_polygon.size() - 1):
+		var p1 := _visible_polygon[i]
+		var p2 := _visible_polygon[i + 1]
+		_debug_immediate_mesh.surface_add_vertex(Vector3(p1.x, draw_height, p1.z))
+		_debug_immediate_mesh.surface_add_vertex(Vector3(p2.x, draw_height, p2.z))
+
+	_debug_immediate_mesh.surface_end()
+
+	# Draw hit points (small crosses at wall intersections)
+	var hit_material := StandardMaterial3D.new()
+	hit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hit_material.albedo_color = debug_hit_color
+
+	_debug_immediate_mesh.surface_begin(Mesh.PRIMITIVE_LINES, hit_material)
+	var cross_size := 0.1
+	for i in range(1, _visible_polygon.size()):
+		var p := _visible_polygon[i]
+		var dist := p.distance_to(origin)
+		# Only draw hit markers for points that hit walls (not at max distance)
+		if dist < view_distance - 0.1:
+			# Small cross at hit point
+			_debug_immediate_mesh.surface_add_vertex(Vector3(p.x - cross_size, draw_height, p.z))
+			_debug_immediate_mesh.surface_add_vertex(Vector3(p.x + cross_size, draw_height, p.z))
+			_debug_immediate_mesh.surface_add_vertex(Vector3(p.x, draw_height, p.z - cross_size))
+			_debug_immediate_mesh.surface_add_vertex(Vector3(p.x, draw_height, p.z + cross_size))
+	_debug_immediate_mesh.surface_end()
+
+
+func _exit_tree() -> void:
+	# Clean up debug mesh when removed from scene
+	if _debug_mesh_instance and is_instance_valid(_debug_mesh_instance):
+		_debug_mesh_instance.queue_free()
+		_debug_mesh_instance = null
 
 
 # ============================================

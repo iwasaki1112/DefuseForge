@@ -366,6 +366,15 @@ func set_vision_enabled(enabled: bool) -> void:
 		vision_service.set_enabled(enabled)
 
 
+## 視界デバッグ表示の切り替え（味方キャラクターの視界コーンを表示）
+func set_vision_debug_draw(enabled: bool) -> void:
+	for character in characters:
+		if PlayerState.is_friendly(character):
+			var game_char := character as GameCharacter
+			if game_char and game_char.vision:
+				game_char.vision.set_debug_draw(enabled)
+
+
 ## ========================================
 ## マップ管理（MapManager委譲）
 ## ========================================

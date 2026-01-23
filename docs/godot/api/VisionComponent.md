@@ -41,6 +41,14 @@ Fog of Warシステム用の視界コンポーネント。等間隔レイキャ�
 |-----------|-----|----------|------|
 | `wall_collision_mask` | `int` | `2` | 壁の衝突マスク |
 
+### Debug
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `debug_draw` | `bool` | `false` | デバッグ表示のON/OFF |
+| `debug_color` | `Color` | 緑半透明 | 視界コーンの塗りつぶし色 |
+| `debug_line_color` | `Color` | 緑 | 視界境界線の色 |
+| `debug_hit_color` | `Color` | 赤 | レイキャストヒットポイントの色 |
+
 ## Public API
 
 ### get_visible_polygon() -> PackedVector3Array
@@ -104,6 +112,27 @@ Fog of Warシステム用の視界コンポーネント。等間隔レイキャ�
 # 敵位置が味方視界内かチェック
 if friendly.vision.is_position_in_view(enemy.global_position):
     print("Enemy in sight!")
+```
+
+### set_debug_draw(enabled: bool) -> void
+デバッグ表示を実行時に切り替える。
+
+**引数:**
+- `enabled` - trueでデバッグ表示ON
+
+**表示内容:**
+- 視界コーン（半透明の扇形）
+- FOV境界線（左右の視界端）
+- 外周アーク（視界範囲の外縁）
+- ヒットポイント（壁との交点に赤い十字）
+
+**使用例:**
+```gdscript
+# デバッグ表示をON
+character.vision.set_debug_draw(true)
+
+# デバッグ表示をOFF
+character.vision.set_debug_draw(false)
 ```
 
 ## 使用例
@@ -192,3 +221,4 @@ func _setup_wall_collisions(node: Node) -> void:
 - `enable() -> void`
 - `is_enabled() -> bool`
 - `is_position_in_view(world_pos: Vector3) -> bool`
+- `set_debug_draw(enabled: bool) -> void`
