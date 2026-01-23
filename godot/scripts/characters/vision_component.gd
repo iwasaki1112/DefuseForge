@@ -117,6 +117,7 @@ func get_visible_polygon() -> PackedVector3Array:
 
 ## Force immediate vision update
 func force_update() -> void:
+	_force_next_update = true
 	_calculate_vision()
 
 
