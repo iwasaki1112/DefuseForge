@@ -17,8 +17,10 @@
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` | 視線ポイント追加時（target_pointはターゲット地点） |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
 | `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
+| `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` | グレネードマーカー追加時 |
+| `door_marker_added` | `path_ratio: float, door: Node3D` | ドアマーカー追加時 |
 | `path_undone` | なし | パス描画がUndoされた時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER） |
+| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR） |
 
 ## Enums
 
@@ -41,6 +43,8 @@
 | `RUN` | Run区間 |
 | `CLEAR` | Clearポイント |
 | `PATH` | パス描画自体 |
+| `GRENADE` | グレネードマーカー |
+| `DOOR` | ドアマーカー |
 
 ## Export Properties
 
@@ -316,6 +320,88 @@ PATHがUndoされると、パスとすべてのマーカーがクリアされ、
 
 **戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
+### Grenade Marker API
+
+#### start_grenade_mode() -> bool
+グレネードマーカー設定モードに切り替える。パス上をクリック→ドラッグでグレネード投擲位置と目標を設定。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_grenade_markers() -> bool
+グレネードマーカーがあるか確認する。
+
+#### get_grenade_markers() -> Array[Dictionary]
+グレネードマーカーを取得する。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_pos": Vector3, "bounce_point": Vector3 }` の配列
+
+#### take_grenade_markers() -> Array[MeshInstance3D]
+グレネードマーカーの所有権を移譲する。
+
+### Door Marker API
+
+#### start_door_mode() -> bool
+ドアマーカー設定モードに切り替える。ドアをクリックしてキック位置を設定。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_door_markers() -> bool
+ドアマーカーがあるか確認する。
+
+#### get_door_markers() -> Array[Dictionary]
+ドアマーカーを取得する。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "door_node": Node3D }` の配列
+
+#### take_door_markers() -> Array[MeshInstance3D]
+ドアマーカーの所有権を移譲する。
+
+### Unified Marker API (新システム)
+
+マーカータイプを問わず統一的にアクセスするためのAPI。`ActionMarkerData.Type`列挙型を使用する。
+
+#### get_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[Dictionary]
+アクティブキャラクターの指定タイプのマーカーデータを取得する。
+
+**引数:**
+- `marker_type` - `ActionMarkerData.Type`の値（VISION, CLEAR, RUN, GRENADE, DOOR）
+
+**戻り値:** 指定タイプのマーカーデータ配列
+
+#### take_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[MeshInstance3D]
+アクティブキャラクターの指定タイプのマーカーメッシュを取得して所有権を移譲する。
+
+**引数:**
+- `marker_type` - `ActionMarkerData.Type`の値
+
+**戻り値:** マーカーメッシュ配列
+
+#### get_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary
+全キャラクターの指定タイプのマーカーデータを取得する。
+
+**引数:**
+- `marker_type` - `ActionMarkerData.Type`の値
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたマーカーデータの辞書
+
+#### take_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary
+全キャラクターの指定タイプのマーカーメッシュを取得して所有権を移譲する。
+
+**引数:**
+- `marker_type` - `ActionMarkerData.Type`の値
+
+**戻り値:** `{ char_id: Array[MeshInstance3D] }`
+
+#### get_all_marker_types_data() -> Dictionary
+全タイプのマーカーデータを一括取得する。
+
+**戻り値:** `{ ActionMarkerData.Type: Array[Dictionary] }`
+
+#### take_all_marker_types_meshes() -> Dictionary
+全タイプのマーカーメッシュを一括取得して所有権を移譲する。
+
+**戻り値:** `{ ActionMarkerData.Type: Array[MeshInstance3D] }`
+
 ### Execution API
 
 #### execute(run: bool = false) -> bool
@@ -556,3 +642,30 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `take_all_vision_markers() -> Dictionary`
 - `take_all_run_markers() -> Dictionary`
 - `take_all_clear_markers() -> Dictionary`
+- `start_grenade_mode() -> bool`
+- `has_grenade_markers() -> bool`
+- `get_grenade_markers() -> Array[Dictionary]`
+- `take_grenade_markers() -> Array[MeshInstance3D]`
+- `start_door_mode() -> bool`
+- `has_door_markers() -> bool`
+- `get_door_markers() -> Array[Dictionary]`
+- `take_door_markers() -> Array[MeshInstance3D]`
+- `get_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[Dictionary]`
+- `take_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[MeshInstance3D]`
+- `get_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary`
+- `take_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary`
+- `get_all_marker_types_data() -> Dictionary`
+- `take_all_marker_types_meshes() -> Dictionary`
+
+## 関連クラス
+
+- `ActionMarker` - アクションマーカーの基底クラス
+- `ActionMarkerData` - マーカーデータの統一基底クラス
+- `MarkerCollection` - マーカーの統一管理コレクション
+- `VisionMarker` - 視線マーカー（ActionMarker継承）
+- `ClearMarker` - クリアマーカー（ActionMarker継承）
+- `RunMarker` - ダッシュマーカー（ActionMarker継承）
+- `GrenadeMarker` - グレネードマーカー（ActionMarker継承）
+- `DoorMarker` - ドアマーカー（ActionMarker継承）
+- `PathLineMesh` - パス描画メッシュ
+- `PathSmoother` - パススムージング
