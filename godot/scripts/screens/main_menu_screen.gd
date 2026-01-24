@@ -8,6 +8,7 @@ extends Control
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const OPTION_SCENE := "res://scenes/screens/option.tscn"
 const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
+const LOGO_TEXTURE := preload("res://assets/images/logo.png")
 
 var _welcome_label: Label
 
@@ -19,16 +20,15 @@ func _ready() -> void:
 
 
 func _setup_ui() -> void:
-	# 背景と中央配置の共通レイアウト
-	ScreenLayoutScript.add_solid_background(self)
+	# 中央配置の共通レイアウト（背景はシーンのTextureRectで設定）
 	var vbox := ScreenLayoutScript.create_centered_vbox(self, 30)
 
-	# タイトル
-	var title := Label.new()
-	title.text = "RescueForge"
-	title.add_theme_font_size_override("font_size", 64)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title)
+	# ロゴ
+	var logo := TextureRect.new()
+	logo.texture = LOGO_TEXTURE
+	logo.expand_mode = TextureRect.EXPAND_KEEP_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	vbox.add_child(logo)
 
 	# Welcome メッセージ
 	_welcome_label = Label.new()
