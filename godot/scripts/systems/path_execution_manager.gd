@@ -10,6 +10,7 @@ const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
+const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -895,3 +896,79 @@ func _create_door_markers_for_path(
 		markers.append(marker)
 
 	return markers
+
+
+#region 統一マーカーAPI
+## マーカータイプのエイリアス
+const MarkerType = ActionMarkerDataScript.Type
+
+
+## 指定タイプのマーカー比率を一括調整
+func adjust_marker_ratios_for_type(
+	marker_data: Array[Dictionary],
+	marker_type: int,
+	connect_length: float,
+	base_length: float
+) -> Array[Dictionary]:
+	match marker_type:
+		MarkerType.VISION:
+			return _adjust_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.RUN:
+			return _adjust_run_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.CLEAR:
+			return _adjust_clear_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.GRENADE:
+			return _adjust_grenade_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.DOOR:
+			return _adjust_door_ratios_for_connection(marker_data, connect_length, base_length)
+		_:
+			return marker_data.duplicate()
+
+
+## 指定タイプのマーカーを一括生成
+func create_markers_for_type(
+	path: Array[Vector3],
+	marker_data: Array[Dictionary],
+	marker_type: int,
+	character: Node
+) -> Array[MeshInstance3D]:
+	match marker_type:
+		MarkerType.VISION:
+			return _create_vision_markers_for_path(path, marker_data, character)
+		MarkerType.RUN:
+			return _create_run_markers_for_path(path, marker_data, character)
+		MarkerType.CLEAR:
+			return _create_clear_markers_for_path(path, marker_data, character)
+		MarkerType.GRENADE:
+			return _create_grenade_markers_for_path(path, marker_data, character)
+		MarkerType.DOOR:
+			return _create_door_markers_for_path(path, marker_data, character)
+		_:
+			return []
+
+
+## PathDrawerから統一APIでマーカーデータを取得
+func get_all_markers_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dictionary:
+	var result: Dictionary = {}
+
+	for type_value in MarkerType.values():
+		if is_multi_mode:
+			result[type_value] = {
+				"data": path_drawer.get_all_markers_by_type(type_value),
+				"meshes": path_drawer.take_all_markers_by_type(type_value)
+			}
+		else:
+			result[type_value] = {
+				"data": path_drawer.get_markers_by_type(type_value).duplicate(),
+				"meshes": path_drawer.take_markers_by_type(type_value)
+			}
+
+	return result
+
+
+## マーカーメッシュを一括削除
+func free_marker_meshes(meshes: Array) -> void:
+	for mesh in meshes:
+		if mesh and is_instance_valid(mesh):
+			mesh.queue_free()
+#endregion
