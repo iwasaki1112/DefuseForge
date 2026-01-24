@@ -107,6 +107,7 @@
 | UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
 | UI | ScreenLayout | 画面UIの共通レイアウト生成ヘルパー |
 | UI | WeaponShopModal | 武器購入モーダル（BUYメニュー） |
+| Weapon | Grenade | 投擲グレネード（放物線軌道・跳ね返り・時間爆発） |
 | Test | FreeCamera | テスト用オービットカメラ |
 | Test | LightingTest | ライティング確認用テストシーン |
 | Test | WeaponAdjustment | 武器位置・マズル調整ツール |

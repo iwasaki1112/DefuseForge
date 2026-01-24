@@ -43,6 +43,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_left_click(event)
 		return
 
+	# グレネードモード中のマウス移動（プレビュー更新）
+	if game_manager.is_grenade_mode() and event is InputEventMouseMotion:
+		game_manager.update_grenade_preview(event.position)
+		# ドラッグ処理も続行
+
 	# 左クリック中のマウス移動
 	if event is InputEventMouseMotion and _left_button_pressed:
 		_handle_left_drag(event)
@@ -168,7 +173,9 @@ func _input(event: InputEvent) -> void:
 
 	# ESCキー処理
 	if event.is_action_pressed("ui_cancel"):
-		if game_manager.is_any_path_following_active():
+		if game_manager.is_grenade_mode():
+			game_manager.end_grenade_mode()
+		elif game_manager.is_any_path_following_active():
 			game_manager.cancel_all_path_following()
 		elif game_manager.is_rotation_active():
 			game_manager.cancel_rotation()

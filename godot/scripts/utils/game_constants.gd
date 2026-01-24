@@ -54,6 +54,18 @@ const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
 const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
 
 # ========================================================
+# Grenade Settings
+# ========================================================
+const GRENADE_FUSE_TIME := 3.0  # 導火線時間（秒）
+const GRENADE_EXPLOSION_RADIUS := 5.0  # 爆発範囲
+const GRENADE_EXPLOSION_DAMAGE := 100.0  # 最大ダメージ
+const GRENADE_ARC_HEIGHT := 2.0  # 放物線高さ
+const GRENADE_BOUNCE := 0.5  # 跳ね返り係数
+const GRENADE_FRICTION := 0.3  # 摩擦係数
+const GRENADE_MASS := 0.4  # 質量
+
+# ========================================================
 # Scene Paths (Use with load/preload if class_name not available)
 # ========================================================
 const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
+const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"

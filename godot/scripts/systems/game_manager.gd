@@ -12,6 +12,7 @@ const WeaponShopModalScript = preload("res://scripts/ui/weapon_shop_modal.gd")
 const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
 const PathServiceScript = preload("res://scripts/systems/path_service.gd")
 const VisionServiceScript = preload("res://scripts/systems/vision_service.gd")
+const GrenadeScene = preload("res://scenes/weapons/grenade.tscn")
 
 ## UI接続用シグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -30,6 +31,10 @@ signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
 ## コンテキストメニュー操作シグナル
 signal context_action_requested(action_id: String, character: Node)
+## グレネード投擲シグナル
+signal grenade_thrown(grenade: Node3D, character: Node)
+signal grenade_mode_started(character: Node)
+signal grenade_mode_ended()
 
 ## コアシステム
 var selection_manager: CharacterSelectionManager = null
@@ -68,6 +73,13 @@ var default_vision_range: float = 15.0
 var default_weapon_id: String = "glock"
 var is_vision_enabled: bool = false
 
+## グレネードモード状態
+var _grenade_mode_active: bool = false
+var _grenade_mode_character: CharacterBody3D = null
+var _grenade_bounce_point: Vector3 = Vector3.ZERO  ## 1タップ目のバウンスポイント
+var _grenade_bounce_normal: Vector3 = Vector3.ZERO  ## バウンス面の法線
+var _grenade_has_bounce_point: bool = false  ## バウンスポイントが設定済みか
+var _grenade_trajectory_mesh: MeshInstance3D = null  ## 軌道プレビュー用メッシュ
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
@@ -146,6 +158,13 @@ func unregister_character(character: Node) -> void:
 
 ## マウス/タッチクリック処理（シーンから呼び出す）
 func handle_click(screen_pos: Vector2, button_index: int) -> bool:
+	# グレネードモード中の処理（2タップ方式）
+	if _grenade_mode_active:
+		if button_index == MOUSE_BUTTON_LEFT or button_index == MOUSE_BUTTON_RIGHT:
+			if _handle_grenade_tap(screen_pos):
+				return true
+			# 投擲失敗時もクリックは消費しない（他の処理に任せる）
+
 	var clicked_character = raycast_character(screen_pos)
 
 	# コンテキストメニューが開いている場合の処理
@@ -878,8 +897,8 @@ func _on_context_menu_item_selected(action_id: String, character: CharacterBody3
 		"rotate":
 			start_rotation_mode(character)
 		"crouch":
-			if character.has_method("toggle_crouch"):
-				character.toggle_crouch()
+			# 仮実装: グレネードモード開始
+			start_grenade_mode(character)
 		"buy":
 			_open_weapon_shop(character)
 		_:
@@ -1123,3 +1142,358 @@ func _on_door_kick_animation_finished(character: CharacterBody3D) -> void:
 	# キャラクターの向きをドア方向に設定
 	if character.has_method("set_facing_direction_vec"):
 		character.set_facing_direction_vec(door_dir)
+
+
+## ========================================
+## グレネード投擲処理（2タップ方式）
+## 1タップ目: バウンスポイント（壁/ドアエッジ）
+## 2タップ目: 最終目標位置 → 投擲実行
+## ========================================
+
+## グレネードモード開始
+func start_grenade_mode(character: CharacterBody3D) -> void:
+	if not character or not is_instance_valid(character):
+		return
+
+	# 既にアクティブな場合は一度終了してリセット
+	if _grenade_mode_active:
+		_cleanup_grenade_trajectory_mesh()
+
+	_grenade_mode_active = true
+	_grenade_mode_character = character
+	_grenade_has_bounce_point = false
+	_grenade_bounce_point = Vector3.ZERO
+	_grenade_bounce_normal = Vector3.ZERO
+
+	# コンテキストメニューを閉じる
+	if context_menu and context_menu.is_open():
+		context_menu.close()
+
+	# 軌道プレビュー用メッシュを作成
+	_setup_grenade_trajectory_mesh()
+
+	grenade_mode_started.emit(character)
+
+
+## グレネードモード終了
+func end_grenade_mode() -> void:
+	if not _grenade_mode_active:
+		return
+
+	_grenade_mode_active = false
+	_grenade_mode_character = null
+	_grenade_has_bounce_point = false
+	_grenade_bounce_point = Vector3.ZERO
+	_grenade_bounce_normal = Vector3.ZERO
+
+	# 軌道プレビューを削除
+	_cleanup_grenade_trajectory_mesh()
+
+	grenade_mode_ended.emit()
+
+
+## グレネードモード中かどうか
+func is_grenade_mode() -> bool:
+	return _grenade_mode_active
+
+
+## バウンスポイントが設定済みか
+func has_grenade_bounce_point() -> bool:
+	return _grenade_has_bounce_point
+
+
+## グレネードモードのキャラクターを取得
+func get_grenade_mode_character() -> CharacterBody3D:
+	return _grenade_mode_character
+
+
+## グレネードタップ処理（2タップ方式）
+## Returns: 処理成功したかどうか
+func _handle_grenade_tap(screen_pos: Vector2) -> bool:
+	if not _grenade_mode_active or not _grenade_mode_character:
+		return false
+
+	if not is_instance_valid(_grenade_mode_character):
+		end_grenade_mode()
+		return false
+
+	if not _grenade_has_bounce_point:
+		# 1タップ目: バウンスポイントを設定
+		return _set_grenade_bounce_point(screen_pos)
+	else:
+		# 2タップ目: 投擲実行
+		return _execute_grenade_throw(screen_pos)
+
+
+## グレネードが壁に当たる固定高さ（地面からの高さ）
+const GRENADE_WALL_HIT_HEIGHT: float = 1.0
+
+## 1タップ目: 壁ならバウンスポイント設定、床なら直接投擲
+func _set_grenade_bounce_point(screen_pos: Vector2) -> bool:
+	# 壁または床へのレイキャスト
+	var hit_result = _raycast_wall_or_floor(screen_pos)
+	if hit_result.is_empty():
+		return false
+
+	var hit_pos: Vector3 = hit_result.position
+	var hit_normal: Vector3 = hit_result.normal
+
+	# 壁かどうか判定（法線が水平に近い = 壁）
+	var is_wall = abs(hit_normal.y) < 0.5
+
+	# 投擲開始位置
+	var start_pos = _grenade_mode_character.global_position + Vector3(0, 1.5, 0)
+
+	if is_wall:
+		# 壁の場合: バウンスポイントを設定して2タップ目を待つ
+		hit_pos.y = GRENADE_WALL_HIT_HEIGHT
+
+		if not _is_grenade_path_clear(start_pos, hit_pos):
+			return false
+
+		_grenade_bounce_point = hit_pos
+		_grenade_bounce_normal = hit_normal
+		_grenade_has_bounce_point = true
+
+		# 軌道プレビューを更新（バウンスポイントまでの線）
+		_update_grenade_trajectory_preview()
+		return true
+	else:
+		# 床の場合: 直接投擲（2タップ目不要）
+		if not _is_grenade_path_clear(start_pos, hit_pos):
+			return false
+
+		return _throw_grenade_direct(hit_pos)
+
+
+## グレネードを直接投擲（バウンスなし）
+func _throw_grenade_direct(target_pos: Vector3) -> bool:
+	if not _grenade_mode_character or not is_instance_valid(_grenade_mode_character):
+		return false
+
+	var start_pos = _grenade_mode_character.global_position + Vector3(0, 1.5, 0)
+
+	# グレネードをインスタンス化
+	var grenade = GrenadeScene.instantiate() as Grenade
+	if not grenade:
+		return false
+
+	# ワールドに追加
+	_mesh_parent.add_child(grenade)
+
+	# 直接投擲
+	grenade.throw(start_pos, target_pos, _grenade_mode_character)
+
+	# シグナル発火
+	grenade_thrown.emit(grenade, _grenade_mode_character)
+
+	# グレネードモード終了
+	end_grenade_mode()
+
+	# 選択解除
+	if selection_manager:
+		selection_manager.deselect_all()
+
+	return true
+
+
+## 2タップ目: グレネード投擲実行
+func _execute_grenade_throw(screen_pos: Vector2) -> bool:
+	# 最終目標位置を取得
+	var target_pos = _screen_to_ground_position(screen_pos)
+	if target_pos == Vector3.ZERO:
+		return false
+
+	# 投擲開始位置
+	var start_pos = _grenade_mode_character.global_position + Vector3(0, 1.5, 0)
+
+	# グレネードをインスタンス化
+	var grenade = GrenadeScene.instantiate() as Grenade
+	if not grenade:
+		return false
+
+	# ワールドに追加
+	_mesh_parent.add_child(grenade)
+
+	# バウンス投擲実行
+	grenade.throw_with_bounce(start_pos, _grenade_bounce_point, _grenade_bounce_normal, target_pos, _grenade_mode_character)
+
+	# シグナル発火
+	grenade_thrown.emit(grenade, _grenade_mode_character)
+
+	# グレネードモード終了
+	end_grenade_mode()
+
+	# 選択解除
+	if selection_manager:
+		selection_manager.deselect_all()
+
+	return true
+
+
+## スクリーン座標を地面位置に変換
+func _screen_to_ground_position(screen_pos: Vector2) -> Vector3:
+	if not camera:
+		return Vector3.ZERO
+
+	var ray_origin = camera.project_ray_origin(screen_pos)
+	var ray_dir = camera.project_ray_normal(screen_pos)
+
+	# 地面平面（Y=0）との交差を計算
+	var ground_plane = Plane(Vector3.UP, 0.0)
+	var intersection = ground_plane.intersects_ray(ray_origin, ray_dir)
+
+	if intersection:
+		return intersection
+	return Vector3.ZERO
+
+
+## 壁または床へのレイキャスト（法線情報付き）
+func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
+	if not camera or not _mesh_parent:
+		return {}
+
+	var ray_origin = camera.project_ray_origin(screen_pos)
+	var ray_dir = camera.project_ray_normal(screen_pos)
+	var ray_end = ray_origin + ray_dir * 100.0
+
+	var space_state = _mesh_parent.get_world_3d().direct_space_state
+	if not space_state:
+		return {}
+
+	# 壁と床の両方を検出（mask = 1 | 2 = 3）
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end, 3)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var result = space_state.intersect_ray(query)
+	return result
+
+
+## グレネード軌道が障害物なしで到達可能かチェック
+func _is_grenade_path_clear(from: Vector3, to: Vector3) -> bool:
+	if not _mesh_parent:
+		return true
+
+	var space_state = _mesh_parent.get_world_3d().direct_space_state
+	if not space_state:
+		return true
+
+	var query = PhysicsRayQueryParameters3D.create(from, to, 2)  # 壁のみ
+	var result = space_state.intersect_ray(query)
+
+	if result.is_empty():
+		return true
+
+	# 目標位置に非常に近い場合はOK（壁自体をターゲットにしている）
+	var hit_pos: Vector3 = result.position
+	return hit_pos.distance_to(to) < 0.3
+
+
+## 軌道プレビュー用メッシュをセットアップ
+func _setup_grenade_trajectory_mesh() -> void:
+	if _grenade_trajectory_mesh:
+		return
+
+	_grenade_trajectory_mesh = MeshInstance3D.new()
+	_grenade_trajectory_mesh.name = "GrenadeTrajectoryPreview"
+	_mesh_parent.add_child(_grenade_trajectory_mesh)
+
+	# マテリアル設定
+	var mat = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.5, 0.0, 0.8)  # オレンジ
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_grenade_trajectory_mesh.material_override = mat
+
+
+## グレネードプレビューを更新（マウス移動時に呼ばれる）
+func update_grenade_preview(screen_pos: Vector2) -> void:
+	if not _grenade_mode_active or not _grenade_mode_character:
+		return
+
+	if not is_instance_valid(_grenade_mode_character):
+		return
+
+	# 現在のマウス位置を3D座標に変換
+	var current_pos = _screen_to_ground_position(screen_pos)
+	if current_pos == Vector3.ZERO:
+		# 地面に当たらない場合は壁へのレイキャスト
+		var hit = _raycast_wall_or_floor(screen_pos)
+		if not hit.is_empty():
+			current_pos = hit.position
+
+	if current_pos == Vector3.ZERO:
+		return
+
+	# 軌道プレビューを更新
+	_update_grenade_trajectory_preview(current_pos)
+
+
+## 軌道プレビューを更新
+## target_pos: 2タップ目のターゲット位置（マウス位置）。省略時はバウンスポイントのみ表示
+func _update_grenade_trajectory_preview(target_pos: Vector3 = Vector3.ZERO) -> void:
+	if not _grenade_trajectory_mesh or not _grenade_mode_character:
+		return
+
+	var start_pos = _grenade_mode_character.global_position + Vector3(0, 1.5, 0)
+
+	# ImmediateMeshで線を描画
+	var im = ImmediateMesh.new()
+	im.surface_begin(Mesh.PRIMITIVE_LINES)
+
+	if _grenade_has_bounce_point:
+		# バウンスポイントが設定済み: 開始点→バウンス→ターゲット
+		# 第1区間: 開始点からバウンスポイント
+		im.surface_add_vertex(start_pos)
+		im.surface_add_vertex(_grenade_bounce_point)
+
+		# バウンスポイントにマーカー（クロス）
+		var cross_size = 0.2
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(-cross_size, 0, 0))
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(cross_size, 0, 0))
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(0, -cross_size, 0))
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(0, cross_size, 0))
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(0, 0, -cross_size))
+		im.surface_add_vertex(_grenade_bounce_point + Vector3(0, 0, cross_size))
+
+		# 第2区間: バウンスポイントからターゲット（破線風に）
+		if target_pos != Vector3.ZERO:
+			var bounce_to_target = target_pos - _grenade_bounce_point
+			var distance = bounce_to_target.length()
+			var direction = bounce_to_target.normalized()
+			var dash_length = 0.3
+			var gap_length = 0.15
+			var current_dist = 0.0
+
+			while current_dist < distance:
+				var dash_start = _grenade_bounce_point + direction * current_dist
+				var dash_end_dist = min(current_dist + dash_length, distance)
+				var dash_end = _grenade_bounce_point + direction * dash_end_dist
+
+				im.surface_add_vertex(dash_start)
+				im.surface_add_vertex(dash_end)
+
+				current_dist += dash_length + gap_length
+
+			# ターゲット位置にマーカー（小さいクロス）
+			var target_cross_size = 0.15
+			im.surface_add_vertex(target_pos + Vector3(-target_cross_size, 0, 0))
+			im.surface_add_vertex(target_pos + Vector3(target_cross_size, 0, 0))
+			im.surface_add_vertex(target_pos + Vector3(0, 0, -target_cross_size))
+			im.surface_add_vertex(target_pos + Vector3(0, 0, target_cross_size))
+	else:
+		# バウンスポイント未設定: 開始点から現在のマウス位置への線
+		if target_pos != Vector3.ZERO:
+			im.surface_add_vertex(start_pos)
+			im.surface_add_vertex(target_pos)
+
+	im.surface_end()
+	_grenade_trajectory_mesh.mesh = im
+
+
+## 軌道プレビューを削除
+func _cleanup_grenade_trajectory_mesh() -> void:
+	if _grenade_trajectory_mesh:
+		_grenade_trajectory_mesh.queue_free()
+		_grenade_trajectory_mesh = null

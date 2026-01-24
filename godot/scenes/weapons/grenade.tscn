@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3 uid="uid://dxpqz8km7h3ry"]
+
+[ext_resource type="Script" path="res://scripts/weapons/grenade.gd" id="1_grenade"]
+[ext_resource type="PackedScene" uid="uid://gjhu0hjnilsv" path="res://assets/weapons/hand_granade/hand_granade.glb" id="2_model"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_1"]
+radius = 0.08
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_1"]
+bounce = 0.5
+friction = 0.3
+
+[node name="Grenade" type="RigidBody3D"]
+collision_layer = 1
+collision_mask = 3
+mass = 0.4
+physics_material_override = SubResource("PhysicsMaterial_1")
+continuous_cd = true
+max_contacts_reported = 4
+contact_monitor = true
+script = ExtResource("1_grenade")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_1")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)

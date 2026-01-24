@@ -398,7 +398,9 @@ func _rebuild_buttons() -> void:
 			texture_button.size = scaled_size
 			texture_button.disabled = not item.enabled
 			texture_button.tooltip_text = item.display_name
-			texture_button.texture_click_mask = _get_click_mask(segment_texture)
+			# セグメントモードでは角度ベースでクリック検出するため
+			# TextureButtonはクリックを通過させる（表示専用）
+			texture_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			button = texture_button
 		else:
 			var text_button = Button.new()
@@ -442,28 +444,63 @@ func _rebuild_buttons() -> void:
 ## ボタン押下時
 func _on_button_pressed(action_id: String) -> void:
 	var character = _current_character
+	if not character:
+		return
 	close()
 	item_selected.emit(action_id, character)
 
 
-## メニュー外クリック検出
+## メニュー外クリック検出 & セグメントクリック処理
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton or event is InputEventScreenTouch:
 		var pressed = false
+		var is_left_button = true
 		if event is InputEventMouseButton:
 			pressed = event.pressed
+			is_left_button = event.button_index == MOUSE_BUTTON_LEFT
 		elif event is InputEventScreenTouch:
 			pressed = event.pressed
 
-		if pressed and _is_open:
+		if pressed and is_left_button and _is_open:
 			var local_pos = _menu_root.get_local_mouse_position()
+			var center = _menu_root.size * 0.5
+			var from_center = local_pos - center
+			var dist_from_center = from_center.length()
+
+			# セグメントテクスチャモードの場合、角度ベースでセグメントを判定
+			# 回転したセグメントは_menu_rootの境界外にはみ出すため、距離ベースで判定
+			if use_segment_textures and _has_any_segment_texture():
+				# 内側半径（中央の穴）と外側半径（メニュー範囲）
+				var menu_radius = min(_menu_root.size.x, _menu_root.size.y) * 0.5
+				var inner_radius = menu_radius * 0.3  # 中央30%は穴
+				var outer_radius = menu_radius * 1.2  # 外側は20%余裕を持たせる
+
+				# 範囲外はGameManagerに委譲
+				if dist_from_center > outer_radius:
+					return
+
+				# 中央の穴は背景クリック
+				if dist_from_center < inner_radius:
+					var character = _current_character
+					close()
+					background_clicked.emit(character)
+					get_viewport().set_input_as_handled()
+					return
+
+				# 角度からセグメントを特定
+				var action_id = _get_segment_at_angle(from_center)
+				if action_id != "":
+					_on_button_pressed(action_id)
+					get_viewport().set_input_as_handled()
+				return
+
+			# 通常モード：パネル境界チェック
 			var panel_rect = Rect2(Vector2.ZERO, _menu_root.size)
 			if not panel_rect.has_point(local_pos):
-				# パネル外をクリックした場合は入力を消費せず、GameManagerに処理を委譲
-				# GameManager.handle_clickでドアチェックやメニュークローズが行われる
 				return
-			elif not _is_point_over_any_button(local_pos):
-				# パネル内だがボタン以外（中央の穴など）をクリックした場合
+
+			# ボタン以外は背景クリック
+			if not _is_point_over_any_button(local_pos):
 				var character = _current_character
 				close()
 				background_clicked.emit(character)
@@ -550,6 +587,49 @@ func _get_segment_rotation_degrees(action_id: String) -> float:
 
 func _has_any_segment_texture() -> bool:
 	return segment_move_texture or segment_rotation_texture or segment_buy_texture or segment_crouch_texture
+
+
+## 角度からセグメントのaction_idを取得
+## 4分割メニュー: 各セグメントは90度ずつ
+## move=0°, rotate=90°, buy=180°, crouch=270° (標準設定の場合)
+func _get_segment_at_angle(from_center: Vector2) -> String:
+	# atan2で角度を取得（-PI～PIの範囲、Y軸上向きが0）
+	var angle = atan2(from_center.x, -from_center.y)  # 上向きを0度とする
+	# 0～TAUの範囲に正規化
+	if angle < 0:
+		angle += TAU
+
+	# 角度を度数に変換
+	var angle_deg = rad_to_deg(angle)
+
+	# セグメント数（現在は4固定）
+	var segment_count = 4
+	var segment_angle = 360.0 / segment_count  # 90度
+
+	# 各セグメントの中心角度を計算し、最も近いセグメントを見つける
+	var segments = [
+		{"id": "move", "center": segment_move_rotation_degrees},
+		{"id": "rotate", "center": segment_rotation_rotation_degrees},
+		{"id": "buy", "center": segment_buy_rotation_degrees},
+		{"id": "crouch", "center": segment_crouch_rotation_degrees},
+	]
+
+	var best_id = ""
+	var best_diff = 999.0
+
+	for seg in segments:
+		# セグメントの中心角度（正規化）
+		var center = fmod(seg["center"] + 360.0, 360.0)
+		# クリック角度との差（最短距離）
+		var diff = absf(angle_deg - center)
+		if diff > 180.0:
+			diff = 360.0 - diff
+		# 45度以内なら候補
+		if diff < segment_angle / 2.0 and diff < best_diff:
+			best_diff = diff
+			best_id = seg["id"]
+
+	return best_id
 
 
 func _get_segment_base_size() -> float:
