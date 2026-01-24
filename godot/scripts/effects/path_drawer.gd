@@ -1167,6 +1167,11 @@ func undo_last_marker() -> int:
 		MarkerType.DOOR:
 			_undo_door_marker()
 
+	# MarkerCollectionもUndo（同期を保つ）
+	# Note: PATHは共通履歴なのでMarkerCollectionには影響なし
+	if last_type != MarkerType.PATH and _multi_character_mode and _active_edit_character:
+		_undo_last_marker_from_collection(_active_edit_character)
+
 	return last_type
 
 
@@ -1345,6 +1350,12 @@ func _undo_path() -> void:
 			data.door_markers.clear()
 			data.door_meshes.clear()
 			data.marker_history.clear()
+
+		# MarkerCollectionもクリア（メッシュは上で既にfreeしているので履歴・データのみ）
+		for char_id in _character_collections:
+			var collection = _character_collections[char_id]
+			if collection:
+				collection.clear_all()
 
 	# シグナルを発火
 	path_undone.emit()
