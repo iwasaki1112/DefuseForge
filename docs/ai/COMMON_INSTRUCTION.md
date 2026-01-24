@@ -63,6 +63,8 @@
 | Character | PathFollowingController | パス追従＋視線ポイント＋Run/Clear/Grenade/Doorマーカー処理＋スタック検出を行う再利用可能コントローラー |
 | Character | CharacterRotationController | 視線方向変更のスムーズな回転制御 |
 | Effect | ActionMarker | アクションマーカーの基底クラス（Vision/Clear/Run/Door/Grenadeの共通機能） |
+| Effect | ActionMarkerData | マーカーデータの統一基底クラス＋各種マーカーデータサブクラス |
+| Effect | MarkerCollection | マーカーの統一管理コレクション（タイプ別管理・Undo対応） |
 | Effect | PathDrawer | マウスドラッグでパス描画（ドア貫通可能）＋視線ポイント＋Run/Clear/Grenade/Doorマーカー設定 |
 | Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | Effect | RunMarker | Run区間の開始/終点を示すマーカー（ActionMarker継承） |
