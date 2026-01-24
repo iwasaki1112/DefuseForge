@@ -446,11 +446,11 @@ func _on_path_cancelled(_character: Node) -> void:
 	pass
 
 
-func _on_grenade_marker_reached(index: int, marker_data: Dictionary, character: Node) -> void:
+func _on_grenade_marker_reached(_index: int, marker_data: Dictionary, character: Node) -> void:
 	grenade_marker_reached.emit(character, marker_data)
 
 
-func _on_door_marker_reached(index: int, door: Node3D, character: Node) -> void:
+func _on_door_marker_reached(_index: int, door: Node3D, character: Node) -> void:
 	door_marker_reached.emit(character, door)
 
 

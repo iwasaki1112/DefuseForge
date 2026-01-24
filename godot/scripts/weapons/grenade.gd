@@ -69,8 +69,8 @@ func _calculate_throw_velocity(start: Vector3, target: Vector3, _arc_height: flo
 	# 投擲速度（距離に応じて調整、ゆっくり転がす）
 	var throw_speed = clamp(horizontal_distance * 0.5, 2.0, 5.0)
 
-	# ターゲットへの3D方向
-	var direction = displacement.normalized()
+	# ターゲットへの3D方向（将来の使用のため保持）
+	var _direction = displacement.normalized()
 
 	# 近〜中距離（8m以下）: ほぼ直線的に投げる
 	if horizontal_distance < 8.0:
