@@ -1,52 +1,30 @@
 class_name DoorMarker
-extends MeshInstance3D
+extends ActionMarker
 
 ## ドアマーカー（円形背景 + ドアアイコン + ドアへの接続線）
 ## パス上のドアキック位置に表示され、対象ドアへの接続線を示す
 
-@export var circle_radius: float = 0.3  ## 円の半径
-@export var circle_color: Color = Color(0.1, 0.1, 0.1, 0.95)  ## 円の背景色
-@export var icon_color: Color = Color(0.8, 0.6, 0.3, 1.0)  ## アイコンの色（ブラウン系）
-@export var height_offset: float = 0.03  ## 地面からの高さ
-@export var segments: int = 32  ## 円のセグメント数
 @export var connection_line_color: Color = Color(0.8, 0.6, 0.3, 0.8)  ## 接続線の色
 @export var connection_line_width: float = 0.02  ## 接続線の太さ
 
-var _array_mesh: ArrayMesh
-var _circle_material: StandardMaterial3D
-var _icon_material: StandardMaterial3D
 var _connection_material: StandardMaterial3D
 var _door_node: Node3D = null  ## 対象ドア
 var _door_position: Vector3 = Vector3.ZERO  ## ドアの位置
 var _connection_mesh: MeshInstance3D = null  ## 接続線用メッシュ
 
 
-func _ready() -> void:
-	_setup_mesh()
+func _init() -> void:
+	# デフォルト色を設定
+	circle_color = Color(0.1, 0.1, 0.1, 0.95)
+	icon_color = Color(0.8, 0.6, 0.3, 1.0)  # ブラウン系
+
+
+func get_action_marker_type() -> MarkerType:
+	return MarkerType.DOOR
 
 
 func _setup_mesh() -> void:
-	_array_mesh = ArrayMesh.new()
-	mesh = _array_mesh
-
-	# 円のマテリアル
-	_circle_material = StandardMaterial3D.new()
-	_circle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_circle_material.albedo_color = circle_color
-	_circle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_circle_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_circle_material.render_priority = 10
-
-	# アイコンのマテリアル
-	_icon_material = StandardMaterial3D.new()
-	_icon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_icon_material.albedo_color = icon_color
-	_icon_material.emission_enabled = true
-	_icon_material.emission = icon_color
-	_icon_material.emission_energy_multiplier = 1.2
-	_icon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_icon_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_icon_material.render_priority = 11
+	super._setup_mesh()
 
 	# 接続線のマテリアル
 	_connection_material = StandardMaterial3D.new()
@@ -56,55 +34,9 @@ func _setup_mesh() -> void:
 	_connection_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_connection_material.render_priority = 9
 
-	_build_mesh()
 
-
-func _build_mesh() -> void:
-	_array_mesh.clear_surfaces()
-
-	# 塗りつぶし円を生成
-	_build_filled_circle()
-
-	# ドアアイコンを生成
-	_build_door_icon()
-
-
-## 塗りつぶし円を構築
-func _build_filled_circle() -> void:
-	var vertices = PackedVector3Array()
-	var indices = PackedInt32Array()
-
-	# 中心点
-	vertices.append(Vector3(0, 0, 0))
-
-	# 円周上の頂点
-	for i in range(segments):
-		var angle = TAU * i / segments
-		vertices.append(Vector3(
-			cos(angle) * circle_radius,
-			0,
-			sin(angle) * circle_radius
-		))
-
-	# 三角形で塗りつぶし
-	for i in range(segments):
-		var curr = i + 1
-		var next = (i + 1) % segments + 1
-		indices.append(0)  # 中心
-		indices.append(curr)
-		indices.append(next)
-
-	var arrays = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_INDEX] = indices
-
-	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_array_mesh.surface_set_material(0, _circle_material)
-
-
-## ドアアイコン（長方形 + 取っ手）を構築
-func _build_door_icon() -> void:
+## アイコン（ドアアイコン）を構築
+func _build_icon() -> void:
 	var vertices = PackedVector3Array()
 	var indices = PackedInt32Array()
 
@@ -202,17 +134,6 @@ func get_door_node() -> Node3D:
 ## ドアの位置を取得
 func get_door_position() -> Vector3:
 	return _door_position
-
-
-## 色を変更
-func set_colors(bg_color: Color, fg_color: Color) -> void:
-	circle_color = bg_color
-	icon_color = fg_color
-	if _circle_material:
-		_circle_material.albedo_color = bg_color
-	if _icon_material:
-		_icon_material.albedo_color = fg_color
-		_icon_material.emission = fg_color
 
 
 ## 接続線の色を設定

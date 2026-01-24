@@ -10,6 +10,7 @@ const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
+const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -119,21 +120,11 @@ func confirm_path(
 			all_door_markers_data[cid] = base_door.duplicate()
 
 		# 元のマーカーは後で削除
-		for marker in original_vision_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_run_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_clear_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_grenade_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_door_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
+		free_marker_meshes(original_vision_markers)
+		free_marker_meshes(original_run_markers)
+		free_marker_meshes(original_clear_markers)
+		free_marker_meshes(original_grenade_markers)
+		free_marker_meshes(original_door_markers)
 
 	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
 
@@ -200,26 +191,17 @@ func confirm_path(
 		var path_mesh = _create_path_mesh(full_display_path, character)
 
 		# マルチモードの場合、元のマーカーを削除して新しいマーカーを生成
-		if is_multi_mode and all_vision_markers.has(char_id):
-			for marker in all_vision_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_run_markers.has(char_id):
-			for marker in all_run_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_clear_markers.has(char_id):
-			for marker in all_clear_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_grenade_markers.has(char_id):
-			for marker in all_grenade_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_door_markers.has(char_id):
-			for marker in all_door_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
+		if is_multi_mode:
+			if all_vision_markers.has(char_id):
+				free_marker_meshes(all_vision_markers[char_id])
+			if all_run_markers.has(char_id):
+				free_marker_meshes(all_run_markers[char_id])
+			if all_clear_markers.has(char_id):
+				free_marker_meshes(all_clear_markers[char_id])
+			if all_grenade_markers.has(char_id):
+				free_marker_meshes(all_grenade_markers[char_id])
+			if all_door_markers.has(char_id):
+				free_marker_meshes(all_door_markers[char_id])
 
 		# 各キャラクター用にマーカーを新規生成
 		var char_vision_markers_nodes = _create_vision_markers_for_path(
@@ -492,59 +474,26 @@ func _clear_pending_path_for_character(char_id: int) -> void:
 	if not pending_paths.has(char_id):
 		return
 
-	var old_data = pending_paths[char_id]
-	if old_data.has("path_mesh") and is_instance_valid(old_data["path_mesh"]):
-		old_data["path_mesh"].queue_free()
-	if old_data.has("vision_markers"):
-		for marker in old_data["vision_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("run_markers"):
-		for marker in old_data["run_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("clear_markers"):
-		for marker in old_data["clear_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("grenade_markers"):
-		for marker in old_data["grenade_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("door_markers"):
-		for marker in old_data["door_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-
+	_free_pending_path_data(pending_paths[char_id])
 	pending_paths.erase(char_id)
 
 
-## 全てのパスメッシュと視線マーカーとRunマーカーとClearマーカーとグレネード/ドアマーカーを削除
+## 全てのパスメッシュとマーカーを削除
 func _clear_all_path_meshes() -> void:
 	for char_id in pending_paths:
-		var data = pending_paths[char_id]
-		if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
-			data["path_mesh"].queue_free()
-		if data.has("vision_markers"):
-			for marker in data["vision_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("run_markers"):
-			for marker in data["run_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("clear_markers"):
-			for marker in data["clear_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("grenade_markers"):
-			for marker in data["grenade_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("door_markers"):
-			for marker in data["door_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
+		_free_pending_path_data(pending_paths[char_id])
+
+
+## pending_pathsのデータからメッシュとマーカーを解放
+func _free_pending_path_data(data: Dictionary) -> void:
+	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
+		data["path_mesh"].queue_free()
+
+	# 全マーカータイプを一括解放
+	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "door_markers"]
+	for key in marker_keys:
+		if data.has(key):
+			free_marker_meshes(data[key])
 
 
 ## パスの長さを計算
@@ -555,18 +504,25 @@ func _calculate_path_length(path: Array[Vector3]) -> float:
 	return length
 
 
+## 単一の比率を接続線を考慮して調整（共通ヘルパー）
+## @param old_ratio: 元の比率 (0.0 ~ 1.0)
+## @param connect_length: 接続線の長さ
+## @param base_length: 元のパスの長さ
+## @return: 調整後の比率
+func _adjust_single_ratio(old_ratio: float, connect_length: float, base_length: float) -> float:
+	var new_length = connect_length + base_length
+	return (connect_length + old_ratio * base_length) / new_length
+
+
 ## 接続線を考慮して視線ポイントの比率を調整（ターゲットポイントモード対応）
 func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
 	if connect_length < 0.01 or base_length < 0.01:
 		return vision_points.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for vp in vision_points:
-		var old_ratio: float = vp.path_ratio
-		# 新しい比率 = (接続線の長さ + 元の比率 * 元のパス長さ) / 新しいパス長さ
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
+		var new_ratio: float = _adjust_single_ratio(vp.path_ratio, connect_length, base_length)
 
 		# ターゲットポイントモードか固定方向モードかをチェック
 		if vp.has("target_point"):
@@ -591,18 +547,12 @@ func _adjust_run_ratios_for_connection(run_segments: Array[Dictionary], connect_
 	if connect_length < 0.01 or base_length < 0.01:
 		return run_segments.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for seg in run_segments:
-		var old_start: float = seg.start_ratio
-		var old_end: float = seg.end_ratio
-		# 新しい比率を計算
-		var new_start: float = (connect_length + old_start * base_length) / new_length
-		var new_end: float = (connect_length + old_end * base_length) / new_length
 		adjusted.append({
-			"start_ratio": new_start,
-			"end_ratio": new_end
+			"start_ratio": _adjust_single_ratio(seg.start_ratio, connect_length, base_length),
+			"end_ratio": _adjust_single_ratio(seg.end_ratio, connect_length, base_length)
 		})
 
 	return adjusted
@@ -746,14 +696,11 @@ func _adjust_clear_ratios_for_connection(clear_points: Array[Dictionary], connec
 	if connect_length < 0.01 or base_length < 0.01:
 		return clear_points.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for cp in clear_points:
-		var old_ratio: float = cp.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		adjusted.append({
-			"path_ratio": new_ratio
+			"path_ratio": _adjust_single_ratio(cp.path_ratio, connect_length, base_length)
 		})
 
 	return adjusted
@@ -795,14 +742,11 @@ func _adjust_grenade_ratios_for_connection(grenade_markers: Array[Dictionary], c
 	if connect_length < 0.01 or base_length < 0.01:
 		return grenade_markers.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for gm in grenade_markers:
-		var old_ratio: float = gm.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		var new_marker: Dictionary = {
-			"path_ratio": new_ratio,
+			"path_ratio": _adjust_single_ratio(gm.path_ratio, connect_length, base_length),
 			"anchor": gm.anchor,
 			"target_pos": gm.target_pos
 		}
@@ -821,14 +765,11 @@ func _adjust_door_ratios_for_connection(door_markers: Array[Dictionary], connect
 	if connect_length < 0.01 or base_length < 0.01:
 		return door_markers.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for dm in door_markers:
-		var old_ratio: float = dm.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		adjusted.append({
-			"path_ratio": new_ratio,
+			"path_ratio": _adjust_single_ratio(dm.path_ratio, connect_length, base_length),
 			"door_node": dm.door_node if dm.has("door_node") else dm.get("door")
 		})
 
@@ -903,3 +844,79 @@ func _create_door_markers_for_path(
 		markers.append(marker)
 
 	return markers
+
+
+#region 統一マーカーAPI
+## マーカータイプのエイリアス
+const MarkerType = ActionMarkerDataScript.Type
+
+
+## 指定タイプのマーカー比率を一括調整
+func adjust_marker_ratios_for_type(
+	marker_data: Array[Dictionary],
+	marker_type: int,
+	connect_length: float,
+	base_length: float
+) -> Array[Dictionary]:
+	match marker_type:
+		MarkerType.VISION:
+			return _adjust_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.RUN:
+			return _adjust_run_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.CLEAR:
+			return _adjust_clear_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.GRENADE:
+			return _adjust_grenade_ratios_for_connection(marker_data, connect_length, base_length)
+		MarkerType.DOOR:
+			return _adjust_door_ratios_for_connection(marker_data, connect_length, base_length)
+		_:
+			return marker_data.duplicate()
+
+
+## 指定タイプのマーカーを一括生成
+func create_markers_for_type(
+	path: Array[Vector3],
+	marker_data: Array[Dictionary],
+	marker_type: int,
+	character: Node
+) -> Array[MeshInstance3D]:
+	match marker_type:
+		MarkerType.VISION:
+			return _create_vision_markers_for_path(path, marker_data, character)
+		MarkerType.RUN:
+			return _create_run_markers_for_path(path, marker_data, character)
+		MarkerType.CLEAR:
+			return _create_clear_markers_for_path(path, marker_data, character)
+		MarkerType.GRENADE:
+			return _create_grenade_markers_for_path(path, marker_data, character)
+		MarkerType.DOOR:
+			return _create_door_markers_for_path(path, marker_data, character)
+		_:
+			return []
+
+
+## PathDrawerから統一APIでマーカーデータを取得
+func get_all_markers_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dictionary:
+	var result: Dictionary = {}
+
+	for type_value in MarkerType.values():
+		if is_multi_mode:
+			result[type_value] = {
+				"data": path_drawer.get_all_markers_by_type(type_value),
+				"meshes": path_drawer.take_all_markers_by_type(type_value)
+			}
+		else:
+			result[type_value] = {
+				"data": path_drawer.get_markers_by_type(type_value).duplicate(),
+				"meshes": path_drawer.take_markers_by_type(type_value)
+			}
+
+	return result
+
+
+## マーカーメッシュを一括削除
+func free_marker_meshes(meshes: Array) -> void:
+	for mesh in meshes:
+		if mesh and is_instance_valid(mesh):
+			mesh.queue_free()
+#endregion

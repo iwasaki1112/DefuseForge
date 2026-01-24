@@ -65,13 +65,13 @@ add_child(marker)
 # 開始点を設置
 marker.set_position_and_type(
     Vector3(5, 0, 3),
-    RunMarker.MarkerType.START
+    RunMarker.RunMarkerType.START
 )
 
 # 終点に変更
 marker.set_position_and_type(
     Vector3(10, 0, 3),
-    RunMarker.MarkerType.END
+    RunMarker.RunMarkerType.END
 )
 ```
 

@@ -1,46 +1,34 @@
 class_name ClearMarker
-extends MeshInstance3D
+extends ActionMarker
 
 ## Clearポイントマーカー
 ## 円形背景と回転アイコンで「リセット」を示す
 ## このポイント以降はVision/Runがクリアされ、進行方向を向く
 
-@export var circle_radius: float = 0.3
-@export var circle_color: Color = Color(0.2, 0.6, 0.9, 0.95)  # 青系
-@export var icon_color: Color = Color(1.0, 1.0, 1.0, 1.0)
-@export var height_offset: float = 0.03
-@export var segments: int = 32
+
+func _init() -> void:
+	# デフォルト色を設定
+	circle_color = Color(0.2, 0.6, 0.9, 0.95)  # 青系
+	icon_color = Color(1.0, 1.0, 1.0, 1.0)
 
 
-func _ready() -> void:
-	_build_mesh()
-
-
-## 位置を設定
-func set_marker_position(pos: Vector3) -> void:
-	global_position = Vector3(pos.x, pos.y + height_offset, pos.z)
-
-
-## 色を変更
-func set_colors(bg_color: Color, fg_color: Color) -> void:
-	circle_color = bg_color
-	icon_color = fg_color
-	_build_mesh()
+func get_action_marker_type() -> MarkerType:
+	return MarkerType.CLEAR
 
 
 func _build_mesh() -> void:
 	var array_mesh = ArrayMesh.new()
+	_array_mesh = array_mesh
+	mesh = _array_mesh
 
 	# 1. 塗りつぶし円を生成
-	_build_circle_mesh(array_mesh)
+	_build_circle_mesh()
 
 	# 2. リセットアイコン（円形矢印風）を生成
-	_build_icon_mesh(array_mesh)
-
-	mesh = array_mesh
+	_build_icon()
 
 
-func _build_circle_mesh(array_mesh: ArrayMesh) -> void:
+func _build_circle_mesh() -> void:
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
@@ -58,7 +46,7 @@ func _build_circle_mesh(array_mesh: ArrayMesh) -> void:
 		st.add_vertex(p1)
 		st.add_vertex(p2)
 
-	st.commit(array_mesh)
+	st.commit(_array_mesh)
 
 	# マテリアル設定
 	var mat = StandardMaterial3D.new()
@@ -67,10 +55,11 @@ func _build_circle_mesh(array_mesh: ArrayMesh) -> void:
 	mat.vertex_color_use_as_albedo = true
 	mat.render_priority = 10
 	mat.no_depth_test = true
-	array_mesh.surface_set_material(0, mat)
+	_array_mesh.surface_set_material(0, mat)
+	_circle_material = mat
 
 
-func _build_icon_mesh(array_mesh: ArrayMesh) -> void:
+func _build_icon() -> void:
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
@@ -130,7 +119,7 @@ func _build_icon_mesh(array_mesh: ArrayMesh) -> void:
 	st.add_vertex(Vector3(arrow_p2.x, y_offset, arrow_p2.z))
 	st.add_vertex(Vector3(arrow_p3.x, y_offset, arrow_p3.z))
 
-	st.commit(array_mesh)
+	st.commit(_array_mesh)
 
 	# マテリアル設定（発光あり）
 	var mat = StandardMaterial3D.new()
@@ -142,4 +131,12 @@ func _build_icon_mesh(array_mesh: ArrayMesh) -> void:
 	mat.emission_energy_multiplier = 1.2
 	mat.render_priority = 11
 	mat.no_depth_test = true
-	array_mesh.surface_set_material(1, mat)
+	_array_mesh.surface_set_material(1, mat)
+	_icon_material = mat
+
+
+## 色を変更（ClearMarkerは再構築が必要）
+func set_colors(bg_color: Color, fg_color: Color) -> void:
+	circle_color = bg_color
+	icon_color = fg_color
+	_build_mesh()
