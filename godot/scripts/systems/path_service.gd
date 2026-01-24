@@ -89,8 +89,20 @@ func start_move_mode() -> bool:
 	var primary = selection_manager.primary_character
 	var char_color = CharacterColorManager.get_character_color(primary)
 
-	# パスモード開始
-	if not path_mode_controller.start(primary, char_color):
+	# 既存の確定済みパスがあるかチェック
+	var existing_path_data: Dictionary = {}
+	if path_execution_manager and path_execution_manager.has_pending_path_for_character(primary):
+		# 既存パスを編集用に取り出す（pending_pathsから削除される）
+		existing_path_data = path_execution_manager.take_pending_path_for_editing(primary)
+
+	# パスモード開始（既存パスがあれば復元、なければ新規）
+	var started: bool
+	if not existing_path_data.is_empty():
+		started = path_mode_controller.start_with_existing_path(existing_path_data, char_color)
+	else:
+		started = path_mode_controller.start(primary, char_color)
+
+	if not started:
 		return false
 
 	# マルチセレクトの場合
@@ -321,7 +333,7 @@ func _on_path_ready() -> void:
 			for c in selection_manager.selected_characters:
 				selected_chars.append(c)
 			# マルチキャラクターモードを再設定
-			if path_drawer and not path_drawer.is_multi_character_mode():
+			if path_drawer and not path_drawer.is_multi_character_mode() and selected_chars.size() > 1:
 				path_drawer.start_multi_character_mode(selected_chars)
 			marker_edit_panel.setup(selected_chars, path_drawer)
 		_show_marker_panel()

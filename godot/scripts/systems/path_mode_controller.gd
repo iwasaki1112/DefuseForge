@@ -63,6 +63,37 @@ func start(_character: Node, char_color: Color = Color.WHITE) -> bool:
 	return true
 
 
+## 既存パスを読み込んで編集モード開始
+## @param path_data: PathExecutionManagerから取得したパスデータ
+## @param char_color: キャラクター色
+func start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+	if not selection_manager or not selection_manager.has_selection():
+		return false
+
+	if not path_drawer:
+		return false
+
+	if path_data.is_empty():
+		return false
+
+	# MOVEモード開始時に対象キャラクターを確定（スナップショット）
+	selection_manager.capture_path_targets()
+
+	var primary = selection_manager.primary_character
+	var _target_count = selection_manager.get_path_targets().size()
+
+	# 既存パスを復元してパス描画モードに入る
+	is_active = true
+	editing_character = primary
+	if not path_drawer.restore_pending_path(primary, path_data):
+		# 復元に失敗した場合は通常のenableにフォールバック
+		path_drawer.enable(primary)
+	path_drawer.set_character_color(char_color)
+
+	mode_started.emit(primary)
+	return true
+
+
 ## パスモードを確定して終了
 func confirm() -> bool:
 	if not is_active or not path_drawer.has_pending_path():

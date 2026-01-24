@@ -35,8 +35,8 @@ signal door_marker_added(path_ratio: float, door: Node3D)
 ## パスがUndoされた時のシグナル
 signal path_undone()
 
-## マーカー履歴用の種別（PATH = パス描画自体）
-enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR }
+## マーカー履歴用の種別（PATH = パス描画自体, PATH_EXTENSION = パス拡張）
+enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION }
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -46,6 +46,7 @@ enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR }
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
 @export var path_click_threshold: float = 0.5  # パスクリック判定距離
+@export var path_endpoint_threshold: float = 0.3  # パス終点タップ検出距離（モバイル向けに大きめ）
 @export_flags_3d_physics var wall_collision_mask: int = 2  # 壁検出用のコリジョンマスク
 
 ## スムージング設定
@@ -66,6 +67,7 @@ var _camera: Camera3D
 var _character: Node3D
 var _ground_plane: Plane
 var _is_drawing: bool = false
+var _is_extending_path: bool = false  # パス継続描画中フラグ
 var _is_enabled: bool = false
 var _drawing_mode: DrawingMode = DrawingMode.MOVEMENT
 var _path_points: PackedVector3Array = PackedVector3Array()
@@ -126,6 +128,9 @@ var _pending_path: PackedVector3Array = PackedVector3Array()
 var _pending_character: CharacterBody3D = null
 var _executing_character: CharacterBody3D = null
 
+## パス拡張Undo用（拡張前の状態を保存）
+var _path_extension_snapshots: Array[PackedVector3Array] = []
+
 ## キャラクター色
 var _character_color: Color = Color(1.0, 1.0, 1.0)  # デフォルト白
 
@@ -152,6 +157,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _camera == null or not _is_enabled:
 		return
 
+	# パス継続描画の入力処理（どのモードでも優先）
+	if _handle_path_extension_input(event):
+		return
+
 	match _drawing_mode:
 		DrawingMode.MOVEMENT:
 			_handle_movement_input(event)
@@ -167,12 +176,47 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_door_marker_input(event)
 
 
+## パス継続描画の入力処理（全モード共通、優先処理）
+## @return: 入力を処理した場合true
+func _handle_path_extension_input(event: InputEvent) -> bool:
+	# 継続描画中のマウス移動・解放処理
+	if _is_extending_path:
+		if event is InputEventMouseMotion:
+			var ground_pos = _get_ground_position(event.position)
+			if ground_pos != null:
+				_add_extend_point(ground_pos)
+			get_viewport().set_input_as_handled()
+			return true
+		elif event is InputEventMouseButton:
+			var mouse_event = event as InputEventMouseButton
+			if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+				_finish_extending_path()
+				get_viewport().set_input_as_handled()
+				return true
+
+	# 継続描画開始判定（左クリック押下時）
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			# パス終点付近をタップした場合、継続描画を開始
+			if has_pending_path() and not _is_drawing:
+				var ground_pos = _get_ground_position(mouse_event.position)
+				if ground_pos != null and _is_near_path_endpoint(ground_pos):
+					_start_extending_path()
+					get_viewport().set_input_as_handled()
+					return true
+
+	return false
+
+
 ## 移動パス描画の入力処理
+## Note: パス継続描画は_handle_path_extension_inputで優先処理済み
 func _handle_movement_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
+				# 通常の新規描画開始
 				var start_pos: Vector3
 				if _character:
 					start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
@@ -184,6 +228,7 @@ func _handle_movement_input(event: InputEvent) -> void:
 				_start_drawing(start_pos)
 				get_viewport().set_input_as_handled()
 			else:
+				# マウス解放時
 				if _is_drawing:
 					_finish_drawing()
 					get_viewport().set_input_as_handled()
@@ -546,6 +591,22 @@ func _find_offset_point_on_path(base_ratio: float, offset_distance: float) -> Di
 	return { "point": _pending_path[_pending_path.size() - 1], "ratio": 1.0 }
 
 
+## パス終点位置を取得
+func _get_path_endpoint() -> Vector3:
+	if _pending_path.size() < 1:
+		return Vector3.ZERO
+	return _pending_path[_pending_path.size() - 1]
+
+
+## 指定位置がパス終点付近かどうか判定
+func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
+	if _pending_path.size() < 2:
+		return false
+	var endpoint = _get_path_endpoint()
+	var distance = Vector2(ground_pos.x - endpoint.x, ground_pos.z - endpoint.z).length()
+	return distance <= path_endpoint_threshold
+
+
 ## 視線ポイントの設定を完了（ターゲットポイントモード）
 ## end_posがターゲット地点として保存される
 func _finish_vision_point(end_pos: Vector3) -> void:
@@ -739,15 +800,134 @@ func _finish_drawing() -> void:
 	drawing_finished.emit(_path_points)
 
 
+## ========================================
+## パス継続描画 API
+## ========================================
+
+## パスの継続描画が可能か
+func can_extend_path() -> bool:
+	return has_pending_path() and not _is_drawing and not _is_extending_path
+
+
+## 継続描画中かどうか
+func is_extending_path() -> bool:
+	return _is_extending_path
+
+
+## 継続描画開始
+func _start_extending_path() -> void:
+	if not has_pending_path():
+		return
+
+	_is_extending_path = true
+	# 拡張前のパスをスナップショットとして保存（Undo用）
+	_path_extension_snapshots.append(_pending_path.duplicate())
+	# _pending_pathを_path_pointsにコピー（既存パスを維持）
+	_path_points = _pending_path.duplicate()
+	# 表示メッシュを更新
+	_path_mesh.update_from_points(_path_points)
+
+
+## 継続描画中にポイントを追加
+func _add_extend_point(pos: Vector3) -> void:
+	if not _is_extending_path:
+		return
+
+	if _path_points.size() >= max_points:
+		_finish_extending_path()
+		return
+
+	var last_point = _path_points[_path_points.size() - 1]
+	if pos.distance_to(last_point) < min_point_distance:
+		return
+
+	# 壁検出: 前のポイントから新しいポイントへ壁がないかチェック
+	var hit_result = _check_wall_between(last_point, pos)
+	if hit_result.hit:
+		# 壁直前のポイントを追加して継続描画終了
+		var wall_pos = hit_result.position
+		# 壁に少し手前で止まる（0.1m手前）
+		var to_wall = (wall_pos - last_point).normalized()
+		var safe_pos = wall_pos - to_wall * 0.1
+		safe_pos.y = ground_plane_height
+		_path_points.append(safe_pos)
+		_path_mesh.update_from_points(_path_points)
+		_finish_extending_path()
+		return
+
+	_path_points.append(pos)
+	_path_mesh.update_from_points(_path_points)
+
+
+## 継続描画完了
+func _finish_extending_path() -> void:
+	_is_extending_path = false
+
+	if _path_points.size() >= 2 and _character:
+		# 拡張されたパスでスムージング再適用
+		if enable_smoothing and _path_points.size() >= 3:
+			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
+		else:
+			_pending_path = _path_points.duplicate()
+
+		# マーカーのpath_ratio再計算（パスが延長されたため）
+		_recalculate_marker_ratios()
+
+		# 履歴にパス拡張を追加（Undo対応）
+		_marker_history.append(MarkerType.PATH_EXTENSION)
+
+	drawing_finished.emit(_path_points)
+
+
+## マーカーのpath_ratioを再計算
+## パスが延長されると総距離が変わるため、既存マーカーのpath_ratioを再計算する
+func _recalculate_marker_ratios() -> void:
+	if _pending_path.size() < 2:
+		return
+
+	# シングルモードのマーカーを再計算
+	_recalculate_marker_ratios_for_array(_vision_points)
+	_recalculate_marker_ratios_for_array(_clear_points)
+	_recalculate_marker_ratios_for_array(_grenade_markers)
+	_recalculate_marker_ratios_for_array(_door_markers)
+	# Run区間は start_ratio と end_ratio の両方を再計算
+	for segment in _run_segments:
+		if segment.has("start_ratio") and segment.has("end_ratio"):
+			# Start位置を推定して再計算（元のratioから位置を推定）
+			# Note: Runセグメントはanchorを持たないため、start/end_ratioをそのまま維持
+			# （延長部分にRunセグメントを追加する場合は新たに設定する）
+			pass
+
+	# マルチキャラクターモードのマーカーを再計算
+	for char_id in _character_markers:
+		var char_data = _character_markers[char_id]
+		_recalculate_marker_ratios_for_array(char_data.vision_points)
+		_recalculate_marker_ratios_for_array(char_data.clear_points)
+		if char_data.has("grenade_markers"):
+			_recalculate_marker_ratios_for_array(char_data.grenade_markers)
+		if char_data.has("door_markers"):
+			_recalculate_marker_ratios_for_array(char_data.door_markers)
+
+
+## マーカー配列のpath_ratioを再計算（anchor位置ベース）
+func _recalculate_marker_ratios_for_array(markers: Array) -> void:
+	for marker in markers:
+		if marker.has("anchor"):
+			var result = _find_closest_point_on_path(marker.anchor)
+			marker.path_ratio = result.ratio
+
+
 ## パスをクリア
 func clear() -> void:
 	_path_points.clear()
 	_path_mesh.clear()
 	_is_drawing = false
+	_is_extending_path = false
 	_is_drawing_vision = false
 	_drawing_mode = DrawingMode.MOVEMENT
 	_pending_path.clear()
 	_pending_character = null
+	_path_extension_snapshots.clear()
 	_clear_vision_points()
 	_clear_run_markers()
 	_clear_clear_markers()
@@ -878,7 +1058,7 @@ func get_relative_vision_points() -> Array[Dictionary]:
 
 
 func is_drawing() -> bool:
-	return _is_drawing or _is_drawing_vision
+	return _is_drawing or _is_drawing_vision or _is_extending_path
 
 
 ## 指定座標がパス上にあるかどうか判定
@@ -917,9 +1097,128 @@ func enable(character: Node3D) -> void:
 	clear()
 
 
+## 既存の確定済みパスを読み込んで編集モードに入る
+## @param character: 対象キャラクター
+## @param path_data: PathExecutionManagerから取得したパスデータ
+func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
+	if path_data.is_empty():
+		return false
+
+	# 既存の描画・マーカー状態をクリア
+	clear()
+
+	_character = character
+	_is_enabled = true
+	_drawing_mode = DrawingMode.MOVEMENT
+	_pending_character = character as CharacterBody3D
+
+	# パスを復元
+	if path_data.has("path"):
+		_pending_path.clear()
+		for point in path_data["path"]:
+			_pending_path.append(point)
+		_path_points = _pending_path.duplicate()
+	if _path_points.size() < 2:
+		return false
+
+	# パスメッシュをポイントから再描画（元の_path_meshを維持）
+	if _path_mesh and _path_points.size() > 0:
+		_path_mesh.update_from_points(_path_points)
+
+	# PathExecutionManagerの古いpath_meshは削除
+	if path_data.has("path_mesh") and is_instance_valid(path_data["path_mesh"]):
+		path_data["path_mesh"].queue_free()
+
+	# 履歴にPATHを追加（Undoでパスごと削除可能に）
+	_marker_history.append(MarkerType.PATH)
+
+	# Visionマーカーを復元（データとメッシュを同期して追加）
+	var vision_points_list = path_data.get("vision_points", [])
+	var vision_markers_list = path_data.get("vision_markers", [])
+	for i in range(mini(vision_points_list.size(), vision_markers_list.size())):
+		var marker = vision_markers_list[i]
+		if is_instance_valid(marker):
+			_vision_points.append(vision_points_list[i])
+			if marker.get_parent():
+				marker.get_parent().remove_child(marker)
+			add_child(marker)
+			_vision_meshes.append(marker)
+			_marker_history.append(MarkerType.VISION)
+
+	# Runマーカーを復元（データとメッシュを同期して追加）
+	# Run: 1セグメント = 2マーカー（開始点・終了点）
+	var run_segments_list = path_data.get("run_segments", [])
+	var run_markers_list = path_data.get("run_markers", [])
+	var run_marker_idx = 0
+	for i in range(run_segments_list.size()):
+		# 各セグメントには2つのマーカーが対応
+		if run_marker_idx + 1 >= run_markers_list.size():
+			break
+		var start_marker = run_markers_list[run_marker_idx]
+		var end_marker = run_markers_list[run_marker_idx + 1]
+		if is_instance_valid(start_marker) and is_instance_valid(end_marker):
+			_run_segments.append(run_segments_list[i])
+			for marker in [start_marker, end_marker]:
+				if marker.get_parent():
+					marker.get_parent().remove_child(marker)
+				add_child(marker)
+				_run_meshes.append(marker)
+			_marker_history.append(MarkerType.RUN)
+		run_marker_idx += 2
+
+	# Clearマーカーを復元（データとメッシュを同期して追加）
+	var clear_points_list = path_data.get("clear_points", [])
+	var clear_markers_list = path_data.get("clear_markers", [])
+	for i in range(mini(clear_points_list.size(), clear_markers_list.size())):
+		var marker = clear_markers_list[i]
+		if is_instance_valid(marker):
+			_clear_points.append(clear_points_list[i])
+			if marker.get_parent():
+				marker.get_parent().remove_child(marker)
+			add_child(marker)
+			_clear_meshes.append(marker)
+			_marker_history.append(MarkerType.CLEAR)
+
+	# Grenadeマーカーを復元（データとメッシュを同期して追加）
+	var grenade_data_list = path_data.get("grenade_markers_data", [])
+	var grenade_markers_list = path_data.get("grenade_markers", [])
+	for i in range(mini(grenade_data_list.size(), grenade_markers_list.size())):
+		var marker = grenade_markers_list[i]
+		if is_instance_valid(marker):
+			_grenade_markers.append(grenade_data_list[i])
+			if marker.get_parent():
+				marker.get_parent().remove_child(marker)
+			add_child(marker)
+			_grenade_meshes.append(marker)
+			_marker_history.append(MarkerType.GRENADE)
+
+	# Doorマーカーを復元（データとメッシュを同期して追加）
+	var door_data_list = path_data.get("door_markers_data", [])
+	var door_markers_list = path_data.get("door_markers", [])
+	for i in range(mini(door_data_list.size(), door_markers_list.size())):
+		var marker = door_markers_list[i]
+		if is_instance_valid(marker):
+			_door_markers.append(door_data_list[i])
+			if marker.get_parent():
+				marker.get_parent().remove_child(marker)
+			add_child(marker)
+			_door_meshes.append(marker)
+			_marker_history.append(MarkerType.DOOR)
+
+	# 復元完了後にパス準備完了を通知
+	call_deferred("_emit_drawing_finished_after_restore")
+	return true
+
+
+func _emit_drawing_finished_after_restore() -> void:
+	if _path_points.size() >= 2:
+		drawing_finished.emit(_path_points)
+
+
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false
+	_is_extending_path = false
 	_is_drawing_vision = false
 
 
@@ -1169,10 +1468,12 @@ func undo_last_marker() -> int:
 			_undo_grenade_marker()
 		MarkerType.DOOR:
 			_undo_door_marker()
+		MarkerType.PATH_EXTENSION:
+			_undo_path_extension()
 
 	# MarkerCollectionもUndo（同期を保つ）
-	# Note: PATHは共通履歴なのでMarkerCollectionには影響なし
-	if last_type != MarkerType.PATH and _multi_character_mode and _active_edit_character:
+	# Note: PATH/PATH_EXTENSIONは共通履歴なのでMarkerCollectionには影響なし
+	if last_type != MarkerType.PATH and last_type != MarkerType.PATH_EXTENSION and _multi_character_mode and _active_edit_character:
 		_undo_last_marker_from_collection(_active_edit_character)
 
 	return last_type
@@ -1304,6 +1605,25 @@ func _undo_door_marker() -> void:
 				mesh.queue_free()
 
 
+## パス拡張をUndo（内部用、履歴は操作しない）
+## 拡張前のパス状態に戻す
+func _undo_path_extension() -> void:
+	if _path_extension_snapshots.size() == 0:
+		return
+
+	# 拡張前のパスに戻す
+	var previous_path = _path_extension_snapshots.pop_back()
+	_pending_path = previous_path
+	_path_points = previous_path.duplicate()
+
+	# パスメッシュを更新
+	if _path_mesh:
+		_path_mesh.update_from_points(_path_points)
+
+	# マーカーのpath_ratioを再計算（パスが短くなったため）
+	_recalculate_marker_ratios()
+
+
 ## パス描画をUndo（内部用、履歴は操作しない）
 ## パスとすべてのマーカーをクリアする
 func _undo_path() -> void:
@@ -1312,6 +1632,7 @@ func _undo_path() -> void:
 	_path_mesh.clear()
 	_pending_path.clear()
 	_pending_character = null
+	_path_extension_snapshots.clear()
 	_is_drawing = false
 	_is_drawing_vision = false
 	_drawing_mode = DrawingMode.MOVEMENT

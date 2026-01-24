@@ -327,6 +327,29 @@ func get_pending_path_count() -> int:
 	return pending_paths.size()
 
 
+## 指定キャラクターに保留パスがあるかチェック
+func has_pending_path_for_character(character: Node) -> bool:
+	if not character:
+		return false
+	return pending_paths.has(character.get_instance_id())
+
+
+## 指定キャラクターの保留パスを編集用に取り出す
+## パスデータを返し、pending_pathsから削除する（メッシュ・マーカーは削除しない）
+## @return: パスデータのDictionary、存在しない場合は空のDictionary
+func take_pending_path_for_editing(character: Node) -> Dictionary:
+	if not character:
+		return {}
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return {}
+
+	var data = pending_paths[char_id]
+	pending_paths.erase(char_id)
+	return data
+
+
 ## パス追従中のコントローラーがあるかチェック
 func is_any_path_following_active() -> bool:
 	for controller in _path_controllers.values():

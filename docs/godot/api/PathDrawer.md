@@ -47,6 +47,7 @@
 | `PATH` | パス描画自体 |
 | `GRENADE` | グレネードマーカー |
 | `DOOR` | ドアマーカー |
+| `PATH_EXTENSION` | パス拡張（Undoで拡張前に戻る） |
 
 ## Export Properties
 
@@ -60,6 +61,7 @@
 | `ground_plane_height` | `float` | `0.0` | 地面の高さ |
 | `max_points` | `int` | `500` | 最大ポイント数 |
 | `path_click_threshold` | `float` | `0.5` | パスクリック判定距離 |
+| `path_endpoint_threshold` | `float` | `0.3` | パス終点タップ検出距離（継続描画用） |
 | `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
 | `enable_smoothing` | `bool` | `true` | パススムージングを有効化 |
 | `smoothing_epsilon` | `float` | `0.15` | RDP間引き許容誤差（大きいほど間引き強） |
@@ -81,6 +83,21 @@ PathDrawerを有効化する。
 
 **引数:**
 - `character` - パス追従キャラクター
+
+#### restore_pending_path(character: Node3D, path_data: Dictionary) -> bool
+既存の確定済みパスを読み込んで編集モードに入る。PathExecutionManagerから取得したパスデータを復元する。
+
+**引数:**
+- `character` - 対象キャラクター
+- `path_data` - PathExecutionManagerから取得したパスデータ
+
+**戻り値:** 復元に成功した場合`true`
+
+**注意:**
+- 通常はPathService経由で自動的に呼び出される。直接呼び出す必要はない
+- データ配列とメッシュ配列は同期して復元される（Undo操作の整合性を保つため）
+- 無効なマーカーメッシュがある場合、対応するデータも復元されない
+- 復元後に`drawing_finished`シグナルが遅延発火し、`PathModeController`が`path_ready`を通知する
 
 #### disable() -> void
 PathDrawerを無効化する。
@@ -122,6 +139,41 @@ PathDrawerを無効化する。
 マーカーモード（VISION_POINT, RUN_MARKER, CLEAR_MARKER）かどうかを確認する。
 
 **戻り値:** MOVEMENTモード以外なら`true`
+
+### Path Extension API
+
+パス終点付近をタップ＆ドラッグして、既存パスの末尾から継続描画する機能。
+
+#### can_extend_path() -> bool
+パスの継続描画が可能か確認する。
+
+**戻り値:** 未確定パスが存在し、描画中でなければ`true`
+
+#### is_extending_path() -> bool
+継続描画中かどうか確認する。
+
+**戻り値:** 継続描画中なら`true`
+
+**使用例:**
+```gdscript
+# パス描画後、終点付近をタップすると自動的に継続描画モードに入る
+# 継続描画が完了すると、既存マーカーのpath_ratioが自動再計算される
+
+# 手動で継続描画可能かチェック
+if path_drawer.can_extend_path():
+    print("パス終点をタップして継続描画可能")
+
+# 継続描画中かチェック
+if path_drawer.is_extending_path():
+    print("継続描画中...")
+```
+
+**注意事項:**
+- **どのモードでも使用可能**: VISION/RUN/CLEAR等のマーカーモードでも、終点付近タップで継続描画が優先される
+- 継続描画中は`is_drawing()`も`true`を返す
+- 継続描画完了時、既存マーカーの`path_ratio`は自動再計算される
+- 壁に当たった場合は自動的に継続描画が終了する
+- `path_endpoint_threshold`（デフォルト0.3m）以内をタップすると継続描画開始
 
 #### set_line_color(color: Color) -> void
 ライン色を変更する。
@@ -599,9 +651,12 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `is_drawing() -> bool`
 - `is_point_on_path(ground_pos: Vector3) -> bool`
 - `is_marker_mode() -> bool`
+- `can_extend_path() -> bool`
+- `is_extending_path() -> bool`
 - `set_line_color(color: Color) -> void`
 - `set_character_color(color: Color) -> void`
 - `enable(character: Node3D) -> void`
+- `restore_pending_path(character: Node3D, path_data: Dictionary) -> bool`
 - `disable() -> void`
 - `is_enabled() -> bool`
 - `get_drawing_mode() -> DrawingMode`

@@ -136,7 +136,7 @@ func _on_confirm() -> void:
 
 `MarkerEditPanel`は`PathDrawer`のマルチキャラクターモードと連携します：
 
-1. `setup()`呼び出し時に`PathDrawer.start_multi_character_mode()`が呼ばれていること
+1. 複数キャラクター選択時のみ`PathDrawer.start_multi_character_mode()`が呼ばれていること
 2. キャラクター切り替え時に`PathDrawer.set_active_edit_character()`を呼び出す
 3. マーカー追加/削除は`PathDrawer`のAPIを通じて行う
 
