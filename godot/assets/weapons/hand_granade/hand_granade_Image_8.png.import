@@ -1,0 +1,45 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://bnd86gdy3b0uw"
+path.s3tc="res://.godot/imported/hand_granade_Image_8.png-9a48de434bd37c72fbdb65af98a6d95a.s3tc.ctex"
+path.etc2="res://.godot/imported/hand_granade_Image_8.png-9a48de434bd37c72fbdb65af98a6d95a.etc2.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "cc87a3e56cbfbd1d6a6383fdac3804c3"
+}
+
+[deps]
+
+source_file="res://assets/weapons/hand_granade/hand_granade_Image_8.png"
+dest_files=["res://.godot/imported/hand_granade_Image_8.png-9a48de434bd37c72fbdb65af98a6d95a.s3tc.ctex", "res://.godot/imported/hand_granade_Image_8.png-9a48de434bd37c72fbdb65af98a6d95a.etc2.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/uastc_level=0
+compress/rdo_quality_loss=0.0
+compress/hdr_compression=1
+compress/normal_map=1
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=1
+roughness/src_normal="res://assets/weapons/hand_granade/hand_granade_Image_8.png"
+process/channel_remap/red=0
+process/channel_remap/green=1
+process/channel_remap/blue=2
+process/channel_remap/alpha=3
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0
