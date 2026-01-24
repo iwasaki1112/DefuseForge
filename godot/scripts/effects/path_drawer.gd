@@ -242,7 +242,7 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 			if _current_run_start.is_empty():
 				# 開始点を設定
 				_current_run_start = { "ratio": result.ratio, "position": result.point }
-				_create_run_marker(result.point, RunMarkerScript.MarkerType.START)
+				_create_run_marker(result.point, RunMarkerScript.RunMarkerType.START)
 			else:
 				# 終点を設定してセグメントを完成
 				var start_ratio = _current_run_start.ratio
@@ -271,7 +271,7 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 					_marker_history.append(MarkerType.RUN)
 
 				# 終点マーカーを作成
-				_create_run_marker(result.point, RunMarkerScript.MarkerType.END)
+				_create_run_marker(result.point, RunMarkerScript.RunMarkerType.END)
 
 				run_segment_added.emit(start_ratio, end_ratio)
 
