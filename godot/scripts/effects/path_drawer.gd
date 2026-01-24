@@ -115,6 +115,9 @@ var _marker_history: Array[int] = []  # MarkerType の配列
 ## { char_id: { "vision_points": Array[Dictionary], "vision_meshes": Array[MeshInstance3D],
 ##              "run_segments": Array[Dictionary], "run_meshes": Array[MeshInstance3D] } }
 var _character_markers: Dictionary = {}
+## キャラクター別マーカーコレクション（統一管理用）
+## { char_id: MarkerCollection }
+var _character_collections: Dictionary = {}
 var _active_edit_character: Node = null  # 現在編集中のキャラクター
 var _multi_character_mode: bool = false  # マルチキャラクターモード
 
@@ -267,6 +270,13 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 						char_data.run_segments.append(new_segment)
 						# 履歴に追加
 						char_data.marker_history.append(MarkerType.RUN)
+
+						# MarkerCollectionにも追加（新システム）
+						# Note: Runは2つのメッシュ(START/END)を持つが、データは1セグメント
+						var run_data = ActionMarkerDataScript.RunMarkerData.new()
+						run_data.start_ratio = start_ratio
+						run_data.end_ratio = end_ratio
+						_add_marker_to_collection(_active_edit_character, run_data, null)
 				else:
 					_run_segments.append(new_segment)
 					# 履歴に追加
@@ -317,6 +327,12 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 					char_data.clear_meshes.insert(multi_insert_idx, marker)
 					# 履歴に追加
 					char_data.marker_history.append(MarkerType.CLEAR)
+
+					# MarkerCollectionにも追加（新システム）
+					var clear_data = ActionMarkerDataScript.ClearMarkerData.new()
+					clear_data.path_ratio = result.ratio
+					clear_data.anchor = result.point
+					_add_marker_to_collection(_active_edit_character, clear_data, marker)
 			else:
 				# シングルモードの場合
 				var single_insert_idx = 0
@@ -574,6 +590,14 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 
 			# 履歴に追加
 			char_data.marker_history.append(MarkerType.VISION)
+
+			# MarkerCollectionにも追加（新システム）
+			var vision_data = ActionMarkerDataScript.VisionMarkerData.new()
+			vision_data.path_ratio = _current_vision_ratio
+			vision_data.anchor = _current_vision_anchor
+			vision_data.target_point = target_point
+			vision_data.has_target = true
+			_add_marker_to_collection(_active_edit_character, vision_data, marker)
 
 			vision_point_added.emit(_current_vision_anchor, target_point)
 			return
@@ -1408,10 +1432,12 @@ func _on_path_completed() -> void:
 func start_multi_character_mode(characters: Array[Node]) -> void:
 	_multi_character_mode = true
 	_character_markers.clear()
+	_character_collections.clear()
 
 	# 各キャラクター用のマーカーストレージを初期化
 	for character in characters:
 		var char_id = character.get_instance_id()
+		# 従来のDictionary形式（後方互換）
 		_character_markers[char_id] = {
 			"character": character,
 			"vision_points": [] as Array[Dictionary],
@@ -1426,6 +1452,8 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 			"door_meshes": [] as Array[MeshInstance3D],
 			"marker_history": [] as Array[int]
 		}
+		# 新しいMarkerCollection形式
+		_character_collections[char_id] = MarkerCollectionScript.new()
 
 	# 最初のキャラクターをアクティブに設定
 	if characters.size() > 0:
@@ -1597,6 +1625,14 @@ func _clear_multi_character_markers() -> void:
 				if is_instance_valid(mesh):
 					mesh.queue_free()
 	_character_markers.clear()
+
+	# MarkerCollectionもクリア
+	for char_id in _character_collections:
+		var collection = _character_collections[char_id]
+		if collection:
+			collection.clear_all()
+	_character_collections.clear()
+
 	_active_edit_character = null
 	_multi_character_mode = false
 
@@ -1798,6 +1834,15 @@ func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, _bounce_
 
 			# 履歴に追加
 			char_data.marker_history.append(MarkerType.GRENADE)
+
+			# MarkerCollectionにも追加（新システム）
+			var grenade_data = ActionMarkerDataScript.GrenadeMarkerData.new()
+			grenade_data.path_ratio = _grenade_pending_ratio
+			grenade_data.anchor = _grenade_pending_anchor
+			grenade_data.target_pos = target_pos
+			grenade_data.bounce_point = bounce_point if bounce_point.length_squared() > 0.001 else Vector3.ZERO
+			grenade_data.has_bounce = bounce_point.length_squared() > 0.001
+			_add_marker_to_collection(_active_edit_character, grenade_data, marker)
 	else:
 		# シングルモード
 		_grenade_markers.append(new_marker)
@@ -2027,6 +2072,13 @@ func _process_door_click(screen_pos: Vector2) -> void:
 
 			# 履歴に追加
 			char_data.marker_history.append(MarkerType.DOOR)
+
+			# MarkerCollectionにも追加（新システム）
+			var door_data = ActionMarkerDataScript.DoorMarkerData.new()
+			door_data.path_ratio = offset_result.ratio
+			door_data.anchor = offset_result.point
+			door_data.door_node = door
+			_add_marker_to_collection(_active_edit_character, door_data, marker)
 	else:
 		# シングルモード
 		_door_markers.append(new_marker)
@@ -2238,4 +2290,56 @@ func take_all_marker_types_meshes() -> Dictionary:
 	for type_value in ActionMarkerDataScript.Type.values():
 		result[type_value] = take_markers_by_type(type_value)
 	return result
+#endregion
+
+
+#region MarkerCollectionベース内部ヘルパー
+## ========================================
+## MarkerCollectionベース内部ヘルパー
+## ========================================
+
+## アクティブキャラクターのMarkerCollectionを取得
+func _get_active_collection() -> MarkerCollectionScript:
+	if not _multi_character_mode or _active_edit_character == null:
+		return null
+	var char_id = _active_edit_character.get_instance_id()
+	return _character_collections.get(char_id, null)
+
+
+## 指定キャラクターのMarkerCollectionを取得
+func _get_collection_for_character(character: Node) -> MarkerCollectionScript:
+	if character == null:
+		return null
+	var char_id = character.get_instance_id()
+	return _character_collections.get(char_id, null)
+
+
+## 全キャラクターのMarkerCollectionを取得
+## @return: { instance_id: MarkerCollectionScript }
+func _get_all_collections() -> Dictionary:
+	return _character_collections.duplicate()
+
+
+## MarkerCollectionにマーカーを追加（内部ヘルパー）
+## 同時に従来の配列にも追加して後方互換性を保持
+func _add_marker_to_collection(
+	character: Node,
+	marker_data: ActionMarkerDataScript,
+	mesh: MeshInstance3D = null
+) -> bool:
+	var collection = _get_collection_for_character(character)
+	if collection == null:
+		return false
+
+	collection.add_marker(marker_data, mesh)
+	return true
+
+
+## MarkerCollectionから最後のマーカーをUndo（内部ヘルパー）
+func _undo_last_marker_from_collection(character: Node) -> Dictionary:
+	var collection = _get_collection_for_character(character)
+	if collection == null:
+		return {"success": false}
+
+	return collection.undo_last_marker()
 #endregion
