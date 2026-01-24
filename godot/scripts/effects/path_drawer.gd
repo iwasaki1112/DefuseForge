@@ -59,6 +59,8 @@ const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
+const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
+const MarkerCollectionScript = preload("res://scripts/effects/marker_collection.gd")
 
 var _camera: Camera3D
 var _character: Node3D
@@ -2132,3 +2134,108 @@ func get_all_door_markers() -> Dictionary:
 		else:
 			result[char_id] = []
 	return result
+
+
+#region 統一マーカーAPI
+## 指定タイプのマーカーデータを取得（統一API）
+func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
+	match marker_type:
+		ActionMarkerDataScript.Type.VISION:
+			return get_vision_points()
+		ActionMarkerDataScript.Type.RUN:
+			return get_run_segments()
+		ActionMarkerDataScript.Type.CLEAR:
+			return get_clear_points()
+		ActionMarkerDataScript.Type.GRENADE:
+			return get_grenade_markers()
+		ActionMarkerDataScript.Type.DOOR:
+			return get_door_markers()
+		_:
+			return []
+
+
+## 指定タイプのマーカーメッシュを取得して所有権を移譲（統一API）
+func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[MeshInstance3D]:
+	match marker_type:
+		ActionMarkerDataScript.Type.VISION:
+			return take_vision_markers()
+		ActionMarkerDataScript.Type.RUN:
+			return take_run_markers()
+		ActionMarkerDataScript.Type.CLEAR:
+			return take_clear_markers()
+		ActionMarkerDataScript.Type.GRENADE:
+			return take_grenade_markers()
+		ActionMarkerDataScript.Type.DOOR:
+			return take_door_markers()
+		_:
+			return []
+
+
+## 指定キャラクターの指定タイプのマーカーデータを取得（統一API）
+func get_markers_for_character_by_type(character: Node, marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
+	match marker_type:
+		ActionMarkerDataScript.Type.VISION:
+			return get_vision_points_for_character(character)
+		ActionMarkerDataScript.Type.RUN:
+			return get_run_segments_for_character(character)
+		ActionMarkerDataScript.Type.CLEAR:
+			return get_clear_points_for_character(character)
+		ActionMarkerDataScript.Type.GRENADE:
+			return get_grenade_markers_for_character(character)
+		ActionMarkerDataScript.Type.DOOR:
+			return get_door_markers_for_character(character)
+		_:
+			return []
+
+
+## 全キャラクターの指定タイプのマーカーデータを取得（統一API）
+func get_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
+	match marker_type:
+		ActionMarkerDataScript.Type.VISION:
+			return get_all_vision_points()
+		ActionMarkerDataScript.Type.RUN:
+			return get_all_run_segments()
+		ActionMarkerDataScript.Type.CLEAR:
+			return get_all_clear_points()
+		ActionMarkerDataScript.Type.GRENADE:
+			return get_all_grenade_markers()
+		ActionMarkerDataScript.Type.DOOR:
+			return get_all_door_markers()
+		_:
+			return {}
+
+
+## 全キャラクターの指定タイプのマーカーメッシュを取得して所有権を移譲（統一API）
+func take_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
+	match marker_type:
+		ActionMarkerDataScript.Type.VISION:
+			return take_all_vision_markers()
+		ActionMarkerDataScript.Type.RUN:
+			return take_all_run_markers()
+		ActionMarkerDataScript.Type.CLEAR:
+			return take_all_clear_markers()
+		ActionMarkerDataScript.Type.GRENADE:
+			return take_all_grenade_markers()
+		ActionMarkerDataScript.Type.DOOR:
+			return take_all_door_markers()
+		_:
+			return {}
+
+
+## 全タイプのマーカーデータを一括取得（統一API）
+## @return: { Type: Array[Dictionary] }
+func get_all_marker_types_data() -> Dictionary:
+	var result: Dictionary = {}
+	for type_value in ActionMarkerDataScript.Type.values():
+		result[type_value] = get_markers_by_type(type_value)
+	return result
+
+
+## 全タイプのマーカーメッシュを一括取得して所有権を移譲（統一API）
+## @return: { Type: Array[MeshInstance3D] }
+func take_all_marker_types_meshes() -> Dictionary:
+	var result: Dictionary = {}
+	for type_value in ActionMarkerDataScript.Type.values():
+		result[type_value] = take_markers_by_type(type_value)
+	return result
+#endregion
