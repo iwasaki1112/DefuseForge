@@ -9,6 +9,8 @@ signal path_started()
 signal path_completed()
 signal path_cancelled()
 signal vision_point_reached(index: int, direction: Vector3)
+signal grenade_marker_reached(index: int, marker_data: Dictionary)
+signal door_marker_reached(index: int, door: Node3D)
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -30,6 +32,11 @@ var _vision_index: int = 0
 var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _clear_points: Array[Dictionary] = []  # { path_ratio }
 var _clear_index: int = 0
+var _grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _grenade_index: int = 0
+var _door_markers: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
+var _door_index: int = 0
+var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
@@ -64,10 +71,13 @@ func set_combat_awareness(component: Node) -> void:
 ## @param run_segments: Run区間配列（start_ratio, end_ratioを含むDictionary）
 ## @param run: 走行モードか（全体を走る場合）
 ## @param clear_points: Clearポイント配列（path_ratioを含むDictionary）
+## @param grenade_markers: グレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
+## @param door_markers: ドアマーカー配列（path_ratio, door_nodeを含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		run_segments: Array[Dictionary] = [], run: bool = false,
-		clear_points: Array[Dictionary] = []) -> bool:
+		clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [],
+		door_markers: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -80,10 +90,17 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_vision_points = vision_points.duplicate()
 	_run_segments = run_segments.duplicate()
 	_clear_points = clear_points.duplicate()
+	_grenade_markers = grenade_markers.duplicate()
+	_door_markers = door_markers.duplicate()
 	_vision_index = 0
 	_clear_index = 0
+	_grenade_index = 0
+	_door_index = 0
+
+	print("[PathFollowingController] start_path: door_markers count=%d, data=%s" % [_door_markers.size(), _door_markers])
 	_is_running = run
 	_is_following = true
+	_is_waiting_for_door = false
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
 	_last_move_direction = Vector3.ZERO
@@ -115,10 +132,13 @@ func cancel() -> void:
 		return
 
 	_is_following = false
+	_is_waiting_for_door = false
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()
 	_clear_points.clear()
+	_grenade_markers.clear()
+	_door_markers.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
@@ -134,6 +154,10 @@ func is_following_path() -> bool:
 ## 毎フレームの処理（_physics_processから呼び出す）
 func process(delta: float) -> void:
 	if not _is_following:
+		return
+
+	# ドアキック完了待ち状態の場合は処理しない
+	if _is_waiting_for_door:
 		return
 
 	# キャラクターキャッシュ更新（150ms間隔）
@@ -161,6 +185,18 @@ func process(delta: float) -> void:
 	var to_final = final_target - char_pos
 	to_final.y = 0
 	var distance_to_final = to_final.length()
+
+	# ドアマーカーのチェック（最終目的地到達前に優先チェック）
+	# ドアマーカーがある場合、パス完了より先に停止してドアキックを実行
+	var early_progress = _calculate_path_progress()
+
+	# デバッグ：進行率と最終地点までの距離を表示
+	if _door_markers.size() > 0 and _door_index < _door_markers.size():
+		var next_door = _door_markers[_door_index]
+		print("[PathFollowingController] progress=%.4f, door_ratio=%.4f, distance_to_final=%.4f" % [early_progress, next_door.path_ratio, distance_to_final])
+
+	if _check_door_markers(early_progress):
+		return  # ドアマーカーに到達、処理を中断
 
 	# 最終目的地に十分近ければ完了
 	if distance_to_final < final_destination_radius:
@@ -230,6 +266,11 @@ func process(delta: float) -> void:
 
 	# Clearポイントのチェック（視線・Runをリセット）
 	_check_clear_points(progress)
+
+	# グレネードマーカーのチェック（投擲実行、移動は継続）
+	_check_grenade_markers(progress)
+
+	# ドアマーカーは早期チェック済み（最終目的地到達前に処理）
 
 	# 視線方向を更新（Run区間外のみ）
 	if not in_run_segment:
@@ -416,6 +457,58 @@ func _check_clear_points(progress: float) -> void:
 			break
 
 
+## グレネードマーカーのチェックと処理
+## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
+func _check_grenade_markers(progress: float) -> void:
+	while _grenade_index < _grenade_markers.size():
+		var gm = _grenade_markers[_grenade_index]
+		if progress >= gm.path_ratio:
+			# グレネードマーカーに到達: 投擲シグナルを発火
+			grenade_marker_reached.emit(_grenade_index, gm)
+			_grenade_index += 1
+		else:
+			break
+
+
+## ドアマーカーのチェックと処理
+## マーカー到達時にパスを一時停止してドアキックシグナルを発火
+## @return: ドアマーカーに到達してパスを停止した場合はtrue
+func _check_door_markers(progress: float) -> bool:
+	# パス終端付近のマーカーに対する許容範囲（進行率が完全に1.0に到達しないため）
+	const END_TOLERANCE: float = 0.03
+
+	while _door_index < _door_markers.size():
+		var dm = _door_markers[_door_index]
+		var target_ratio = dm.path_ratio
+
+		# 終端付近（ratio > 0.97）のマーカーは許容範囲を持たせる
+		var reached = false
+		if target_ratio > 0.97:
+			# 終端マーカー: progress が target_ratio - END_TOLERANCE 以上で到達とみなす
+			reached = progress >= (target_ratio - END_TOLERANCE)
+		else:
+			reached = progress >= target_ratio
+
+		if reached:
+			# ドアマーカーに到達: パスを一時停止
+			_is_waiting_for_door = true
+			_door_index += 1
+
+			# ドアノードを取得してシグナル発火
+			var door = dm.door_node if dm.has("door_node") else null
+			print("[PathFollowingController] Door marker reached! index=%d, door=%s, dm=%s" % [_door_index - 1, door, dm])
+			door_marker_reached.emit(_door_index - 1, door)
+			return true
+		else:
+			break
+	return false
+
+
+## ドアキック完了後にパス追従を再開
+func resume_after_door() -> void:
+	_is_waiting_for_door = false
+
+
 ## パス追従完了
 func _finish() -> void:
 	# キャラクターの速度を停止
@@ -447,10 +540,13 @@ func _finish() -> void:
 			anim_ctrl.update_animation(Vector3.ZERO, final_dir, false, 0.016)
 
 	_is_following = false
+	_is_waiting_for_door = false
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()
 	_clear_points.clear()
+	_grenade_markers.clear()
+	_door_markers.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO

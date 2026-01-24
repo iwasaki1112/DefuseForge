@@ -13,6 +13,8 @@ signal mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
 signal clear_point_added(path_ratio: float)
+signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
+signal door_marker_added(path_ratio: float, door: Node3D)
 
 var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
@@ -44,6 +46,8 @@ func setup(
 		path_drawer.vision_point_added.connect(_on_vision_point_added)
 		path_drawer.run_segment_added.connect(_on_run_segment_added)
 		path_drawer.clear_point_added.connect(_on_clear_point_added)
+		path_drawer.grenade_marker_added.connect(_on_grenade_marker_added)
+		path_drawer.door_marker_added.connect(_on_door_marker_added)
 		path_drawer.path_undone.connect(_on_path_undone)
 
 	if path_mode_controller:
@@ -57,6 +61,8 @@ func setup(
 		marker_edit_panel.vision_add_requested.connect(_on_marker_panel_vision_add)
 		marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
 		marker_edit_panel.clear_add_requested.connect(_on_marker_panel_clear_add)
+		marker_edit_panel.grenade_add_requested.connect(_on_marker_panel_grenade_add)
+		marker_edit_panel.door_add_requested.connect(_on_marker_panel_door_add)
 		marker_edit_panel.undo_requested.connect(_on_marker_panel_undo)
 		marker_edit_panel.confirm_requested.connect(_on_marker_panel_confirm)
 		marker_edit_panel.cancel_requested.connect(_on_marker_panel_cancel)
@@ -213,6 +219,24 @@ func remove_last_clear_point() -> void:
 		path_drawer.remove_last_clear_point()
 
 
+func start_grenade_mode() -> void:
+	if path_drawer:
+		path_drawer.start_grenade_mode()
+
+
+func start_door_mode() -> void:
+	if path_drawer:
+		path_drawer.start_door_mode()
+
+
+func get_grenade_marker_count() -> int:
+	return path_drawer.get_grenade_marker_count() if path_drawer else 0
+
+
+func get_door_marker_count() -> int:
+	return path_drawer.get_door_marker_count() if path_drawer else 0
+
+
 ## 最後に追加したマーカーを削除（統一Undo）
 func undo_last_marker() -> void:
 	if path_drawer:
@@ -338,6 +362,18 @@ func _on_clear_point_added(path_ratio: float) -> void:
 	clear_point_added.emit(path_ratio)
 
 
+func _on_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
+	if marker_edit_panel:
+		marker_edit_panel.on_grenade_marker_added()
+	grenade_marker_added.emit(path_ratio, target_pos)
+
+
+func _on_door_marker_added(path_ratio: float, door: Node3D) -> void:
+	if marker_edit_panel:
+		marker_edit_panel.on_door_marker_added()
+	door_marker_added.emit(path_ratio, door)
+
+
 func _on_path_undone() -> void:
 	# パスがUndoされたらマーカーパネルを非表示にするが、
 	# パスモードは維持して再度パスを描けるようにする
@@ -368,6 +404,16 @@ func _on_marker_panel_run_add(_character: Node) -> void:
 func _on_marker_panel_clear_add(_character: Node) -> void:
 	if has_pending_path():
 		start_clear_mode()
+
+
+func _on_marker_panel_grenade_add(_character: Node) -> void:
+	if has_pending_path():
+		start_grenade_mode()
+
+
+func _on_marker_panel_door_add(_character: Node) -> void:
+	if has_pending_path():
+		start_door_mode()
 
 
 func _on_marker_panel_undo(_character: Node) -> void:

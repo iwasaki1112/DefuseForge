@@ -11,6 +11,10 @@ signal vision_add_requested(character: Node)
 signal run_add_requested(character: Node)
 ## Clear追加要求シグナル
 signal clear_add_requested(character: Node)
+## Grenade追加要求シグナル
+signal grenade_add_requested(character: Node)
+## Door追加要求シグナル
+signal door_add_requested(character: Node)
 ## 統一Undo要求シグナル
 signal undo_requested(character: Node)
 ## 確定要求シグナル
@@ -34,6 +38,14 @@ var _add_run_button: Button = null
 ## Clearマーカー部分
 var _clear_label: Label = null
 var _add_clear_button: Button = null
+
+## グレネードマーカー部分
+var _grenade_label: Label = null
+var _add_grenade_button: Button = null
+
+## ドアマーカー部分
+var _door_label: Label = null
+var _add_door_button: Button = null
 
 ## 統一Undoボタン
 var _undo_button: Button = null
@@ -93,6 +105,21 @@ func _build_ui() -> void:
 	_add_clear_button.pressed.connect(_on_add_clear_pressed)
 	marker_buttons_hbox.add_child(_add_clear_button)
 
+	# 2段目のマーカー追加ボタン（グレネード・ドア）
+	var marker_buttons_hbox2 = HBoxContainer.new()
+	marker_buttons_hbox2.add_theme_constant_override("separation", 4)
+	add_child(marker_buttons_hbox2)
+
+	_add_grenade_button = Button.new()
+	_add_grenade_button.text = "Add Grenade"
+	_add_grenade_button.pressed.connect(_on_add_grenade_pressed)
+	marker_buttons_hbox2.add_child(_add_grenade_button)
+
+	_add_door_button = Button.new()
+	_add_door_button.text = "Add Door"
+	_add_door_button.pressed.connect(_on_add_door_pressed)
+	marker_buttons_hbox2.add_child(_add_door_button)
+
 	# セパレータ2
 	var sep2 = HSeparator.new()
 	add_child(sep2)
@@ -109,6 +136,14 @@ func _build_ui() -> void:
 	_clear_label = Label.new()
 	_clear_label.text = "Clear Points: 0"
 	add_child(_clear_label)
+
+	_grenade_label = Label.new()
+	_grenade_label.text = "Grenade Markers: 0"
+	add_child(_grenade_label)
+
+	_door_label = Label.new()
+	_door_label.text = "Door Markers: 0"
+	add_child(_door_label)
 
 	# セパレータ3
 	var sep3 = HSeparator.new()
@@ -289,6 +324,18 @@ func _update_labels() -> void:
 		clear_count = _path_drawer.get_clear_point_count_for_character(_active_character)
 	_clear_label.text = "Clear Points (%s): %d" % [char_label, clear_count]
 
+	# グレネードマーカー数
+	var grenade_count = 0
+	if _path_drawer and _path_drawer.has_method("get_grenade_marker_count_for_character"):
+		grenade_count = _path_drawer.get_grenade_marker_count_for_character(_active_character)
+	_grenade_label.text = "Grenade Markers (%s): %d" % [char_label, grenade_count]
+
+	# ドアマーカー数
+	var door_count = 0
+	if _path_drawer and _path_drawer.has_method("get_door_marker_count_for_character"):
+		door_count = _path_drawer.get_door_marker_count_for_character(_active_character)
+	_door_label.text = "Door Markers (%s): %d" % [char_label, door_count]
+
 
 ## 視線ポイントが追加された時に呼ぶ
 func on_vision_point_added() -> void:
@@ -302,6 +349,16 @@ func on_run_segment_added() -> void:
 
 ## Clearポイントが追加された時に呼ぶ
 func on_clear_point_added() -> void:
+	_update_labels()
+
+
+## グレネードマーカーが追加された時に呼ぶ
+func on_grenade_marker_added() -> void:
+	_update_labels()
+
+
+## ドアマーカーが追加された時に呼ぶ
+func on_door_marker_added() -> void:
 	_update_labels()
 
 
@@ -326,6 +383,18 @@ func _on_add_run_pressed() -> void:
 func _on_add_clear_pressed() -> void:
 	if _active_character:
 		clear_add_requested.emit(_active_character)
+
+
+## Add Grenade押下時
+func _on_add_grenade_pressed() -> void:
+	if _active_character:
+		grenade_add_requested.emit(_active_character)
+
+
+## Add Door押下時
+func _on_add_door_pressed() -> void:
+	if _active_character:
+		door_add_requested.emit(_active_character)
 
 
 ## 統一Undo押下時
@@ -360,3 +429,5 @@ func clear() -> void:
 	_vision_label.text = "Vision Points: 0"
 	_run_label.text = "Run Segments: 0"
 	_clear_label.text = "Clear Points: 0"
+	_grenade_label.text = "Grenade Markers: 0"
+	_door_label.text = "Door Markers: 0"

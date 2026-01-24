@@ -6,7 +6,7 @@ extends Node3D
 ## Slice the Pie: パス上の任意の点から視線方向を設定可能
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER }
 
 ## 視線ポイントデータ（ターゲットポイントモード）
 ## { "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }
@@ -26,11 +26,17 @@ signal run_segment_added(start_ratio: float, end_ratio: float)
 ## Clearマーカー用シグナル
 signal clear_point_added(path_ratio: float)
 
+## グレネードマーカー用シグナル
+signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
+
+## ドアマーカー用シグナル
+signal door_marker_added(path_ratio: float, door: Node3D)
+
 ## パスがUndoされた時のシグナル
 signal path_undone()
 
 ## マーカー履歴用の種別（PATH = パス描画自体）
-enum MarkerType { VISION, RUN, CLEAR, PATH }
+enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR }
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -51,6 +57,8 @@ const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
 const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
+const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
+const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
 
 var _camera: Camera3D
 var _character: Node3D
@@ -76,6 +84,25 @@ var _current_run_start: Dictionary = {}  # 未完成のrun開始点 { ratio, pos
 ## Clearマーカー用
 var _clear_points: Array[Dictionary] = []  # { path_ratio }
 var _clear_meshes: Array[MeshInstance3D] = []
+
+## グレネードマーカー用
+## { "path_ratio": float, "anchor": Vector3, "target_pos": Vector3, "bounce_point": Vector3?, "bounce_normal": Vector3? }
+var _grenade_markers: Array[Dictionary] = []
+var _grenade_meshes: Array[MeshInstance3D] = []
+
+## ドアマーカー用
+## { "path_ratio": float, "anchor": Vector3, "door_node": Node3D }
+var _door_markers: Array[Dictionary] = []
+var _door_meshes: Array[MeshInstance3D] = []
+
+## グレネードモード用の状態
+var _grenade_pending_anchor: Vector3 = Vector3.ZERO
+var _grenade_pending_ratio: float = 0.0
+var _grenade_has_anchor: bool = false
+var _grenade_bounce_point: Vector3 = Vector3.ZERO
+var _grenade_bounce_normal: Vector3 = Vector3.ZERO
+var _grenade_has_bounce: bool = false
+var _grenade_trajectory_mesh: MeshInstance3D = null
 
 ## マーカー追加履歴（Undo用）- キャラクターID別に管理
 ## シングルモード: _marker_history に追加
@@ -129,6 +156,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_run_marker_input(event)
 		DrawingMode.CLEAR_MARKER:
 			_handle_clear_marker_input(event)
+		DrawingMode.GRENADE_MARKER:
+			_handle_grenade_marker_input(event)
+		DrawingMode.DOOR_MARKER:
+			_handle_door_marker_input(event)
 
 
 ## 移動パス描画の入力処理
@@ -350,7 +381,7 @@ func _get_ground_position(screen_pos: Vector2) -> Variant:
 	return null
 
 
-## 2点間に壁があるかチェック
+## 2点間に壁があるかチェック（ドアは除外）
 ## @return: { "hit": bool, "position": Vector3 (ヒット位置、hitがtrueの場合) }
 func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
 	var space_state = get_world_3d().direct_space_state
@@ -362,14 +393,47 @@ func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
 	var check_to = to + Vector3(0, 0.5, 0)
 
 	var query = PhysicsRayQueryParameters3D.create(check_from, check_to, wall_collision_mask)
-	var result = space_state.intersect_ray(query)
 
-	if result:
-		# ヒット位置を地面高さに補正
+	# 最大10回までレイキャストを試行（ドアを除外しながら）
+	var excluded_rids: Array[RID] = []
+	for _i in range(10):
+		query.exclude = excluded_rids
+		var result = space_state.intersect_ray(query)
+
+		if not result:
+			return { "hit": false }
+
+		var collider = result.collider
+
+		# ドアグループに属するオブジェクトは無視（パスはドアを貫通できる）
+		if _is_door_object(collider):
+			# このコライダーを除外リストに追加して再試行
+			if collider is CollisionObject3D:
+				excluded_rids.append(collider.get_rid())
+			continue
+
+		# 壁にヒット - 位置を地面高さに補正
 		var hit_pos = result.position
 		hit_pos.y = ground_plane_height
 		return { "hit": true, "position": hit_pos }
+
 	return { "hit": false }
+
+
+## オブジェクトがドアかどうかをチェック
+func _is_door_object(obj: Object) -> bool:
+	if not obj:
+		return false
+	var node = obj as Node
+	if not node:
+		return false
+
+	# ノードまたはその親がdoorsグループに属しているかチェック
+	while node:
+		if node.is_in_group("doors"):
+			return true
+		node = node.get_parent()
+	return false
 
 
 ## パス上で最も近い点を見つける
@@ -413,6 +477,52 @@ func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
 			closest_ratio = distance_to_point / total_length if total_length > 0 else 0.0
 
 	return { "point": closest_point, "distance": closest_distance, "ratio": closest_ratio }
+
+
+## パス上の指定された比率から距離オフセットした点を探す
+## @param base_ratio: 基準となるパス上の比率 (0.0-1.0)
+## @param offset_distance: オフセット距離（負の値で開始方向へ）
+## @return: { "point": Vector3, "ratio": float }
+func _find_offset_point_on_path(base_ratio: float, offset_distance: float) -> Dictionary:
+	if _pending_path.size() < 2:
+		return { "point": Vector3.ZERO, "ratio": 0.0 }
+
+	# パスの総距離を計算
+	var total_length: float = 0.0
+	var lengths: Array[float] = [0.0]
+	for i in range(1, _pending_path.size()):
+		var segment_length = _pending_path[i - 1].distance_to(_pending_path[i])
+		total_length += segment_length
+		lengths.append(total_length)
+
+	if total_length < 0.001:
+		return { "point": _pending_path[0], "ratio": 0.0 }
+
+	# 基準点の距離を計算
+	var base_distance = base_ratio * total_length
+
+	# オフセットを適用した距離を計算
+	var target_distance = clampf(base_distance + offset_distance, 0.0, total_length)
+
+	# 目標距離に対応するパス上の点を探す
+	var target_ratio = target_distance / total_length
+
+	for i in range(1, _pending_path.size()):
+		if lengths[i] >= target_distance:
+			var p1 = _pending_path[i - 1]
+			var p2 = _pending_path[i]
+			var segment_start_dist = lengths[i - 1]
+			var segment_length = lengths[i] - segment_start_dist
+
+			if segment_length < 0.001:
+				return { "point": p1, "ratio": target_ratio }
+
+			var t = (target_distance - segment_start_dist) / segment_length
+			var point = p1 + (p2 - p1) * t
+			return { "point": point, "ratio": target_ratio }
+
+	# パスの終点を返す
+	return { "point": _pending_path[_pending_path.size() - 1], "ratio": 1.0 }
 
 
 ## 視線ポイントの設定を完了（ターゲットポイントモード）
@@ -612,6 +722,8 @@ func clear() -> void:
 	_clear_vision_points()
 	_clear_run_markers()
 	_clear_clear_markers()
+	_clear_grenade_markers()
+	_clear_door_markers()
 	_marker_history.clear()
 	# マルチキャラクターモードもクリア
 	_clear_multi_character_markers()
@@ -639,6 +751,32 @@ func _clear_clear_markers() -> void:
 	_clear_meshes.clear()
 
 
+func _clear_grenade_markers() -> void:
+	_grenade_markers.clear()
+	for mesh in _grenade_meshes:
+		if is_instance_valid(mesh):
+			mesh.queue_free()
+	_grenade_meshes.clear()
+	# グレネードモードの状態をリセット
+	_grenade_has_anchor = false
+	_grenade_pending_anchor = Vector3.ZERO
+	_grenade_pending_ratio = 0.0
+	_grenade_has_bounce = false
+	_grenade_bounce_point = Vector3.ZERO
+	_grenade_bounce_normal = Vector3.ZERO
+	if _grenade_trajectory_mesh:
+		_grenade_trajectory_mesh.queue_free()
+		_grenade_trajectory_mesh = null
+
+
+func _clear_door_markers() -> void:
+	_door_markers.clear()
+	for mesh in _door_meshes:
+		if is_instance_valid(mesh):
+			mesh.queue_free()
+	_door_meshes.clear()
+
+
 ## 視線マーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_vision_markers() -> Array[MeshInstance3D]:
 	var markers = _vision_meshes.duplicate()
@@ -657,6 +795,20 @@ func take_run_markers() -> Array[MeshInstance3D]:
 func take_clear_markers() -> Array[MeshInstance3D]:
 	var markers = _clear_meshes.duplicate()
 	_clear_meshes.clear()
+	return markers
+
+
+## グレネードマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
+func take_grenade_markers() -> Array[MeshInstance3D]:
+	var markers = _grenade_meshes.duplicate()
+	_grenade_meshes.clear()
+	return markers
+
+
+## ドアマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
+func take_door_markers() -> Array[MeshInstance3D]:
+	var markers = _door_meshes.duplicate()
+	_door_meshes.clear()
 	return markers
 
 
@@ -984,6 +1136,10 @@ func undo_last_marker() -> int:
 			_undo_clear_marker()
 		MarkerType.PATH:
 			_undo_path()
+		MarkerType.GRENADE:
+			_undo_grenade_marker()
+		MarkerType.DOOR:
+			_undo_door_marker()
 
 	return last_type
 
@@ -1070,6 +1226,50 @@ func _undo_clear_marker() -> void:
 			mesh.queue_free()
 
 
+## Grenade マーカーをUndo（内部用、履歴は操作しない）
+func _undo_grenade_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.grenade_markers.size() > 0:
+				char_data.grenade_markers.pop_back()
+				if char_data.grenade_meshes.size() > 0:
+					var mesh = char_data.grenade_meshes.pop_back()
+					if is_instance_valid(mesh):
+						mesh.queue_free()
+		return
+
+	if _grenade_markers.size() > 0:
+		_grenade_markers.pop_back()
+		if _grenade_meshes.size() > 0:
+			var mesh = _grenade_meshes.pop_back()
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+
+
+## Door マーカーをUndo（内部用、履歴は操作しない）
+func _undo_door_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.door_markers.size() > 0:
+				char_data.door_markers.pop_back()
+				if char_data.door_meshes.size() > 0:
+					var mesh = char_data.door_meshes.pop_back()
+					if is_instance_valid(mesh):
+						mesh.queue_free()
+		return
+
+	if _door_markers.size() > 0:
+		_door_markers.pop_back()
+		if _door_meshes.size() > 0:
+			var mesh = _door_meshes.pop_back()
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+
+
 ## パス描画をUndo（内部用、履歴は操作しない）
 ## パスとすべてのマーカーをクリアする
 func _undo_path() -> void:
@@ -1086,6 +1286,8 @@ func _undo_path() -> void:
 	_clear_vision_points()
 	_clear_run_markers()
 	_clear_clear_markers()
+	_clear_grenade_markers()
+	_clear_door_markers()
 
 	# マルチキャラクターモードのマーカーもクリア
 	if _multi_character_mode:
@@ -1100,12 +1302,22 @@ func _undo_path() -> void:
 			for mesh in data.clear_meshes:
 				if is_instance_valid(mesh):
 					mesh.queue_free()
+			for mesh in data.grenade_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+			for mesh in data.door_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
 			data.vision_points.clear()
 			data.vision_meshes.clear()
 			data.run_segments.clear()
 			data.run_meshes.clear()
 			data.clear_points.clear()
 			data.clear_meshes.clear()
+			data.grenade_markers.clear()
+			data.grenade_meshes.clear()
+			data.door_markers.clear()
+			data.door_meshes.clear()
 			data.marker_history.clear()
 
 	# シグナルを発火
@@ -1206,6 +1418,10 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 			"run_meshes": [] as Array[MeshInstance3D],
 			"clear_points": [] as Array[Dictionary],
 			"clear_meshes": [] as Array[MeshInstance3D],
+			"grenade_markers": [] as Array[Dictionary],
+			"grenade_meshes": [] as Array[MeshInstance3D],
+			"door_markers": [] as Array[Dictionary],
+			"door_meshes": [] as Array[MeshInstance3D],
 			"marker_history": [] as Array[int]
 		}
 
@@ -1370,6 +1586,14 @@ func _clear_multi_character_markers() -> void:
 		for mesh in data.clear_meshes:
 			if is_instance_valid(mesh):
 				mesh.queue_free()
+		if data.has("grenade_meshes"):
+			for mesh in data.grenade_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+		if data.has("door_meshes"):
+			for mesh in data.door_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
 	_character_markers.clear()
 	_active_edit_character = null
 	_multi_character_mode = false
@@ -1423,4 +1647,489 @@ func take_all_clear_markers() -> Dictionary:
 	for char_id in _character_markers:
 		result[char_id] = _character_markers[char_id].clear_meshes.duplicate()
 		_character_markers[char_id].clear_meshes.clear()
+	return result
+
+
+## 全キャラクターのGrenadeMarkersを移譲
+## @return { char_id: Array[MeshInstance3D] }
+func take_all_grenade_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			var markers = _grenade_meshes.duplicate()
+			_grenade_meshes.clear()
+			return { _active_edit_character.get_instance_id(): markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("grenade_meshes"):
+			result[char_id] = _character_markers[char_id].grenade_meshes.duplicate()
+			_character_markers[char_id].grenade_meshes.clear()
+		else:
+			result[char_id] = []
+	return result
+
+
+## 全キャラクターのDoorMarkersを移譲
+## @return { char_id: Array[MeshInstance3D] }
+func take_all_door_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			var markers = _door_meshes.duplicate()
+			_door_meshes.clear()
+			return { _active_edit_character.get_instance_id(): markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("door_meshes"):
+			result[char_id] = _character_markers[char_id].door_meshes.duplicate()
+			_character_markers[char_id].door_meshes.clear()
+		else:
+			result[char_id] = []
+	return result
+
+
+## ========================================
+## グレネードマーカーモード API
+## ========================================
+
+## グレネードマーカー設定モードに切り替え
+## 1. パス上をクリック → 投擲位置（path_ratio）設定
+## 2. 目標クリック → 床なら完了、壁ならバウンスポイント設定
+## 3. （壁の場合）最終目標クリック → バウンス投擲設定完了
+func start_grenade_mode() -> bool:
+	if _pending_path.size() < 2:
+		return false
+
+	_drawing_mode = DrawingMode.GRENADE_MARKER
+	_is_enabled = true
+	# グレネードモード状態をリセット
+	_grenade_has_anchor = false
+	_grenade_pending_anchor = Vector3.ZERO
+	_grenade_pending_ratio = 0.0
+	_grenade_has_bounce = false
+	_grenade_bounce_point = Vector3.ZERO
+	_grenade_bounce_normal = Vector3.ZERO
+	mode_changed.emit(int(DrawingMode.GRENADE_MARKER))
+	return true
+
+
+## グレネードマーカー入力処理
+func _handle_grenade_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			_process_grenade_click(mouse_event.position)
+			get_viewport().set_input_as_handled()
+
+	elif event is InputEventMouseMotion:
+		# 軌道プレビュー更新
+		_update_grenade_trajectory_preview_at(event.position)
+
+
+## グレネードクリック処理
+func _process_grenade_click(screen_pos: Vector2) -> void:
+	if not _grenade_has_anchor:
+		# 1. パス上クリック → 投擲位置を設定
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+
+		var result = _find_closest_point_on_path(ground_pos)
+		if result.distance > path_click_threshold:
+			return
+
+		_grenade_pending_anchor = result.point
+		_grenade_pending_ratio = result.ratio
+		_grenade_has_anchor = true
+		_setup_grenade_trajectory_mesh()
+	elif not _grenade_has_bounce:
+		# 2. 目標クリック
+		var target_result = _raycast_wall_or_floor(screen_pos)
+		if target_result.is_empty():
+			return
+
+		var hit_pos: Vector3 = target_result.position
+		var hit_normal: Vector3 = target_result.normal
+
+		# 壁かどうか判定
+		var is_wall = abs(hit_normal.y) < 0.5
+
+		if is_wall:
+			# 壁の場合: バウンスポイントを設定
+			hit_pos.y = 1.0  # グレネードが壁に当たる高さ
+			_grenade_bounce_point = hit_pos
+			_grenade_bounce_normal = hit_normal
+			_grenade_has_bounce = true
+		else:
+			# 床の場合: 直接投擲完了
+			_finish_grenade_marker(hit_pos, Vector3.ZERO, Vector3.ZERO)
+	else:
+		# 3. バウンス後の最終目標クリック
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+
+		_finish_grenade_marker(ground_pos, _grenade_bounce_point, _grenade_bounce_normal)
+
+
+## グレネードマーカーを完成させる
+func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, _bounce_normal: Vector3) -> void:
+	var new_marker = {
+		"path_ratio": _grenade_pending_ratio,
+		"anchor": _grenade_pending_anchor,
+		"target_pos": target_pos,
+		"bounce_point": bounce_point if bounce_point.length_squared() > 0.001 else Vector3.ZERO
+	}
+
+	# マルチキャラクターモードの場合
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			char_data.grenade_markers.append(new_marker)
+
+			# マーカーメッシュを作成
+			var marker = _create_grenade_marker_node(_grenade_pending_anchor, target_pos, bounce_point)
+			char_data.grenade_meshes.append(marker)
+
+			# 履歴に追加
+			char_data.marker_history.append(MarkerType.GRENADE)
+	else:
+		# シングルモード
+		_grenade_markers.append(new_marker)
+
+		# マーカーメッシュを作成
+		var marker = _create_grenade_marker_node(_grenade_pending_anchor, target_pos, bounce_point)
+		_grenade_meshes.append(marker)
+
+		# 履歴に追加
+		_marker_history.append(MarkerType.GRENADE)
+
+	grenade_marker_added.emit(_grenade_pending_ratio, target_pos)
+
+	# 状態をリセット
+	_grenade_has_anchor = false
+	_grenade_pending_anchor = Vector3.ZERO
+	_grenade_pending_ratio = 0.0
+	_grenade_has_bounce = false
+	_grenade_bounce_point = Vector3.ZERO
+	_grenade_bounce_normal = Vector3.ZERO
+	_cleanup_grenade_trajectory_mesh()
+
+
+## グレネードマーカーノードを作成
+func _create_grenade_marker_node(anchor: Vector3, target: Vector3, bounce: Vector3) -> MeshInstance3D:
+	var marker = MeshInstance3D.new()
+	marker.set_script(GrenadeMarkerScript)
+	add_child(marker)
+	marker.set_position_and_target(anchor, target, bounce)
+	marker.set_colors(_character_color, Color(1.0, 0.5, 0.0, 1.0))
+	marker.set_trajectory_color(Color(_character_color.r, _character_color.g * 0.7, _character_color.b * 0.3, 0.8))
+	return marker
+
+
+## グレネード軌道プレビューメッシュをセットアップ
+func _setup_grenade_trajectory_mesh() -> void:
+	if _grenade_trajectory_mesh:
+		return
+
+	_grenade_trajectory_mesh = MeshInstance3D.new()
+	_grenade_trajectory_mesh.name = "GrenadeTrajectoryPreview"
+	add_child(_grenade_trajectory_mesh)
+
+	var mat = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.5, 0.0, 0.6)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_grenade_trajectory_mesh.material_override = mat
+
+
+## グレネード軌道プレビューを更新
+func _update_grenade_trajectory_preview_at(screen_pos: Vector2) -> void:
+	if not _grenade_has_anchor or not _grenade_trajectory_mesh:
+		return
+
+	var target_pos = _get_ground_position(screen_pos)
+	if target_pos == null:
+		var wall_result = _raycast_wall_or_floor(screen_pos)
+		if wall_result.is_empty():
+			return
+		target_pos = wall_result.position
+
+	var im = ImmediateMesh.new()
+	im.surface_begin(Mesh.PRIMITIVE_LINES)
+
+	var start_pos = _grenade_pending_anchor + Vector3(0, 0.05, 0)
+
+	if _grenade_has_bounce:
+		# バウンスポイント設定済み: アンカー → バウンス → ターゲット
+		im.surface_add_vertex(start_pos)
+		im.surface_add_vertex(_grenade_bounce_point)
+		im.surface_add_vertex(_grenade_bounce_point)
+		im.surface_add_vertex(target_pos)
+	else:
+		# バウンスなし: アンカー → ターゲット
+		im.surface_add_vertex(start_pos)
+		im.surface_add_vertex(target_pos)
+
+	im.surface_end()
+	_grenade_trajectory_mesh.mesh = im
+
+
+## グレネード軌道プレビューを削除
+func _cleanup_grenade_trajectory_mesh() -> void:
+	if _grenade_trajectory_mesh:
+		_grenade_trajectory_mesh.queue_free()
+		_grenade_trajectory_mesh = null
+
+
+## 壁または床へのレイキャスト
+func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
+	if not _camera:
+		return {}
+
+	var ray_origin = _camera.project_ray_origin(screen_pos)
+	var ray_dir = _camera.project_ray_normal(screen_pos)
+	var ray_end = ray_origin + ray_dir * 100.0
+
+	var space_state = get_world_3d().direct_space_state
+	if not space_state:
+		return {}
+
+	# 壁と床の両方を検出
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end, 3)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	return space_state.intersect_ray(query)
+
+
+## グレネードマーカーがあるか
+func has_grenade_markers() -> bool:
+	return _grenade_markers.size() > 0
+
+
+## グレネードマーカーを取得
+func get_grenade_markers() -> Array[Dictionary]:
+	return _grenade_markers
+
+
+## グレネードマーカー数を取得
+func get_grenade_marker_count() -> int:
+	if _multi_character_mode and _active_edit_character:
+		return get_grenade_marker_count_for_character(_active_edit_character)
+	return _grenade_markers.size()
+
+
+## キャラクター別のグレネードマーカー数を取得
+func get_grenade_marker_count_for_character(character: Node) -> int:
+	if not character:
+		return 0
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("grenade_markers"):
+		return _character_markers[char_id].grenade_markers.size()
+	return 0
+
+
+## キャラクター別のグレネードマーカーを取得
+func get_grenade_markers_for_character(character: Node) -> Array[Dictionary]:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("grenade_markers"):
+		return _character_markers[char_id].grenade_markers
+	return []
+
+
+## 全キャラクターのグレネードマーカーを取得
+func get_all_grenade_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			return { _active_edit_character.get_instance_id(): _grenade_markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("grenade_markers"):
+			result[char_id] = _character_markers[char_id].grenade_markers
+		else:
+			result[char_id] = []
+	return result
+
+
+## ========================================
+## ドアマーカーモード API
+## ========================================
+
+## ドアマーカー設定モードに切り替え
+## ドアをクリック → パス上最近点に自動配置
+func start_door_mode() -> bool:
+	if _pending_path.size() < 2:
+		return false
+
+	_drawing_mode = DrawingMode.DOOR_MARKER
+	_is_enabled = true
+	mode_changed.emit(int(DrawingMode.DOOR_MARKER))
+	return true
+
+
+## ドアマーカー入力処理
+func _handle_door_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			_process_door_click(mouse_event.position)
+			get_viewport().set_input_as_handled()
+
+
+## ドアクリック処理
+func _process_door_click(screen_pos: Vector2) -> void:
+	# ドアをレイキャストで検出
+	var door = _raycast_door(screen_pos)
+	if not door:
+		return
+
+	# ドア位置からパス上の最近点を計算
+	var door_pos = door.global_position
+	door_pos.y = 0
+	var result = _find_closest_point_on_path(door_pos)
+
+	# パスから遠すぎる場合はキャンセル（ドアに到達不可能）
+	if result.distance > 5.0:
+		return
+
+	# ドアから離れた位置にマーカーを配置（キック距離を確保）
+	# パスの開始方向に0.6mオフセット
+	const DOOR_KICK_OFFSET: float = 0.6
+	var offset_result = _find_offset_point_on_path(result.ratio, -DOOR_KICK_OFFSET)
+
+	var new_marker = {
+		"path_ratio": offset_result.ratio,
+		"anchor": offset_result.point,
+		"door_node": door
+	}
+
+	print("[PathDrawer] Door marker added: ratio=%f, door=%s, marker=%s" % [result.ratio, door, new_marker])
+
+	# マルチキャラクターモードの場合
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			char_data.door_markers.append(new_marker)
+
+			# マーカーメッシュを作成
+			var marker = _create_door_marker_node(result.point, door)
+			char_data.door_meshes.append(marker)
+
+			# 履歴に追加
+			char_data.marker_history.append(MarkerType.DOOR)
+	else:
+		# シングルモード
+		_door_markers.append(new_marker)
+
+		# マーカーメッシュを作成
+		var marker = _create_door_marker_node(result.point, door)
+		_door_meshes.append(marker)
+
+		# 履歴に追加
+		_marker_history.append(MarkerType.DOOR)
+
+	door_marker_added.emit(result.ratio, door)
+
+
+## ドアマーカーノードを作成
+func _create_door_marker_node(anchor: Vector3, door: Node3D) -> MeshInstance3D:
+	var marker = MeshInstance3D.new()
+	marker.set_script(DoorMarkerScript)
+	add_child(marker)
+	marker.set_position_and_door(anchor, door)
+	marker.set_colors(_character_color, Color(0.8, 0.6, 0.3, 1.0))
+	marker.set_connection_color(Color(_character_color.r * 0.8, _character_color.g * 0.6, _character_color.b * 0.3, 0.8))
+	return marker
+
+
+## ドアをレイキャストで検出
+func _raycast_door(screen_pos: Vector2) -> Node3D:
+	if not _camera:
+		return null
+
+	var ray_origin = _camera.project_ray_origin(screen_pos)
+	var ray_dir = _camera.project_ray_normal(screen_pos)
+	var ray_end = ray_origin + ray_dir * 100.0
+
+	var space_state = get_world_3d().direct_space_state
+	if not space_state:
+		return null
+
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var result = space_state.intersect_ray(query)
+	if result.is_empty():
+		return null
+
+	# doorsグループを探す
+	var collider = result.collider
+	var node = collider
+	while node:
+		if node.is_in_group("doors"):
+			return node as Node3D
+		node = node.get_parent()
+	return null
+
+
+## ドアマーカーがあるか
+func has_door_markers() -> bool:
+	return _door_markers.size() > 0
+
+
+## ドアマーカーを取得
+func get_door_markers() -> Array[Dictionary]:
+	return _door_markers
+
+
+## ドアマーカー数を取得
+func get_door_marker_count() -> int:
+	if _multi_character_mode and _active_edit_character:
+		return get_door_marker_count_for_character(_active_edit_character)
+	return _door_markers.size()
+
+
+## キャラクター別のドアマーカー数を取得
+func get_door_marker_count_for_character(character: Node) -> int:
+	if not character:
+		return 0
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("door_markers"):
+		return _character_markers[char_id].door_markers.size()
+	return 0
+
+
+## キャラクター別のドアマーカーを取得
+func get_door_markers_for_character(character: Node) -> Array[Dictionary]:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("door_markers"):
+		return _character_markers[char_id].door_markers
+	return []
+
+
+## 全キャラクターのドアマーカーを取得
+func get_all_door_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			return { _active_edit_character.get_instance_id(): _door_markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("door_markers"):
+			result[char_id] = _character_markers[char_id].door_markers
+		else:
+			result[char_id] = []
 	return result

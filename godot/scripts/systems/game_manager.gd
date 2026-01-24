@@ -670,6 +670,9 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.setup(mesh_parent)
 		# ドアキック用: 個別キャラクターのパス完了シグナルを接続
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
+		# グレネード/ドアマーカー到達シグナルを接続
+		path_execution_manager.grenade_marker_reached.connect(_on_grenade_marker_reached)
+		path_execution_manager.door_marker_reached.connect(_on_door_marker_reached)
 
 
 func _setup_idle_manager() -> void:
@@ -1497,3 +1500,179 @@ func _cleanup_grenade_trajectory_mesh() -> void:
 	if _grenade_trajectory_mesh:
 		_grenade_trajectory_mesh.queue_free()
 		_grenade_trajectory_mesh = null
+
+
+## ========================================
+## パスマーカー到達時の処理
+## ========================================
+
+## グレネードマーカー到達時（移動を継続しながら投擲）
+func _on_grenade_marker_reached(character: Node, marker_data: Dictionary) -> void:
+	if not is_instance_valid(character):
+		return
+
+	var char_body := character as CharacterBody3D
+	if not char_body:
+		return
+
+	# マーカーデータからターゲット位置を取得
+	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
+	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
+
+	if target_pos == Vector3.ZERO:
+		return
+
+	# グレネードをインスタンス化
+	var grenade = GrenadeScene.instantiate() as Grenade
+	if not grenade:
+		return
+
+	# ワールドに追加
+	_mesh_parent.add_child(grenade)
+
+	# 投擲開始位置
+	var start_pos = char_body.global_position + Vector3(0, 1.5, 0)
+
+	# バウンスポイントがある場合はバウンス投擲
+	if bounce_point != Vector3.ZERO and bounce_point.length_squared() > 0.001:
+		# バウンス法線を計算（簡略化：バウンスポイントからターゲットへの方向）
+		var bounce_normal = (target_pos - bounce_point).normalized()
+		bounce_normal.y = 0
+		grenade.throw_with_bounce(start_pos, bounce_point, bounce_normal, target_pos, char_body)
+	else:
+		# 直接投擲
+		grenade.throw(start_pos, target_pos, char_body)
+
+	# シグナル発火
+	grenade_thrown.emit(grenade, char_body)
+
+
+## ドアマーカー到達時（移動を一時停止してドアキック）
+func _on_door_marker_reached(character: Node, door: Node3D) -> void:
+	print("[GameManager] _on_door_marker_reached: character=%s, door=%s" % [character, door])
+	if not is_instance_valid(character) or not is_instance_valid(door):
+		# ドアが無効な場合はパス追従を再開
+		print("[GameManager] Door or character invalid, resuming path")
+		_resume_path_after_door(character)
+		return
+
+	var char_body := character as CharacterBody3D
+	if not char_body:
+		print("[GameManager] Character is not CharacterBody3D")
+		_resume_path_after_door(character)
+		return
+
+	# ドアキック実行（完了後にパス追従を再開）
+	print("[GameManager] Executing door kick from marker")
+	_execute_door_kick_from_marker(char_body, door)
+
+
+## マーカーからのドアキック実行（完了後にパス追従を再開）
+func _execute_door_kick_from_marker(character: CharacterBody3D, door: Node3D) -> void:
+	if not is_instance_valid(character) or not is_instance_valid(door):
+		_resume_path_after_door(character)
+		return
+
+	var door_pos := door.global_position
+	door_pos.y = character.global_position.y
+
+	# モデルをTweenでスムーズに回転
+	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
+	if not anim_ctrl:
+		_resume_path_after_door(character)
+		return
+
+	# 現在の回転と目標の回転を計算
+	var model = anim_ctrl.get_model() if anim_ctrl.has_method("get_model") else null
+	if not model:
+		# フォールバック: 即座に向きを変えてキック
+		if character.has_method("face_towards"):
+			character.face_towards(door_pos)
+		_play_door_kick_animation_from_marker(character, door)
+		return
+
+	# 目標方向を計算（Mixamoモデルは+Zが前方）
+	var direction := (door_pos - character.global_position).normalized()
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		direction = Vector3.FORWARD
+
+	# Basis.looking_at(-direction) でMixamoモデルの向きを正しく設定
+	var target_basis := Basis.looking_at(-direction, Vector3.UP)
+	var target_quat := target_basis.get_rotation_quaternion()
+	var current_quat := Quaternion(model.transform.basis)
+
+	# Tweenでスムーズに回転（0.25秒）
+	var tween := create_tween()
+	tween.tween_method(
+		func(t: float):
+			if is_instance_valid(model):
+				var new_quat := current_quat.slerp(target_quat, t)
+				model.transform.basis = Basis(new_quat),
+		0.0, 1.0, 0.25
+	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+	# 回転完了後にキックアニメーション再生
+	tween.tween_callback(_play_door_kick_animation_from_marker.bind(character, door))
+
+
+## ドアキックアニメーション再生（マーカーから）
+func _play_door_kick_animation_from_marker(character: CharacterBody3D, door: Node3D) -> void:
+	if not is_instance_valid(character) or not is_instance_valid(door):
+		_resume_path_after_door(character)
+		return
+
+	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
+	if not anim_ctrl or not anim_ctrl.has_method("play_door_kick"):
+		_resume_path_after_door(character)
+		return
+
+	# ドア方向を保存（キック完了後にこの向きを維持するため）
+	var door_dir := (door.global_position - character.global_position).normalized()
+	door_dir.y = 0.0
+	if door_dir.length_squared() > 0.001:
+		_door_kick_directions[character.get_instance_id()] = door_dir.normalized()
+
+	# door_kick_impactシグナルに接続（キックがドアに当たるタイミングでドアを開く）
+	if anim_ctrl.has_signal("door_kick_impact"):
+		if not anim_ctrl.door_kick_impact.is_connected(_on_door_kick_done.bind(door, character)):
+			anim_ctrl.door_kick_impact.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
+
+	# door_kick_finishedシグナルに接続（アニメーション完了後にパス追従を再開）
+	if anim_ctrl.has_signal("door_kick_finished"):
+		if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_animation_finished_from_marker.bind(character)):
+			anim_ctrl.door_kick_finished.connect(_on_door_kick_animation_finished_from_marker.bind(character), CONNECT_ONE_SHOT)
+
+	anim_ctrl.play_door_kick()
+
+
+## ドアキックアニメーション完了時（マーカーから）
+func _on_door_kick_animation_finished_from_marker(character: CharacterBody3D) -> void:
+	if not is_instance_valid(character):
+		return
+
+	var char_id := character.get_instance_id()
+	if _door_kick_directions.has(char_id):
+		var door_dir: Vector3 = _door_kick_directions[char_id]
+		_door_kick_directions.erase(char_id)
+
+		# キャラクターの向きをドア方向に設定
+		if character.has_method("set_facing_direction_vec"):
+			character.set_facing_direction_vec(door_dir)
+
+	# パス追従を再開
+	_resume_path_after_door(character)
+
+
+## ドアキック後にパス追従を再開
+func _resume_path_after_door(character: Node) -> void:
+	if not is_instance_valid(character):
+		return
+
+	# PathExecutionManagerからコントローラーを取得してresumeを呼ぶ
+	if path_execution_manager:
+		var char_id = character.get_instance_id()
+		if path_execution_manager._path_controllers.has(char_id):
+			var controller = path_execution_manager._path_controllers[char_id]
+			if controller.has_method("resume_after_door"):
+				controller.resume_after_door()
