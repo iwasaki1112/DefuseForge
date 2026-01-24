@@ -355,10 +355,30 @@ func _on_door_kick_impact() -> void:
 
 func _on_door_kick_finished(_anim_name: String) -> void:
 	_is_door_kicking = false
-	# Resume AnimationTree
-	if _anim_tree and not _is_dead:
-		_anim_tree.active = true
+
+	# スムーズにアイドルへ遷移してからAnimationTreeを再開
+	if _anim_player and not _is_dead:
+		# 武器に応じたアイドルアニメーションを選択
+		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
+		if _stance == Stance.CROUCH:
+			idle_anim_name = "rifle_idle_crouching" if _weapon == Weapon.RIFLE else "pistol_idle_crouching"
+
+		# クロスフェードでアイドルへ遷移（0.3秒）
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+
+		# クロスフェード完了後にAnimationTreeを再開
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
 	door_kick_finished.emit()
+
+
+## ドアキック後のAnimationTree再開
+func _resume_animation_tree() -> void:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking:
+		_anim_tree.active = true
 
 
 ## Check if door kick animation is playing

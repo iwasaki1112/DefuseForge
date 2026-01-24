@@ -170,7 +170,7 @@
 - `Weapon.PISTOL` → `pistol_door_kick`
 
 アニメーション再生中は`update_animation()`の更新がスキップされ、`get_current_speed()`は0を返す。
-アニメーション完了時に`door_kick_finished`シグナルが発火する。
+アニメーション完了時に`door_kick_finished`シグナルが発火し、0.3秒のクロスフェードでアイドルアニメーションに遷移する。
 
 ### is_door_kicking() -> bool
 ドアキックアニメーション再生中か確認する。

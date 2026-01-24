@@ -201,6 +201,7 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 4. `GameCharacter.face_towards()`でドア方向を向く
 5. ドアキックアニメーション再生（`CharacterAnimationController.play_door_kick()`）
 6. **インパクトタイミング**（フレーム36/66、1.2秒）でドアをY軸で170度回転開始（Tween、キャラクターから離れる方向）
+7. **アニメーション完了時**にキャラクターの向きをドア方向に維持（`set_facing_direction_vec()`）
 
 **アンカーベースのアプローチ:**
 - `anchor_front`: `door_pos + door_forward * 1.0`（+Z側）
@@ -214,7 +215,8 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 **内部メソッド:**
 - `_start_door_kick(character, door)`: ドアキック開始、アンカー選択
 - `_on_door_approach_completed(character, door)`: ドア前到達完了、向き設定
-- `_on_door_kick_done(door, character)`: アニメーション完了、ドア回転開始
+- `_on_door_kick_done(door, character)`: インパクト時、ドア回転開始
+- `_on_door_kick_animation_finished(character)`: アニメーション完了、ドア方向を維持
 
 ### 毎フレーム処理
 

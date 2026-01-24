@@ -934,6 +934,8 @@ func _on_character_died(character: GameCharacter) -> void:
 
 ## ドアキック中のドア参照（キャラクターID -> ドア）
 var _door_kick_targets: Dictionary = {}
+## ドアキック時のドア方向（キャラクターID -> Vector3）
+var _door_kick_directions: Dictionary = {}
 
 
 ## ドアキック開始
@@ -1052,10 +1054,22 @@ func _play_door_kick_animation(character: CharacterBody3D, door: Node3D) -> void
 
 	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
 	if anim_ctrl and anim_ctrl.has_method("play_door_kick"):
+		# ドア方向を保存（キック完了後にこの向きを維持するため）
+		var door_dir := (door.global_position - character.global_position).normalized()
+		door_dir.y = 0.0
+		if door_dir.length_squared() > 0.001:
+			_door_kick_directions[character.get_instance_id()] = door_dir.normalized()
+
 		# door_kick_impactシグナルに接続（キックがドアに当たるタイミングでドアを開く）
 		if anim_ctrl.has_signal("door_kick_impact"):
 			if not anim_ctrl.door_kick_impact.is_connected(_on_door_kick_done.bind(door, character)):
 				anim_ctrl.door_kick_impact.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
+
+		# door_kick_finishedシグナルに接続（アニメーション完了後にドア方向を維持）
+		if anim_ctrl.has_signal("door_kick_finished"):
+			if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_animation_finished.bind(character)):
+				anim_ctrl.door_kick_finished.connect(_on_door_kick_animation_finished.bind(character), CONNECT_ONE_SHOT)
+
 		anim_ctrl.play_door_kick()
 
 
@@ -1092,3 +1106,20 @@ func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
 
 	# ドアが開いた後に視界を強制更新
 	tween.tween_callback(_force_update_all_vision)
+
+
+## ドアキックアニメーション完了時（ドア方向を維持）
+func _on_door_kick_animation_finished(character: CharacterBody3D) -> void:
+	if not is_instance_valid(character):
+		return
+
+	var char_id := character.get_instance_id()
+	if not _door_kick_directions.has(char_id):
+		return
+
+	var door_dir: Vector3 = _door_kick_directions[char_id]
+	_door_kick_directions.erase(char_id)
+
+	# キャラクターの向きをドア方向に設定
+	if character.has_method("set_facing_direction_vec"):
+		character.set_facing_direction_vec(door_dir)
