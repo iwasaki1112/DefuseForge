@@ -96,8 +96,6 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_clear_index = 0
 	_grenade_index = 0
 	_door_index = 0
-
-	print("[PathFollowingController] start_path: door_markers count=%d, data=%s" % [_door_markers.size(), _door_markers])
 	_is_running = run
 	_is_following = true
 	_is_waiting_for_door = false
@@ -189,12 +187,6 @@ func process(delta: float) -> void:
 	# ドアマーカーのチェック（最終目的地到達前に優先チェック）
 	# ドアマーカーがある場合、パス完了より先に停止してドアキックを実行
 	var early_progress = _calculate_path_progress()
-
-	# デバッグ：進行率と最終地点までの距離を表示
-	if _door_markers.size() > 0 and _door_index < _door_markers.size():
-		var next_door = _door_markers[_door_index]
-		print("[PathFollowingController] progress=%.4f, door_ratio=%.4f, distance_to_final=%.4f" % [early_progress, next_door.path_ratio, distance_to_final])
-
 	if _check_door_markers(early_progress):
 		return  # ドアマーカーに到達、処理を中断
 
@@ -496,7 +488,6 @@ func _check_door_markers(progress: float) -> bool:
 
 			# ドアノードを取得してシグナル発火
 			var door = dm.door_node if dm.has("door_node") else null
-			print("[PathFollowingController] Door marker reached! index=%d, door=%s, dm=%s" % [_door_index - 1, door, dm])
 			door_marker_reached.emit(_door_index - 1, door)
 			return true
 		else:

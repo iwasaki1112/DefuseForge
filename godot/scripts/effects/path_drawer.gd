@@ -2011,8 +2011,6 @@ func _process_door_click(screen_pos: Vector2) -> void:
 		"door_node": door
 	}
 
-	print("[PathDrawer] Door marker added: ratio=%f, door=%s, marker=%s" % [result.ratio, door, new_marker])
-
 	# マルチキャラクターモードの場合
 	if _multi_character_mode and _active_edit_character:
 		var char_id = _active_edit_character.get_instance_id()

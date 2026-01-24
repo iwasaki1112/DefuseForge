@@ -189,8 +189,6 @@ func confirm_path(
 			for dm in all_door_markers_data[char_id]:
 				char_door_markers.append(dm)
 
-		print("[PathExecutionManager] confirm_path: char_door_markers count=%d, data=%s" % [char_door_markers.size(), char_door_markers])
-
 		# 視線ポイントとRun区間とClearポイントとグレネード/ドアマーカーの比率を再計算
 		var adjusted_vision_points = _adjust_ratios_for_connection(char_vision_points, connect_length, base_length)
 		var adjusted_run_segments = _adjust_run_ratios_for_connection(char_run_segments, connect_length, base_length)
@@ -309,8 +307,6 @@ func execute_all_paths(run: bool) -> int:
 		if data.has("door_markers_data"):
 			for dm in data["door_markers_data"]:
 				door_markers_data.append(dm)
-
-		print("[PathExecutionManager] execute_all_paths: door_markers_data count=%d, data=%s" % [door_markers_data.size(), door_markers_data])
 
 		if not is_instance_valid(character):
 			continue

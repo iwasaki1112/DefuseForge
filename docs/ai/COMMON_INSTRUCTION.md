@@ -60,13 +60,15 @@
 | Character | GameCharacter | HP・チーム・死亡処理を管理するCharacterBody3D |
 | Character | VisionComponent | シャドウキャスト法でFoW用の可視ポリゴンを計算 |
 | Character | CombatAwarenessComponent | 敵検出・自動照準を管理するコンポーネント |
-| Character | PathFollowingController | パス追従＋視線ポイント＋Run区間＋スタック検出を行う再利用可能コントローラー |
+| Character | PathFollowingController | パス追従＋視線ポイント＋Run/Clear/Grenade/Doorマーカー処理＋スタック検出を行う再利用可能コントローラー |
 | Character | CharacterRotationController | 視線方向変更のスムーズな回転制御 |
-| Effect | PathDrawer | マウスドラッグでパス描画＋視線ポイント＋Runマーカー設定 |
+| Effect | PathDrawer | マウスドラッグでパス描画（ドア貫通可能）＋視線ポイント＋Run/Clear/Grenade/Doorマーカー設定 |
 | Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | Effect | RunMarker | Run区間の開始/終点を示すマーカー |
 | Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー |
 | Effect | ClearMarker | Clearポイント（視線・Runリセット）を示すマーカー |
+| Effect | GrenadeMarker | パス上のグレネード投擲位置＋軌道を示すマーカー |
+| Effect | DoorMarker | パス上のドアキック位置＋対象ドアを示すマーカー |
 | Effect | CharacterSelectedMarker | 選択中キャラクター足元の回転マーカー |
 | Util | GameConstants | ノード名・グループ名・アニメ名などの共有定数 |
 | Util | CameraPanController | 画面ドラッグ/ピンチによるカメラ移動・ズーム制御 |
