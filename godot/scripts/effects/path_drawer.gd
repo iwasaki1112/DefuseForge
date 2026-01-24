@@ -1996,8 +1996,9 @@ func _process_door_click(screen_pos: Vector2) -> void:
 	door_pos.y = 0
 	var result = _find_closest_point_on_path(door_pos)
 
-	# パスから遠すぎる場合はキャンセル（ドアに到達不可能）
-	if result.distance > 5.0:
+	# パスから遠すぎる場合はキャンセル（パスがドアの0.6m以内にないとドアマーカーは配置できない）
+	const DOOR_PROXIMITY_THRESHOLD: float = 0.6
+	if result.distance > DOOR_PROXIMITY_THRESHOLD:
 		return
 
 	# ドアから離れた位置にマーカーを配置（キック距離を確保）
