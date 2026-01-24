@@ -120,21 +120,11 @@ func confirm_path(
 			all_door_markers_data[cid] = base_door.duplicate()
 
 		# 元のマーカーは後で削除
-		for marker in original_vision_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_run_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_clear_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_grenade_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
-		for marker in original_door_markers:
-			if is_instance_valid(marker):
-				marker.queue_free()
+		free_marker_meshes(original_vision_markers)
+		free_marker_meshes(original_run_markers)
+		free_marker_meshes(original_clear_markers)
+		free_marker_meshes(original_grenade_markers)
+		free_marker_meshes(original_door_markers)
 
 	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
 
@@ -201,26 +191,17 @@ func confirm_path(
 		var path_mesh = _create_path_mesh(full_display_path, character)
 
 		# マルチモードの場合、元のマーカーを削除して新しいマーカーを生成
-		if is_multi_mode and all_vision_markers.has(char_id):
-			for marker in all_vision_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_run_markers.has(char_id):
-			for marker in all_run_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_clear_markers.has(char_id):
-			for marker in all_clear_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_grenade_markers.has(char_id):
-			for marker in all_grenade_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if is_multi_mode and all_door_markers.has(char_id):
-			for marker in all_door_markers[char_id]:
-				if is_instance_valid(marker):
-					marker.queue_free()
+		if is_multi_mode:
+			if all_vision_markers.has(char_id):
+				free_marker_meshes(all_vision_markers[char_id])
+			if all_run_markers.has(char_id):
+				free_marker_meshes(all_run_markers[char_id])
+			if all_clear_markers.has(char_id):
+				free_marker_meshes(all_clear_markers[char_id])
+			if all_grenade_markers.has(char_id):
+				free_marker_meshes(all_grenade_markers[char_id])
+			if all_door_markers.has(char_id):
+				free_marker_meshes(all_door_markers[char_id])
 
 		# 各キャラクター用にマーカーを新規生成
 		var char_vision_markers_nodes = _create_vision_markers_for_path(
@@ -493,59 +474,26 @@ func _clear_pending_path_for_character(char_id: int) -> void:
 	if not pending_paths.has(char_id):
 		return
 
-	var old_data = pending_paths[char_id]
-	if old_data.has("path_mesh") and is_instance_valid(old_data["path_mesh"]):
-		old_data["path_mesh"].queue_free()
-	if old_data.has("vision_markers"):
-		for marker in old_data["vision_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("run_markers"):
-		for marker in old_data["run_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("clear_markers"):
-		for marker in old_data["clear_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("grenade_markers"):
-		for marker in old_data["grenade_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-	if old_data.has("door_markers"):
-		for marker in old_data["door_markers"]:
-			if is_instance_valid(marker):
-				marker.queue_free()
-
+	_free_pending_path_data(pending_paths[char_id])
 	pending_paths.erase(char_id)
 
 
-## 全てのパスメッシュと視線マーカーとRunマーカーとClearマーカーとグレネード/ドアマーカーを削除
+## 全てのパスメッシュとマーカーを削除
 func _clear_all_path_meshes() -> void:
 	for char_id in pending_paths:
-		var data = pending_paths[char_id]
-		if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
-			data["path_mesh"].queue_free()
-		if data.has("vision_markers"):
-			for marker in data["vision_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("run_markers"):
-			for marker in data["run_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("clear_markers"):
-			for marker in data["clear_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("grenade_markers"):
-			for marker in data["grenade_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
-		if data.has("door_markers"):
-			for marker in data["door_markers"]:
-				if is_instance_valid(marker):
-					marker.queue_free()
+		_free_pending_path_data(pending_paths[char_id])
+
+
+## pending_pathsのデータからメッシュとマーカーを解放
+func _free_pending_path_data(data: Dictionary) -> void:
+	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
+		data["path_mesh"].queue_free()
+
+	# 全マーカータイプを一括解放
+	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "door_markers"]
+	for key in marker_keys:
+		if data.has(key):
+			free_marker_meshes(data[key])
 
 
 ## パスの長さを計算
