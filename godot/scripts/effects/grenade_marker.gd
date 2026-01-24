@@ -1,20 +1,12 @@
 class_name GrenadeMarker
-extends MeshInstance3D
+extends ActionMarker
 
 ## グレネードマーカー（円形背景 + 爆発アイコン + 軌道線）
 ## パス上のグレネード投擲位置に表示され、投擲目標への軌道を示す
 
-@export var circle_radius: float = 0.3  ## 円の半径
-@export var circle_color: Color = Color(0.1, 0.1, 0.1, 0.95)  ## 円の背景色
-@export var icon_color: Color = Color(1.0, 0.5, 0.0, 1.0)  ## アイコンの色（オレンジ）
-@export var height_offset: float = 0.03  ## 地面からの高さ
-@export var segments: int = 32  ## 円のセグメント数
 @export var trajectory_line_color: Color = Color(1.0, 0.5, 0.0, 0.8)  ## 軌道線の色
 @export var trajectory_line_width: float = 0.02  ## 軌道線の太さ
 
-var _array_mesh: ArrayMesh
-var _circle_material: StandardMaterial3D
-var _icon_material: StandardMaterial3D
 var _trajectory_material: StandardMaterial3D
 var _target_pos: Vector3 = Vector3.ZERO  ## 投擲目標位置
 var _bounce_point: Vector3 = Vector3.ZERO  ## バウンスポイント（壁に当たる位置）
@@ -22,32 +14,18 @@ var _has_bounce: bool = false  ## バウンスポイントがあるか
 var _trajectory_mesh: MeshInstance3D = null  ## 軌道線用メッシュ
 
 
-func _ready() -> void:
-	_setup_mesh()
+func _init() -> void:
+	# デフォルト色を設定
+	circle_color = Color(0.1, 0.1, 0.1, 0.95)
+	icon_color = Color(1.0, 0.5, 0.0, 1.0)  # オレンジ
+
+
+func get_action_marker_type() -> MarkerType:
+	return MarkerType.GRENADE
 
 
 func _setup_mesh() -> void:
-	_array_mesh = ArrayMesh.new()
-	mesh = _array_mesh
-
-	# 円のマテリアル
-	_circle_material = StandardMaterial3D.new()
-	_circle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_circle_material.albedo_color = circle_color
-	_circle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_circle_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_circle_material.render_priority = 10
-
-	# アイコンのマテリアル
-	_icon_material = StandardMaterial3D.new()
-	_icon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_icon_material.albedo_color = icon_color
-	_icon_material.emission_enabled = true
-	_icon_material.emission = icon_color
-	_icon_material.emission_energy_multiplier = 1.2
-	_icon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_icon_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_icon_material.render_priority = 11
+	super._setup_mesh()
 
 	# 軌道線のマテリアル
 	_trajectory_material = StandardMaterial3D.new()
@@ -57,55 +35,9 @@ func _setup_mesh() -> void:
 	_trajectory_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_trajectory_material.render_priority = 9
 
-	_build_mesh()
 
-
-func _build_mesh() -> void:
-	_array_mesh.clear_surfaces()
-
-	# 塗りつぶし円を生成
-	_build_filled_circle()
-
-	# 爆発アイコンを生成
-	_build_explosion_icon()
-
-
-## 塗りつぶし円を構築
-func _build_filled_circle() -> void:
-	var vertices = PackedVector3Array()
-	var indices = PackedInt32Array()
-
-	# 中心点
-	vertices.append(Vector3(0, 0, 0))
-
-	# 円周上の頂点
-	for i in range(segments):
-		var angle = TAU * i / segments
-		vertices.append(Vector3(
-			cos(angle) * circle_radius,
-			0,
-			sin(angle) * circle_radius
-		))
-
-	# 三角形で塗りつぶし
-	for i in range(segments):
-		var curr = i + 1
-		var next = (i + 1) % segments + 1
-		indices.append(0)  # 中心
-		indices.append(curr)
-		indices.append(next)
-
-	var arrays = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_INDEX] = indices
-
-	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_array_mesh.surface_set_material(0, _circle_material)
-
-
-## 爆発アイコン（スターバースト形状）を構築
-func _build_explosion_icon() -> void:
+## アイコン（爆発アイコン）を構築
+func _build_icon() -> void:
 	var vertices = PackedVector3Array()
 	var indices = PackedInt32Array()
 
@@ -175,17 +107,6 @@ func has_bounce_point() -> bool:
 	return _has_bounce
 
 
-## 色を変更
-func set_colors(bg_color: Color, fg_color: Color) -> void:
-	circle_color = bg_color
-	icon_color = fg_color
-	if _circle_material:
-		_circle_material.albedo_color = bg_color
-	if _icon_material:
-		_icon_material.albedo_color = fg_color
-		_icon_material.emission = fg_color
-
-
 ## 軌道線の色を設定
 func set_trajectory_color(color: Color) -> void:
 	trajectory_line_color = color
@@ -242,7 +163,7 @@ func _build_trajectory_line() -> void:
 
 
 ## ライン（四角形）を構築
-func _build_line_segment(vertices: PackedVector3Array, indices: PackedInt32Array, from: Vector3, to: Vector3, v_offset: int = 0) -> void:
+func _build_line_segment(vertices: PackedVector3Array, indices: PackedInt32Array, from: Vector3, to: Vector3, _v_offset: int = 0) -> void:
 	var direction = (to - from).normalized()
 	var perpendicular = Vector3(-direction.z, 0, direction.x).normalized() * trajectory_line_width
 
