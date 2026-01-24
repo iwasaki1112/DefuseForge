@@ -37,6 +37,8 @@ var _grenade_index: int = 0
 var _door_markers: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
 var _door_index: int = 0
 var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
+var _is_waiting_for_closed_door: bool = false  # 閉じたドアが開くのを待っている状態
+var _waiting_door: Node3D = null  # 待機中のドアノード
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
@@ -99,6 +101,8 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_is_running = run
 	_is_following = true
 	_is_waiting_for_door = false
+	_is_waiting_for_closed_door = false
+	_waiting_door = null
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
 	_last_move_direction = Vector3.ZERO
@@ -131,6 +135,8 @@ func cancel() -> void:
 
 	_is_following = false
 	_is_waiting_for_door = false
+	_is_waiting_for_closed_door = false
+	_waiting_door = null
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()
@@ -157,6 +163,17 @@ func process(delta: float) -> void:
 	# ドアキック完了待ち状態の場合は処理しない
 	if _is_waiting_for_door:
 		return
+
+	# 閉じたドアが開くのを待っている場合
+	if _is_waiting_for_closed_door:
+		if _check_waiting_door_opened():
+			# ドアが開いたので移動再開
+			_is_waiting_for_closed_door = false
+			_waiting_door = null
+		else:
+			# アイドルアニメーションを維持
+			_update_idle_animation_while_waiting()
+			return  # まだ閉じているので待機継続
 
 	# キャラクターキャッシュ更新（150ms間隔）
 	_characters_cache_timer += delta
@@ -296,6 +313,17 @@ func process(delta: float) -> void:
 		# VisionComponent用にGameCharacterの向きを同期
 		if look_dir.length_squared() > 0.001:
 			_character._facing_direction = look_dir.normalized()
+
+	# 閉じたドアチェック（移動方向に閉じたドアがあれば停止）
+	# ただし、Doorマーカーが設定されているドアは除外（Doorマーカーで処理される）
+	var closed_door = _check_closed_door_ahead(move_dir)
+	if closed_door and not _is_door_in_markers(closed_door):
+		_is_waiting_for_closed_door = true
+		_waiting_door = closed_door
+		_character.velocity = Vector3.ZERO
+		# アイドルアニメーションに切り替え
+		_update_idle_animation_while_waiting()
+		return
 
 	# 物理移動
 	_character.velocity.x = move_dir.x * speed
@@ -468,28 +496,46 @@ func _check_grenade_markers(progress: float) -> void:
 func _check_door_markers(progress: float) -> bool:
 	# パス終端付近のマーカーに対する許容範囲（進行率が完全に1.0に到達しないため）
 	const END_TOLERANCE: float = 0.03
+	# マーカー位置への到達判定距離
+	const MARKER_REACH_DISTANCE: float = 0.8
 
 	while _door_index < _door_markers.size():
 		var dm = _door_markers[_door_index]
 		var target_ratio = dm.path_ratio
 
 		# 終端付近（ratio > 0.97）のマーカーは許容範囲を持たせる
-		var reached = false
+		var ratio_reached = false
 		if target_ratio > 0.97:
 			# 終端マーカー: progress が target_ratio - END_TOLERANCE 以上で到達とみなす
-			reached = progress >= (target_ratio - END_TOLERANCE)
+			ratio_reached = progress >= (target_ratio - END_TOLERANCE)
 		else:
-			reached = progress >= target_ratio
+			ratio_reached = progress >= target_ratio
 
-		if reached:
-			# ドアマーカーに到達: パスを一時停止
-			_is_waiting_for_door = true
-			_door_index += 1
+		if ratio_reached:
+			# 進行率だけでなく、実際の距離もチェック
+			# キャラクターがマーカーのanchor位置に十分近いか確認
+			var actually_reached = true
+			if dm.has("anchor") and _character:
+				var char_pos = _character.global_position
+				char_pos.y = 0
+				var anchor = dm.anchor
+				anchor.y = 0
+				var distance = char_pos.distance_to(anchor)
+				actually_reached = distance < MARKER_REACH_DISTANCE
 
-			# ドアノードを取得してシグナル発火
-			var door = dm.door_node if dm.has("door_node") else null
-			door_marker_reached.emit(_door_index - 1, door)
-			return true
+			if actually_reached:
+				# ドアマーカーに到達: パスを一時停止
+				_is_waiting_for_door = true
+				_door_index += 1
+
+				# ドアノードを取得してシグナル発火
+				var door = dm.door_node if dm.has("door_node") else null
+				door_marker_reached.emit(_door_index - 1, door)
+				return true
+			else:
+				# 進行率は超えているが、実際の位置はまだ遠い
+				# 次のフレームで再チェックするために break しない
+				break
 		else:
 			break
 	return false
@@ -498,6 +544,88 @@ func _check_door_markers(progress: float) -> bool:
 ## ドアキック完了後にパス追従を再開
 func resume_after_door() -> void:
 	_is_waiting_for_door = false
+
+
+## 移動方向に閉じたドアがあるかチェック
+## @return: 閉じたドアがあればそのノード、なければnull
+func _check_closed_door_ahead(move_dir: Vector3) -> Node3D:
+	if not _character:
+		return null
+
+	# レイキャストで前方の閉じたドアを検出
+	var space_state = _character.get_world_3d().direct_space_state
+	if not space_state:
+		return null
+
+	var from = _character.global_position + Vector3(0, 0.5, 0)
+	var to = from + move_dir.normalized() * 0.8  # 0.8m先をチェック
+
+	# 壁レイヤー（2）をチェック
+	var query = PhysicsRayQueryParameters3D.create(from, to, 2)
+	query.exclude = [_character.get_rid()]
+	var result = space_state.intersect_ray(query)
+
+	if result.is_empty():
+		return null
+
+	var collider = result.collider
+	if not collider:
+		return null
+
+	# doorsグループに属していて、open_doorsグループに属していないドアを検出
+	var door = _find_closed_door_in_hierarchy(collider)
+	return door
+
+
+## ノード階層を遡って閉じたドアを探す
+func _find_closed_door_in_hierarchy(node: Node) -> Node3D:
+	while node:
+		if node.is_in_group("doors"):
+			# open_doorsグループに属していなければ閉じている
+			if not node.is_in_group("open_doors"):
+				return node as Node3D
+			else:
+				return null  # 開いているドア
+		node = node.get_parent()
+	return null
+
+
+## 待機中のドアが開いたかチェック
+func _check_waiting_door_opened() -> bool:
+	if not is_instance_valid(_waiting_door):
+		return true  # ドアが無効になった場合は通過可能
+
+	# open_doorsグループに属していれば開いている
+	return _waiting_door.is_in_group("open_doors")
+
+
+## 指定されたドアがDoorマーカーに設定されているかチェック
+func _is_door_in_markers(door: Node3D) -> bool:
+	if not door:
+		return false
+
+	for dm in _door_markers:
+		if dm.has("door_node") and dm.door_node == door:
+			return true
+	return false
+
+
+## 閉じたドア待機中のアイドルアニメーション更新
+func _update_idle_animation_while_waiting() -> void:
+	if not _character:
+		return
+
+	var anim_ctrl = _character.get_anim_controller()
+	if not anim_ctrl:
+		return
+
+	# 現在の視線方向または最後の移動方向を維持
+	var look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _last_move_direction
+	if look_dir.length_squared() < 0.1:
+		look_dir = Vector3.FORWARD
+
+	# アイドル状態（移動方向ゼロ）でアニメーション更新
+	anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, 0.016)
 
 
 ## パス追従完了
@@ -532,6 +660,8 @@ func _finish() -> void:
 
 	_is_following = false
 	_is_waiting_for_door = false
+	_is_waiting_for_closed_door = false
+	_waiting_door = null
 	_current_path.clear()
 	_vision_points.clear()
 	_run_segments.clear()

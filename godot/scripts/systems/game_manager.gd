@@ -933,6 +933,10 @@ func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
 	# side_dot < 0: キャラクターはドアの左側 → ドアは右に開く（+方向）
 	var rotation_amount := -170.0 if side_dot > 0 else 170.0
 
+	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
+	if not door.is_in_group("open_doors"):
+		door.add_to_group("open_doors")
+
 	# TweenでドアをY軸で回転（蝶番を軸に横開き）
 	var tween := create_tween()
 	var current_y := door.rotation_degrees.y
