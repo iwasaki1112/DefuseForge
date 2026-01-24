@@ -272,7 +272,10 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 						char_data.marker_history.append(MarkerType.RUN)
 
 						# MarkerCollectionにも追加（新システム）
-						# Note: Runは2つのメッシュ(START/END)を持つが、データは1セグメント
+						# Note: Runは1セグメント=2メッシュ(START/END)の特殊構造
+						# MarkerCollectionは1データ=1メッシュを前提としているため、
+						# Runのメッシュ管理は従来のrun_meshes配列で行う
+						# take_run_meshes()を使う場合は従来のAPIを使用すること
 						var run_data = ActionMarkerDataScript.RunMarkerData.new()
 						run_data.start_ratio = start_ratio
 						run_data.end_ratio = end_ratio
@@ -1824,12 +1827,14 @@ func _process_grenade_click(screen_pos: Vector2) -> void:
 
 
 ## グレネードマーカーを完成させる
-func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, _bounce_normal: Vector3) -> void:
+func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_normal: Vector3) -> void:
+	var has_bounce = bounce_point.length_squared() > 0.001
 	var new_marker = {
 		"path_ratio": _grenade_pending_ratio,
 		"anchor": _grenade_pending_anchor,
 		"target_pos": target_pos,
-		"bounce_point": bounce_point if bounce_point.length_squared() > 0.001 else Vector3.ZERO
+		"bounce_point": bounce_point if has_bounce else Vector3.ZERO,
+		"bounce_normal": bounce_normal if has_bounce else Vector3.ZERO
 	}
 
 	# マルチキャラクターモードの場合
@@ -1851,8 +1856,9 @@ func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, _bounce_
 			grenade_data.path_ratio = _grenade_pending_ratio
 			grenade_data.anchor = _grenade_pending_anchor
 			grenade_data.target_pos = target_pos
-			grenade_data.bounce_point = bounce_point if bounce_point.length_squared() > 0.001 else Vector3.ZERO
-			grenade_data.has_bounce = bounce_point.length_squared() > 0.001
+			grenade_data.bounce_point = bounce_point if has_bounce else Vector3.ZERO
+			grenade_data.bounce_normal = bounce_normal if has_bounce else Vector3.ZERO
+			grenade_data.has_bounce = has_bounce
 			_add_marker_to_collection(_active_edit_character, grenade_data, marker)
 	else:
 		# シングルモード
@@ -2077,8 +2083,8 @@ func _process_door_click(screen_pos: Vector2) -> void:
 			var char_data = _character_markers[char_id]
 			char_data.door_markers.append(new_marker)
 
-			# マーカーメッシュを作成
-			var marker = _create_door_marker_node(result.point, door)
+			# マーカーメッシュを作成（キック位置=offset_result.pointに配置）
+			var marker = _create_door_marker_node(offset_result.point, door)
 			char_data.door_meshes.append(marker)
 
 			# 履歴に追加
@@ -2094,14 +2100,14 @@ func _process_door_click(screen_pos: Vector2) -> void:
 		# シングルモード
 		_door_markers.append(new_marker)
 
-		# マーカーメッシュを作成
-		var marker = _create_door_marker_node(result.point, door)
+		# マーカーメッシュを作成（キック位置=offset_result.pointに配置）
+		var marker = _create_door_marker_node(offset_result.point, door)
 		_door_meshes.append(marker)
 
 		# 履歴に追加
 		_marker_history.append(MarkerType.DOOR)
 
-	door_marker_added.emit(result.ratio, door)
+	door_marker_added.emit(offset_result.ratio, door)
 
 
 ## ドアマーカーノードを作成

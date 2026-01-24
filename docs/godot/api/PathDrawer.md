@@ -33,6 +33,8 @@
 | `VISION_POINT` | 視線ポイント設定モード |
 | `RUN_MARKER` | Runマーカー設定モード |
 | `CLEAR_MARKER` | Clearマーカー設定モード |
+| `GRENADE_MARKER` | グレネードマーカー設定モード |
+| `DOOR_MARKER` | ドアマーカー設定モード |
 
 ### MarkerType
 マーカー種別（Undo履歴用）。
@@ -87,7 +89,7 @@ PathDrawerを無効化する。
 有効状態を確認する。
 
 #### clear() -> void
-パスと視線ポイントとRunマーカーとClearマーカーをすべてクリアする。
+パスと全マーカー（Vision、Run、Clear、Grenade、Door）をすべてクリアする。
 
 #### get_drawn_path() -> PackedVector3Array
 描画されたパス（生パス）を取得する。
