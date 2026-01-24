@@ -24,6 +24,8 @@
 - **`agents.md` / `CLAUDE.md` / `GEMINI.md`**: AIエージェント向けの指示
 
 ## 主要エントリポイント（最初に見る場所）
+必要なクラスドキュメントも必ず参照すること
+
 - **画面フローの全体像**: `docs/godot/game-flow.md`
 - **最初に表示される画面**: `scenes/screens/main_menu.tscn` / `scripts/screens/main_menu_screen.gd`
 - **マップ選択画面**: `scenes/screens/map_selection.tscn` / `scripts/screens/map_selection_screen.gd`
