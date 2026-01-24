@@ -24,6 +24,9 @@
 | `vision_point_added` | 視線ポイント追加 |
 | `run_segment_added` | Run区間追加 |
 | `clear_point_added` | Clearポイント追加 |
+| `grenade_marker_added` | グレネードマーカー追加 |
+| `door_marker_added` | ドアマーカー追加 |
+| `wait_marker_added` | Waitマーカー追加 |
 
 ## 主なメソッド
 
@@ -99,6 +102,27 @@ Clearポイント追加モードを開始する。
 ### `remove_last_clear_point() -> void`
 最後のClearポイントを削除する。
 
+### `start_grenade_mode() -> void`
+グレネードマーカー追加モードを開始する。
+
+### `start_door_mode() -> void`
+ドアマーカー追加モードを開始する。
+
+### `start_wait_mode() -> void`
+Waitマーカー追加モードを開始する。長押し時間が待機時間になる。
+
+### `get_grenade_marker_count() -> int`
+グレネードマーカー数を取得する。
+
+### `get_door_marker_count() -> int`
+ドアマーカー数を取得する。
+
+### `get_wait_marker_count() -> int`
+Waitマーカー数を取得する。
+
+### `undo_last_marker() -> void`
+最後に追加したマーカーを種別を問わず削除する（統一Undo）。
+
 ### `get_vision_point_count() -> int`
 視線ポイント数を取得する。
 
@@ -147,6 +171,9 @@ Run開始のみ設定された未完了区間があるか判定する。
 | `vision_point_added` | `anchor: Vector3, direction: Vector3` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
+| `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` |
+| `door_marker_added` | `path_ratio: float, door: Node3D` |
+| `wait_marker_added` | `path_ratio: float, wait_duration: float` |
 
 ### メソッド
 - `setup(`
@@ -173,9 +200,16 @@ Run開始のみ設定された未完了区間があるか判定する。
 - `remove_last_run_segment() -> void`
 - `start_clear_mode() -> void`
 - `remove_last_clear_point() -> void`
+- `start_grenade_mode() -> void`
+- `start_door_mode() -> void`
+- `start_wait_mode() -> void`
 - `get_vision_point_count() -> int`
 - `get_run_segment_count() -> int`
 - `get_clear_point_count() -> int`
+- `get_grenade_marker_count() -> int`
+- `get_door_marker_count() -> int`
+- `get_wait_marker_count() -> int`
+- `undo_last_marker() -> void`
 - `has_incomplete_run_start() -> bool`
 - `is_multi_character_mode() -> bool`
 - `start_multi_character_mode(selected_chars: Array[Node]) -> void`

@@ -28,6 +28,9 @@
 | `paths_execution_started` | `count: int` | 全パス実行開始時 |
 | `all_paths_completed` | なし | 全パス完了時 |
 | `paths_cleared` | なし | パスクリア時 |
+| `character_path_completed` | `character: Node` | 個別キャラクターのパス完了時 |
+| `grenade_marker_reached` | `character: Node, marker_data: Dictionary` | グレネードマーカー到達時 |
+| `door_marker_reached` | `character: Node, door: Node3D` | ドアマーカー到達時 |
 
 ## プロパティ
 
@@ -155,13 +158,21 @@ func _physics_process(delta: float) -> void:
 
 ```gdscript
 {
-    "character": Node,           # キャラクターノード
-    "path": Array[Vector3],      # パスポイント（接続線含む）
-    "vision_points": Array[Dictionary],  # 視線ポイント
-    "run_segments": Array[Dictionary],   # Run区間
-    "path_mesh": MeshInstance3D, # パスメッシュ
-    "vision_markers": Array[MeshInstance3D],  # 視線マーカー
-    "run_markers": Array[MeshInstance3D]      # Runマーカー
+    "character": Node,                         # キャラクターノード
+    "path": Array[Vector3],                    # パスポイント（接続線含む）
+    "vision_points": Array[Dictionary],        # 視線ポイント
+    "run_segments": Array[Dictionary],         # Run区間
+    "clear_points": Array[Dictionary],         # Clearポイント
+    "grenade_markers_data": Array[Dictionary], # グレネードマーカーデータ
+    "door_markers_data": Array[Dictionary],    # ドアマーカーデータ
+    "wait_markers_data": Array[Dictionary],    # Waitマーカーデータ
+    "path_mesh": MeshInstance3D,               # パスメッシュ
+    "vision_markers": Array[MeshInstance3D],   # 視線マーカー
+    "run_markers": Array[MeshInstance3D],      # Runマーカー
+    "clear_markers": Array[MeshInstance3D],    # Clearマーカー
+    "grenade_markers": Array[MeshInstance3D],  # グレネードマーカー
+    "door_markers": Array[MeshInstance3D],     # ドアマーカー
+    "wait_markers": Array[MeshInstance3D]      # Waitマーカー
 }
 ```
 
@@ -226,6 +237,8 @@ PathDrawerが通常モード（`is_multi_character_mode() == false`）の場合�
 | `all_paths_completed` | なし |
 | `paths_cleared` | なし |
 | `character_path_completed` | `character: Node` |
+| `grenade_marker_reached` | `character: Node, marker_data: Dictionary` |
+| `door_marker_reached` | `character: Node, door: Node3D` |
 
 ### メソッド
 - `setup(mesh_parent: Node3D) -> void`

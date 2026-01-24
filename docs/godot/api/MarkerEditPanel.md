@@ -13,23 +13,27 @@
 ## UI構造
 
 ```
-┌─────────────────────────────────────┐
-│ Select character for markers:       │
-│ ┌─────┐ ┌─────┐                    │
-│ │  A  │ │  B  │  ← キャラクター選択  │
-│ └─────┘ └─────┘                    │
-├─────────────────────────────────────┤
-│ [Add Vision] [Add Run] [Add Clear] │
-├─────────────────────────────────────┤
-│ Vision Points (A): 2               │
-│ Run Segments (A): 1                │
-│ Clear Points (A): 0                │
-├─────────────────────────────────────┤
-│ [Undo]                             │
-├─────────────────────────────────────┤
-│ [Confirm Path]                     │
-│ [Cancel]                           │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│ Select character for markers:            │
+│ ┌─────┐ ┌─────┐                         │
+│ │  A  │ │  B  │  ← キャラクター選択       │
+│ └─────┘ └─────┘                         │
+├──────────────────────────────────────────┤
+│ [Add Vision] [Add Run] [Add Clear]       │
+│ [Add Grenade] [Add Door] [Add Wait]      │
+├──────────────────────────────────────────┤
+│ Vision Points (A): 2                     │
+│ Run Segments (A): 1                      │
+│ Clear Points (A): 0                      │
+│ Grenade Markers (A): 0                   │
+│ Door Markers (A): 0                      │
+│ Wait Markers (A): 1                      │
+├──────────────────────────────────────────┤
+│ [Undo]                                   │
+├──────────────────────────────────────────┤
+│ [Confirm Path]                           │
+│ [Cancel]                                 │
+└──────────────────────────────────────────┘
 ```
 
 Undoボタンは1つで、最後に追加したマーカー（種別を問わず）を削除します。
@@ -42,6 +46,9 @@ Undoボタンは1つで、最後に追加したマーカー（種別を問わず
 | `vision_add_requested` | `character: Node` | Vision追加ボタン押下時 |
 | `run_add_requested` | `character: Node` | Run追加ボタン押下時 |
 | `clear_add_requested` | `character: Node` | Clear追加ボタン押下時 |
+| `grenade_add_requested` | `character: Node` | Grenade追加ボタン押下時 |
+| `door_add_requested` | `character: Node` | Door追加ボタン押下時 |
+| `wait_add_requested` | `character: Node` | Wait追加ボタン押下時 |
 | `undo_requested` | `character: Node` | 統一Undoボタン押下時 |
 | `confirm_requested` | なし | 確定ボタン押下時 |
 | `cancel_requested` | なし | キャンセルボタン押下時 |
@@ -90,11 +97,15 @@ func get_active_character() -> Node
 
 現在のアクティブキャラクターを取得します。
 
-### on_vision_point_added / on_run_segment_added
+### on_vision_point_added / on_run_segment_added / on_wait_marker_added
 
 ```gdscript
 func on_vision_point_added() -> void
 func on_run_segment_added() -> void
+func on_clear_point_added() -> void
+func on_grenade_marker_added() -> void
+func on_door_marker_added() -> void
+func on_wait_marker_added() -> void
 ```
 
 マーカーが追加された時にラベルを更新します。外部から呼び出します。
@@ -161,6 +172,9 @@ func _on_confirm() -> void:
 | `vision_add_requested` | `character: Node` |
 | `run_add_requested` | `character: Node` |
 | `clear_add_requested` | `character: Node` |
+| `grenade_add_requested` | `character: Node` |
+| `door_add_requested` | `character: Node` |
+| `wait_add_requested` | `character: Node` |
 | `undo_requested` | `character: Node` |
 | `confirm_requested` | なし |
 | `cancel_requested` | なし |
@@ -171,5 +185,8 @@ func _on_confirm() -> void:
 - `on_vision_point_added() -> void`
 - `on_run_segment_added() -> void`
 - `on_clear_point_added() -> void`
+- `on_grenade_marker_added() -> void`
+- `on_door_marker_added() -> void`
+- `on_wait_marker_added() -> void`
 - `get_active_character() -> Node`
 - `clear() -> void`

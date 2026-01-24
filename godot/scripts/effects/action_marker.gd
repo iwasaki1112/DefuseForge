@@ -10,7 +10,8 @@ enum MarkerType {
 	CLEAR,
 	RUN,
 	DOOR,
-	GRENADE
+	GRENADE,
+	WAIT
 }
 
 @export var circle_radius: float = 0.3  ## 円の半径

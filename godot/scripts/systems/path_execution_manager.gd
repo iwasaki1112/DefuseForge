@@ -10,6 +10,7 @@ const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
+const WaitMarkerScript = preload("res://scripts/effects/wait_marker.gd")
 const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 
 ## パス確定時のシグナル
@@ -29,9 +30,9 @@ signal door_marker_reached(character: Node, door: Node3D)
 
 ## 保留中のパス（キャラクターごと）
 ## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
-##                   "grenade_markers_data": Array, "door_markers_data": Array,
+##                   "grenade_markers_data": Array, "door_markers_data": Array, "wait_markers_data": Array,
 ##                   "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array, "clear_markers": Array,
-##                   "grenade_markers": Array, "door_markers": Array } }
+##                   "grenade_markers": Array, "door_markers": Array, "wait_markers": Array } }
 var pending_paths: Dictionary = {}
 
 ## パス追従コントローラー { character_id -> PathFollowingController }
@@ -80,11 +81,13 @@ func confirm_path(
 	var all_clear_points: Dictionary = {}
 	var all_grenade_markers_data: Dictionary = {}
 	var all_door_markers_data: Dictionary = {}
+	var all_wait_markers_data: Dictionary = {}
 	var all_vision_markers: Dictionary = {}
 	var all_run_markers: Dictionary = {}
 	var all_clear_markers: Dictionary = {}
 	var all_grenade_markers: Dictionary = {}
 	var all_door_markers: Dictionary = {}
+	var all_wait_markers: Dictionary = {}
 
 	if is_multi_mode:
 		all_vision_points = path_drawer.get_all_vision_points()
@@ -92,11 +95,15 @@ func confirm_path(
 		all_clear_points = path_drawer.get_all_clear_points()
 		all_grenade_markers_data = path_drawer.get_all_grenade_markers()
 		all_door_markers_data = path_drawer.get_all_door_markers()
+		all_wait_markers_data = path_drawer.get_all_wait_markers()
 		all_vision_markers = path_drawer.take_all_vision_markers()
 		all_run_markers = path_drawer.take_all_run_markers()
 		all_clear_markers = path_drawer.take_all_clear_markers()
 		all_grenade_markers = path_drawer.take_all_grenade_markers()
 		all_door_markers = path_drawer.take_all_door_markers()
+		# Note: Waitマーカーのメッシュは別途取得（take_all_wait_markersがあれば）
+		if path_drawer.has_method("take_all_wait_markers"):
+			all_wait_markers = path_drawer.take_all_wait_markers()
 	else:
 		# シングルモードの場合、従来通り
 		var base_vision = path_drawer.get_vision_points().duplicate()
@@ -104,11 +111,13 @@ func confirm_path(
 		var base_clear = path_drawer.get_clear_points().duplicate()
 		var base_grenade = path_drawer.get_grenade_markers().duplicate()
 		var base_door = path_drawer.get_door_markers().duplicate()
+		var base_wait = path_drawer.get_wait_markers().duplicate()
 		var original_vision_markers = path_drawer.take_vision_markers()
 		var original_run_markers = path_drawer.take_run_markers()
 		var original_clear_markers = path_drawer.take_clear_markers()
 		var original_grenade_markers = path_drawer.take_grenade_markers()
 		var original_door_markers = path_drawer.take_door_markers()
+		var original_wait_markers = path_drawer.take_wait_markers()
 
 		# 全キャラクターに同じマーカーを適用するため、一時的に格納
 		for character in target_characters:
@@ -118,6 +127,7 @@ func confirm_path(
 			all_clear_points[cid] = base_clear.duplicate()
 			all_grenade_markers_data[cid] = base_grenade.duplicate()
 			all_door_markers_data[cid] = base_door.duplicate()
+			all_wait_markers_data[cid] = base_wait.duplicate()
 
 		# 元のマーカーは後で削除
 		free_marker_meshes(original_vision_markers)
@@ -125,6 +135,7 @@ func confirm_path(
 		free_marker_meshes(original_clear_markers)
 		free_marker_meshes(original_grenade_markers)
 		free_marker_meshes(original_door_markers)
+		free_marker_meshes(original_wait_markers)
 
 	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
 
@@ -180,12 +191,18 @@ func confirm_path(
 			for dm in all_door_markers_data[char_id]:
 				char_door_markers.append(dm)
 
-		# 視線ポイントとRun区間とClearポイントとグレネード/ドアマーカーの比率を再計算
+		var char_wait_markers: Array[Dictionary] = []
+		if all_wait_markers_data.has(char_id):
+			for wm in all_wait_markers_data[char_id]:
+				char_wait_markers.append(wm)
+
+		# 視線ポイントとRun区間とClearポイントとグレネード/ドア/Waitマーカーの比率を再計算
 		var adjusted_vision_points = _adjust_ratios_for_connection(char_vision_points, connect_length, base_length)
 		var adjusted_run_segments = _adjust_run_ratios_for_connection(char_run_segments, connect_length, base_length)
 		var adjusted_clear_points = _adjust_clear_ratios_for_connection(char_clear_points, connect_length, base_length)
 		var adjusted_grenade_markers = _adjust_grenade_ratios_for_connection(char_grenade_markers, connect_length, base_length)
 		var adjusted_door_markers = _adjust_door_ratios_for_connection(char_door_markers, connect_length, base_length)
+		var adjusted_wait_markers = _adjust_wait_ratios_for_connection(char_wait_markers, connect_length, base_length)
 
 		# パスメッシュを作成（表示用の生パスを使用）
 		var path_mesh = _create_path_mesh(full_display_path, character)
@@ -202,6 +219,8 @@ func confirm_path(
 				free_marker_meshes(all_grenade_markers[char_id])
 			if all_door_markers.has(char_id):
 				free_marker_meshes(all_door_markers[char_id])
+			if all_wait_markers.has(char_id):
+				free_marker_meshes(all_wait_markers[char_id])
 
 		# 各キャラクター用にマーカーを新規生成
 		var char_vision_markers_nodes = _create_vision_markers_for_path(
@@ -219,6 +238,9 @@ func confirm_path(
 		var char_door_markers_nodes = _create_door_markers_for_path(
 			full_path, adjusted_door_markers, character
 		)
+		var char_wait_markers_nodes = _create_wait_markers_for_path(
+			full_path, adjusted_wait_markers, character
+		)
 
 		pending_paths[char_id] = {
 			"character": character,
@@ -228,12 +250,14 @@ func confirm_path(
 			"clear_points": adjusted_clear_points,
 			"grenade_markers_data": adjusted_grenade_markers,
 			"door_markers_data": adjusted_door_markers,
+			"wait_markers_data": adjusted_wait_markers,
 			"path_mesh": path_mesh,
 			"vision_markers": char_vision_markers_nodes,
 			"run_markers": char_run_markers_nodes,
 			"clear_markers": char_clear_markers_nodes,
 			"grenade_markers": char_grenade_markers_nodes,
-			"door_markers": char_door_markers_nodes
+			"door_markers": char_door_markers_nodes,
+			"wait_markers": char_wait_markers_nodes
 		}
 
 		processed_count += 1
@@ -290,6 +314,12 @@ func execute_all_paths(run: bool) -> int:
 			for dm in data["door_markers_data"]:
 				door_markers_data.append(dm)
 
+		# Waitマーカーを明示的にArray[Dictionary]に変換
+		var wait_markers_data: Array[Dictionary] = []
+		if data.has("wait_markers_data"):
+			for wm in data["wait_markers_data"]:
+				wait_markers_data.append(wm)
+
 		if not is_instance_valid(character):
 			continue
 
@@ -297,7 +327,7 @@ func execute_all_paths(run: bool) -> int:
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
 
-		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_markers_data, door_markers_data):
+		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_markers_data, door_markers_data, wait_markers_data):
 			executed_count += 1
 
 	# パスデータのみクリア（メッシュは残す）
@@ -309,6 +339,7 @@ func execute_all_paths(run: bool) -> int:
 		data.erase("clear_points")
 		data.erase("grenade_markers_data")
 		data.erase("door_markers_data")
+		data.erase("wait_markers_data")
 		data.erase("character")
 
 	paths_execution_started.emit(executed_count)
@@ -513,7 +544,7 @@ func _free_pending_path_data(data: Dictionary) -> void:
 		data["path_mesh"].queue_free()
 
 	# 全マーカータイプを一括解放
-	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "door_markers"]
+	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "door_markers", "wait_markers"]
 	for key in marker_keys:
 		if data.has(key):
 			free_marker_meshes(data[key])
@@ -863,6 +894,58 @@ func _create_door_markers_for_path(
 		# キャラクター色を取得して適用（背景色は暗く、アイコン色はキャラクター色）
 		var char_color = CharacterColorManager.get_character_color(character)
 		marker.set_colors(Color(0.1, 0.1, 0.1, 0.95), char_color)
+
+		markers.append(marker)
+
+	return markers
+
+
+## 接続線を考慮してWaitマーカーの比率を調整
+func _adjust_wait_ratios_for_connection(wait_markers: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+	if connect_length < 0.01 or base_length < 0.01:
+		return wait_markers.duplicate()
+
+	var adjusted: Array[Dictionary] = []
+
+	for wm in wait_markers:
+		adjusted.append({
+			"path_ratio": _adjust_single_ratio(wm.path_ratio, connect_length, base_length),
+			"anchor": wm.get("anchor", Vector3.ZERO),
+			"wait_duration": wm.get("wait_duration", 1.0)
+		})
+
+	return adjusted
+
+
+## 調整済みWaitマーカーから新しいWaitMarkerを生成
+func _create_wait_markers_for_path(
+	path: Array[Vector3],
+	adjusted_wait_markers: Array[Dictionary],
+	character: Node
+) -> Array[MeshInstance3D]:
+	var markers: Array[MeshInstance3D] = []
+
+	for wm in adjusted_wait_markers:
+		var ratio: float = wm.path_ratio
+
+		# パス上の位置を計算
+		var anchor = _calculate_position_on_path(path, ratio)
+
+		# WaitMarkerを作成
+		var marker = MeshInstance3D.new()
+		marker.set_script(WaitMarkerScript)
+		_mesh_parent.add_child(marker)
+
+		# 位置を設定
+		marker.set_marker_position(anchor)
+
+		# 待機時間を設定
+		var duration = wm.get("wait_duration", 1.0)
+		marker.set_wait_duration(duration)
+
+		# キャラクター色を取得して適用（背景色はキャラクター色、アイコン色は白）
+		var char_color = CharacterColorManager.get_character_color(character)
+		marker.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
 
 		markers.append(marker)
 

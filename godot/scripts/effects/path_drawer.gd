@@ -6,7 +6,7 @@ extends Node3D
 ## Slice the Pie: パス上の任意の点から視線方向を設定可能
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER, WAIT_MARKER }
 
 ## 視線ポイントデータ（ターゲットポイントモード）
 ## { "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }
@@ -32,11 +32,14 @@ signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
 ## ドアマーカー用シグナル
 signal door_marker_added(path_ratio: float, door: Node3D)
 
+## Waitマーカー用シグナル
+signal wait_marker_added(path_ratio: float, wait_duration: float)
+
 ## パスがUndoされた時のシグナル
 signal path_undone()
 
 ## マーカー履歴用の種別（PATH = パス描画自体, PATH_EXTENSION = パス拡張）
-enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION }
+enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT }
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -60,6 +63,7 @@ const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
 const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
+const WaitMarkerScript = preload("res://scripts/effects/wait_marker.gd")
 const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 const MarkerCollectionScript = preload("res://scripts/effects/marker_collection.gd")
 
@@ -98,6 +102,22 @@ var _grenade_meshes: Array[MeshInstance3D] = []
 ## { "path_ratio": float, "anchor": Vector3, "door_node": Node3D }
 var _door_markers: Array[Dictionary] = []
 var _door_meshes: Array[MeshInstance3D] = []
+
+## Waitマーカー用
+## { "path_ratio": float, "anchor": Vector3, "wait_duration": float }
+var _wait_markers: Array[Dictionary] = []
+var _wait_meshes: Array[MeshInstance3D] = []
+
+## Wait長押し検出用
+var _wait_press_start_time: float = 0.0
+var _wait_is_pressing: bool = false
+var _wait_preview_marker: MeshInstance3D = null
+var _wait_pending_anchor: Vector3 = Vector3.ZERO
+var _wait_pending_ratio: float = 0.0
+
+## Wait設定
+const WAIT_MIN_DURATION: float = 0.5  ## 最小待機時間（秒）
+const WAIT_MAX_DURATION: float = 10.0  ## 最大待機時間（秒）
 
 ## グレネードモード用の状態
 var _grenade_pending_anchor: Vector3 = Vector3.ZERO
@@ -174,6 +194,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_grenade_marker_input(event)
 		DrawingMode.DOOR_MARKER:
 			_handle_door_marker_input(event)
+		DrawingMode.WAIT_MARKER:
+			_handle_wait_marker_input(event)
 
 
 ## パス継続描画の入力処理（全モード共通、優先処理）
@@ -933,6 +955,7 @@ func clear() -> void:
 	_clear_clear_markers()
 	_clear_grenade_markers()
 	_clear_door_markers()
+	_clear_wait_markers()
 	_marker_history.clear()
 	# マルチキャラクターモードもクリア
 	_clear_multi_character_markers()
@@ -1470,6 +1493,8 @@ func undo_last_marker() -> int:
 			_undo_door_marker()
 		MarkerType.PATH_EXTENSION:
 			_undo_path_extension()
+		MarkerType.WAIT:
+			_undo_wait_marker()
 
 	# MarkerCollectionもUndo（同期を保つ）
 	# Note: PATH/PATH_EXTENSIONは共通履歴なのでMarkerCollectionには影響なし
@@ -1663,6 +1688,10 @@ func _undo_path() -> void:
 			for mesh in data.door_meshes:
 				if is_instance_valid(mesh):
 					mesh.queue_free()
+			if data.has("wait_meshes"):
+				for mesh in data.wait_meshes:
+					if is_instance_valid(mesh):
+						mesh.queue_free()
 			data.vision_points.clear()
 			data.vision_meshes.clear()
 			data.run_segments.clear()
@@ -1673,6 +1702,10 @@ func _undo_path() -> void:
 			data.grenade_meshes.clear()
 			data.door_markers.clear()
 			data.door_meshes.clear()
+			if data.has("wait_markers"):
+				data.wait_markers.clear()
+			if data.has("wait_meshes"):
+				data.wait_meshes.clear()
 			data.marker_history.clear()
 
 		# MarkerCollectionもクリア（メッシュは上で既にfreeしているので履歴・データのみ）
@@ -1957,6 +1990,10 @@ func _clear_multi_character_markers() -> void:
 					mesh.queue_free()
 		if data.has("door_meshes"):
 			for mesh in data.door_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
+		if data.has("wait_meshes"):
+			for mesh in data.wait_meshes:
 				if is_instance_valid(mesh):
 					mesh.queue_free()
 	_character_markers.clear()
@@ -2526,6 +2563,281 @@ func get_all_door_markers() -> Dictionary:
 	return result
 
 
+## ========================================
+## Waitマーカーモード API
+## ========================================
+
+## Waitマーカー設定モードに切り替え
+## パス上を長押しで待機時間を設定（押している時間 = 待機時間）
+func start_wait_mode() -> bool:
+	if _pending_path.size() < 2:
+		return false
+
+	_drawing_mode = DrawingMode.WAIT_MARKER
+	_is_enabled = true
+	mode_changed.emit(int(DrawingMode.WAIT_MARKER))
+	return true
+
+
+## Waitマーカー入力処理（長押し検出）
+func _handle_wait_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				# 長押し開始
+				_start_wait_marker_press(mouse_event.position)
+				get_viewport().set_input_as_handled()
+			else:
+				# 長押し終了
+				if _wait_is_pressing:
+					_finish_wait_marker_press()
+					get_viewport().set_input_as_handled()
+
+	if event is InputEventMouseMotion:
+		# 長押し中のプレビュー更新
+		if _wait_is_pressing:
+			_update_wait_marker_preview()
+
+
+## 長押し開始処理
+func _start_wait_marker_press(screen_pos: Vector2) -> void:
+	var ground_pos = _get_ground_position(screen_pos)
+	if ground_pos == null:
+		return
+
+	var result = _find_closest_point_on_path(ground_pos)
+	if result.distance > path_click_threshold:
+		return
+
+	_wait_pending_anchor = result.point
+	_wait_pending_ratio = result.ratio
+	_wait_press_start_time = Time.get_ticks_msec() / 1000.0
+	_wait_is_pressing = true
+
+	# プレビューマーカーを作成
+	_create_wait_preview_marker()
+
+
+## 長押し終了処理
+func _finish_wait_marker_press() -> void:
+	if not _wait_is_pressing:
+		return
+
+	var current_time = Time.get_ticks_msec() / 1000.0
+	var duration = current_time - _wait_press_start_time
+	_wait_is_pressing = false
+
+	# 最小時間未満はキャンセル
+	if duration < WAIT_MIN_DURATION:
+		_remove_wait_preview_marker()
+		return
+
+	# 最大時間で制限
+	duration = clampf(duration, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
+
+	# プレビューを削除
+	_remove_wait_preview_marker()
+
+	# Waitマーカーを追加
+	var new_marker = {
+		"path_ratio": _wait_pending_ratio,
+		"anchor": _wait_pending_anchor,
+		"wait_duration": duration
+	}
+
+	# マルチキャラクターモードの場合
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if not char_data.has("wait_markers"):
+				char_data.wait_markers = []
+			if not char_data.has("wait_meshes"):
+				char_data.wait_meshes = []
+			char_data.wait_markers.append(new_marker)
+
+			# マーカーメッシュを作成
+			var marker = _create_wait_marker_node(_wait_pending_anchor, duration)
+			char_data.wait_meshes.append(marker)
+
+			# 履歴に追加
+			char_data.marker_history.append(MarkerType.WAIT)
+
+			# MarkerCollectionにも追加（新システム）
+			var wait_data = ActionMarkerDataScript.WaitMarkerData.new()
+			wait_data.path_ratio = _wait_pending_ratio
+			wait_data.anchor = _wait_pending_anchor
+			wait_data.wait_duration = duration
+			_add_marker_to_collection(_active_edit_character, wait_data, marker)
+	else:
+		# シングルモード
+		_wait_markers.append(new_marker)
+
+		# マーカーメッシュを作成
+		var marker = _create_wait_marker_node(_wait_pending_anchor, duration)
+		_wait_meshes.append(marker)
+
+		# 履歴に追加
+		_marker_history.append(MarkerType.WAIT)
+
+	wait_marker_added.emit(_wait_pending_ratio, duration)
+
+
+## Waitプレビューマーカーを作成
+func _create_wait_preview_marker() -> void:
+	_remove_wait_preview_marker()
+
+	_wait_preview_marker = MeshInstance3D.new()
+	_wait_preview_marker.set_script(WaitMarkerScript)
+	add_child(_wait_preview_marker)
+	_wait_preview_marker.set_marker_position(_wait_pending_anchor)
+	_wait_preview_marker.set_colors(Color(_character_color.r, _character_color.g, _character_color.b, 0.6), Color(1.0, 1.0, 1.0, 0.8))
+	_wait_preview_marker.set_wait_duration(WAIT_MIN_DURATION)
+
+
+## Waitプレビューマーカーを削除
+func _remove_wait_preview_marker() -> void:
+	if _wait_preview_marker:
+		_wait_preview_marker.queue_free()
+		_wait_preview_marker = null
+
+
+## 長押し中のプレビュー更新
+func _update_wait_marker_preview() -> void:
+	if not _wait_is_pressing or not _wait_preview_marker:
+		return
+
+	var current_time = Time.get_ticks_msec() / 1000.0
+	var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
+	_wait_preview_marker.set_wait_duration(duration)
+
+
+## Waitマーカーノードを作成
+func _create_wait_marker_node(anchor: Vector3, duration: float) -> MeshInstance3D:
+	var marker = MeshInstance3D.new()
+	marker.set_script(WaitMarkerScript)
+	add_child(marker)
+	marker.set_marker_position(anchor)
+	marker.set_colors(_character_color, Color(1.0, 1.0, 1.0, 1.0))
+	marker.set_wait_duration(duration)
+	return marker
+
+
+## Waitマーカーがあるか
+func has_wait_markers() -> bool:
+	return _wait_markers.size() > 0
+
+
+## Waitマーカーを取得
+func get_wait_markers() -> Array[Dictionary]:
+	return _wait_markers
+
+
+## Waitマーカー数を取得
+func get_wait_marker_count() -> int:
+	if _multi_character_mode and _active_edit_character:
+		return get_wait_marker_count_for_character(_active_edit_character)
+	return _wait_markers.size()
+
+
+## キャラクター別のWaitマーカー数を取得
+func get_wait_marker_count_for_character(character: Node) -> int:
+	if not character:
+		return 0
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("wait_markers"):
+		return _character_markers[char_id].wait_markers.size()
+	return 0
+
+
+## キャラクター別のWaitマーカーを取得
+func get_wait_markers_for_character(character: Node) -> Array[Dictionary]:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("wait_markers"):
+		return _character_markers[char_id].wait_markers
+	return []
+
+
+## 全キャラクターのWaitマーカーを取得
+func get_all_wait_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			return { _active_edit_character.get_instance_id(): _wait_markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("wait_markers"):
+			result[char_id] = _character_markers[char_id].wait_markers
+		else:
+			result[char_id] = []
+	return result
+
+
+## Waitマーカーの所有権を移譲
+func take_wait_markers() -> Array[MeshInstance3D]:
+	var markers = _wait_meshes.duplicate()
+	_wait_meshes.clear()
+	return markers
+
+
+## 全キャラクターのWaitMarkersを移譲
+## @return { char_id: Array[MeshInstance3D] }
+func take_all_wait_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			var markers = _wait_meshes.duplicate()
+			_wait_meshes.clear()
+			return { _active_edit_character.get_instance_id(): markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("wait_meshes"):
+			result[char_id] = _character_markers[char_id].wait_meshes.duplicate()
+			_character_markers[char_id].wait_meshes.clear()
+		else:
+			result[char_id] = []
+	return result
+
+
+## Waitマーカーをクリア
+func _clear_wait_markers() -> void:
+	_wait_markers.clear()
+	for mesh in _wait_meshes:
+		if is_instance_valid(mesh):
+			mesh.queue_free()
+	_wait_meshes.clear()
+	_remove_wait_preview_marker()
+	_wait_is_pressing = false
+	_wait_press_start_time = 0.0
+
+
+## WaitマーカーをUndo（内部用、履歴は操作しない）
+func _undo_wait_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.has("wait_markers") and char_data.wait_markers.size() > 0:
+				char_data.wait_markers.pop_back()
+				if char_data.has("wait_meshes") and char_data.wait_meshes.size() > 0:
+					var mesh = char_data.wait_meshes.pop_back()
+					if is_instance_valid(mesh):
+						mesh.queue_free()
+		return
+
+	if _wait_markers.size() > 0:
+		_wait_markers.pop_back()
+		if _wait_meshes.size() > 0:
+			var mesh = _wait_meshes.pop_back()
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+
+
 #region 統一マーカーAPI
 ## 指定タイプのマーカーデータを取得（統一API）
 func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
@@ -2540,6 +2852,8 @@ func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dict
 			return get_grenade_markers()
 		ActionMarkerDataScript.Type.DOOR:
 			return get_door_markers()
+		ActionMarkerDataScript.Type.WAIT:
+			return get_wait_markers()
 		_:
 			return []
 
@@ -2557,6 +2871,8 @@ func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Mes
 			return take_grenade_markers()
 		ActionMarkerDataScript.Type.DOOR:
 			return take_door_markers()
+		ActionMarkerDataScript.Type.WAIT:
+			return take_wait_markers()
 		_:
 			return []
 
@@ -2574,6 +2890,8 @@ func get_markers_for_character_by_type(character: Node, marker_type: ActionMarke
 			return get_grenade_markers_for_character(character)
 		ActionMarkerDataScript.Type.DOOR:
 			return get_door_markers_for_character(character)
+		ActionMarkerDataScript.Type.WAIT:
+			return get_wait_markers_for_character(character)
 		_:
 			return []
 
@@ -2591,6 +2909,8 @@ func get_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictio
 			return get_all_grenade_markers()
 		ActionMarkerDataScript.Type.DOOR:
 			return get_all_door_markers()
+		ActionMarkerDataScript.Type.WAIT:
+			return get_all_wait_markers()
 		_:
 			return {}
 
@@ -2608,6 +2928,8 @@ func take_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dicti
 			return take_all_grenade_markers()
 		ActionMarkerDataScript.Type.DOOR:
 			return take_all_door_markers()
+		ActionMarkerDataScript.Type.WAIT:
+			return take_all_wait_markers()
 		_:
 			return {}
 

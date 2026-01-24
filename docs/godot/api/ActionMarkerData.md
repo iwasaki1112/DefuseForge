@@ -9,7 +9,7 @@
 ## 概要
 
 `ActionMarkerData`は、パス上のマーカーデータを統一的に扱うための基底クラス。
-各マーカー種別（Vision、Clear、Run、Door、Grenade）のデータサブクラスを提供する。
+各マーカー種別（Vision、Clear、Run、Door、Grenade、Wait）のデータサブクラスを提供する。
 
 ## Type列挙型
 
@@ -19,7 +19,8 @@ enum Type {
     CLEAR,    # クリアマーカー
     RUN,      # ダッシュマーカー
     DOOR,     # ドアマーカー
-    GRENADE   # グレネードマーカー
+    GRENADE,  # グレネードマーカー
+    WAIT      # 待機マーカー
 }
 ```
 
@@ -106,6 +107,14 @@ Dictionaryからデータクラスを作成。
 | `bounce_point` | `Vector3` | バウンスポイント |
 | `bounce_normal` | `Vector3` | バウンス法線 |
 | `has_bounce` | `bool` | バウンスがあるか |
+
+### WaitMarkerData
+
+待機マーカーデータ。
+
+| プロパティ | 型 | 説明 |
+|-----------|-----|------|
+| `wait_duration` | `float` | 待機時間（秒） |
 
 ## 使用例
 

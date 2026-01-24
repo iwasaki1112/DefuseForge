@@ -10,7 +10,8 @@ enum Type {
 	CLEAR,
 	RUN,
 	DOOR,
-	GRENADE
+	GRENADE,
+	WAIT
 }
 
 ## マーカータイプ
@@ -68,6 +69,8 @@ static func create(marker_type: Type) -> ActionMarkerData:
 			return DoorMarkerData.new()
 		Type.GRENADE:
 			return GrenadeMarkerData.new()
+		Type.WAIT:
+			return WaitMarkerData.new()
 		_:
 			return ActionMarkerData.new()
 
@@ -228,5 +231,30 @@ class GrenadeMarkerData extends ActionMarkerData:
 	func create_marker_node() -> Node3D:
 		var marker = MeshInstance3D.new()
 		marker.set_script(preload("res://scripts/effects/grenade_marker.gd"))
+		return marker
+#endregion
+
+
+#region Wait Marker Data
+class WaitMarkerData extends ActionMarkerData:
+	## 待機時間（秒）
+	var wait_duration: float = 1.0
+
+	func _init() -> void:
+		type = Type.WAIT
+
+	func to_dict() -> Dictionary:
+		var data = super.to_dict()
+		data["wait_duration"] = wait_duration
+		return data
+
+	func from_dict(data: Dictionary) -> void:
+		super.from_dict(data)
+		if data.has("wait_duration"):
+			wait_duration = data.wait_duration
+
+	func create_marker_node() -> Node3D:
+		var marker = MeshInstance3D.new()
+		marker.set_script(preload("res://scripts/effects/wait_marker.gd"))
 		return marker
 #endregion

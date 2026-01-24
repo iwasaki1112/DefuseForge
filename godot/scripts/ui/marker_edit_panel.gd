@@ -15,6 +15,8 @@ signal clear_add_requested(character: Node)
 signal grenade_add_requested(character: Node)
 ## Door追加要求シグナル
 signal door_add_requested(character: Node)
+## Wait追加要求シグナル
+signal wait_add_requested(character: Node)
 ## 統一Undo要求シグナル
 signal undo_requested(character: Node)
 ## 確定要求シグナル
@@ -46,6 +48,10 @@ var _add_grenade_button: Button = null
 ## ドアマーカー部分
 var _door_label: Label = null
 var _add_door_button: Button = null
+
+## Waitマーカー部分
+var _wait_label: Label = null
+var _add_wait_button: Button = null
 
 ## 統一Undoボタン
 var _undo_button: Button = null
@@ -120,6 +126,11 @@ func _build_ui() -> void:
 	_add_door_button.pressed.connect(_on_add_door_pressed)
 	marker_buttons_hbox2.add_child(_add_door_button)
 
+	_add_wait_button = Button.new()
+	_add_wait_button.text = "Add Wait"
+	_add_wait_button.pressed.connect(_on_add_wait_pressed)
+	marker_buttons_hbox2.add_child(_add_wait_button)
+
 	# セパレータ2
 	var sep2 = HSeparator.new()
 	add_child(sep2)
@@ -144,6 +155,10 @@ func _build_ui() -> void:
 	_door_label = Label.new()
 	_door_label.text = "Door Markers: 0"
 	add_child(_door_label)
+
+	_wait_label = Label.new()
+	_wait_label.text = "Wait Markers: 0"
+	add_child(_wait_label)
 
 	# セパレータ3
 	var sep3 = HSeparator.new()
@@ -336,6 +351,12 @@ func _update_labels() -> void:
 		door_count = _path_drawer.get_door_marker_count_for_character(_active_character)
 	_door_label.text = "Door Markers (%s): %d" % [char_label, door_count]
 
+	# Waitマーカー数
+	var wait_count = 0
+	if _path_drawer and _path_drawer.has_method("get_wait_marker_count_for_character"):
+		wait_count = _path_drawer.get_wait_marker_count_for_character(_active_character)
+	_wait_label.text = "Wait Markers (%s): %d" % [char_label, wait_count]
+
 
 ## 視線ポイントが追加された時に呼ぶ
 func on_vision_point_added() -> void:
@@ -359,6 +380,11 @@ func on_grenade_marker_added() -> void:
 
 ## ドアマーカーが追加された時に呼ぶ
 func on_door_marker_added() -> void:
+	_update_labels()
+
+
+## Waitマーカーが追加された時に呼ぶ
+func on_wait_marker_added() -> void:
 	_update_labels()
 
 
@@ -397,6 +423,12 @@ func _on_add_door_pressed() -> void:
 		door_add_requested.emit(_active_character)
 
 
+## Add Wait押下時
+func _on_add_wait_pressed() -> void:
+	if _active_character:
+		wait_add_requested.emit(_active_character)
+
+
 ## 統一Undo押下時
 func _on_undo_pressed() -> void:
 	if _active_character:
@@ -431,3 +463,4 @@ func clear() -> void:
 	_clear_label.text = "Clear Points: 0"
 	_grenade_label.text = "Grenade Markers: 0"
 	_door_label.text = "Door Markers: 0"
+	_wait_label.text = "Wait Markers: 0"

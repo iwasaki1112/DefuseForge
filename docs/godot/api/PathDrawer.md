@@ -19,8 +19,9 @@
 | `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
 | `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` | グレネードマーカー追加時 |
 | `door_marker_added` | `path_ratio: float, door: Node3D` | ドアマーカー追加時 |
+| `wait_marker_added` | `path_ratio: float, wait_duration: float` | Waitマーカー追加時 |
 | `path_undone` | なし | パス描画がUndoされた時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR） |
+| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR, 6=WAIT） |
 
 ## Enums
 
@@ -35,6 +36,7 @@
 | `CLEAR_MARKER` | Clearマーカー設定モード |
 | `GRENADE_MARKER` | グレネードマーカー設定モード |
 | `DOOR_MARKER` | ドアマーカー設定モード |
+| `WAIT_MARKER` | 待機マーカー設定モード |
 
 ### MarkerType
 マーカー種別（Undo履歴用）。
@@ -47,6 +49,7 @@
 | `PATH` | パス描画自体 |
 | `GRENADE` | グレネードマーカー |
 | `DOOR` | ドアマーカー |
+| `WAIT` | 待機マーカー |
 | `PATH_EXTENSION` | パス拡張（Undoで拡張前に戻る） |
 
 ## Export Properties
@@ -410,6 +413,47 @@ PATHがUndoされると、パスとすべてのマーカーがクリアされ、
 #### take_door_markers() -> Array[MeshInstance3D]
 ドアマーカーの所有権を移譲する。
 
+### Wait Marker API
+
+#### start_wait_mode() -> bool
+待機マーカー設定モードに切り替える。パス上を長押しして待機位置と待機時間を設定。長押し時間が待機時間になる。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+**動作:**
+- タッチ/クリック開始で時刻記録
+- 長押し中はプレビューマーカーが表示され、リアルタイムで待機時間が更新
+- 指を離すと経過時間が待機時間として確定
+- 最小待機時間: 0.5秒（これ未満はキャンセル扱い）
+- 最大待機時間: 10.0秒
+
+#### has_wait_markers() -> bool
+Waitマーカーがあるか確認する。
+
+#### get_wait_markers() -> Array[Dictionary]
+Waitマーカーを取得する。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "wait_duration": float }` の配列
+
+#### get_wait_marker_count() -> int
+Waitマーカー数を取得する。
+
+#### take_wait_markers() -> Array[MeshInstance3D]
+Waitマーカーの所有権を移譲する。
+
+#### get_wait_marker_count_for_character(character: Node) -> int
+指定キャラクターのWaitマーカー数を取得する。
+
+#### get_all_wait_markers() -> Dictionary
+全キャラクターのWaitマーカーを取得する。
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたWaitマーカーの辞書
+
+#### take_all_wait_markers() -> Dictionary
+全キャラクターのWaitマーカーの所有権を移譲する。
+
+**戻り値:** `{ char_id: Array[MeshInstance3D] }`
+
 ### Unified Marker API (新システム)
 
 マーカータイプを問わず統一的にアクセスするためのAPI。`ActionMarkerData.Type`列挙型を使用する。
@@ -571,13 +615,25 @@ path_execution_manager.confirm_path(selected_characters, path_drawer, char_a)
 
 このポイントに到達すると、現在の視線方向とRun状態がリセットされ、キャラクターは進行方向を向く。
 
+### Waitポイント
+```gdscript
+{
+    "path_ratio": 0.6,       # パス上の位置（0.0〜1.0）
+    "anchor": Vector3(...),  # アンカー位置
+    "wait_duration": 3.0     # 待機時間（秒）
+}
+```
+
+このポイントに到達すると、キャラクターは指定時間アイドル待機し、待機完了後にパス追従を再開する。
+
 ## 内部動作
 
 - `PathLineMesh`でパスを描画（破線+終点ドーナツ）
 - `VisionMarker`で視線ポイントを可視化
 - `RunMarker`でRun区間の開始/終点を可視化
 - `ClearMarker`でClearポイントを可視化（リセットマーカー）
-- パス上クリックで最近接点を計算し、そこから視線方向やRun区間、Clearポイントを設定
+- `WaitMarker`で待機ポイントを可視化（砂時計アイコン）
+- パス上クリックで最近接点を計算し、そこから視線方向やRun区間、Clearポイント、待機ポイントを設定
 - **パススムージング**: 描画完了時に`PathSmoother`で手ブレを補正
 
 ## パススムージング
@@ -636,6 +692,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 | `mode_changed` | `mode: int` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
+| `wait_marker_added` | `path_ratio: float, wait_duration: float` |
 | `path_undone` | なし |
 
 ### メソッド
@@ -707,6 +764,14 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `has_door_markers() -> bool`
 - `get_door_markers() -> Array[Dictionary]`
 - `take_door_markers() -> Array[MeshInstance3D]`
+- `start_wait_mode() -> bool`
+- `has_wait_markers() -> bool`
+- `get_wait_markers() -> Array[Dictionary]`
+- `get_wait_marker_count() -> int`
+- `take_wait_markers() -> Array[MeshInstance3D]`
+- `get_wait_marker_count_for_character(character: Node) -> int`
+- `get_all_wait_markers() -> Dictionary`
+- `take_all_wait_markers() -> Dictionary`
 - `get_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[Dictionary]`
 - `take_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[MeshInstance3D]`
 - `get_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary`
@@ -724,5 +789,6 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `RunMarker` - ダッシュマーカー（ActionMarker継承）
 - `GrenadeMarker` - グレネードマーカー（ActionMarker継承）
 - `DoorMarker` - ドアマーカー（ActionMarker継承）
+- `WaitMarker` - 待機マーカー（ActionMarker継承）
 - `PathLineMesh` - パス描画メッシュ
 - `PathSmoother` - パススムージング

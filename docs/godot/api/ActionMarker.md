@@ -18,6 +18,7 @@
 - `RunMarker` - ダッシュ区間マーカー
 - `DoorMarker` - ドアキックマーカー
 - `GrenadeMarker` - グレネード投擲マーカー
+- `WaitMarker` - 待機マーカー
 
 ## MarkerType列挙型
 
@@ -27,7 +28,8 @@ enum MarkerType {
     CLEAR,    # クリアマーカー
     RUN,      # ダッシュマーカー
     DOOR,     # ドアマーカー
-    GRENADE   # グレネードマーカー
+    GRENADE,  # グレネードマーカー
+    WAIT      # 待機マーカー
 }
 ```
 
@@ -152,4 +154,5 @@ match marker.get_action_marker_type():
 - `RunMarker` - ダッシュマーカー
 - `DoorMarker` - ドアマーカー
 - `GrenadeMarker` - グレネードマーカー
+- `WaitMarker` - 待機マーカー
 - `PathDrawer` - マーカーを配置するパス描画システム

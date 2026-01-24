@@ -1,6 +1,6 @@
 # PathFollowingController
 
-パス追従を管理するコントローラークラス。キャラクターが描画されたパスに沿って移動し、視線ポイントで向きを変える。Run区間では走行速度で移動し、敵認識・視線ポイントを無視する。
+パス追従を管理するコントローラークラス。キャラクターが描画されたパスに沿って移動し、視線ポイントで向きを変える。Run区間では走行速度で移動し、敵認識・視線ポイントを無視する。Waitマーカーでは指定時間アイドル待機する。
 
 ## 基本情報
 
@@ -53,7 +53,7 @@ CombatAwarenessComponentを設定する。
 **引数:**
 - `component` - 敵自動追跡用のコンポーネント
 
-### start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run_segments: Array[Dictionary] = [], run: bool = false, clear_points: Array[Dictionary] = []) -> bool
+### start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], run_segments: Array[Dictionary] = [], run: bool = false, clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [], door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = []) -> bool
 パス追従を開始する。
 
 **引数:**
@@ -62,6 +62,9 @@ CombatAwarenessComponentを設定する。
 - `run_segments` - Run区間配列（`start_ratio`と`end_ratio`を含むDictionary）
 - `run` - 全体を走行モードで移動するか
 - `clear_points` - Clearポイント配列（`path_ratio`を含むDictionary）
+- `grenade_markers` - グレネードマーカー配列
+- `door_markers` - ドアマーカー配列
+- `wait_markers` - Waitマーカー配列（`path_ratio`と`wait_duration`を含むDictionary）
 
 **戻り値:** 開始成功なら`true`
 
@@ -100,7 +103,10 @@ var run_segments = [
 var clear_points = [
     {"path_ratio": 0.8}  # 80%の位置で視線・Run効果をリセット
 ]
-path_controller.start_path(path, vision_points, run_segments, false, clear_points)
+var wait_markers = [
+    {"path_ratio": 0.4, "wait_duration": 2.0}  # 40%の位置で2秒待機
+]
+path_controller.start_path(path, vision_points, run_segments, false, clear_points, [], [], wait_markers)
 
 # 毎フレーム処理
 func _physics_process(delta):
@@ -144,6 +150,16 @@ func _physics_process(delta):
 ```
 
 このポイントに到達すると、現在の視線方向とRun状態がリセットされ、キャラクターは進行方向を向く。
+
+### Waitポイント
+```gdscript
+{
+    "path_ratio": 0.6,      # パス上の位置（0.0〜1.0）
+    "wait_duration": 3.0    # 待機時間（秒）
+}
+```
+
+このポイントに到達すると、キャラクターは指定時間アイドル待機する。待機完了後、パス追従を再開する。
 
 ## 内部動作
 
@@ -214,6 +230,17 @@ Clearポイントに到達すると、以下の処理が行われる：
 2. **ターゲットポイントリセット**: `_active_target_point`をクリア
 
 これにより、Clearポイント以降はVision/Runの効果がリセットされ、キャラクターは単純に進行方向を向いて歩く状態に戻る。
+
+### Waitマーカーの動作
+
+Waitマーカーに到達すると、以下の処理が行われる：
+
+1. **待機開始**: `_is_waiting_for_wait`フラグを立て、移動を一時停止
+2. **待機時間カウント**: `_wait_timer`で経過時間を計測
+3. **アイドルアニメーション**: 待機中は`_update_idle_animation_while_waiting()`でアイドル状態を維持
+4. **待機完了**: `wait_duration`が経過したら、フラグをクリアしてパス追従を再開
+
+これにより、キャラクターは指定時間その場で待機し、待機完了後に自動的にパス追従を再開する。
 
 ### スタック検出と回避
 

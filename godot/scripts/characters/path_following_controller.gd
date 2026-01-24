@@ -39,6 +39,11 @@ var _door_index: int = 0
 var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
 var _is_waiting_for_closed_door: bool = false  # 閉じたドアが開くのを待っている状態
 var _waiting_door: Node3D = null  # 待機中のドアノード
+var _wait_markers: Array[Dictionary] = []  # { path_ratio, anchor, wait_duration }
+var _wait_index: int = 0
+var _is_waiting_for_wait: bool = false  # Wait待機中状態
+var _wait_timer: float = 0.0  # 現在の待機経過時間
+var _current_wait_duration: float = 0.0  # 現在の待機時間目標
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
@@ -75,11 +80,12 @@ func set_combat_awareness(component: Node) -> void:
 ## @param clear_points: Clearポイント配列（path_ratioを含むDictionary）
 ## @param grenade_markers: グレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
 ## @param door_markers: ドアマーカー配列（path_ratio, door_nodeを含むDictionary）
+## @param wait_markers: Waitマーカー配列（path_ratio, wait_durationを含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		run_segments: Array[Dictionary] = [], run: bool = false,
 		clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [],
-		door_markers: Array[Dictionary] = []) -> bool:
+		door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -94,14 +100,19 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_clear_points = clear_points.duplicate()
 	_grenade_markers = grenade_markers.duplicate()
 	_door_markers = door_markers.duplicate()
+	_wait_markers = wait_markers.duplicate()
 	_vision_index = 0
 	_clear_index = 0
 	_grenade_index = 0
 	_door_index = 0
+	_wait_index = 0
 	_is_running = run
 	_is_following = true
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
+	_is_waiting_for_wait = false
+	_wait_timer = 0.0
+	_current_wait_duration = 0.0
 	_waiting_door = null
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
@@ -136,6 +147,9 @@ func cancel() -> void:
 	_is_following = false
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
+	_is_waiting_for_wait = false
+	_wait_timer = 0.0
+	_current_wait_duration = 0.0
 	_waiting_door = null
 	_current_path.clear()
 	_vision_points.clear()
@@ -143,6 +157,7 @@ func cancel() -> void:
 	_clear_points.clear()
 	_grenade_markers.clear()
 	_door_markers.clear()
+	_wait_markers.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
@@ -163,6 +178,19 @@ func process(delta: float) -> void:
 	# ドアキック完了待ち状態の場合は処理しない
 	if _is_waiting_for_door:
 		return
+
+	# Wait待機中の場合
+	if _is_waiting_for_wait:
+		_wait_timer += delta
+		if _wait_timer >= _current_wait_duration:
+			# 待機完了、移動再開
+			_is_waiting_for_wait = false
+			_wait_timer = 0.0
+			_current_wait_duration = 0.0
+		else:
+			# アイドルアニメーションを維持
+			_update_idle_animation_while_waiting()
+			return
 
 	# 閉じたドアが開くのを待っている場合
 	if _is_waiting_for_closed_door:
@@ -278,6 +306,10 @@ func process(delta: float) -> void:
 
 	# グレネードマーカーのチェック（投擲実行、移動は継続）
 	_check_grenade_markers(progress)
+
+	# Waitマーカーのチェック（待機開始）
+	if _check_wait_markers(progress):
+		return  # Waitマーカーに到達、処理を中断
 
 	# ドアマーカーは早期チェック済み（最終目的地到達前に処理）
 
@@ -546,6 +578,31 @@ func resume_after_door() -> void:
 	_is_waiting_for_door = false
 
 
+## Waitマーカーのチェックと処理
+## マーカー到達時にパスを一時停止して待機開始
+## @return: Waitマーカーに到達してパスを停止した場合はtrue
+func _check_wait_markers(progress: float) -> bool:
+	while _wait_index < _wait_markers.size():
+		var wm = _wait_markers[_wait_index]
+		if progress >= wm.path_ratio:
+			# Waitマーカーに到達: 待機開始
+			_is_waiting_for_wait = true
+			_wait_timer = 0.0
+			_current_wait_duration = wm.wait_duration if wm.has("wait_duration") else 1.0
+			_wait_index += 1
+
+			# キャラクターを停止
+			if _character:
+				_character.velocity = Vector3.ZERO
+
+			# アイドルアニメーションに切り替え
+			_update_idle_animation_while_waiting()
+			return true
+		else:
+			break
+	return false
+
+
 ## 移動方向に閉じたドアがあるかチェック
 ## @return: 閉じたドアがあればそのノード、なければnull
 func _check_closed_door_ahead(move_dir: Vector3) -> Node3D:
@@ -661,6 +718,9 @@ func _finish() -> void:
 	_is_following = false
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
+	_is_waiting_for_wait = false
+	_wait_timer = 0.0
+	_current_wait_duration = 0.0
 	_waiting_door = null
 	_current_path.clear()
 	_vision_points.clear()
@@ -668,6 +728,7 @@ func _finish() -> void:
 	_clear_points.clear()
 	_grenade_markers.clear()
 	_door_markers.clear()
+	_wait_markers.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
