@@ -555,18 +555,25 @@ func _calculate_path_length(path: Array[Vector3]) -> float:
 	return length
 
 
+## 単一の比率を接続線を考慮して調整（共通ヘルパー）
+## @param old_ratio: 元の比率 (0.0 ~ 1.0)
+## @param connect_length: 接続線の長さ
+## @param base_length: 元のパスの長さ
+## @return: 調整後の比率
+func _adjust_single_ratio(old_ratio: float, connect_length: float, base_length: float) -> float:
+	var new_length = connect_length + base_length
+	return (connect_length + old_ratio * base_length) / new_length
+
+
 ## 接続線を考慮して視線ポイントの比率を調整（ターゲットポイントモード対応）
 func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
 	if connect_length < 0.01 or base_length < 0.01:
 		return vision_points.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for vp in vision_points:
-		var old_ratio: float = vp.path_ratio
-		# 新しい比率 = (接続線の長さ + 元の比率 * 元のパス長さ) / 新しいパス長さ
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
+		var new_ratio: float = _adjust_single_ratio(vp.path_ratio, connect_length, base_length)
 
 		# ターゲットポイントモードか固定方向モードかをチェック
 		if vp.has("target_point"):
@@ -591,18 +598,12 @@ func _adjust_run_ratios_for_connection(run_segments: Array[Dictionary], connect_
 	if connect_length < 0.01 or base_length < 0.01:
 		return run_segments.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for seg in run_segments:
-		var old_start: float = seg.start_ratio
-		var old_end: float = seg.end_ratio
-		# 新しい比率を計算
-		var new_start: float = (connect_length + old_start * base_length) / new_length
-		var new_end: float = (connect_length + old_end * base_length) / new_length
 		adjusted.append({
-			"start_ratio": new_start,
-			"end_ratio": new_end
+			"start_ratio": _adjust_single_ratio(seg.start_ratio, connect_length, base_length),
+			"end_ratio": _adjust_single_ratio(seg.end_ratio, connect_length, base_length)
 		})
 
 	return adjusted
@@ -746,14 +747,11 @@ func _adjust_clear_ratios_for_connection(clear_points: Array[Dictionary], connec
 	if connect_length < 0.01 or base_length < 0.01:
 		return clear_points.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for cp in clear_points:
-		var old_ratio: float = cp.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		adjusted.append({
-			"path_ratio": new_ratio
+			"path_ratio": _adjust_single_ratio(cp.path_ratio, connect_length, base_length)
 		})
 
 	return adjusted
@@ -795,14 +793,11 @@ func _adjust_grenade_ratios_for_connection(grenade_markers: Array[Dictionary], c
 	if connect_length < 0.01 or base_length < 0.01:
 		return grenade_markers.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for gm in grenade_markers:
-		var old_ratio: float = gm.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		var new_marker: Dictionary = {
-			"path_ratio": new_ratio,
+			"path_ratio": _adjust_single_ratio(gm.path_ratio, connect_length, base_length),
 			"anchor": gm.anchor,
 			"target_pos": gm.target_pos
 		}
@@ -821,14 +816,11 @@ func _adjust_door_ratios_for_connection(door_markers: Array[Dictionary], connect
 	if connect_length < 0.01 or base_length < 0.01:
 		return door_markers.duplicate()
 
-	var new_length = connect_length + base_length
 	var adjusted: Array[Dictionary] = []
 
 	for dm in door_markers:
-		var old_ratio: float = dm.path_ratio
-		var new_ratio: float = (connect_length + old_ratio * base_length) / new_length
 		adjusted.append({
-			"path_ratio": new_ratio,
+			"path_ratio": _adjust_single_ratio(dm.path_ratio, connect_length, base_length),
 			"door_node": dm.door_node if dm.has("door_node") else dm.get("door")
 		})
 
