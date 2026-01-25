@@ -285,8 +285,8 @@ func _update_timeline_preview() -> void:
 
 	var path_drawer = game_manager.path_drawer
 
-	# パスが存在しない場合はタイムラインをクリア
-	if not path_drawer.has_pending_path():
+	# パスが存在しない場合はタイムラインをクリア（描画中/拡張中も含めて判定）
+	if not path_drawer.has_preview_path():
 		_hud.clear_all_timelines()
 		return
 
@@ -304,10 +304,10 @@ func _update_timeline_preview() -> void:
 	if target_characters.is_empty():
 		return
 
-	# パスデータを取得（スムージング済み）
-	var smoothed_path = path_drawer.get_smoothed_path()
+	# パスデータを取得（描画中は_path_points、それ以外は_pending_path）
+	var preview_path = path_drawer.get_preview_path()
 	var path: Array[Vector3] = []
-	for p in smoothed_path:
+	for p in preview_path:
 		path.append(p)
 
 	if path.size() < 2:

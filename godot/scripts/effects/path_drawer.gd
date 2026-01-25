@@ -163,6 +163,12 @@ func _ready() -> void:
 	_setup_mesh()
 
 
+func _process(_delta: float) -> void:
+	# Wait長押し中は時間ベースでプレビューを更新
+	if _wait_is_pressing and _wait_preview_marker:
+		_update_wait_marker_preview()
+
+
 func _setup_mesh() -> void:
 	_path_mesh = MeshInstance3D.new()
 	_path_mesh.set_script(PathLineMeshScript)
@@ -810,6 +816,7 @@ func _add_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
+	timeline_data_changed.emit()
 
 
 func _finish_drawing() -> void:
@@ -887,6 +894,7 @@ func _add_extend_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
+	timeline_data_changed.emit()
 
 
 ## 継続描画完了
@@ -1787,6 +1795,22 @@ func execute_with_vision(run: bool = false) -> bool:
 
 func has_pending_path() -> bool:
 	return _pending_path.size() >= 2 and _pending_character != null
+
+
+## プレビュー用パスがあるか（描画中/拡張中/確定済みを含む）
+func has_preview_path() -> bool:
+	# 描画中または拡張中は_path_pointsを使用
+	if _is_drawing or _is_extending_path:
+		return _path_points.size() >= 2 and _character != null
+	# それ以外は確定済みパスを使用
+	return has_pending_path()
+
+
+## プレビュー用パスを取得（描画中は_path_points、それ以外は_pending_path）
+func get_preview_path() -> PackedVector3Array:
+	if _is_drawing or _is_extending_path:
+		return _path_points
+	return _pending_path
 
 
 func clear_pending() -> void:
@@ -2729,6 +2753,7 @@ func _update_wait_marker_preview() -> void:
 	var current_time = Time.get_ticks_msec() / 1000.0
 	var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 	_wait_preview_marker.set_wait_duration(duration)
+	timeline_data_changed.emit()
 
 
 ## Waitマーカーノードを作成
@@ -2747,9 +2772,19 @@ func has_wait_markers() -> bool:
 	return _wait_markers.size() > 0
 
 
-## Waitマーカーを取得
+## Waitマーカーを取得（プレビュー中のマーカーも含む）
 func get_wait_markers() -> Array[Dictionary]:
-	return _wait_markers
+	var result: Array[Dictionary] = _wait_markers.duplicate()
+	# プレビュー中のマーカーがあれば追加
+	if _wait_is_pressing and _wait_preview_marker:
+		var current_time = Time.get_ticks_msec() / 1000.0
+		var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
+		result.append({
+			"path_ratio": _wait_pending_ratio,
+			"anchor": _wait_pending_anchor,
+			"wait_duration": duration
+		})
+	return result
 
 
 ## Waitマーカー数を取得
@@ -2769,29 +2804,57 @@ func get_wait_marker_count_for_character(character: Node) -> int:
 	return 0
 
 
-## キャラクター別のWaitマーカーを取得
+## キャラクター別のWaitマーカーを取得（プレビュー中のマーカーも含む）
 func get_wait_markers_for_character(character: Node) -> Array[Dictionary]:
 	if not character:
 		return []
 	var char_id = character.get_instance_id()
+	var result: Array[Dictionary] = []
 	if _character_markers.has(char_id) and _character_markers[char_id].has("wait_markers"):
-		return _character_markers[char_id].wait_markers
-	return []
+		result = _character_markers[char_id].wait_markers.duplicate()
+	# アクティブキャラクターならプレビュー中のマーカーを追加
+	if _active_edit_character and character.get_instance_id() == _active_edit_character.get_instance_id():
+		if _wait_is_pressing and _wait_preview_marker:
+			var current_time = Time.get_ticks_msec() / 1000.0
+			var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
+			result.append({
+				"path_ratio": _wait_pending_ratio,
+				"anchor": _wait_pending_anchor,
+				"wait_duration": duration
+			})
+	return result
 
 
-## 全キャラクターのWaitマーカーを取得
+## 全キャラクターのWaitマーカーを取得（プレビュー中のマーカーも含む）
 func get_all_wait_markers() -> Dictionary:
+	# プレビュー中のマーカーを取得するヘルパー
+	var preview_marker: Dictionary = {}
+	if _wait_is_pressing and _wait_preview_marker:
+		var current_time = Time.get_ticks_msec() / 1000.0
+		var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
+		preview_marker = {
+			"path_ratio": _wait_pending_ratio,
+			"anchor": _wait_pending_anchor,
+			"wait_duration": duration
+		}
+
 	if not _multi_character_mode:
 		if _active_edit_character:
-			return { _active_edit_character.get_instance_id(): _wait_markers }
+			var markers: Array[Dictionary] = _wait_markers.duplicate()
+			if not preview_marker.is_empty():
+				markers.append(preview_marker)
+			return { _active_edit_character.get_instance_id(): markers }
 		return {}
 
 	var result: Dictionary = {}
 	for char_id in _character_markers:
+		var markers: Array[Dictionary] = []
 		if _character_markers[char_id].has("wait_markers"):
-			result[char_id] = _character_markers[char_id].wait_markers
-		else:
-			result[char_id] = []
+			markers = _character_markers[char_id].wait_markers.duplicate()
+		# アクティブキャラクターにプレビューマーカーを追加
+		if _active_edit_character and char_id == _active_edit_character.get_instance_id() and not preview_marker.is_empty():
+			markers.append(preview_marker)
+		result[char_id] = markers
 	return result
 
 
