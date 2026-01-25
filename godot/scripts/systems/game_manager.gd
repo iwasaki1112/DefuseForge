@@ -39,6 +39,11 @@ signal context_action_requested(action_id: String, character: Node)
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
+## ラウンド管理シグナル
+signal round_started()
+signal round_ended(winner: int, reason: int)
+signal round_timer_updated(remaining: float)
+signal survivor_count_changed(ct_count: int, t_count: int)
 
 ## コアシステム
 var selection_manager: CharacterSelectionManager = null
@@ -55,6 +60,7 @@ var rotation_controller: Node = null
 var character_setup_service: CharacterSetupService = null
 var path_service: PathService = null
 var vision_service: VisionService = null
+var round_manager: RoundManager = null
 
 ## UIコンポーネント
 var context_menu: Control = null
@@ -105,6 +111,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_weapon_shop_modal()
 	_setup_path_service()
 	_setup_label_manager()
+	_setup_round_manager()
 	_setup_character_setup_service()
 
 
@@ -121,6 +128,10 @@ func register_character(character: Node) -> void:
 	# 視界セットアップ
 	if character_setup_service:
 		character_setup_service.setup_character(character)
+
+	# ラウンド管理に登録
+	if round_manager and character is GameCharacter:
+		round_manager.register_character(character as GameCharacter)
 
 	# 死亡シグナル接続
 	if character.has_signal("died") and not character.died.is_connected(_on_character_died):
@@ -427,6 +438,10 @@ func get_character_parent() -> Node3D:
 
 ## 毎フレーム処理（_physics_processから呼ぶ）
 func process_frame(delta: float) -> void:
+	# ラウンドタイマー処理
+	if round_manager:
+		round_manager.process(delta)
+
 	# パス追従コントローラーを処理
 	if path_service:
 		path_service.process_controllers(delta)
@@ -785,6 +800,18 @@ func _setup_path_service() -> void:
 		path_service.run_segment_added.connect(_on_run_segment_added)
 
 
+func _setup_round_manager() -> void:
+	if round_manager == null:
+		round_manager = RoundManager.new()
+		round_manager.name = GameConstants.NODE_ROUND_MANAGER
+		add_child(round_manager)
+		round_manager.setup(self)
+		round_manager.round_started.connect(_on_round_started)
+		round_manager.round_ended.connect(_on_round_ended)
+		round_manager.timer_updated.connect(_on_round_timer_updated)
+		round_manager.survivor_count_changed.connect(_on_survivor_count_changed)
+
+
 func _setup_character_setup_service() -> void:
 	if character_setup_service == null:
 		character_setup_service = CharacterSetupServiceScript.new()
@@ -869,6 +896,22 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 
 func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
 	run_segment_added.emit(start_ratio, end_ratio)
+
+
+func _on_round_started() -> void:
+	round_started.emit()
+
+
+func _on_round_ended(winner: int, reason: int) -> void:
+	round_ended.emit(winner, reason)
+
+
+func _on_round_timer_updated(remaining: float) -> void:
+	round_timer_updated.emit(remaining)
+
+
+func _on_survivor_count_changed(ct_count: int, t_count: int) -> void:
+	survivor_count_changed.emit(ct_count, t_count)
 
 
 func _on_context_menu_item_selected(action_id: String, character: CharacterBody3D) -> void:

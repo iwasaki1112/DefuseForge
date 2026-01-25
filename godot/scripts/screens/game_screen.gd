@@ -24,6 +24,7 @@ var environment_setup: EnvironmentSetup = null
 
 ## UI要素
 var _hud: GameHUD = null
+var _round_hud: RoundHUD = null
 
 ## カメラ移動
 var _camera_pan_controller: CameraPanController = null
@@ -44,6 +45,7 @@ func _ready() -> void:
 	_setup_environment()
 	_setup_game_manager()
 	_setup_hud()
+	_setup_round_hud()
 	_setup_match_service()
 	_match_setup_service.determine_player_team()
 	_load_map()
@@ -56,6 +58,10 @@ func _ready() -> void:
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
+
+	# ラウンド開始（タイマー開始）
+	if game_manager.round_manager:
+		game_manager.round_manager.start_round()
 
 
 ## ========================================
@@ -107,6 +113,19 @@ func _setup_hud() -> void:
 		_hud.setup()
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
 		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
+
+
+## ラウンドHUDのセットアップ
+func _setup_round_hud() -> void:
+	if _round_hud == null:
+		_round_hud = RoundHUD.new()
+		_round_hud.name = GameConstants.NODE_ROUND_HUD
+		ui_layer.add_child(_round_hud)
+
+		# シグナル接続
+		game_manager.round_timer_updated.connect(_round_hud.update_timer)
+		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
+		game_manager.round_ended.connect(_round_hud.show_result)
 
 
 ## カメラのパン操作をセットアップ

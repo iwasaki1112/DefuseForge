@@ -102,6 +102,7 @@
 | System | MatchSetupService | マッチ開始時のセットアップを担当 |
 | System | SettingsManager | 設定管理（プレイヤー名保存・選択マップ保持）（Autoload） |
 | System | InputController | ゲーム画面の入力処理コントローラー |
+| System | RoundManager | ラウンド状態管理・タイマー・生存者数追跡・勝敗判定 |
 | Screen | MainMenuScreen | メインメニュー画面 |
 | Screen | MapSelectionScreen | マップ選択画面 |
 | Screen | OptionScreen | オプション設定画面 |
@@ -112,6 +113,7 @@
 | UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
 | UI | ScreenLayout | 画面UIの共通レイアウト生成ヘルパー |
 | UI | WeaponShopModal | 武器購入モーダル（BUYメニュー） |
+| UI | RoundHUD | ラウンドタイマー・生存者数・結果表示UI |
 | Weapon | Grenade | 投擲グレネード（放物線軌道・跳ね返り・時間爆発） |
 | Test | FreeCamera | テスト用オービットカメラ |
 | Test | LightingTest | ライティング確認用テストシーン |

@@ -80,3 +80,15 @@ const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
 const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
+
+# ========================================================
+# Round Settings
+# ========================================================
+const ROUND_TIME_LIMIT: float = 90.0      # ラウンド制限時間（秒）
+const ROUND_END_DELAY: float = 3.0        # ラウンド終了後の遅延（秒）
+
+# ========================================================
+# Node Names (Round System)
+# ========================================================
+const NODE_ROUND_MANAGER := "RoundManager"
+const NODE_ROUND_HUD := "RoundHUD"
