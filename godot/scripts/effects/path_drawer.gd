@@ -1511,6 +1511,10 @@ func undo_last_marker() -> int:
 	if last_type != MarkerType.PATH and last_type != MarkerType.PATH_EXTENSION and _multi_character_mode and _active_edit_character:
 		_undo_last_marker_from_collection(_active_edit_character)
 
+	# タイムライン更新シグナルを発火（PATHは_undo_path内で発火済み）
+	if last_type != MarkerType.PATH:
+		timeline_data_changed.emit()
+
 	return last_type
 
 
