@@ -88,6 +88,7 @@ func _setup_game_manager() -> void:
 		game_manager.paths_execution_started.connect(_on_paths_execution_started)
 		game_manager.all_paths_completed.connect(_on_all_paths_completed)
 		game_manager.paths_cleared.connect(_on_paths_cleared)
+		game_manager.timeline_data_changed.connect(_on_timeline_data_changed)
 
 
 func _setup_match_service() -> void:
@@ -221,6 +222,10 @@ func _on_paths_cleared() -> void:
 		_hud.clear_all_timelines()
 
 
+func _on_timeline_data_changed() -> void:
+	_update_timeline_preview()
+
+
 func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
 
@@ -261,6 +266,90 @@ func _update_timeline_from_pending_paths() -> void:
 		var door_markers: Array[Dictionary] = []
 		for dm in data.get("door_markers_data", []):
 			door_markers.append(dm)
+
+		# キャラクターラベルと色を取得
+		var label_text = CharacterColorManager.get_character_label(character)
+		var char_color = CharacterColorManager.get_character_color(character)
+
+		# タイムラインを設定
+		_hud.set_character_timeline(
+			character, path, run_segments, wait_markers, door_markers,
+			label_text, char_color
+		)
+
+
+## 編集中のパスからタイムラインをプレビュー更新
+func _update_timeline_preview() -> void:
+	if not _hud or not game_manager or not game_manager.path_drawer:
+		return
+
+	var path_drawer = game_manager.path_drawer
+
+	# パスが存在しない場合はタイムラインをクリア
+	if not path_drawer.has_pending_path():
+		_hud.clear_all_timelines()
+		return
+
+	# 対象キャラクターを取得（選択中キャラクターまたは編集中キャラクター）
+	var target_characters: Array[Node] = []
+	if game_manager.selection_manager:
+		target_characters = game_manager.selection_manager.get_path_targets()
+
+	# ターゲットがいない場合、プライマリキャラクターを使用
+	if target_characters.is_empty() and game_manager.selection_manager:
+		var primary = game_manager.selection_manager.primary_character
+		if primary:
+			target_characters.append(primary)
+
+	if target_characters.is_empty():
+		return
+
+	# パスデータを取得（スムージング済み）
+	var smoothed_path = path_drawer.get_smoothed_path()
+	var path: Array[Vector3] = []
+	for p in smoothed_path:
+		path.append(p)
+
+	if path.size() < 2:
+		return
+
+	# マルチキャラクターモードかチェック
+	var is_multi_mode = path_drawer.is_multi_character_mode()
+
+	for character in target_characters:
+		if not is_instance_valid(character):
+			continue
+
+		var char_id = character.get_instance_id()
+
+		# マーカーデータを取得
+		var run_segments: Array[Dictionary] = []
+		var wait_markers: Array[Dictionary] = []
+		var door_markers: Array[Dictionary] = []
+
+		if is_multi_mode:
+			# マルチモード：キャラクター別のマーカーを取得
+			var all_run = path_drawer.get_all_run_segments()
+			var all_wait = path_drawer.get_all_wait_markers()
+			var all_door = path_drawer.get_all_door_markers()
+
+			if all_run.has(char_id):
+				for seg in all_run[char_id]:
+					run_segments.append(seg)
+			if all_wait.has(char_id):
+				for wm in all_wait[char_id]:
+					wait_markers.append(wm)
+			if all_door.has(char_id):
+				for dm in all_door[char_id]:
+					door_markers.append(dm)
+		else:
+			# シングルモード：共通のマーカーを使用
+			for seg in path_drawer.get_run_segments():
+				run_segments.append(seg)
+			for wm in path_drawer.get_wait_markers():
+				wait_markers.append(wm)
+			for dm in path_drawer.get_door_markers():
+				door_markers.append(dm)
 
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)

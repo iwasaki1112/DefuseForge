@@ -38,6 +38,9 @@ signal wait_marker_added(path_ratio: float, wait_duration: float)
 ## パスがUndoされた時のシグナル
 signal path_undone()
 
+## タイムライン用データが変更された時のシグナル（リアルタイムプレビュー用）
+signal timeline_data_changed()
+
 ## マーカー履歴用の種別（PATH = パス描画自体, PATH_EXTENSION = パス拡張）
 enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT }
 
@@ -356,6 +359,7 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 				_create_run_marker(result.point, RunMarkerScript.RunMarkerType.END)
 
 				run_segment_added.emit(start_ratio, end_ratio)
+				timeline_data_changed.emit()
 
 				# 開始点をクリア
 				_current_run_start = {}
@@ -417,6 +421,7 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 				_marker_history.append(MarkerType.CLEAR)
 
 			clear_point_added.emit(result.ratio)
+			timeline_data_changed.emit()
 			get_viewport().set_input_as_handled()
 
 
@@ -686,6 +691,7 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 			_add_marker_to_collection(_active_edit_character, vision_data, marker)
 
 			vision_point_added.emit(_current_vision_anchor, target_point)
+			timeline_data_changed.emit()
 			return
 
 	# シングルモードの場合は従来通り
@@ -704,6 +710,7 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	_marker_history.append(MarkerType.VISION)
 
 	vision_point_added.emit(_current_vision_anchor, target_point)
+	timeline_data_changed.emit()
 
 
 ## 視線マーカーを作成（末尾に追加）
@@ -820,6 +827,7 @@ func _finish_drawing() -> void:
 		_marker_history.append(MarkerType.PATH)
 
 	drawing_finished.emit(_path_points)
+	timeline_data_changed.emit()
 
 
 ## ========================================
@@ -899,6 +907,7 @@ func _finish_extending_path() -> void:
 		_marker_history.append(MarkerType.PATH_EXTENSION)
 
 	drawing_finished.emit(_path_points)
+	timeline_data_changed.emit()
 
 
 ## マーカーのpath_ratioを再計算
@@ -1236,6 +1245,7 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 func _emit_drawing_finished_after_restore() -> void:
 	if _path_points.size() >= 2:
 		drawing_finished.emit(_path_points)
+		timeline_data_changed.emit()
 
 
 func disable() -> void:
@@ -1716,6 +1726,7 @@ func _undo_path() -> void:
 
 	# シグナルを発火
 	path_undone.emit()
+	timeline_data_changed.emit()
 
 
 ## ========================================
@@ -2230,6 +2241,7 @@ func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_n
 		_marker_history.append(MarkerType.GRENADE)
 
 	grenade_marker_added.emit(_grenade_pending_ratio, target_pos)
+	timeline_data_changed.emit()
 
 	# 状態をリセット
 	_grenade_has_anchor = false
@@ -2466,6 +2478,7 @@ func _process_door_click(screen_pos: Vector2) -> void:
 		_marker_history.append(MarkerType.DOOR)
 
 	door_marker_added.emit(offset_result.ratio, door)
+	timeline_data_changed.emit()
 
 
 ## ドアマーカーノードを作成
@@ -2682,6 +2695,7 @@ func _finish_wait_marker_press() -> void:
 		_marker_history.append(MarkerType.WAIT)
 
 	wait_marker_added.emit(_wait_pending_ratio, duration)
+	timeline_data_changed.emit()
 
 
 ## Waitプレビューマーカーを作成

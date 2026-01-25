@@ -30,6 +30,8 @@ signal rotation_cancelled()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
+## タイムラインデータ変更シグナル（リアルタイムプレビュー用）
+signal timeline_data_changed()
 ## コンテキストメニュー操作シグナル
 signal context_action_requested(action_id: String, character: Node)
 ## グレネード投擲シグナル
@@ -636,6 +638,7 @@ func _setup_path_drawer() -> void:
 		path_drawer.name = GameConstants.NODE_PATH_DRAWER
 		add_child(path_drawer)
 		path_drawer.setup(camera)
+		path_drawer.timeline_data_changed.connect(_on_timeline_data_changed)
 
 
 func _setup_path_mode_controller() -> void:
@@ -797,6 +800,10 @@ func _on_path_mode_cancelled() -> void:
 
 func _on_path_ready() -> void:
 	path_ready.emit()
+
+
+func _on_timeline_data_changed() -> void:
+	timeline_data_changed.emit()
 
 
 func _on_path_confirmed(count: int) -> void:
