@@ -16,6 +16,13 @@ enum SegmentType {
 	DOOR
 }
 
+## 瞬間マーカータイプ（時間を消費しないマーカー）
+enum MarkerType {
+	VISION,
+	CLEAR,
+	GRENADE
+}
+
 ## タイムラインセグメント
 ## 各セグメントは開始時間、終了時間、タイプを持つ
 class TimelineSegment:
@@ -36,17 +43,33 @@ class TimelineSegment:
 		return end_time - start_time
 
 
+## 瞬間マーカーポイント（時間を消費しないアクション）
+class MarkerPoint:
+	var time: float = 0.0  ## タイムライン上の時間位置
+	var ratio: float = 0.0  ## パス上の位置(0.0-1.0)
+	var type: int = MarkerType.VISION
+
+	func _init(p_time: float = 0.0, p_ratio: float = 0.0, p_type: int = MarkerType.VISION) -> void:
+		time = p_time
+		ratio = p_ratio
+		type = p_type
+
+
 ## タイムラインデータ
 ## パス全体の時間情報とセグメントリストを保持
 class TimelineData:
 	var total_duration: float = 0.0
 	var segments: Array[TimelineSegment] = []
+	var markers: Array[MarkerPoint] = []  ## 瞬間マーカー
 	var path_length: float = 0.0
 
 	func add_segment(segment: TimelineSegment) -> void:
 		segments.append(segment)
 		if segment.end_time > total_duration:
 			total_duration = segment.end_time
+
+	func add_marker(marker: MarkerPoint) -> void:
+		markers.append(marker)
 
 	func get_time_at_ratio(ratio: float) -> float:
 		if segments.is_empty():
@@ -85,12 +108,18 @@ class TimelineData:
 ## @param run_segments: Run区間配列 [{ start_ratio, end_ratio }]
 ## @param wait_markers: Waitマーカー配列 [{ path_ratio, wait_duration }]
 ## @param door_markers: Doorマーカー配列 [{ path_ratio }]
+## @param vision_markers: Visionマーカー配列 [{ path_ratio }]
+## @param clear_markers: Clearマーカー配列 [{ path_ratio }]
+## @param grenade_markers: Grenadeマーカー配列 [{ path_ratio }]
 ## @return: TimelineData
 static func calculate_timeline(
 	path: Array[Vector3],
 	run_segments: Array[Dictionary] = [],
 	wait_markers: Array[Dictionary] = [],
-	door_markers: Array[Dictionary] = []
+	door_markers: Array[Dictionary] = [],
+	vision_markers: Array[Dictionary] = [],
+	clear_markers: Array[Dictionary] = [],
+	grenade_markers: Array[Dictionary] = []
 ) -> TimelineData:
 	var timeline = TimelineData.new()
 
@@ -191,6 +220,22 @@ static func calculate_timeline(
 			1.0
 		)
 		timeline.add_segment(segment)
+
+	# 瞬間マーカーを追加（時間位置を計算）
+	for vm in vision_markers:
+		var ratio = vm.get("path_ratio", 0.0)
+		var time = timeline.get_time_at_ratio(ratio)
+		timeline.add_marker(MarkerPoint.new(time, ratio, MarkerType.VISION))
+
+	for cm in clear_markers:
+		var ratio = cm.get("path_ratio", 0.0)
+		var time = timeline.get_time_at_ratio(ratio)
+		timeline.add_marker(MarkerPoint.new(time, ratio, MarkerType.CLEAR))
+
+	for gm in grenade_markers:
+		var ratio = gm.get("path_ratio", 0.0)
+		var time = timeline.get_time_at_ratio(ratio)
+		timeline.add_marker(MarkerPoint.new(time, ratio, MarkerType.GRENADE))
 
 	return timeline
 

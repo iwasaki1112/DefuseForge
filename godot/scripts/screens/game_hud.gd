@@ -113,12 +113,16 @@ func set_character_timeline(
 	run_segments: Array[Dictionary] = [],
 	wait_markers: Array[Dictionary] = [],
 	door_markers: Array[Dictionary] = [],
+	vision_markers: Array[Dictionary] = [],
+	clear_markers: Array[Dictionary] = [],
+	grenade_markers: Array[Dictionary] = [],
 	label_text: String = "A",
 	color: Color = Color.CYAN
 ) -> void:
 	if _timeline_bar_ui:
 		_timeline_bar_ui.set_character_timeline(
-			character, path, run_segments, wait_markers, door_markers, label_text, color
+			character, path, run_segments, wait_markers, door_markers,
+			vision_markers, clear_markers, grenade_markers, label_text, color
 		)
 
 

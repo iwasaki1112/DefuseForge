@@ -267,6 +267,18 @@ func _update_timeline_from_pending_paths() -> void:
 		for dm in data.get("door_markers_data", []):
 			door_markers.append(dm)
 
+		var vision_markers: Array[Dictionary] = []
+		for vm in data.get("vision_points", []):
+			vision_markers.append(vm)
+
+		var clear_markers: Array[Dictionary] = []
+		for cm in data.get("clear_points", []):
+			clear_markers.append(cm)
+
+		var grenade_markers: Array[Dictionary] = []
+		for gm in data.get("grenade_markers", []):
+			grenade_markers.append(gm)
+
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)
 		var char_color = CharacterColorManager.get_character_color(character)
@@ -274,6 +286,7 @@ func _update_timeline_from_pending_paths() -> void:
 		# タイムラインを設定
 		_hud.set_character_timeline(
 			character, path, run_segments, wait_markers, door_markers,
+			vision_markers, clear_markers, grenade_markers,
 			label_text, char_color
 		)
 
@@ -326,12 +339,18 @@ func _update_timeline_preview() -> void:
 		var run_segments: Array[Dictionary] = []
 		var wait_markers: Array[Dictionary] = []
 		var door_markers: Array[Dictionary] = []
+		var vision_markers: Array[Dictionary] = []
+		var clear_markers: Array[Dictionary] = []
+		var grenade_markers: Array[Dictionary] = []
 
 		if is_multi_mode:
 			# マルチモード：キャラクター別のマーカーを取得
 			var all_run = path_drawer.get_all_run_segments()
 			var all_wait = path_drawer.get_all_wait_markers()
 			var all_door = path_drawer.get_all_door_markers()
+			var all_vision = path_drawer.get_all_vision_points()
+			var all_clear = path_drawer.get_all_clear_points()
+			var all_grenade = path_drawer.get_all_grenade_markers()
 
 			if all_run.has(char_id):
 				for seg in all_run[char_id]:
@@ -342,6 +361,15 @@ func _update_timeline_preview() -> void:
 			if all_door.has(char_id):
 				for dm in all_door[char_id]:
 					door_markers.append(dm)
+			if all_vision.has(char_id):
+				for vm in all_vision[char_id]:
+					vision_markers.append(vm)
+			if all_clear.has(char_id):
+				for cm in all_clear[char_id]:
+					clear_markers.append(cm)
+			if all_grenade.has(char_id):
+				for gm in all_grenade[char_id]:
+					grenade_markers.append(gm)
 		else:
 			# シングルモード：共通のマーカーを使用
 			for seg in path_drawer.get_run_segments():
@@ -350,6 +378,12 @@ func _update_timeline_preview() -> void:
 				wait_markers.append(wm)
 			for dm in path_drawer.get_door_markers():
 				door_markers.append(dm)
+			for vm in path_drawer.get_vision_points():
+				vision_markers.append(vm)
+			for cm in path_drawer.get_clear_points():
+				clear_markers.append(cm)
+			for gm in path_drawer.get_grenade_markers():
+				grenade_markers.append(gm)
 
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)
@@ -358,6 +392,7 @@ func _update_timeline_preview() -> void:
 		# タイムラインを設定
 		_hud.set_character_timeline(
 			character, path, run_segments, wait_markers, door_markers,
+			vision_markers, clear_markers, grenade_markers,
 			label_text, char_color
 		)
 

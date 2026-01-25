@@ -4,6 +4,9 @@ extends RefCounted
 ## マーカーコレクション
 ## 複数種類のマーカーを統一的に管理するクラス
 
+## マーカーが変更された時のシグナル（追加・削除・クリア時に発火）
+signal marker_changed()
+
 const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 
 ## マーカーデータ（タイプ別）
@@ -36,6 +39,7 @@ func add_marker(data: ActionMarkerDataScript, mesh: MeshInstance3D = null) -> vo
 	if mesh:
 		_meshes_by_type[type].append(mesh)
 	_history.append(type)
+	marker_changed.emit()
 
 
 ## 指定タイプのマーカーデータを取得
@@ -113,6 +117,7 @@ func undo_last_marker() -> Dictionary:
 	if not meshes.is_empty():
 		removed_mesh = meshes.pop_back()
 
+	marker_changed.emit()
 	return {
 		"success": true,
 		"type": type,
@@ -123,6 +128,7 @@ func undo_last_marker() -> Dictionary:
 
 ## 指定タイプのマーカーをクリア
 func clear_type(type: ActionMarkerDataScript.Type) -> void:
+	var had_markers = not _markers_by_type.get(type, []).is_empty()
 	# メッシュを削除
 	for mesh in _meshes_by_type.get(type, []):
 		if mesh and is_instance_valid(mesh):
@@ -131,16 +137,21 @@ func clear_type(type: ActionMarkerDataScript.Type) -> void:
 	_meshes_by_type[type] = []
 	# 履歴からも該当タイプを削除
 	_history = _history.filter(func(t): return t != type)
+	if had_markers:
+		marker_changed.emit()
 
 
 ## 全マーカーをクリア
 func clear_all() -> void:
+	var had_markers = get_total_marker_count() > 0
 	for type in _meshes_by_type:
 		for mesh in _meshes_by_type[type]:
 			if mesh and is_instance_valid(mesh):
 				mesh.queue_free()
 	_init_type_arrays()
 	_history.clear()
+	if had_markers:
+		marker_changed.emit()
 
 
 ## マーカー数を取得

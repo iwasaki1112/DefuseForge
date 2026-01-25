@@ -119,7 +119,7 @@ var _wait_pending_anchor: Vector3 = Vector3.ZERO
 var _wait_pending_ratio: float = 0.0
 
 ## Wait設定
-const WAIT_MIN_DURATION: float = 0.5  ## 最小待機時間（秒）
+const WAIT_MIN_DURATION: float = 0.0  ## 最小待機時間（秒）
 const WAIT_MAX_DURATION: float = 10.0  ## 最大待機時間（秒）
 
 ## グレネードモード用の状態
@@ -157,6 +157,13 @@ var _path_extension_snapshots: Array[PackedVector3Array] = []
 ## キャラクター色
 var _character_color: Color = Color(1.0, 1.0, 1.0)  # デフォルト白
 
+## タイムライン更新管理
+var _timeline_manager: TimelineManager = null
+## 頻度抑制用: 最後の更新時刻
+var _last_timeline_update_time: float = 0.0
+## 頻度抑制用: 更新間隔（ミリ秒）
+const TIMELINE_UPDATE_THROTTLE_MS: float = 50.0  ## 50ms = 20fps
+
 
 func _ready() -> void:
 	_ground_plane = Plane(Vector3.UP, ground_plane_height)
@@ -177,9 +184,31 @@ func _setup_mesh() -> void:
 	add_child(_path_mesh)
 
 
-func setup(camera: Camera3D, character: Node3D = null) -> void:
+func setup(camera: Camera3D, character: Node3D = null, timeline_manager: TimelineManager = null) -> void:
 	_camera = camera
 	_character = character
+	_timeline_manager = timeline_manager
+
+
+## タイムライン更新を通知（即時）
+## マーカー追加・削除・パス完了など、確実に更新が必要な場合に使用
+func _notify_timeline_changed() -> void:
+	if _timeline_manager:
+		_timeline_manager.mark_dirty()
+	else:
+		timeline_data_changed.emit()
+
+
+## タイムライン更新を通知（頻度抑制あり）
+## パス描画中・Wait長押し中など、高頻度更新の場合に使用
+## @return: 実際に通知した場合true
+func _notify_timeline_changed_throttled() -> bool:
+	var current_time = Time.get_ticks_msec()
+	if current_time - _last_timeline_update_time < TIMELINE_UPDATE_THROTTLE_MS:
+		return false
+	_last_timeline_update_time = current_time
+	_notify_timeline_changed()
+	return true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -365,7 +394,7 @@ func _handle_run_marker_input(event: InputEvent) -> void:
 				_create_run_marker(result.point, RunMarkerScript.RunMarkerType.END)
 
 				run_segment_added.emit(start_ratio, end_ratio)
-				timeline_data_changed.emit()
+				_notify_timeline_changed()
 
 				# 開始点をクリア
 				_current_run_start = {}
@@ -427,7 +456,7 @@ func _handle_clear_marker_input(event: InputEvent) -> void:
 				_marker_history.append(MarkerType.CLEAR)
 
 			clear_point_added.emit(result.ratio)
-			timeline_data_changed.emit()
+			_notify_timeline_changed()
 			get_viewport().set_input_as_handled()
 
 
@@ -697,7 +726,7 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 			_add_marker_to_collection(_active_edit_character, vision_data, marker)
 
 			vision_point_added.emit(_current_vision_anchor, target_point)
-			timeline_data_changed.emit()
+			_notify_timeline_changed()
 			return
 
 	# シングルモードの場合は従来通り
@@ -716,7 +745,7 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	_marker_history.append(MarkerType.VISION)
 
 	vision_point_added.emit(_current_vision_anchor, target_point)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## 視線マーカーを作成（末尾に追加）
@@ -816,7 +845,7 @@ func _add_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
-	timeline_data_changed.emit()
+	_notify_timeline_changed_throttled()
 
 
 func _finish_drawing() -> void:
@@ -834,7 +863,7 @@ func _finish_drawing() -> void:
 		_marker_history.append(MarkerType.PATH)
 
 	drawing_finished.emit(_path_points)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## ========================================
@@ -894,7 +923,7 @@ func _add_extend_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
-	timeline_data_changed.emit()
+	_notify_timeline_changed_throttled()
 
 
 ## 継続描画完了
@@ -915,7 +944,7 @@ func _finish_extending_path() -> void:
 		_marker_history.append(MarkerType.PATH_EXTENSION)
 
 	drawing_finished.emit(_path_points)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## マーカーのpath_ratioを再計算
@@ -1253,7 +1282,7 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 func _emit_drawing_finished_after_restore() -> void:
 	if _path_points.size() >= 2:
 		drawing_finished.emit(_path_points)
-		timeline_data_changed.emit()
+		_notify_timeline_changed()
 
 
 func disable() -> void:
@@ -1521,7 +1550,7 @@ func undo_last_marker() -> int:
 
 	# タイムライン更新シグナルを発火（PATHは_undo_path内で発火済み）
 	if last_type != MarkerType.PATH:
-		timeline_data_changed.emit()
+		_notify_timeline_changed()
 
 	return last_type
 
@@ -1738,7 +1767,7 @@ func _undo_path() -> void:
 
 	# シグナルを発火
 	path_undone.emit()
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## ========================================
@@ -2269,7 +2298,7 @@ func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_n
 		_marker_history.append(MarkerType.GRENADE)
 
 	grenade_marker_added.emit(_grenade_pending_ratio, target_pos)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 	# 状態をリセット
 	_grenade_has_anchor = false
@@ -2506,7 +2535,7 @@ func _process_door_click(screen_pos: Vector2) -> void:
 		_marker_history.append(MarkerType.DOOR)
 
 	door_marker_added.emit(offset_result.ratio, door)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## ドアマーカーノードを作成
@@ -2723,7 +2752,7 @@ func _finish_wait_marker_press() -> void:
 		_marker_history.append(MarkerType.WAIT)
 
 	wait_marker_added.emit(_wait_pending_ratio, duration)
-	timeline_data_changed.emit()
+	_notify_timeline_changed()
 
 
 ## Waitプレビューマーカーを作成
@@ -2753,7 +2782,7 @@ func _update_wait_marker_preview() -> void:
 	var current_time = Time.get_ticks_msec() / 1000.0
 	var duration = clampf(current_time - _wait_press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 	_wait_preview_marker.set_wait_duration(duration)
-	timeline_data_changed.emit()
+	_notify_timeline_changed_throttled()
 
 
 ## Waitマーカーノードを作成
