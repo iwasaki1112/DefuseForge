@@ -7,7 +7,12 @@ extends Control
 signal execute_all_requested()
 signal clear_paths_requested()
 
+const TIMER_WARNING_THRESHOLD := 10.0
+const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)
+const TIMER_NORMAL_COLOR := Color.WHITE
+
 @onready var _pending_paths_label: Label = $ControlPanel/PendingPathsLabel
+@onready var _timer_label: Label = %TimerLabel
 
 var _timeline_bar_ui: TimelineBarUI = null
 
@@ -19,6 +24,22 @@ func setup() -> void:
 func set_pending_paths(count: int) -> void:
 	if _pending_paths_label:
 		_pending_paths_label.text = "Pending: %d paths" % count
+
+
+## タイマーを更新
+func update_timer(remaining: float) -> void:
+	if not _timer_label:
+		return
+	var total_seconds := int(remaining)
+	@warning_ignore("integer_division")
+	var minutes := total_seconds / 60
+	var seconds := total_seconds % 60
+	_timer_label.text = "%d:%02d" % [minutes, seconds]
+
+	if remaining <= TIMER_WARNING_THRESHOLD:
+		_timer_label.add_theme_color_override("font_color", TIMER_WARNING_COLOR)
+	else:
+		_timer_label.add_theme_color_override("font_color", TIMER_NORMAL_COLOR)
 
 
 func _on_execute_pressed() -> void:

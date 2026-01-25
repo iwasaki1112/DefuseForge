@@ -2,15 +2,11 @@ extends Control
 class_name RoundHUD
 ## ラウンドHUD
 ##
-## タイマー、生存者数、ラウンド結果を表示するUI。
+## 生存者数、ラウンド結果を表示するUI。
 
 # ============================================
 # Constants
 # ============================================
-
-const TIMER_WARNING_THRESHOLD := 10.0  # 残り時間警告閾値（秒）
-const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)  # 警告時の色（赤）
-const TIMER_NORMAL_COLOR := Color.WHITE  # 通常時の色
 
 const CT_COLOR := Color(0.4, 0.6, 1.0)  # CTの色（青）
 const T_COLOR := Color(1.0, 0.6, 0.3)  # Tの色（オレンジ）
@@ -21,7 +17,6 @@ const T_COLOR := Color(1.0, 0.6, 0.3)  # Tの色（オレンジ）
 
 var _top_bar: HBoxContainer = null
 var _ct_label: Label = null
-var _timer_label: Label = null
 var _t_label: Label = null
 var _result_overlay: ColorRect = null
 var _result_label: Label = null
@@ -61,16 +56,6 @@ func _setup_ui() -> void:
 	_ct_label.custom_minimum_size = Vector2(80, 0)
 	_top_bar.add_child(_ct_label)
 
-	# タイマーラベル
-	_timer_label = Label.new()
-	_timer_label.name = "TimerLabel"
-	_timer_label.text = "1:30"
-	_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_timer_label.add_theme_font_size_override("font_size", 36)
-	_timer_label.add_theme_color_override("font_color", TIMER_NORMAL_COLOR)
-	_timer_label.custom_minimum_size = Vector2(100, 0)
-	_top_bar.add_child(_timer_label)
-
 	# T生存者数ラベル
 	_t_label = Label.new()
 	_t_label.name = "TLabel"
@@ -103,21 +88,6 @@ func _setup_ui() -> void:
 # ============================================
 # Public Methods
 # ============================================
-
-## タイマーを更新
-func update_timer(remaining: float) -> void:
-	var total_seconds := int(remaining)
-	@warning_ignore("integer_division")
-	var minutes := total_seconds / 60
-	var seconds := total_seconds % 60
-	_timer_label.text = "%d:%02d" % [minutes, seconds]
-
-	# 警告色の切り替え
-	if remaining <= TIMER_WARNING_THRESHOLD:
-		_timer_label.add_theme_color_override("font_color", TIMER_WARNING_COLOR)
-	else:
-		_timer_label.add_theme_color_override("font_color", TIMER_NORMAL_COLOR)
-
 
 ## 生存者数を更新
 func update_survivor_counts(ct: int, t: int) -> void:

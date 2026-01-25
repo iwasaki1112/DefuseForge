@@ -123,7 +123,7 @@ func _setup_round_hud() -> void:
 		ui_layer.add_child(_round_hud)
 
 		# シグナル接続
-		game_manager.round_timer_updated.connect(_round_hud.update_timer)
+		game_manager.round_timer_updated.connect(_hud.update_timer)
 		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
 		game_manager.round_ended.connect(_round_hud.show_result)
 
@@ -301,7 +301,8 @@ func _update_timeline_from_pending_paths() -> void:
 
 		var smoke_grenade_markers: Array[Dictionary] = []
 		for sm in data.get("smoke_grenade_markers", []):
-			smoke_grenade_markers.append(sm)
+			if sm is Dictionary:
+				smoke_grenade_markers.append(sm)
 
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)
