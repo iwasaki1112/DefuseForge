@@ -6,7 +6,7 @@ extends RefCounted
 ## 移動速度定数
 const WALK_SPEED: float = 2.0  ## 歩行速度 (m/s)
 const RUN_SPEED: float = 5.0  ## 走行速度 (m/s)
-const DOOR_DURATION: float = 1.0  ## ドアキック固定時間 (秒)
+const DOOR_DURATION: float = 2.2  ## ドアキック固定時間 (秒) - 66フレーム/30fps
 
 ## セグメントタイプ
 enum SegmentType {
