@@ -9,6 +9,7 @@ class_name GameScreen
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
 const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_service.gd")
+const TimelineCalculatorScript := preload("res://scripts/utils/timeline_calculator.gd")
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -31,6 +32,10 @@ var _match_setup_service: MatchSetupService = null
 
 ## デバッグ
 var _vision_debug_enabled: bool = false
+
+## タイムライン状態
+var _timeline_executing: bool = false
+var _timeline_elapsed_time: float = 0.0  ## 実行開始からの経過時間
 
 
 
@@ -80,6 +85,7 @@ func _setup_game_manager() -> void:
 		# シグナル接続
 		game_manager.selection_changed.connect(_on_selection_changed)
 		game_manager.path_confirmed.connect(_on_path_confirmed)
+		game_manager.paths_execution_started.connect(_on_paths_execution_started)
 		game_manager.all_paths_completed.connect(_on_all_paths_completed)
 		game_manager.paths_cleared.connect(_on_paths_cleared)
 
@@ -175,6 +181,11 @@ func _physics_process(delta: float) -> void:
 	if _camera_pan_controller:
 		_camera_pan_controller.process(delta)
 
+	# タイムライン進行状況を更新（実時間ベース）
+	if _timeline_executing:
+		_timeline_elapsed_time += delta
+		_update_timeline_progress()
+
 
 ## ========================================
 ## シグナルハンドラ
@@ -186,18 +197,99 @@ func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
 
 func _on_path_confirmed(_count: int) -> void:
 	_update_pending_paths_label()
+	_update_timeline_from_pending_paths()
+
+
+func _on_paths_execution_started(_count: int) -> void:
+	_timeline_executing = true
+	_timeline_elapsed_time = 0.0  ## 経過時間をリセット
+	if _hud:
+		_hud.start_timeline_execution()
 
 
 func _on_all_paths_completed() -> void:
 	_update_pending_paths_label()
+	_timeline_executing = false
+	if _hud:
+		_hud.stop_timeline_execution()
+		_hud.clear_all_timelines()
 
 
 func _on_paths_cleared() -> void:
 	_update_pending_paths_label()
+	if _hud:
+		_hud.clear_all_timelines()
 
 
 func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
+
+
+## ========================================
+## タイムライン管理
+## ========================================
+
+## 保留パスからタイムラインを更新
+func _update_timeline_from_pending_paths() -> void:
+	if not _hud or not game_manager or not game_manager.path_execution_manager:
+		return
+
+	var pending = game_manager.path_execution_manager.pending_paths
+	for char_id in pending:
+		var data = pending[char_id]
+		if not data.has("character") or not data.has("path"):
+			continue
+
+		var character = data["character"]
+		if not is_instance_valid(character):
+			continue
+
+		# パスデータを取得
+		var path: Array[Vector3] = []
+		for p in data.get("path", []):
+			path.append(p)
+
+		# マーカーデータを取得
+		var run_segments: Array[Dictionary] = []
+		for seg in data.get("run_segments", []):
+			run_segments.append(seg)
+
+		var wait_markers: Array[Dictionary] = []
+		for wm in data.get("wait_markers_data", []):
+			wait_markers.append(wm)
+
+		var door_markers: Array[Dictionary] = []
+		for dm in data.get("door_markers_data", []):
+			door_markers.append(dm)
+
+		# キャラクターラベルと色を取得
+		var label_text = CharacterColorManager.get_character_label(character)
+		var char_color = CharacterColorManager.get_character_color(character)
+
+		# タイムラインを設定
+		_hud.set_character_timeline(
+			character, path, run_segments, wait_markers, door_markers,
+			label_text, char_color
+		)
+
+
+## タイムライン進行状況を更新（実時間ベース）
+func _update_timeline_progress() -> void:
+	if not _hud:
+		return
+
+	# 経過時間でプログレスラインを更新
+	_hud.update_execution_time(_timeline_elapsed_time)
+
+
+## キャラクターIDからキャラクターを取得
+func _find_character_by_id(char_id: int) -> Node:
+	if not game_manager:
+		return null
+	for character in game_manager.characters:
+		if character.get_instance_id() == char_id:
+			return character
+	return null
 
 
 ## ========================================

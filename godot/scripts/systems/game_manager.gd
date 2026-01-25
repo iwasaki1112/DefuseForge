@@ -22,6 +22,7 @@ signal path_mode_ended()
 signal path_mode_cancelled()
 signal path_ready()
 signal path_confirmed(count: int)
+signal paths_execution_started(count: int)
 signal all_paths_completed()
 signal paths_cleared()
 signal rotation_confirmed(direction: Vector3)
@@ -613,6 +614,7 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		# グレネード/ドアマーカー到達シグナルを接続
 		path_execution_manager.grenade_marker_reached.connect(_on_grenade_marker_reached)
 		path_execution_manager.door_marker_reached.connect(_on_door_marker_reached)
+		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
 
 
 func _setup_idle_manager() -> void:
@@ -803,6 +805,10 @@ func _on_path_confirmed(count: int) -> void:
 
 func _on_all_paths_completed() -> void:
 	all_paths_completed.emit()
+
+
+func _on_paths_execution_started(count: int) -> void:
+	paths_execution_started.emit(count)
 
 
 func _on_paths_cleared() -> void:

@@ -748,6 +748,51 @@ func _is_ally(other: Node) -> bool:
 	return false
 
 
+## ========================================
+## 進行状況取得API（タイムライン用）
+## ========================================
+
+## 現在の進行率を取得 (0.0 ~ 1.0)
+func get_current_progress() -> float:
+	if not _is_following:
+		return 0.0
+	return _calculate_path_progress()
+
+
+## 待機状態を取得
+## @return: { is_waiting: bool, type: String, remaining: float }
+func get_waiting_state() -> Dictionary:
+	if _is_waiting_for_wait:
+		return {
+			"is_waiting": true,
+			"type": "wait",
+			"remaining": maxf(0.0, _current_wait_duration - _wait_timer)
+		}
+	elif _is_waiting_for_door:
+		return {
+			"is_waiting": true,
+			"type": "door",
+			"remaining": 0.0  # ドアキック時間は外部で管理
+		}
+	elif _is_waiting_for_closed_door:
+		return {
+			"is_waiting": true,
+			"type": "closed_door",
+			"remaining": 0.0  # 不定
+		}
+	else:
+		return {
+			"is_waiting": false,
+			"type": "",
+			"remaining": 0.0
+		}
+
+
+## パス追従中かどうか（_is_followingの公開版）
+func is_active() -> bool:
+	return _is_following
+
+
 ## 最終目的地付近に味方キャラクターがいるかチェック
 func _is_ally_at_destination() -> bool:
 	if _current_path.size() == 0:

@@ -399,6 +399,50 @@ func is_character_following_path(character: Node) -> bool:
 	return false
 
 
+## 指定キャラクターの進行率を取得 (0.0 ~ 1.0)
+func get_character_progress(character: Node) -> float:
+	if not character:
+		return 0.0
+	var char_id = character.get_instance_id()
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.has_method("get_current_progress"):
+			return controller.get_current_progress()
+	return 0.0
+
+
+## 指定キャラクターの待機状態を取得
+func get_character_waiting_state(character: Node) -> Dictionary:
+	if not character:
+		return { "is_waiting": false, "type": "", "remaining": 0.0 }
+	var char_id = character.get_instance_id()
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.has_method("get_waiting_state"):
+			return controller.get_waiting_state()
+	return { "is_waiting": false, "type": "", "remaining": 0.0 }
+
+
+## 全てのアクティブキャラクターの進行状況を取得
+## @return: { character_id: { progress: float, waiting_state: Dictionary } }
+func get_all_progress() -> Dictionary:
+	var result: Dictionary = {}
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+		if controller.is_following_path():
+			var progress = 0.0
+			var waiting_state = { "is_waiting": false, "type": "", "remaining": 0.0 }
+			if controller.has_method("get_current_progress"):
+				progress = controller.get_current_progress()
+			if controller.has_method("get_waiting_state"):
+				waiting_state = controller.get_waiting_state()
+			result[char_id] = {
+				"progress": progress,
+				"waiting_state": waiting_state
+			}
+	return result
+
+
 ## 全てのパス追従をキャンセル
 func cancel_all_path_following() -> void:
 	for controller in _path_controllers.values():
