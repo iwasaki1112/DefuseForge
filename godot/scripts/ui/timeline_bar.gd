@@ -10,6 +10,7 @@ const COLOR_DOOR := Color("#FF4444")
 const COLOR_VISION := Color("#AA66FF")  ## 紫
 const COLOR_CLEAR := Color("#66CCFF")   ## 水色
 const COLOR_GRENADE := Color("#66FF66") ## 緑
+const COLOR_SMOKE_GRENADE := Color("#AAAAAA")  ## 灰色
 const COLOR_BACKGROUND := Color("#333333", 0.5)
 
 ## マーカーサイズ
@@ -24,8 +25,6 @@ var _timeline_data: TimelineCalculator.TimelineData = null
 var _character_color: Color = Color.CYAN
 var _max_duration: float = 0.0  ## 全体の最大時間（スケーリング用）
 
-## マーカーアイコン（将来の拡張用）
-var _marker_icons: Array[Dictionary] = []
 
 
 func _init() -> void:
@@ -57,8 +56,8 @@ func _get_scaled_width(full_width: float) -> float:
 		return full_width
 	if not _timeline_data or _timeline_data.total_duration < 0.001:
 		return 0.0
-	var scale = _timeline_data.total_duration / _max_duration
-	return full_width * scale
+	var time_scale = _timeline_data.total_duration / _max_duration
+	return full_width * time_scale
 
 
 ## タイムラインセグメントを描画
@@ -143,6 +142,8 @@ func _get_marker_color(marker_type: int) -> Color:
 			return COLOR_CLEAR
 		TimelineCalculator.MarkerType.GRENADE:
 			return COLOR_GRENADE
+		TimelineCalculator.MarkerType.SMOKE_GRENADE:
+			return COLOR_SMOKE_GRENADE
 		_:
 			return Color.WHITE
 
@@ -158,6 +159,8 @@ func _draw_marker_icon(marker_type: int, center: Vector2, icon_size: float, colo
 			_draw_clear_icon(center, half_size, color)
 		TimelineCalculator.MarkerType.GRENADE:
 			_draw_grenade_icon(center, half_size, color)
+		TimelineCalculator.MarkerType.SMOKE_GRENADE:
+			_draw_smoke_grenade_icon(center, half_size, color)
 
 
 ## Vision アイコン（矢印）を描画
@@ -223,6 +226,18 @@ func _draw_grenade_icon(center: Vector2, half_size: float, color: Color) -> void
 		colors.append(color)
 
 	draw_polygon(points, colors)
+
+
+## Smoke Grenade アイコン（煙雲）を描画
+func _draw_smoke_grenade_icon(center: Vector2, half_size: float, color: Color) -> void:
+	# 雲形状（3つの重なった円）
+	var radius = half_size * 0.4
+	# 中央の円
+	draw_circle(center, radius, color)
+	# 左の円
+	draw_circle(center + Vector2(-radius * 0.7, 0), radius * 0.8, color)
+	# 右の円
+	draw_circle(center + Vector2(radius * 0.7, 0), radius * 0.8, color)
 
 
 ## タイムラインデータを設定

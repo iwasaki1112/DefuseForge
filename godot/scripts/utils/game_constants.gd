@@ -65,7 +65,18 @@ const GRENADE_FRICTION := 0.3  # 摩擦係数
 const GRENADE_MASS := 0.4  # 質量
 
 # ========================================================
+# Smoke Grenade Settings
+# ========================================================
+const SMOKE_DURATION := 10.0  # スモーク持続時間（秒）
+const SMOKE_RADIUS := 5.0  # スモーク半径（メートル）
+const SMOKE_EXPAND_TIME := 1.5  # 展開時間（秒）
+const SMOKE_FADE_TIME := 2.5  # 消滅時間（秒）
+const SMOKE_FUSE_TIME := 3.0  # 導火線時間（秒）
+
+# ========================================================
 # Scene Paths (Use with load/preload if class_name not available)
 # ========================================================
 const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
+const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
+const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"

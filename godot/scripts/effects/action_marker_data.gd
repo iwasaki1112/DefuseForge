@@ -11,7 +11,8 @@ enum Type {
 	RUN,
 	DOOR,
 	GRENADE,
-	WAIT
+	WAIT,
+	SMOKE_GRENADE
 }
 
 ## マーカータイプ
@@ -71,6 +72,8 @@ static func create(marker_type: Type) -> ActionMarkerData:
 			return GrenadeMarkerData.new()
 		Type.WAIT:
 			return WaitMarkerData.new()
+		Type.SMOKE_GRENADE:
+			return SmokeGrenadeMarkerData.new()
 		_:
 			return ActionMarkerData.new()
 
@@ -256,5 +259,44 @@ class WaitMarkerData extends ActionMarkerData:
 	func create_marker_node() -> Node3D:
 		var marker = MeshInstance3D.new()
 		marker.set_script(preload("res://scripts/effects/wait_marker.gd"))
+		return marker
+#endregion
+
+
+#region Smoke Grenade Marker Data
+class SmokeGrenadeMarkerData extends ActionMarkerData:
+	## 投擲目標位置
+	var target_pos: Vector3 = Vector3.ZERO
+	## バウンスポイント（壁に当たる位置）
+	var bounce_point: Vector3 = Vector3.ZERO
+	## バウンス法線
+	var bounce_normal: Vector3 = Vector3.ZERO
+	## バウンスがあるか
+	var has_bounce: bool = false
+
+	func _init() -> void:
+		type = Type.SMOKE_GRENADE
+
+	func to_dict() -> Dictionary:
+		var data = super.to_dict()
+		data["target_pos"] = target_pos
+		if has_bounce:
+			data["bounce_point"] = bounce_point
+			data["bounce_normal"] = bounce_normal
+		return data
+
+	func from_dict(data: Dictionary) -> void:
+		super.from_dict(data)
+		if data.has("target_pos"):
+			target_pos = data.target_pos
+		if data.has("bounce_point"):
+			bounce_point = data.bounce_point
+			has_bounce = true
+		if data.has("bounce_normal"):
+			bounce_normal = data.bounce_normal
+
+	func create_marker_node() -> Node3D:
+		var marker = MeshInstance3D.new()
+		marker.set_script(preload("res://scripts/effects/smoke_grenade_marker.gd"))
 		return marker
 #endregion

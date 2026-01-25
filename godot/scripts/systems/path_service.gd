@@ -14,6 +14,7 @@ signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
 signal clear_point_added(path_ratio: float)
 signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
+signal smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3)
 signal door_marker_added(path_ratio: float, door: Node3D)
 signal wait_marker_added(path_ratio: float, wait_duration: float)
 
@@ -48,6 +49,7 @@ func setup(
 		path_drawer.run_segment_added.connect(_on_run_segment_added)
 		path_drawer.clear_point_added.connect(_on_clear_point_added)
 		path_drawer.grenade_marker_added.connect(_on_grenade_marker_added)
+		path_drawer.smoke_grenade_marker_added.connect(_on_smoke_grenade_marker_added)
 		path_drawer.door_marker_added.connect(_on_door_marker_added)
 		path_drawer.wait_marker_added.connect(_on_wait_marker_added)
 		path_drawer.path_undone.connect(_on_path_undone)
@@ -64,6 +66,7 @@ func setup(
 		marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
 		marker_edit_panel.clear_add_requested.connect(_on_marker_panel_clear_add)
 		marker_edit_panel.grenade_add_requested.connect(_on_marker_panel_grenade_add)
+		marker_edit_panel.smoke_grenade_add_requested.connect(_on_marker_panel_smoke_grenade_add)
 		marker_edit_panel.door_add_requested.connect(_on_marker_panel_door_add)
 		marker_edit_panel.wait_add_requested.connect(_on_marker_panel_wait_add)
 		marker_edit_panel.undo_requested.connect(_on_marker_panel_undo)
@@ -239,6 +242,11 @@ func start_grenade_mode() -> void:
 		path_drawer.start_grenade_mode()
 
 
+func start_smoke_grenade_mode() -> void:
+	if path_drawer:
+		path_drawer.start_smoke_grenade_mode()
+
+
 func start_door_mode() -> void:
 	if path_drawer:
 		path_drawer.start_door_mode()
@@ -392,6 +400,12 @@ func _on_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
 	grenade_marker_added.emit(path_ratio, target_pos)
 
 
+func _on_smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
+	if marker_edit_panel:
+		marker_edit_panel.on_smoke_grenade_marker_added()
+	smoke_grenade_marker_added.emit(path_ratio, target_pos)
+
+
 func _on_door_marker_added(path_ratio: float, door: Node3D) -> void:
 	if marker_edit_panel:
 		marker_edit_panel.on_door_marker_added()
@@ -439,6 +453,11 @@ func _on_marker_panel_clear_add(_character: Node) -> void:
 func _on_marker_panel_grenade_add(_character: Node) -> void:
 	if has_pending_path():
 		start_grenade_mode()
+
+
+func _on_marker_panel_smoke_grenade_add(_character: Node) -> void:
+	if has_pending_path():
+		start_smoke_grenade_mode()
 
 
 func _on_marker_panel_door_add(_character: Node) -> void:

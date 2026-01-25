@@ -40,6 +40,7 @@ var _timeline_elapsed_time: float = 0.0  ## 実行開始からの経過時間
 
 
 func _ready() -> void:
+	add_to_group("game_screen")
 	_setup_environment()
 	_setup_game_manager()
 	_setup_hud()
@@ -279,6 +280,10 @@ func _update_timeline_from_pending_paths() -> void:
 		for gm in data.get("grenade_markers", []):
 			grenade_markers.append(gm)
 
+		var smoke_grenade_markers: Array[Dictionary] = []
+		for sm in data.get("smoke_grenade_markers", []):
+			smoke_grenade_markers.append(sm)
+
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)
 		var char_color = CharacterColorManager.get_character_color(character)
@@ -286,7 +291,7 @@ func _update_timeline_from_pending_paths() -> void:
 		# タイムラインを設定
 		_hud.set_character_timeline(
 			character, path, run_segments, wait_markers, door_markers,
-			vision_markers, clear_markers, grenade_markers,
+			vision_markers, clear_markers, grenade_markers, smoke_grenade_markers,
 			label_text, char_color
 		)
 
@@ -342,6 +347,7 @@ func _update_timeline_preview() -> void:
 		var vision_markers: Array[Dictionary] = []
 		var clear_markers: Array[Dictionary] = []
 		var grenade_markers: Array[Dictionary] = []
+		var smoke_grenade_markers: Array[Dictionary] = []
 
 		if is_multi_mode:
 			# マルチモード：キャラクター別のマーカーを取得
@@ -351,6 +357,7 @@ func _update_timeline_preview() -> void:
 			var all_vision = path_drawer.get_all_vision_points()
 			var all_clear = path_drawer.get_all_clear_points()
 			var all_grenade = path_drawer.get_all_grenade_markers()
+			var all_smoke_grenade = path_drawer.get_all_smoke_grenade_markers()
 
 			if all_run.has(char_id):
 				for seg in all_run[char_id]:
@@ -370,6 +377,9 @@ func _update_timeline_preview() -> void:
 			if all_grenade.has(char_id):
 				for gm in all_grenade[char_id]:
 					grenade_markers.append(gm)
+			if all_smoke_grenade.has(char_id):
+				for sm in all_smoke_grenade[char_id]:
+					smoke_grenade_markers.append(sm)
 		else:
 			# シングルモード：共通のマーカーを使用
 			for seg in path_drawer.get_run_segments():
@@ -384,6 +394,8 @@ func _update_timeline_preview() -> void:
 				clear_markers.append(cm)
 			for gm in path_drawer.get_grenade_markers():
 				grenade_markers.append(gm)
+			for sm in path_drawer.get_smoke_grenade_markers():
+				smoke_grenade_markers.append(sm)
 
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)
@@ -392,7 +404,7 @@ func _update_timeline_preview() -> void:
 		# タイムラインを設定
 		_hud.set_character_timeline(
 			character, path, run_segments, wait_markers, door_markers,
-			vision_markers, clear_markers, grenade_markers,
+			vision_markers, clear_markers, grenade_markers, smoke_grenade_markers,
 			label_text, char_color
 		)
 
@@ -413,6 +425,13 @@ func _find_character_by_id(char_id: int) -> Node:
 	for character in game_manager.characters:
 		if character.get_instance_id() == char_id:
 			return character
+	return null
+
+
+## SmokeAreaManagerを取得（VisionComponentから呼び出される）
+func get_smoke_area_manager() -> SmokeAreaManager:
+	if game_manager:
+		return game_manager.smoke_area_manager
 	return null
 
 

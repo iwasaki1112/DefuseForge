@@ -13,6 +13,7 @@ const CharacterSetupServiceScript = preload("res://scripts/systems/character_set
 const PathServiceScript = preload("res://scripts/systems/path_service.gd")
 const VisionServiceScript = preload("res://scripts/systems/vision_service.gd")
 const GrenadeScene = preload("res://scenes/weapons/grenade.tscn")
+const SmokeGrenadeScene = preload("res://scenes/weapons/smoke_grenade.tscn")
 
 ## UI接続用シグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -36,6 +37,8 @@ signal timeline_data_changed()
 signal context_action_requested(action_id: String, character: Node)
 ## グレネード投擲シグナル
 signal grenade_thrown(grenade: Node3D, character: Node)
+## スモークグレネード投擲シグナル
+signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
 
 ## コアシステム
 var selection_manager: CharacterSelectionManager = null
@@ -45,6 +48,7 @@ var path_mode_controller: PathModeController = null
 var timeline_manager: TimelineManager = null
 var fog_of_war_system: Node3D = null
 var enemy_visibility_system: Node = null
+var smoke_area_manager: SmokeAreaManager = null
 var map_manager: MapManager = null
 var path_drawer: Node3D = null
 var rotation_controller: Node = null
@@ -90,6 +94,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_path_execution_manager(mesh_parent)
 	_setup_idle_manager()
 	_setup_timeline_manager()
+	_setup_smoke_area_manager()
 	_setup_path_drawer()
 	_setup_path_mode_controller()
 	_setup_rotation_controller()
@@ -615,8 +620,9 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
 		add_child(path_execution_manager)
 		path_execution_manager.setup(mesh_parent)
-		# グレネード/ドアマーカー到達シグナルを接続
+		# グレネード/スモークグレネード/ドアマーカー到達シグナルを接続
 		path_execution_manager.grenade_marker_reached.connect(_on_grenade_marker_reached)
+		path_execution_manager.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached)
 		path_execution_manager.door_marker_reached.connect(_on_door_marker_reached)
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
 
@@ -639,6 +645,13 @@ func _setup_timeline_manager() -> void:
 		timeline_manager.name = "TimelineManager"
 		add_child(timeline_manager)
 		timeline_manager.timeline_updated.connect(_on_timeline_data_changed)
+
+
+func _setup_smoke_area_manager() -> void:
+	if smoke_area_manager == null:
+		smoke_area_manager = SmokeAreaManager.new()
+		smoke_area_manager.name = "SmokeAreaManager"
+		add_child(smoke_area_manager)
 
 
 func _setup_path_drawer() -> void:
@@ -676,6 +689,9 @@ func _setup_vision_service() -> void:
 		vision_service.setup(fow_map_size, is_vision_enabled)
 		fog_of_war_system = vision_service.fog_of_war_system
 		enemy_visibility_system = vision_service.enemy_visibility_system
+		# スモークエリアマネージャーを接続
+		if enemy_visibility_system and smoke_area_manager:
+			enemy_visibility_system.set_smoke_area_manager(smoke_area_manager)
 
 
 func _setup_map_manager() -> void:
@@ -1013,6 +1029,49 @@ func _on_grenade_marker_reached(character: Node, marker_data: Dictionary) -> voi
 
 	# シグナル発火
 	grenade_thrown.emit(grenade, char_body)
+
+
+## スモークグレネードマーカー到達時（移動を継続しながら投擲）
+func _on_smoke_grenade_marker_reached(character: Node, marker_data: Dictionary) -> void:
+	if not is_instance_valid(character):
+		return
+
+	var char_body := character as CharacterBody3D
+	if not char_body:
+		return
+
+	# マーカーデータからターゲット位置を取得
+	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
+	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
+
+	if target_pos == Vector3.ZERO:
+		return
+
+	# スモークグレネードをインスタンス化
+	var smoke_grenade = SmokeGrenadeScene.instantiate() as SmokeGrenade
+	if not smoke_grenade:
+		return
+
+	# スモークエリアマネージャーを設定
+	smoke_grenade.set_smoke_manager(smoke_area_manager)
+
+	# ワールドに追加
+	_mesh_parent.add_child(smoke_grenade)
+
+	# 投擲開始位置
+	var start_pos = char_body.global_position + Vector3(0, 1.5, 0)
+
+	# バウンスポイントがある場合はバウンス投擲
+	if bounce_point != Vector3.ZERO and bounce_point.length_squared() > 0.001:
+		var bounce_normal = (target_pos - bounce_point).normalized()
+		bounce_normal.y = 0
+		smoke_grenade.throw_with_bounce(start_pos, bounce_point, bounce_normal, target_pos, char_body)
+	else:
+		# 直接投擲
+		smoke_grenade.throw(start_pos, target_pos, char_body)
+
+	# シグナル発火
+	smoke_grenade_thrown.emit(smoke_grenade, char_body)
 
 
 ## ドアマーカー到達時（移動を一時停止してドアキック）

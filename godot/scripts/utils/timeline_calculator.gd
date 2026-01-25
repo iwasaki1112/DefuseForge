@@ -20,7 +20,8 @@ enum SegmentType {
 enum MarkerType {
 	VISION,
 	CLEAR,
-	GRENADE
+	GRENADE,
+	SMOKE_GRENADE
 }
 
 ## タイムラインセグメント
@@ -119,7 +120,8 @@ static func calculate_timeline(
 	door_markers: Array[Dictionary] = [],
 	vision_markers: Array[Dictionary] = [],
 	clear_markers: Array[Dictionary] = [],
-	grenade_markers: Array[Dictionary] = []
+	grenade_markers: Array[Dictionary] = [],
+	smoke_grenade_markers: Array[Dictionary] = []
 ) -> TimelineData:
 	var timeline = TimelineData.new()
 
@@ -236,6 +238,11 @@ static func calculate_timeline(
 		var ratio = gm.get("path_ratio", 0.0)
 		var time = timeline.get_time_at_ratio(ratio)
 		timeline.add_marker(MarkerPoint.new(time, ratio, MarkerType.GRENADE))
+
+	for sm in smoke_grenade_markers:
+		var ratio = sm.get("path_ratio", 0.0)
+		var time = timeline.get_time_at_ratio(ratio)
+		timeline.add_marker(MarkerPoint.new(time, ratio, MarkerType.SMOKE_GRENADE))
 
 	return timeline
 

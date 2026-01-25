@@ -211,6 +211,11 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 	if angle > fov_degrees / 2.0:
 		return false
 
+	# Smoke occlusion check
+	var smoke_manager := _get_smoke_area_manager()
+	if smoke_manager and smoke_manager.is_line_of_sight_blocked(origin, world_pos):
+		return false
+
 	# Wall occlusion check (single raycast)
 	var space_state := get_world_3d().direct_space_state
 	if not space_state:
@@ -222,6 +227,15 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 
 	var result := space_state.intersect_ray(query)
 	return result.is_empty()
+
+
+## SmokeAreaManagerを取得（GameManager経由）
+func _get_smoke_area_manager() -> SmokeAreaManager:
+	# GameManagerから取得を試みる
+	var game_screen := get_tree().get_first_node_in_group("game_screen")
+	if game_screen and game_screen.has_method("get_smoke_area_manager"):
+		return game_screen.get_smoke_area_manager()
+	return null
 
 
 # ============================================

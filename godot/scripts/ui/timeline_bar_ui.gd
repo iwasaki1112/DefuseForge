@@ -85,6 +85,7 @@ func _build_ui() -> void:
 ## @param vision_markers: Visionマーカー配列
 ## @param clear_markers: Clearマーカー配列
 ## @param grenade_markers: Grenadeマーカー配列
+## @param smoke_grenade_markers: SmokeGrenadeマーカー配列
 ## @param label_text: キャラクターラベル（A, B, C...）
 ## @param color: キャラクター色
 func set_character_timeline(
@@ -96,6 +97,7 @@ func set_character_timeline(
 	vision_markers: Array[Dictionary] = [],
 	clear_markers: Array[Dictionary] = [],
 	grenade_markers: Array[Dictionary] = [],
+	smoke_grenade_markers: Array[Dictionary] = [],
 	label_text: String = "A",
 	color: Color = Color.CYAN
 ) -> void:
@@ -104,7 +106,7 @@ func set_character_timeline(
 	# タイムラインデータを計算
 	var timeline_data = TimelineCalculator.calculate_timeline(
 		path, run_segments, wait_markers, door_markers,
-		vision_markers, clear_markers, grenade_markers
+		vision_markers, clear_markers, grenade_markers, smoke_grenade_markers
 	)
 
 	# 既存の行を更新または新規作成

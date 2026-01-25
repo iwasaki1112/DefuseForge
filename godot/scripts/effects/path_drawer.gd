@@ -6,7 +6,7 @@ extends Node3D
 ## Slice the Pie: パス上の任意の点から視線方向を設定可能
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER, WAIT_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER, WAIT_MARKER, SMOKE_GRENADE_MARKER }
 
 ## 視線ポイントデータ（ターゲットポイントモード）
 ## { "path_ratio": float, "anchor": Vector3, "target_point": Vector3 }
@@ -29,6 +29,9 @@ signal clear_point_added(path_ratio: float)
 ## グレネードマーカー用シグナル
 signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
 
+## スモークグレネードマーカー用シグナル
+signal smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3)
+
 ## ドアマーカー用シグナル
 signal door_marker_added(path_ratio: float, door: Node3D)
 
@@ -42,7 +45,7 @@ signal path_undone()
 signal timeline_data_changed()
 
 ## マーカー履歴用の種別（PATH = パス描画自体, PATH_EXTENSION = パス拡張）
-enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT }
+enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT, SMOKE_GRENADE }
 
 @export var min_point_distance: float = 0.2  # ポイント間の最小距離
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)  # 白
@@ -67,6 +70,7 @@ const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
 const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
 const WaitMarkerScript = preload("res://scripts/effects/wait_marker.gd")
+const SmokeGrenadeMarkerScript = preload("res://scripts/effects/smoke_grenade_marker.gd")
 const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 const MarkerCollectionScript = preload("res://scripts/effects/marker_collection.gd")
 
@@ -121,6 +125,20 @@ var _wait_pending_ratio: float = 0.0
 ## Wait設定
 const WAIT_MIN_DURATION: float = 0.0  ## 最小待機時間（秒）
 const WAIT_MAX_DURATION: float = 10.0  ## 最大待機時間（秒）
+
+## スモークグレネードマーカー用
+## { "path_ratio": float, "anchor": Vector3, "target_pos": Vector3, "bounce_point": Vector3?, "bounce_normal": Vector3? }
+var _smoke_grenade_markers: Array[Dictionary] = []
+var _smoke_grenade_meshes: Array[MeshInstance3D] = []
+
+## スモークグレネードモード用の状態
+var _smoke_grenade_pending_anchor: Vector3 = Vector3.ZERO
+var _smoke_grenade_pending_ratio: float = 0.0
+var _smoke_grenade_has_anchor: bool = false
+var _smoke_grenade_bounce_point: Vector3 = Vector3.ZERO
+var _smoke_grenade_bounce_normal: Vector3 = Vector3.ZERO
+var _smoke_grenade_has_bounce: bool = false
+var _smoke_grenade_trajectory_mesh: MeshInstance3D = null
 
 ## グレネードモード用の状態
 var _grenade_pending_anchor: Vector3 = Vector3.ZERO
@@ -234,6 +252,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_door_marker_input(event)
 		DrawingMode.WAIT_MARKER:
 			_handle_wait_marker_input(event)
+		DrawingMode.SMOKE_GRENADE_MARKER:
+			_handle_smoke_grenade_marker_input(event)
 
 
 ## パス継続描画の入力処理（全モード共通、優先処理）
@@ -1000,6 +1020,7 @@ func clear() -> void:
 	_clear_run_markers()
 	_clear_clear_markers()
 	_clear_grenade_markers()
+	_clear_smoke_grenade_markers()
 	_clear_door_markers()
 	_clear_wait_markers()
 	_marker_history.clear()
@@ -1047,6 +1068,24 @@ func _clear_grenade_markers() -> void:
 		_grenade_trajectory_mesh = null
 
 
+func _clear_smoke_grenade_markers() -> void:
+	_smoke_grenade_markers.clear()
+	for mesh in _smoke_grenade_meshes:
+		if is_instance_valid(mesh):
+			mesh.queue_free()
+	_smoke_grenade_meshes.clear()
+	# スモークグレネードモードの状態をリセット
+	_smoke_grenade_has_anchor = false
+	_smoke_grenade_pending_anchor = Vector3.ZERO
+	_smoke_grenade_pending_ratio = 0.0
+	_smoke_grenade_has_bounce = false
+	_smoke_grenade_bounce_point = Vector3.ZERO
+	_smoke_grenade_bounce_normal = Vector3.ZERO
+	if _smoke_grenade_trajectory_mesh:
+		_smoke_grenade_trajectory_mesh.queue_free()
+		_smoke_grenade_trajectory_mesh = null
+
+
 func _clear_door_markers() -> void:
 	_door_markers.clear()
 	for mesh in _door_meshes:
@@ -1087,6 +1126,13 @@ func take_grenade_markers() -> Array[MeshInstance3D]:
 func take_door_markers() -> Array[MeshInstance3D]:
 	var markers = _door_meshes.duplicate()
 	_door_meshes.clear()
+	return markers
+
+
+## スモークグレネードマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
+func take_smoke_grenade_markers() -> Array[MeshInstance3D]:
+	var markers = _smoke_grenade_meshes.duplicate()
+	_smoke_grenade_meshes.clear()
 	return markers
 
 
@@ -1536,6 +1582,8 @@ func undo_last_marker() -> int:
 			_undo_path()
 		MarkerType.GRENADE:
 			_undo_grenade_marker()
+		MarkerType.SMOKE_GRENADE:
+			_undo_smoke_grenade_marker()
 		MarkerType.DOOR:
 			_undo_door_marker()
 		MarkerType.PATH_EXTENSION:
@@ -1655,6 +1703,28 @@ func _undo_grenade_marker() -> void:
 		_grenade_markers.pop_back()
 		if _grenade_meshes.size() > 0:
 			var mesh = _grenade_meshes.pop_back()
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+
+
+## Smoke Grenade マーカーをUndo（内部用、履歴は操作しない）
+func _undo_smoke_grenade_marker() -> void:
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if char_data.smoke_grenade_markers.size() > 0:
+				char_data.smoke_grenade_markers.pop_back()
+				if char_data.smoke_grenade_meshes.size() > 0:
+					var mesh = char_data.smoke_grenade_meshes.pop_back()
+					if is_instance_valid(mesh):
+						mesh.queue_free()
+		return
+
+	if _smoke_grenade_markers.size() > 0:
+		_smoke_grenade_markers.pop_back()
+		if _smoke_grenade_meshes.size() > 0:
+			var mesh = _smoke_grenade_meshes.pop_back()
 			if is_instance_valid(mesh):
 				mesh.queue_free()
 
@@ -1884,6 +1954,8 @@ func start_multi_character_mode(characters: Array[Node]) -> void:
 			"clear_meshes": [] as Array[MeshInstance3D],
 			"grenade_markers": [] as Array[Dictionary],
 			"grenade_meshes": [] as Array[MeshInstance3D],
+			"smoke_grenade_markers": [] as Array[Dictionary],
+			"smoke_grenade_meshes": [] as Array[MeshInstance3D],
 			"door_markers": [] as Array[Dictionary],
 			"door_meshes": [] as Array[MeshInstance3D],
 			"marker_history": [] as Array[int]
@@ -2056,6 +2128,10 @@ func _clear_multi_character_markers() -> void:
 			for mesh in data.grenade_meshes:
 				if is_instance_valid(mesh):
 					mesh.queue_free()
+		if data.has("smoke_grenade_meshes"):
+			for mesh in data.smoke_grenade_meshes:
+				if is_instance_valid(mesh):
+					mesh.queue_free()
 		if data.has("door_meshes"):
 			for mesh in data.door_meshes:
 				if is_instance_valid(mesh):
@@ -2163,6 +2239,26 @@ func take_all_door_markers() -> Dictionary:
 		if _character_markers[char_id].has("door_meshes"):
 			result[char_id] = _character_markers[char_id].door_meshes.duplicate()
 			_character_markers[char_id].door_meshes.clear()
+		else:
+			result[char_id] = []
+	return result
+
+
+## 全キャラクターのSmokeGrenadeMarkersを移譲
+## @return { char_id: Array[MeshInstance3D] }
+func take_all_smoke_grenade_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			var markers = _smoke_grenade_meshes.duplicate()
+			_smoke_grenade_meshes.clear()
+			return { _active_edit_character.get_instance_id(): markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("smoke_grenade_meshes"):
+			result[char_id] = _character_markers[char_id].smoke_grenade_meshes.duplicate()
+			_character_markers[char_id].smoke_grenade_meshes.clear()
 		else:
 			result[char_id] = []
 	return result
@@ -2445,6 +2541,264 @@ func get_all_grenade_markers() -> Dictionary:
 	for char_id in _character_markers:
 		if _character_markers[char_id].has("grenade_markers"):
 			result[char_id] = _character_markers[char_id].grenade_markers
+		else:
+			result[char_id] = []
+	return result
+
+
+## ========================================
+## スモークグレネードマーカーモード API
+## ========================================
+
+## スモークグレネードマーカー設定モードに切り替え
+func start_smoke_grenade_mode() -> bool:
+	if _pending_path.size() < 2:
+		return false
+
+	_drawing_mode = DrawingMode.SMOKE_GRENADE_MARKER
+	_is_enabled = true
+	# スモークグレネードモード状態をリセット
+	_smoke_grenade_has_anchor = false
+	_smoke_grenade_pending_anchor = Vector3.ZERO
+	_smoke_grenade_pending_ratio = 0.0
+	_smoke_grenade_has_bounce = false
+	_smoke_grenade_bounce_point = Vector3.ZERO
+	_smoke_grenade_bounce_normal = Vector3.ZERO
+	mode_changed.emit(int(DrawingMode.SMOKE_GRENADE_MARKER))
+	return true
+
+
+## スモークグレネードマーカー入力処理
+func _handle_smoke_grenade_marker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			_process_smoke_grenade_click(mouse_event.position)
+			get_viewport().set_input_as_handled()
+
+	elif event is InputEventMouseMotion:
+		# 軌道プレビュー更新
+		_update_smoke_grenade_trajectory_preview_at(event.position)
+
+
+## スモークグレネードクリック処理
+func _process_smoke_grenade_click(screen_pos: Vector2) -> void:
+	if not _smoke_grenade_has_anchor:
+		# 1. パス上クリック → 投擲位置を設定
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+
+		var result = _find_closest_point_on_path(ground_pos)
+		if result.distance > path_click_threshold:
+			return
+
+		_smoke_grenade_pending_anchor = result.point
+		_smoke_grenade_pending_ratio = result.ratio
+		_smoke_grenade_has_anchor = true
+		_setup_smoke_grenade_trajectory_mesh()
+	elif not _smoke_grenade_has_bounce:
+		# 2. 目標クリック
+		var target_result = _raycast_wall_or_floor(screen_pos)
+		if target_result.is_empty():
+			return
+
+		var hit_pos: Vector3 = target_result.position
+		var hit_normal: Vector3 = target_result.normal
+
+		# 壁かどうか判定
+		var is_wall = abs(hit_normal.y) < 0.5
+
+		if is_wall:
+			# 壁の場合: バウンスポイントを設定
+			hit_pos.y = 1.0
+			_smoke_grenade_bounce_point = hit_pos
+			_smoke_grenade_bounce_normal = hit_normal
+			_smoke_grenade_has_bounce = true
+		else:
+			# 床の場合: 直接投擲完了
+			_finish_smoke_grenade_marker(hit_pos, Vector3.ZERO, Vector3.ZERO)
+	else:
+		# 3. バウンス後の最終目標クリック
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+
+		_finish_smoke_grenade_marker(ground_pos, _smoke_grenade_bounce_point, _smoke_grenade_bounce_normal)
+
+
+## スモークグレネードマーカーを完成させる
+func _finish_smoke_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_normal: Vector3) -> void:
+	var has_bounce = bounce_point.length_squared() > 0.001
+	var new_marker = {
+		"path_ratio": _smoke_grenade_pending_ratio,
+		"anchor": _smoke_grenade_pending_anchor,
+		"target_pos": target_pos,
+		"bounce_point": bounce_point if has_bounce else Vector3.ZERO,
+		"bounce_normal": bounce_normal if has_bounce else Vector3.ZERO
+	}
+
+	# マルチキャラクターモードの場合
+	if _multi_character_mode and _active_edit_character:
+		var char_id = _active_edit_character.get_instance_id()
+		if _character_markers.has(char_id):
+			var char_data = _character_markers[char_id]
+			if not char_data.has("smoke_grenade_markers"):
+				char_data["smoke_grenade_markers"] = []
+				char_data["smoke_grenade_meshes"] = []
+			char_data.smoke_grenade_markers.append(new_marker)
+
+			# マーカーメッシュを作成
+			var marker = _create_smoke_grenade_marker_node(_smoke_grenade_pending_anchor, target_pos, bounce_point)
+			char_data.smoke_grenade_meshes.append(marker)
+
+			# 履歴に追加
+			char_data.marker_history.append(MarkerType.SMOKE_GRENADE)
+
+			# MarkerCollectionにも追加
+			var smoke_data = ActionMarkerDataScript.SmokeGrenadeMarkerData.new()
+			smoke_data.path_ratio = _smoke_grenade_pending_ratio
+			smoke_data.anchor = _smoke_grenade_pending_anchor
+			smoke_data.target_pos = target_pos
+			smoke_data.bounce_point = bounce_point
+			smoke_data.bounce_normal = bounce_normal
+			smoke_data.has_bounce = has_bounce
+			_add_marker_to_collection(_active_edit_character, smoke_data, marker)
+	else:
+		# シングルモード
+		_smoke_grenade_markers.append(new_marker)
+
+		# マーカーメッシュを作成
+		var marker = _create_smoke_grenade_marker_node(_smoke_grenade_pending_anchor, target_pos, bounce_point)
+		_smoke_grenade_meshes.append(marker)
+
+		# 履歴に追加
+		_marker_history.append(MarkerType.SMOKE_GRENADE)
+
+	smoke_grenade_marker_added.emit(_smoke_grenade_pending_ratio, target_pos)
+	_notify_timeline_changed()
+
+	# 状態をリセット
+	_smoke_grenade_has_anchor = false
+	_smoke_grenade_pending_anchor = Vector3.ZERO
+	_smoke_grenade_pending_ratio = 0.0
+	_smoke_grenade_has_bounce = false
+	_smoke_grenade_bounce_point = Vector3.ZERO
+	_smoke_grenade_bounce_normal = Vector3.ZERO
+	_cleanup_smoke_grenade_trajectory_mesh()
+
+
+## スモークグレネードマーカーノードを作成
+func _create_smoke_grenade_marker_node(anchor: Vector3, target: Vector3, bounce: Vector3) -> MeshInstance3D:
+	var marker = MeshInstance3D.new()
+	marker.set_script(SmokeGrenadeMarkerScript)
+	add_child(marker)
+	marker.set_position_and_target(anchor, target, bounce)
+	# スモークグレネードは灰色/白（デフォルト色を使用）
+	return marker
+
+
+## スモークグレネード軌道プレビューメッシュをセットアップ
+func _setup_smoke_grenade_trajectory_mesh() -> void:
+	if _smoke_grenade_trajectory_mesh:
+		return
+
+	_smoke_grenade_trajectory_mesh = MeshInstance3D.new()
+	_smoke_grenade_trajectory_mesh.name = "SmokeGrenadeTrajectoryPreview"
+	add_child(_smoke_grenade_trajectory_mesh)
+
+	var mat = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.7, 0.7, 0.7, 0.6)  # 灰色
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_smoke_grenade_trajectory_mesh.material_override = mat
+
+
+## スモークグレネード軌道プレビューを更新
+func _update_smoke_grenade_trajectory_preview_at(screen_pos: Vector2) -> void:
+	if not _smoke_grenade_has_anchor or not _smoke_grenade_trajectory_mesh:
+		return
+
+	var target_pos = _get_ground_position(screen_pos)
+	if target_pos == null:
+		var wall_result = _raycast_wall_or_floor(screen_pos)
+		if wall_result.is_empty():
+			return
+		target_pos = wall_result.position
+
+	var im = ImmediateMesh.new()
+	im.surface_begin(Mesh.PRIMITIVE_LINES)
+
+	var start_pos = _smoke_grenade_pending_anchor + Vector3(0, 0.05, 0)
+
+	if _smoke_grenade_has_bounce:
+		im.surface_add_vertex(start_pos)
+		im.surface_add_vertex(_smoke_grenade_bounce_point)
+		im.surface_add_vertex(_smoke_grenade_bounce_point)
+		im.surface_add_vertex(target_pos)
+	else:
+		im.surface_add_vertex(start_pos)
+		im.surface_add_vertex(target_pos)
+
+	im.surface_end()
+	_smoke_grenade_trajectory_mesh.mesh = im
+
+
+## スモークグレネード軌道プレビューを削除
+func _cleanup_smoke_grenade_trajectory_mesh() -> void:
+	if _smoke_grenade_trajectory_mesh:
+		_smoke_grenade_trajectory_mesh.queue_free()
+		_smoke_grenade_trajectory_mesh = null
+
+
+## スモークグレネードマーカーがあるか
+func has_smoke_grenade_markers() -> bool:
+	return _smoke_grenade_markers.size() > 0
+
+
+## スモークグレネードマーカーを取得
+func get_smoke_grenade_markers() -> Array[Dictionary]:
+	return _smoke_grenade_markers
+
+
+## スモークグレネードマーカー数を取得
+func get_smoke_grenade_marker_count() -> int:
+	if _multi_character_mode and _active_edit_character:
+		return get_smoke_grenade_marker_count_for_character(_active_edit_character)
+	return _smoke_grenade_markers.size()
+
+
+## キャラクター別のスモークグレネードマーカー数を取得
+func get_smoke_grenade_marker_count_for_character(character: Node) -> int:
+	if not character:
+		return 0
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("smoke_grenade_markers"):
+		return _character_markers[char_id].smoke_grenade_markers.size()
+	return 0
+
+
+## キャラクター別のスモークグレネードマーカーを取得
+func get_smoke_grenade_markers_for_character(character: Node) -> Array[Dictionary]:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if _character_markers.has(char_id) and _character_markers[char_id].has("smoke_grenade_markers"):
+		return _character_markers[char_id].smoke_grenade_markers
+	return []
+
+
+## 全キャラクターのスモークグレネードマーカーを取得
+func get_all_smoke_grenade_markers() -> Dictionary:
+	if not _multi_character_mode:
+		if _active_edit_character:
+			return { _active_edit_character.get_instance_id(): _smoke_grenade_markers }
+		return {}
+
+	var result: Dictionary = {}
+	for char_id in _character_markers:
+		if _character_markers[char_id].has("smoke_grenade_markers"):
+			result[char_id] = _character_markers[char_id].smoke_grenade_markers
 		else:
 			result[char_id] = []
 	return result
@@ -2964,6 +3318,8 @@ func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dict
 			return get_door_markers()
 		ActionMarkerDataScript.Type.WAIT:
 			return get_wait_markers()
+		ActionMarkerDataScript.Type.SMOKE_GRENADE:
+			return get_smoke_grenade_markers()
 		_:
 			return []
 
@@ -2983,6 +3339,8 @@ func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Mes
 			return take_door_markers()
 		ActionMarkerDataScript.Type.WAIT:
 			return take_wait_markers()
+		ActionMarkerDataScript.Type.SMOKE_GRENADE:
+			return take_smoke_grenade_markers()
 		_:
 			return []
 
@@ -3002,6 +3360,8 @@ func get_markers_for_character_by_type(character: Node, marker_type: ActionMarke
 			return get_door_markers_for_character(character)
 		ActionMarkerDataScript.Type.WAIT:
 			return get_wait_markers_for_character(character)
+		ActionMarkerDataScript.Type.SMOKE_GRENADE:
+			return get_smoke_grenade_markers_for_character(character)
 		_:
 			return []
 
@@ -3021,6 +3381,8 @@ func get_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictio
 			return get_all_door_markers()
 		ActionMarkerDataScript.Type.WAIT:
 			return get_all_wait_markers()
+		ActionMarkerDataScript.Type.SMOKE_GRENADE:
+			return get_all_smoke_grenade_markers()
 		_:
 			return {}
 
@@ -3040,6 +3402,8 @@ func take_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dicti
 			return take_all_door_markers()
 		ActionMarkerDataScript.Type.WAIT:
 			return take_all_wait_markers()
+		ActionMarkerDataScript.Type.SMOKE_GRENADE:
+			return take_all_smoke_grenade_markers()
 		_:
 			return {}
 

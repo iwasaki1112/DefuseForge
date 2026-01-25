@@ -35,6 +35,9 @@ var _polygon_cache: Dictionary = {}  # { instance_id: PackedVector2Array } - キ
 var _is_enabled: bool = true
 var _mode: VisibilityMode = VisibilityMode.FULL_VISION
 
+# SmokeAreaManager reference
+var _smoke_area_manager: SmokeAreaManager = null
+
 # Lightweight mode update settings
 const LIGHTWEIGHT_UPDATE_INTERVAL: float = 0.05  # 50ms (20 FPS)
 var _lightweight_update_timer: float = 0.0
@@ -61,6 +64,11 @@ func _physics_process(delta: float) -> void:
 func setup(fog_of_war: Node3D) -> void:
 	_fog_of_war_system = fog_of_war
 	PlayerState.team_changed.connect(_on_player_team_changed)
+
+
+## Set SmokeAreaManager reference
+func set_smoke_area_manager(manager: SmokeAreaManager) -> void:
+	_smoke_area_manager = manager
 
 
 ## Register a character to be managed
@@ -214,11 +222,14 @@ func _is_position_visible_to_friendlies(world_pos: Vector3) -> bool:
 
 		var char_id := game_char.get_instance_id()
 
+		# Check if in polygon first
+		var in_polygon := false
+
 		# キャッシュされた2Dポリゴンを使用
 		if _polygon_cache.has(char_id):
 			var polygon_2d: PackedVector2Array = _polygon_cache[char_id]
 			if polygon_2d.size() >= 3 and Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
-				return true
+				in_polygon = true
 		else:
 			# キャッシュがない場合は構築してキャッシュ
 			var polygon_3d := game_char.vision.get_visible_polygon()
@@ -233,7 +244,16 @@ func _is_position_visible_to_friendlies(world_pos: Vector3) -> bool:
 			_polygon_cache[char_id] = polygon_2d
 
 			if Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
-				return true
+				in_polygon = true
+
+		# If in polygon, check smoke occlusion
+		if in_polygon:
+			# Smoke check: is line of sight blocked?
+			if _smoke_area_manager:
+				var char_pos := game_char.global_position + Vector3(0, 1.5, 0)  # Eye height
+				if _smoke_area_manager.is_line_of_sight_blocked(char_pos, world_pos):
+					continue  # Blocked by smoke, try next friendly
+			return true
 
 	return false
 

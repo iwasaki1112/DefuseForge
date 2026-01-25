@@ -13,6 +13,8 @@ signal run_add_requested(character: Node)
 signal clear_add_requested(character: Node)
 ## Grenade追加要求シグナル
 signal grenade_add_requested(character: Node)
+## SmokeGrenade追加要求シグナル
+signal smoke_grenade_add_requested(character: Node)
 ## Door追加要求シグナル
 signal door_add_requested(character: Node)
 ## Wait追加要求シグナル
@@ -29,28 +31,13 @@ var _character_label: Label = null
 var _character_container: HBoxContainer = null
 var _character_buttons: Dictionary = {}  # { char_id: Button }
 
-## 視線ポイント部分
-var _vision_label: Label = null
+## マーカー追加ボタン
 var _add_vision_button: Button = null
-
-## Runマーカー部分
-var _run_label: Label = null
 var _add_run_button: Button = null
-
-## Clearマーカー部分
-var _clear_label: Label = null
 var _add_clear_button: Button = null
-
-## グレネードマーカー部分
-var _grenade_label: Label = null
 var _add_grenade_button: Button = null
-
-## ドアマーカー部分
-var _door_label: Label = null
+var _add_smoke_grenade_button: Button = null
 var _add_door_button: Button = null
-
-## Waitマーカー部分
-var _wait_label: Label = null
 var _add_wait_button: Button = null
 
 ## 統一Undoボタン
@@ -91,76 +78,43 @@ func _build_ui() -> void:
 	var sep1 = HSeparator.new()
 	add_child(sep1)
 
-	# マーカー追加ボタン（横並び）
-	var marker_buttons_hbox = HBoxContainer.new()
-	marker_buttons_hbox.add_theme_constant_override("separation", 4)
-	add_child(marker_buttons_hbox)
-
+	# マーカー追加ボタン（縦並び）
 	_add_vision_button = Button.new()
 	_add_vision_button.text = "Add Vision"
 	_add_vision_button.pressed.connect(_on_add_vision_pressed)
-	marker_buttons_hbox.add_child(_add_vision_button)
+	add_child(_add_vision_button)
 
 	_add_run_button = Button.new()
 	_add_run_button.text = "Add Run"
 	_add_run_button.pressed.connect(_on_add_run_pressed)
-	marker_buttons_hbox.add_child(_add_run_button)
+	add_child(_add_run_button)
 
 	_add_clear_button = Button.new()
 	_add_clear_button.text = "Add Clear"
 	_add_clear_button.pressed.connect(_on_add_clear_pressed)
-	marker_buttons_hbox.add_child(_add_clear_button)
-
-	# 2段目のマーカー追加ボタン（グレネード・ドア）
-	var marker_buttons_hbox2 = HBoxContainer.new()
-	marker_buttons_hbox2.add_theme_constant_override("separation", 4)
-	add_child(marker_buttons_hbox2)
+	add_child(_add_clear_button)
 
 	_add_grenade_button = Button.new()
 	_add_grenade_button.text = "Add Grenade"
 	_add_grenade_button.pressed.connect(_on_add_grenade_pressed)
-	marker_buttons_hbox2.add_child(_add_grenade_button)
+	add_child(_add_grenade_button)
+
+	_add_smoke_grenade_button = Button.new()
+	_add_smoke_grenade_button.text = "Add Smoke"
+	_add_smoke_grenade_button.pressed.connect(_on_add_smoke_grenade_pressed)
+	add_child(_add_smoke_grenade_button)
 
 	_add_door_button = Button.new()
 	_add_door_button.text = "Add Door"
 	_add_door_button.pressed.connect(_on_add_door_pressed)
-	marker_buttons_hbox2.add_child(_add_door_button)
+	add_child(_add_door_button)
 
 	_add_wait_button = Button.new()
 	_add_wait_button.text = "Add Wait"
 	_add_wait_button.pressed.connect(_on_add_wait_pressed)
-	marker_buttons_hbox2.add_child(_add_wait_button)
+	add_child(_add_wait_button)
 
 	# セパレータ2
-	var sep2 = HSeparator.new()
-	add_child(sep2)
-
-	# マーカーカウントラベル
-	_vision_label = Label.new()
-	_vision_label.text = "Vision Points: 0"
-	add_child(_vision_label)
-
-	_run_label = Label.new()
-	_run_label.text = "Run Segments: 0"
-	add_child(_run_label)
-
-	_clear_label = Label.new()
-	_clear_label.text = "Clear Points: 0"
-	add_child(_clear_label)
-
-	_grenade_label = Label.new()
-	_grenade_label.text = "Grenade Markers: 0"
-	add_child(_grenade_label)
-
-	_door_label = Label.new()
-	_door_label.text = "Door Markers: 0"
-	add_child(_door_label)
-
-	_wait_label = Label.new()
-	_wait_label.text = "Wait Markers: 0"
-	add_child(_wait_label)
-
-	# セパレータ3
 	var sep3 = HSeparator.new()
 	add_child(sep3)
 
@@ -291,9 +245,6 @@ func set_active_character(character: Node) -> void:
 	# ボタンのハイライトを更新
 	_update_button_highlights()
 
-	# ラベルを更新
-	_update_labels()
-
 	character_selected.emit(character)
 
 
@@ -310,82 +261,33 @@ func _update_button_highlights() -> void:
 		_apply_button_style(btn, color, is_active)
 
 
-## ラベルを更新
-func _update_labels() -> void:
-	if not _active_character:
-		return
-
-	var char_label = CharacterColorManager.get_character_label(_active_character)
-
-	# 視線ポイント数
-	var vision_count = 0
-	if _path_drawer and _path_drawer.has_method("get_vision_point_count_for_character"):
-		vision_count = _path_drawer.get_vision_point_count_for_character(_active_character)
-	_vision_label.text = "Vision Points (%s): %d" % [char_label, vision_count]
-
-	# Run区間数
-	var run_count = 0
-	if _path_drawer and _path_drawer.has_method("get_run_segment_count_for_character"):
-		run_count = _path_drawer.get_run_segment_count_for_character(_active_character)
-	var incomplete = ""
-	if _path_drawer and _path_drawer.has_method("has_incomplete_run_start"):
-		if _path_drawer.has_incomplete_run_start():
-			incomplete = " (setting...)"
-	_run_label.text = "Run Segments (%s): %d%s" % [char_label, run_count, incomplete]
-
-	# Clearポイント数
-	var clear_count = 0
-	if _path_drawer and _path_drawer.has_method("get_clear_point_count_for_character"):
-		clear_count = _path_drawer.get_clear_point_count_for_character(_active_character)
-	_clear_label.text = "Clear Points (%s): %d" % [char_label, clear_count]
-
-	# グレネードマーカー数
-	var grenade_count = 0
-	if _path_drawer and _path_drawer.has_method("get_grenade_marker_count_for_character"):
-		grenade_count = _path_drawer.get_grenade_marker_count_for_character(_active_character)
-	_grenade_label.text = "Grenade Markers (%s): %d" % [char_label, grenade_count]
-
-	# ドアマーカー数
-	var door_count = 0
-	if _path_drawer and _path_drawer.has_method("get_door_marker_count_for_character"):
-		door_count = _path_drawer.get_door_marker_count_for_character(_active_character)
-	_door_label.text = "Door Markers (%s): %d" % [char_label, door_count]
-
-	# Waitマーカー数
-	var wait_count = 0
-	if _path_drawer and _path_drawer.has_method("get_wait_marker_count_for_character"):
-		wait_count = _path_drawer.get_wait_marker_count_for_character(_active_character)
-	_wait_label.text = "Wait Markers (%s): %d" % [char_label, wait_count]
-
-
-## 視線ポイントが追加された時に呼ぶ
+## マーカー追加時のコールバック（UIの更新は不要だが、シグナル互換性のため維持）
 func on_vision_point_added() -> void:
-	_update_labels()
+	pass
 
 
-## Run区間が追加された時に呼ぶ
 func on_run_segment_added() -> void:
-	_update_labels()
+	pass
 
 
-## Clearポイントが追加された時に呼ぶ
 func on_clear_point_added() -> void:
-	_update_labels()
+	pass
 
 
-## グレネードマーカーが追加された時に呼ぶ
 func on_grenade_marker_added() -> void:
-	_update_labels()
+	pass
 
 
-## ドアマーカーが追加された時に呼ぶ
+func on_smoke_grenade_marker_added() -> void:
+	pass
+
+
 func on_door_marker_added() -> void:
-	_update_labels()
+	pass
 
 
-## Waitマーカーが追加された時に呼ぶ
 func on_wait_marker_added() -> void:
-	_update_labels()
+	pass
 
 
 ## キャラクターボタン押下時
@@ -417,6 +319,12 @@ func _on_add_grenade_pressed() -> void:
 		grenade_add_requested.emit(_active_character)
 
 
+## Add Smoke Grenade押下時
+func _on_add_smoke_grenade_pressed() -> void:
+	if _active_character:
+		smoke_grenade_add_requested.emit(_active_character)
+
+
 ## Add Door押下時
 func _on_add_door_pressed() -> void:
 	if _active_character:
@@ -433,7 +341,6 @@ func _on_add_wait_pressed() -> void:
 func _on_undo_pressed() -> void:
 	if _active_character:
 		undo_requested.emit(_active_character)
-		_update_labels()
 
 
 ## Confirm押下時
@@ -458,9 +365,3 @@ func clear() -> void:
 	for btn in _character_buttons.values():
 		btn.queue_free()
 	_character_buttons.clear()
-	_vision_label.text = "Vision Points: 0"
-	_run_label.text = "Run Segments: 0"
-	_clear_label.text = "Clear Points: 0"
-	_grenade_label.text = "Grenade Markers: 0"
-	_door_label.text = "Door Markers: 0"
-	_wait_label.text = "Wait Markers: 0"

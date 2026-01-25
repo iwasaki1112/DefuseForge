@@ -10,6 +10,7 @@ signal path_completed()
 signal path_cancelled()
 signal vision_point_reached(index: int, direction: Vector3)
 signal grenade_marker_reached(index: int, marker_data: Dictionary)
+signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
 signal door_marker_reached(index: int, door: Node3D)
 
 ## スタック検出設定
@@ -34,6 +35,8 @@ var _clear_points: Array[Dictionary] = []  # { path_ratio }
 var _clear_index: int = 0
 var _grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
 var _grenade_index: int = 0
+var _smoke_grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _smoke_grenade_index: int = 0
 var _door_markers: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
 var _door_index: int = 0
 var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
@@ -81,11 +84,13 @@ func set_combat_awareness(component: Node) -> void:
 ## @param grenade_markers: グレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
 ## @param door_markers: ドアマーカー配列（path_ratio, door_nodeを含むDictionary）
 ## @param wait_markers: Waitマーカー配列（path_ratio, wait_durationを含むDictionary）
+## @param smoke_grenade_markers: スモークグレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		run_segments: Array[Dictionary] = [], run: bool = false,
 		clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [],
-		door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = []) -> bool:
+		door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = [],
+		smoke_grenade_markers: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -99,11 +104,13 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_run_segments = run_segments.duplicate()
 	_clear_points = clear_points.duplicate()
 	_grenade_markers = grenade_markers.duplicate()
+	_smoke_grenade_markers = smoke_grenade_markers.duplicate()
 	_door_markers = door_markers.duplicate()
 	_wait_markers = wait_markers.duplicate()
 	_vision_index = 0
 	_clear_index = 0
 	_grenade_index = 0
+	_smoke_grenade_index = 0
 	_door_index = 0
 	_wait_index = 0
 	_is_running = run
@@ -306,6 +313,9 @@ func process(delta: float) -> void:
 
 	# グレネードマーカーのチェック（投擲実行、移動は継続）
 	_check_grenade_markers(progress)
+
+	# スモークグレネードマーカーのチェック（投擲実行、移動は継続）
+	_check_smoke_grenade_markers(progress)
 
 	# Waitマーカーのチェック（待機開始）
 	if _check_wait_markers(progress):
@@ -518,6 +528,19 @@ func _check_grenade_markers(progress: float) -> void:
 			# グレネードマーカーに到達: 投擲シグナルを発火
 			grenade_marker_reached.emit(_grenade_index, gm)
 			_grenade_index += 1
+		else:
+			break
+
+
+## スモークグレネードマーカーのチェックと処理
+## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
+func _check_smoke_grenade_markers(progress: float) -> void:
+	while _smoke_grenade_index < _smoke_grenade_markers.size():
+		var sgm = _smoke_grenade_markers[_smoke_grenade_index]
+		if progress >= sgm.path_ratio:
+			# スモークグレネードマーカーに到達: 投擲シグナルを発火
+			smoke_grenade_marker_reached.emit(_smoke_grenade_index, sgm)
+			_smoke_grenade_index += 1
 		else:
 			break
 
