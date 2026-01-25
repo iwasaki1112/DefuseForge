@@ -61,7 +61,6 @@ func _physics_process(delta: float) -> void:
 
 ## 半径を更新
 func _update_radius() -> void:
-	var maintain_start := expand_time
 	var fade_start := duration - fade_time
 
 	if _elapsed_time < expand_time:

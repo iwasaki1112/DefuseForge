@@ -7,6 +7,7 @@ class_name GameScreen
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
+const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
 const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
 const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_service.gd")
 const TimelineCalculatorScript := preload("res://scripts/utils/timeline_calculator.gd")
@@ -107,8 +108,7 @@ func _setup_match_service() -> void:
 ## コントロールUIのセットアップ
 func _setup_hud() -> void:
 	if _hud == null:
-		_hud = GameHUD.new()
-		_hud.name = "GameHUD"
+		_hud = GameHUDScene.instantiate()
 		ui_layer.add_child(_hud)
 		_hud.setup()
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
