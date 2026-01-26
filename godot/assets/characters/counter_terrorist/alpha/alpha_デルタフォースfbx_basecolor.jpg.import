@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ikgnmr0qrp43"
-path.s3tc="res://.godot/imported/alpha_Image_21.jpg-952993cf076a7d19ce820df5506be20c.s3tc.ctex"
-path.etc2="res://.godot/imported/alpha_Image_21.jpg-952993cf076a7d19ce820df5506be20c.etc2.ctex"
+uid="uid://clfv4b6f3tr7i"
+path.s3tc="res://.godot/imported/alpha_デルタフォースfbx_basecolor.jpg-40788d025d4063d4adba7c1306d9ba5a.s3tc.ctex"
+path.etc2="res://.godot/imported/alpha_デルタフォースfbx_basecolor.jpg-40788d025d4063d4adba7c1306d9ba5a.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "0dd95bf3f7e575637c44c4b2f58f2115"
+"md5": "78d2ff1b44d5808ec70864a8faa400e4"
 }
 
 [deps]
 
-source_file="res://assets/characters/counter_terrorist/alpha/alpha_Image_21.jpg"
-dest_files=["res://.godot/imported/alpha_Image_21.jpg-952993cf076a7d19ce820df5506be20c.s3tc.ctex", "res://.godot/imported/alpha_Image_21.jpg-952993cf076a7d19ce820df5506be20c.etc2.ctex"]
+source_file="res://assets/characters/counter_terrorist/alpha/alpha_デルタフォースfbx_basecolor.jpg"
+dest_files=["res://.godot/imported/alpha_デルタフォースfbx_basecolor.jpg-40788d025d4063d4adba7c1306d9ba5a.s3tc.ctex", "res://.godot/imported/alpha_デルタフォースfbx_basecolor.jpg-40788d025d4063d4adba7c1306d9ba5a.etc2.ctex"]
 
 [params]
 
