@@ -22,14 +22,38 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not game_manager:
 		return
 
-	# カメラズーム（ホイール/ピンチ）は常に処理
+	# ピンチ中はマウスイベント（タッチエミュレーション）を無視
+	if camera_pan_controller and camera_pan_controller.is_pinching():
+		if event is InputEventMouseButton or event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
+			return
+
+	# タッチ入力の処理
+	if camera_pan_controller:
+		if event is InputEventScreenTouch or event is InputEventScreenDrag:
+			# タッチポイントを常に追跡（ピンチ検出のため）
+			camera_pan_controller.track_touch(event)
+
+			# 2本指以上、またはピンチ中はカメラズームを最優先（パスモード中でも）
+			if camera_pan_controller.get_touch_count() >= 2 or camera_pan_controller.is_pinching():
+				if camera_pan_controller.handle_pinch(event):
+					get_viewport().set_input_as_handled()
+					return
+
+			# 1本指タッチ - パスモード中はPathDrawerに委譲
+			if game_manager.is_path_mode():
+				return
+
+			# パスモードOFFなら1本指タッチでカメラパン
+			if camera_pan_controller.handle_touch_pan(event):
+				get_viewport().set_input_as_handled()
+				return
+
+	# カメラズーム（マウスホイール）は常に処理
 	if camera_pan_controller:
 		if event is InputEventMouseButton:
 			if event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 				camera_pan_controller.handle_input(event)
-				return
-		if event is InputEventScreenTouch or event is InputEventScreenDrag:
-			if camera_pan_controller.handle_input(event):
 				return
 
 	# 回転モード中
@@ -38,12 +62,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			game_manager.handle_rotation_input(event.position)
 		return
 
-	# 左クリック処理
+	# 左クリック処理（PC向け）
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_handle_left_click(event)
 		return
 
-	# 左クリック中のマウス移動
+	# 左クリック中のマウス移動（PC向け）
 	if event is InputEventMouseMotion and _left_button_pressed:
 		_handle_left_drag(event)
 		return
