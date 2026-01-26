@@ -66,6 +66,11 @@
 | Effect | ActionMarkerData | マーカーデータの統一基底クラス＋各種マーカーデータサブクラス |
 | Effect | MarkerCollection | マーカーの統一管理コレクション（タイプ別管理・Undo対応） |
 | Effect | PathDrawer | マウスドラッグでパス描画（ドア貫通可能）＋視線ポイント＋Run/Clear/Grenade/Doorマーカー設定 |
+| Effect | PathCalculator | パス計算ユーティリティ（最近点検索・オフセット計算等の静的メソッド） |
+| Effect | PathRaycastHelper | レイキャスト・壁検出ユーティリティ（静的メソッド） |
+| Effect | PathInputHandler | 入力処理統括（マーカーハンドラへの委譲） |
+| Effect | PathState | パス状態管理（描画状態・モード・有効フラグ等） |
+| Effect | MarkerHandlerBase | マーカーハンドラ基底クラス（共通インターフェース） |
 | Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | Effect | RunMarker | Run区間の開始/終点を示すマーカー（ActionMarker継承） |
 | Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー（ActionMarker継承） |

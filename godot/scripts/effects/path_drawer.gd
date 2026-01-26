@@ -73,6 +73,8 @@ const WaitMarkerScript = preload("res://scripts/effects/wait_marker.gd")
 const SmokeGrenadeMarkerScript = preload("res://scripts/effects/smoke_grenade_marker.gd")
 const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 const MarkerCollectionScript = preload("res://scripts/effects/marker_collection.gd")
+const PathCalculatorScript = preload("res://scripts/effects/path_calculator.gd")
+const PathRaycastHelperScript = preload("res://scripts/effects/path_raycast_helper.gd")
 
 var _camera: Camera3D
 var _character: Node3D
@@ -516,111 +518,19 @@ func _create_run_marker(pos: Vector3, type: int) -> void:
 
 
 func _get_ground_position(screen_pos: Vector2) -> Variant:
-	var ray_origin = _camera.project_ray_origin(screen_pos)
-	var ray_direction = _camera.project_ray_normal(screen_pos)
-
-	var intersection = _ground_plane.intersects_ray(ray_origin, ray_direction)
-	if intersection:
-		return intersection as Vector3
-	return null
+	return PathRaycastHelperScript.get_ground_position(_camera, _ground_plane, screen_pos)
 
 
 ## 2点間に壁があるかチェック（ドアは除外）
 ## @return: { "hit": bool, "position": Vector3 (ヒット位置、hitがtrueの場合) }
 func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
 	var space_state = get_world_3d().direct_space_state
-	if not space_state:
-		return { "hit": false }
-
-	# 地面ギリギリを避けるため、少し高さを上げてレイキャスト
-	var check_from = from + Vector3(0, 0.5, 0)
-	var check_to = to + Vector3(0, 0.5, 0)
-
-	var query = PhysicsRayQueryParameters3D.create(check_from, check_to, wall_collision_mask)
-
-	# 最大10回までレイキャストを試行（ドアを除外しながら）
-	var excluded_rids: Array[RID] = []
-	for _i in range(10):
-		query.exclude = excluded_rids
-		var result = space_state.intersect_ray(query)
-
-		if not result:
-			return { "hit": false }
-
-		var collider = result.collider
-
-		# ドアグループに属するオブジェクトは無視（パスはドアを貫通できる）
-		if _is_door_object(collider):
-			# このコライダーを除外リストに追加して再試行
-			if collider is CollisionObject3D:
-				excluded_rids.append(collider.get_rid())
-			continue
-
-		# 壁にヒット - 位置を地面高さに補正
-		var hit_pos = result.position
-		hit_pos.y = ground_plane_height
-		return { "hit": true, "position": hit_pos }
-
-	return { "hit": false }
-
-
-## オブジェクトがドアかどうかをチェック
-func _is_door_object(obj: Object) -> bool:
-	if not obj:
-		return false
-	var node = obj as Node
-	if not node:
-		return false
-
-	# ノードまたはその親がdoorsグループに属しているかチェック
-	while node:
-		if node.is_in_group("doors"):
-			return true
-		node = node.get_parent()
-	return false
+	return PathRaycastHelperScript.check_wall_between(space_state, from, to, wall_collision_mask, ground_plane_height)
 
 
 ## パス上で最も近い点を見つける
 func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
-	if _pending_path.size() < 2:
-		return { "point": Vector3.ZERO, "distance": INF, "ratio": 0.0 }
-
-	var closest_point: Vector3 = _pending_path[0]
-	var closest_distance: float = INF
-	var closest_ratio: float = 0.0
-
-	var total_length: float = 0.0
-	var lengths: Array[float] = [0.0]
-
-	# パスの総距離を計算
-	for i in range(1, _pending_path.size()):
-		var segment_length = _pending_path[i - 1].distance_to(_pending_path[i])
-		total_length += segment_length
-		lengths.append(total_length)
-
-	# 各セグメントで最も近い点を探す
-	for i in range(1, _pending_path.size()):
-		var p1 = _pending_path[i - 1]
-		var p2 = _pending_path[i]
-
-		# セグメント上の最近点を計算
-		var segment = p2 - p1
-		var segment_length = segment.length()
-		if segment_length < 0.001:
-			continue
-
-		var t = clampf((pos - p1).dot(segment) / (segment_length * segment_length), 0.0, 1.0)
-		var point_on_segment = p1 + segment * t
-
-		var distance = pos.distance_to(point_on_segment)
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_point = point_on_segment
-			# このセグメント上での進行率を計算
-			var distance_to_point = lengths[i - 1] + segment_length * t
-			closest_ratio = distance_to_point / total_length if total_length > 0 else 0.0
-
-	return { "point": closest_point, "distance": closest_distance, "ratio": closest_ratio }
+	return PathCalculatorScript.find_closest_point_on_path(_pending_path, pos)
 
 
 ## パス上の指定された比率から距離オフセットした点を探す
@@ -628,61 +538,17 @@ func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
 ## @param offset_distance: オフセット距離（負の値で開始方向へ）
 ## @return: { "point": Vector3, "ratio": float }
 func _find_offset_point_on_path(base_ratio: float, offset_distance: float) -> Dictionary:
-	if _pending_path.size() < 2:
-		return { "point": Vector3.ZERO, "ratio": 0.0 }
-
-	# パスの総距離を計算
-	var total_length: float = 0.0
-	var lengths: Array[float] = [0.0]
-	for i in range(1, _pending_path.size()):
-		var segment_length = _pending_path[i - 1].distance_to(_pending_path[i])
-		total_length += segment_length
-		lengths.append(total_length)
-
-	if total_length < 0.001:
-		return { "point": _pending_path[0], "ratio": 0.0 }
-
-	# 基準点の距離を計算
-	var base_distance = base_ratio * total_length
-
-	# オフセットを適用した距離を計算
-	var target_distance = clampf(base_distance + offset_distance, 0.0, total_length)
-
-	# 目標距離に対応するパス上の点を探す
-	var target_ratio = target_distance / total_length
-
-	for i in range(1, _pending_path.size()):
-		if lengths[i] >= target_distance:
-			var p1 = _pending_path[i - 1]
-			var p2 = _pending_path[i]
-			var segment_start_dist = lengths[i - 1]
-			var segment_length = lengths[i] - segment_start_dist
-
-			if segment_length < 0.001:
-				return { "point": p1, "ratio": target_ratio }
-
-			var t = (target_distance - segment_start_dist) / segment_length
-			var point = p1 + (p2 - p1) * t
-			return { "point": point, "ratio": target_ratio }
-
-	# パスの終点を返す
-	return { "point": _pending_path[_pending_path.size() - 1], "ratio": 1.0 }
+	return PathCalculatorScript.find_offset_point_on_path(_pending_path, base_ratio, offset_distance)
 
 
 ## パス終点位置を取得
 func _get_path_endpoint() -> Vector3:
-	if _pending_path.size() < 1:
-		return Vector3.ZERO
-	return _pending_path[_pending_path.size() - 1]
+	return PathCalculatorScript.get_path_endpoint(_pending_path)
 
 
 ## 指定位置がパス終点付近かどうか判定
 func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
-	if _pending_path.size() < 2:
-		return false
-	var endpoint = _get_path_endpoint()
-	var distance = Vector2(ground_pos.x - endpoint.x, ground_pos.z - endpoint.z).length()
-	return distance <= path_endpoint_threshold
+	return PathCalculatorScript.is_near_path_endpoint(_pending_path, ground_pos, path_endpoint_threshold)
 
 
 ## 視線ポイントの設定を完了（ターゲットポイントモード）
@@ -2226,23 +2092,8 @@ func _cleanup_grenade_trajectory_mesh() -> void:
 
 ## 壁または床へのレイキャスト
 func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
-	if not _camera:
-		return {}
-
-	var ray_origin = _camera.project_ray_origin(screen_pos)
-	var ray_dir = _camera.project_ray_normal(screen_pos)
-	var ray_end = ray_origin + ray_dir * 100.0
-
 	var space_state = get_world_3d().direct_space_state
-	if not space_state:
-		return {}
-
-	# 壁と床の両方を検出
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end, 3)
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-
-	return space_state.intersect_ray(query)
+	return PathRaycastHelperScript.raycast_wall_or_floor(_camera, space_state, screen_pos)
 
 
 ## グレネードマーカーがあるか
@@ -2653,33 +2504,8 @@ func _create_door_marker_node(anchor: Vector3, door: Node3D) -> MeshInstance3D:
 
 ## ドアをレイキャストで検出
 func _raycast_door(screen_pos: Vector2) -> Node3D:
-	if not _camera:
-		return null
-
-	var ray_origin = _camera.project_ray_origin(screen_pos)
-	var ray_dir = _camera.project_ray_normal(screen_pos)
-	var ray_end = ray_origin + ray_dir * 100.0
-
 	var space_state = get_world_3d().direct_space_state
-	if not space_state:
-		return null
-
-	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-
-	var result = space_state.intersect_ray(query)
-	if result.is_empty():
-		return null
-
-	# doorsグループを探す
-	var collider = result.collider
-	var node = collider
-	while node:
-		if node.is_in_group("doors"):
-			return node as Node3D
-		node = node.get_parent()
-	return null
+	return PathRaycastHelperScript.raycast_door(_camera, space_state, screen_pos)
 
 
 ## ドアマーカーがあるか

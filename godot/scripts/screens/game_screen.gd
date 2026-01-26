@@ -296,13 +296,12 @@ func _update_timeline_from_pending_paths() -> void:
 			clear_markers.append(cm)
 
 		var grenade_markers: Array[Dictionary] = []
-		for gm in data.get("grenade_markers", []):
+		for gm in data.get("grenade_markers_data", []):
 			grenade_markers.append(gm)
 
 		var smoke_grenade_markers: Array[Dictionary] = []
-		for sm in data.get("smoke_grenade_markers", []):
-			if sm is Dictionary:
-				smoke_grenade_markers.append(sm)
+		for sm in data.get("smoke_grenade_markers_data", []):
+			smoke_grenade_markers.append(sm)
 
 		# キャラクターラベルと色を取得
 		var label_text = CharacterColorManager.get_character_label(character)

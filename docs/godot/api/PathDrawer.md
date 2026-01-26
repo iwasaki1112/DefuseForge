@@ -672,6 +672,81 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `get_all_marker_types_data() -> Dictionary`
 - `take_all_marker_types_meshes() -> Dictionary`
 
+## アーキテクチャ
+
+PathDrawerは単一責任原則に従って責務分離された複数のヘルパークラスで構成されている。
+
+### クラス構成
+
+```
+godot/scripts/effects/
+├── path_drawer.gd                    # ファサード（Public API提供）
+├── path_state.gd                     # パス状態管理
+├── path_calculator.gd                # パス計算ユーティリティ（静的メソッド）
+├── path_raycast_helper.gd            # レイキャスト・壁検出（静的メソッド）
+├── path_input_handler.gd             # 入力処理統括
+├── marker_handler_base.gd            # マーカーハンドラ基底クラス
+└── marker_handlers/                  # マーカーハンドラ実装
+    ├── vision_marker_handler.gd      # 視線マーカー
+    ├── run_marker_handler.gd         # Runマーカー
+    ├── clear_marker_handler.gd       # Clearマーカー
+    ├── grenade_marker_handler.gd     # グレネードマーカー
+    ├── smoke_grenade_marker_handler.gd # スモークグレネードマーカー
+    ├── door_marker_handler.gd        # ドアマーカー
+    └── wait_marker_handler.gd        # Waitマーカー
+```
+
+### PathCalculator
+
+パス上の最近点検索、オフセット計算などの純粋な計算処理を提供する静的クラス。
+
+| メソッド | 説明 |
+|---------|------|
+| `find_closest_point_on_path()` | パス上で最も近い点を検索 |
+| `find_offset_point_on_path()` | 指定比率からオフセットした点を検索 |
+| `calculate_path_length()` | パスの総距離を計算 |
+| `get_point_at_ratio()` | 指定比率のパス上位置を取得 |
+| `get_path_endpoint()` | パス終点を取得 |
+| `is_near_path_endpoint()` | 終点付近かどうか判定 |
+
+### PathRaycastHelper
+
+壁検出、ドア検出などのレイキャスト処理を提供する静的クラス。
+
+| メソッド | 説明 |
+|---------|------|
+| `check_wall_between()` | 2点間の壁検出（ドアは除外） |
+| `raycast_wall_or_floor()` | 壁または床へのレイキャスト |
+| `raycast_door()` | ドアをレイキャストで検出 |
+| `get_ground_position()` | 地面平面との交点を取得 |
+| `is_wall_hit()` | ヒット結果が壁かどうか判定 |
+
+### MarkerHandlerBase
+
+各マーカー種別のハンドラの共通機能を提供する基底クラス。
+
+| メソッド | 説明 |
+|---------|------|
+| `handle_input()` | 入力処理（子クラスでオーバーライド） |
+| `create_marker()` | マーカー作成 |
+| `undo_last()` | 最後のマーカーをUndo |
+| `clear_all()` | 全マーカーをクリア |
+| `get_markers()` | マーカーデータを取得 |
+| `take_markers()` | マーカーメッシュの所有権を移譲 |
+
+### PathInputHandler
+
+入力処理を統括し、描画モードに応じて適切なマーカーハンドラに委譲する。
+
+```gdscript
+# 使用例（内部実装）
+var input_handler = PathInputHandler.new()
+input_handler.setup(path_drawer, camera)
+
+# モードに応じた入力処理
+input_handler.handle_input(event, DrawingMode.VISION_POINT)
+```
+
 ## 関連クラス
 
 - `ActionMarker` - アクションマーカーの基底クラス
@@ -685,3 +760,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `WaitMarker` - 待機マーカー（ActionMarker継承）
 - `PathLineMesh` - パス描画メッシュ
 - `PathSmoother` - パススムージング
+- `PathCalculator` - パス計算ユーティリティ
+- `PathRaycastHelper` - レイキャストユーティリティ
+- `PathInputHandler` - 入力処理統括
+- `MarkerHandlerBase` - マーカーハンドラ基底クラス
