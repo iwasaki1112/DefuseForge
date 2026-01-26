@@ -27,6 +27,15 @@ var _by_team: Dictionary = {}  # { Team: Array[CharacterPreset] }
 ## Directory containing .tres preset files
 const PRESET_DIR := "res://data/characters/"
 
+## Static list of character preset files (required for exported builds)
+## DirAccess does not work with res:// in exported .pck files
+const PRESET_FILES := [
+	"res://data/characters/alpha.tres",
+	"res://data/characters/ares.tres",
+	"res://data/characters/dummy_ct.tres",
+	"res://data/characters/dummy_t.tres",
+]
+
 # ============================================
 # Lifecycle
 # ============================================
@@ -34,7 +43,7 @@ const PRESET_DIR := "res://data/characters/"
 func _ready() -> void:
 	_init_team_arrays()
 	_load_animation_library()
-	_load_presets_from_directory()
+	_load_presets_from_list()
 
 func _init_team_arrays() -> void:
 	for team in GameCharacterScript.Team.values():
@@ -74,29 +83,15 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 # Loading
 # ============================================
 
-## Load all preset .tres files from PRESET_DIR
-func _load_presets_from_directory() -> void:
-	if not DirAccess.dir_exists_absolute(PRESET_DIR):
-		push_warning("CharacterRegistry: Preset directory not found: %s" % PRESET_DIR)
-		return
-
-	var dir := DirAccess.open(PRESET_DIR)
-	if not dir:
-		push_warning("CharacterRegistry: Could not open preset directory: %s" % PRESET_DIR)
-		return
-
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-
-	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".tres"):
-			var path := PRESET_DIR + file_name
+## Load all preset files from static list
+func _load_presets_from_list() -> void:
+	for path in PRESET_FILES:
+		if ResourceLoader.exists(path):
 			var preset := load(path) as CharacterPresetScript
 			if preset:
 				register(preset)
-		file_name = dir.get_next()
-
-	dir.list_dir_end()
+		else:
+			push_warning("CharacterRegistry: Preset file not found: %s" % path)
 
 # ============================================
 # Registration API

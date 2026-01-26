@@ -21,13 +21,20 @@ var _by_category: Dictionary = {}  # { WeaponCategory: Array[WeaponPreset] }
 ## Directory containing .tres preset files
 const PRESET_DIR := "res://data/weapons/"
 
+## Static list of weapon preset files (required for exported builds)
+## DirAccess does not work with res:// in exported .pck files
+const PRESET_FILES := [
+	"res://data/weapons/ak47.tres",
+	"res://data/weapons/glock.tres",
+]
+
 # ============================================
 # Lifecycle
 # ============================================
 
 func _ready() -> void:
 	_init_category_arrays()
-	_load_presets_from_directory()
+	_load_presets_from_list()
 
 func _init_category_arrays() -> void:
 	for category in WeaponPresetScript.WeaponCategory.values():
@@ -37,29 +44,15 @@ func _init_category_arrays() -> void:
 # Loading
 # ============================================
 
-## Load all preset .tres files from PRESET_DIR
-func _load_presets_from_directory() -> void:
-	if not DirAccess.dir_exists_absolute(PRESET_DIR):
-		push_warning("WeaponRegistry: Preset directory not found: %s" % PRESET_DIR)
-		return
-
-	var dir := DirAccess.open(PRESET_DIR)
-	if not dir:
-		push_warning("WeaponRegistry: Could not open preset directory: %s" % PRESET_DIR)
-		return
-
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-
-	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".tres"):
-			var path := PRESET_DIR + file_name
+## Load all preset files from static list
+func _load_presets_from_list() -> void:
+	for path in PRESET_FILES:
+		if ResourceLoader.exists(path):
 			var preset := load(path) as WeaponPresetScript
 			if preset:
 				register(preset)
-		file_name = dir.get_next()
-
-	dir.list_dir_end()
+		else:
+			push_warning("WeaponRegistry: Preset file not found: %s" % path)
 
 # ============================================
 # Registration API

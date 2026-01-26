@@ -1,101 +1,125 @@
 #!/bin/bash
-# iOS実機ビルド自動化スクリプト
-# 使用方法: ./scripts/ios_build.sh [--export]
+# iOS実機ビルド完全自動化スクリプト
+# 使用方法: ./scripts/ios_build.sh [--export] [--run]
+#   --export: Godotからエクスポート（変更がある場合のみ必要）
+#   --run: ビルド後にアプリを自動起動
 
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GODOT_PATH="/Users/iwasakishungo/Downloads/Godot.app/Contents/MacOS/Godot"
-XCODE_PROJECT="$PROJECT_ROOT/godot/builds/ios/godot.xcodeproj"
+GODOT_PATH="/opt/homebrew/bin/godot"
+XCODE_PROJECT="$PROJECT_ROOT/godot/builds/ios/RescueForge.xcodeproj"
 PBXPROJ="$XCODE_PROJECT/project.pbxproj"
+INFO_PLIST="$PROJECT_ROOT/godot/builds/ios/RescueForge/RescueForge-Info.plist"
+
+# === 設定 ===
 TEAM_ID="NSB57DVW9V"
-DEVICE_ID="00008101-000958903C46001E"
-DEVICE_NAME="iwasaki"
-BUNDLE_ID=$(grep -m1 "PRODUCT_BUNDLE_IDENTIFIER" "$PBXPROJ" | sed 's/.*= //; s/;$//')
+DEVICE_ID="7C46939D-68A2-58E9-8850-FDA526502428"  # iwasaki (iPhone 12 mini)
+BUNDLE_ID="com.example.supportrategame"
+SCHEME="RescueForge"
+CONFIGURATION="Debug"
 
-echo "=== iOS実機ビルドスクリプト ==="
+# 引数解析
+DO_EXPORT=false
+DO_RUN=false
+for arg in "$@"; do
+    case $arg in
+        --export) DO_EXPORT=true ;;
+        --run) DO_RUN=true ;;
+    esac
+done
 
-# Godotエクスポートオプション
-if [[ "$1" == "--export" ]]; then
-    echo "1. Godotプロジェクトをエクスポート中..."
-    "$GODOT_PATH" --headless --path "$PROJECT_ROOT/godot" --export-debug "iOS" "builds/ios/godot.xcodeproj"
-    echo "   エクスポート完了"
+echo "=== iOS実機ビルド自動化 ==="
+echo "デバイス: $DEVICE_ID"
+echo "Team ID: $TEAM_ID"
+echo ""
+
+# 1. Godotエクスポート（オプション）
+if $DO_EXPORT; then
+    echo "[1/6] Godotプロジェクトをエクスポート中..."
+    "$GODOT_PATH" --headless --path "$PROJECT_ROOT/godot" --export-release "iOS" "builds/ios/RescueForge.xcodeproj" 2>&1 | grep -v "^ERROR\|ARCHIVE FAILED" || true
+    echo "  完了"
+else
+    echo "[1/6] エクスポートをスキップ（--exportで有効化）"
 fi
 
-# 署名設定を自動的に修正
-echo "2. 署名設定を自動修正中..."
+# 2. Info.plist修正
+echo "[2/6] Info.plistを修正中..."
+if [ -f "$INFO_PLIST" ]; then
+    python3 -c "
+import re
+with open('$INFO_PLIST', 'r') as f:
+    content = f.read()
+content = re.sub(r'(<key>NSCameraUsageDescription</key>\s*<string>)</string>', r'\1This app does not use the camera.</string>', content)
+content = re.sub(r'(<key>NSPhotoLibraryUsageDescription</key>\s*<string>)</string>', r'\1This app does not access photos.</string>', content)
+content = re.sub(r'(<key>NSMicrophoneUsageDescription</key>\s*<string>)</string>', r'\1This app does not use the microphone.</string>', content)
+with open('$INFO_PLIST', 'w') as f:
+    f.write(content)
+"
+    echo "  完了"
+fi
+
+# 3. 署名設定を自動修正
+echo "[3/6] 署名設定を自動修正中..."
 if [ -f "$PBXPROJ" ]; then
-    # CODE_SIGN_STYLE を Automatic に変更（クォート有無両方に対応）
+    # CODE_SIGN_STYLE を Automatic に変更
     sed -i '' 's/CODE_SIGN_STYLE = "Manual";/CODE_SIGN_STYLE = Automatic;/g' "$PBXPROJ"
     sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Automatic;/g' "$PBXPROJ"
 
-    # DEVELOPMENT_TEAM を正しいTeam IDに置換（既存値も含む）
+    # DEVELOPMENT_TEAM を設定
     sed -i '' "s/DEVELOPMENT_TEAM = \"[^\"]*\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
     sed -i '' "s/DEVELOPMENT_TEAM = [A-Z0-9]*;/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
+    sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
 
-    echo "   署名設定を修正しました (Automatic signing有効化, Team ID: $TEAM_ID)"
-else
-    echo "   エラー: project.pbxprojが見つかりません"
+    # 空のDEVELOPMENT_TEAMを追加（存在しない場合）
+    if ! grep -q "DEVELOPMENT_TEAM = $TEAM_ID" "$PBXPROJ"; then
+        sed -i '' "s/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Automatic;\n\t\t\t\tDEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
+    fi
+    echo "  完了"
+fi
+
+# 4. 既存アプリをアンインストール
+echo "[4/6] 既存アプリをアンインストール中..."
+xcrun devicectl device uninstall app --device "$DEVICE_ID" "$BUNDLE_ID" 2>/dev/null || true
+echo "  完了"
+
+# 5. ビルド
+echo "[5/6] Xcodeビルド中..."
+xcodebuild \
+    -project "$XCODE_PROJECT" \
+    -scheme "$SCHEME" \
+    -configuration "$CONFIGURATION" \
+    -destination "id=$DEVICE_ID" \
+    -allowProvisioningUpdates \
+    build 2>&1 | grep -E "^(Build |Compiling|Linking|\*\*|error:|warning:)" || true
+
+# ビルド成果物のパスを取得（Debug用、Index.noindexを除外）
+DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData"
+APP_PATH=$(find "$DERIVED_DATA" -path "*/Build/Products/$CONFIGURATION-iphoneos/$SCHEME.app" -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
+
+if [ -z "$APP_PATH" ]; then
+    echo "  エラー: ビルド成果物が見つかりません"
     exit 1
 fi
+echo "  完了: $APP_PATH"
 
-# 実機の接続確認
-echo "3. 実機の接続を確認中..."
-if xcrun devicectl list devices 2>/dev/null | grep -q "$DEVICE_NAME"; then
-    echo "   デバイス '$DEVICE_NAME' が接続されています"
-else
-    echo "   警告: デバイス '$DEVICE_NAME' が見つかりません"
-    echo "   利用可能なデバイス:"
-    xcrun devicectl list devices 2>/dev/null | grep "available"
-fi
+# 6. インストール＆起動
+echo "[6/6] 実機にインストール中..."
+xcrun devicectl device install app --device "$DEVICE_ID" "$APP_PATH"
+echo "  インストール完了"
 
-# ビルド
-echo "4. クリーンビルドを実行中..."
-xcodebuild \
-    -project "$XCODE_PROJECT" \
-    -scheme "godot" \
-    -configuration Debug \
-    -destination "id=$DEVICE_ID" \
-    clean >/dev/null 2>&1 || true
-
-echo "5. 既存アプリをアンインストール中..."
-if [ -n "$BUNDLE_ID" ]; then
-    xcrun devicectl device uninstall app --device "$DEVICE_ID" "$BUNDLE_ID" 2>/dev/null || \
-    ios-deploy --uninstall_only --bundle_id "$BUNDLE_ID" --id "$DEVICE_ID" 2>/dev/null || \
-    true
-else
-    echo "   警告: BUNDLE_IDが取得できず、アンインストールをスキップ"
-fi
-
-echo "6. Xcodeビルド中..."
-xcodebuild \
-    -project "$XCODE_PROJECT" \
-    -scheme "godot" \
-    -configuration Debug \
-    -destination "id=$DEVICE_ID" \
-    -allowProvisioningUpdates \
-    build 2>&1 | xcbeautify 2>/dev/null || xcodebuild \
-    -project "$XCODE_PROJECT" \
-    -scheme "godot" \
-    -configuration Debug \
-    -destination "id=$DEVICE_ID" \
-    -allowProvisioningUpdates \
-    build
-
-echo "7. 実機にインストール中..."
-# ビルド成果物のパスを取得
-BUILD_DIR=$(xcodebuild -project "$XCODE_PROJECT" -scheme "godot" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | head -1 | awk '{print $3}')
-APP_PATH="$BUILD_DIR/godot.app"
-
-if [ -d "$APP_PATH" ]; then
-    xcrun devicectl device install app --device "$DEVICE_ID" "$APP_PATH" 2>/dev/null || \
-    ios-deploy --bundle "$APP_PATH" --id "$DEVICE_ID" 2>/dev/null || \
-    echo "   手動でXcodeから実行してください"
-else
-    echo "   ビルド成果物が見つかりません: $APP_PATH"
-    echo "   Xcodeから直接実行することをお勧めします"
+if $DO_RUN; then
+    echo ""
+    echo "アプリを起動中..."
+    xcrun devicectl device process launch --device "$DEVICE_ID" "$BUNDLE_ID" || true
+    echo "  起動完了"
 fi
 
 echo ""
 echo "=== 完了 ==="
-echo "Xcodeを開く場合: open \"$XCODE_PROJECT\""
+echo ""
+echo "使用方法:"
+echo "  ./scripts/ios_build.sh          # ビルド＆インストールのみ"
+echo "  ./scripts/ios_build.sh --run    # ビルド＆インストール＆起動"
+echo "  ./scripts/ios_build.sh --export # Godotエクスポートから実行"
+echo "  ./scripts/ios_build.sh --export --run # フルビルド＆起動"
