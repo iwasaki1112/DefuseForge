@@ -1,10 +1,10 @@
 # MarkerEditPanel
 
-マルチキャラクター対応のマーカー編集パネルUIコンポーネント。
+マーカー編集パネルUIコンポーネント。
 
 ## 概要
 
-`MarkerEditPanel`は、パス描画後にVisionMarker/RunMarkerを設定するためのUIパネルです。マルチセレクト時に各キャラクターに対して個別のマーカーを設定できます。
+`MarkerEditPanel`は、パス描画後にVisionMarker/RunMarkerなどのマーカーを設定するためのUIパネルです。
 
 ## 継承
 
@@ -145,11 +145,10 @@ func _on_confirm() -> void:
 
 ## PathDrawerとの連携
 
-`MarkerEditPanel`は`PathDrawer`のマルチキャラクターモードと連携します：
+`MarkerEditPanel`は`PathDrawer`と連携します：
 
-1. 複数キャラクター選択時のみ`PathDrawer.start_multi_character_mode()`が呼ばれていること
-2. キャラクター切り替え時に`PathDrawer.set_active_edit_character()`を呼び出す
-3. マーカー追加/削除は`PathDrawer`のAPIを通じて行う
+1. `PathDrawer.set_active_edit_character()`で編集対象キャラクターを設定
+2. マーカー追加/削除は`PathDrawer`のAPIを通じて行う
 
 ## スタイル
 

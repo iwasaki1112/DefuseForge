@@ -30,9 +30,6 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 ]
 ```
 
-**複数選択時:**
-`setup_multi_select_items()`によりMOVEのみ表示される。
-
 ## Export Properties
 
 ### 外観設定
@@ -82,13 +79,12 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 
 ### Menu Control
 
-#### open(screen_position: Vector2, character: CharacterBody3D, is_multi_select: bool = false) -> void
+#### open(screen_position: Vector2, character: CharacterBody3D) -> void
 メニューを開く。
 
 **引数:**
 - `screen_position` - 画面上の表示位置
 - `character` - 対象キャラクター
-- `is_multi_select` - 複数キャラクター選択時はtrue（MOVEのみ表示）
 
 #### close() -> void
 メニューを閉じる。
@@ -120,10 +116,7 @@ const DEFAULT_MENU_ITEMS: Array[Dictionary] = [
 全メニュー項目をクリアする。
 
 #### setup_default_items() -> void
-標準メニュー項目をセットアップする（Move, Rotate, Crouch）。
-
-#### setup_multi_select_items() -> void
-複数選択時用のメニュー項目をセットアップする（MOVEのみ）。
+標準メニュー項目をセットアップする（Move, Rotate, Crouch, Buy）。
 
 ## 使用例
 
@@ -139,12 +132,8 @@ context_menu.setup_default_items()
 # シグナル接続
 context_menu.item_selected.connect(_on_menu_item_selected)
 
-# メニューを開く（単一選択時）
+# メニューを開く
 context_menu.open(screen_position, character)
-
-# 複数選択時はis_multi_select=trueでMOVEのみ表示
-var is_multi = selection_manager.get_selection_count() > 1
-context_menu.open(screen_position, character, is_multi)
 
 # カスタム項目追加
 var item = ContextMenuItem.create("fire", "Fire", 3)
@@ -190,7 +179,7 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 | `background_clicked` | `character: CharacterBody3D` |
 
 ### メソッド
-- `open(screen_position: Vector2, character: CharacterBody3D, is_multi_select: bool = false) -> void`
+- `open(screen_position: Vector2, character: CharacterBody3D) -> void`
 - `close() -> void`
 - `add_item(item: Resource) -> void`
 - `remove_item(action_id: String) -> void`
@@ -198,7 +187,6 @@ func _on_menu_item_selected(action_id: String, character: CharacterBody3D):
 - `set_item_display_name(action_id: String, display_name: String) -> void`
 - `clear_items() -> void`
 - `setup_default_items() -> void`
-- `setup_multi_select_items() -> void`
 - `is_open() -> bool`
 - `get_current_character() -> CharacterBody3D`
 - `get_panel_rect() -> Rect2`

@@ -50,8 +50,7 @@ func setup(mesh_parent: Node3D) -> void:
 	_mesh_parent = mesh_parent
 
 
-## パスを確定して保存（対象キャラクターに同じパスを適用）
-## マルチキャラクターモードの場合、各キャラクター固有のマーカーを適用
+## パスを確定して保存
 func confirm_path(
 	target_characters: Array[Node],
 	path_drawer: Node,
@@ -62,6 +61,11 @@ func confirm_path(
 
 	if target_characters.is_empty():
 		return false
+
+	# シングルキャラクターのみサポート
+	var character = target_characters[0]
+	var char_id = character.get_instance_id()
+	var char_pos = character.global_position
 
 	# 表示用パス（生パス）を取得
 	var display_path: Array[Vector3] = []
@@ -75,218 +79,102 @@ func confirm_path(
 	for point in pending:
 		base_path.append(point)
 
-	# マルチキャラクターモードかどうかで処理を分岐
-	var is_multi_mode = path_drawer.is_multi_character_mode()
+	# マーカーデータを取得
+	var base_vision = path_drawer.get_vision_points().duplicate()
+	var base_run = path_drawer.get_run_segments().duplicate()
+	var base_clear = path_drawer.get_clear_points().duplicate()
+	var base_grenade = path_drawer.get_grenade_markers().duplicate()
+	var base_smoke_grenade = path_drawer.get_smoke_grenade_markers().duplicate()
+	var base_door = path_drawer.get_door_markers().duplicate()
+	var base_wait = path_drawer.get_wait_markers().duplicate()
 
-	# マルチモードの場合、キャラクター別のマーカーを取得
-	var all_vision_points: Dictionary = {}
-	var all_run_segments: Dictionary = {}
-	var all_clear_points: Dictionary = {}
-	var all_grenade_markers_data: Dictionary = {}
-	var all_smoke_grenade_markers_data: Dictionary = {}
-	var all_door_markers_data: Dictionary = {}
-	var all_wait_markers_data: Dictionary = {}
-	var all_vision_markers: Dictionary = {}
-	var all_run_markers: Dictionary = {}
-	var all_clear_markers: Dictionary = {}
-	var all_grenade_markers: Dictionary = {}
-	var all_smoke_grenade_markers: Dictionary = {}
-	var all_door_markers: Dictionary = {}
-	var all_wait_markers: Dictionary = {}
-
-	if is_multi_mode:
-		all_vision_points = path_drawer.get_all_vision_points()
-		all_run_segments = path_drawer.get_all_run_segments()
-		all_clear_points = path_drawer.get_all_clear_points()
-		all_grenade_markers_data = path_drawer.get_all_grenade_markers()
-		all_smoke_grenade_markers_data = path_drawer.get_all_smoke_grenade_markers()
-		all_door_markers_data = path_drawer.get_all_door_markers()
-		all_wait_markers_data = path_drawer.get_all_wait_markers()
-		all_vision_markers = path_drawer.take_all_vision_markers()
-		all_run_markers = path_drawer.take_all_run_markers()
-		all_clear_markers = path_drawer.take_all_clear_markers()
-		all_grenade_markers = path_drawer.take_all_grenade_markers()
-		if path_drawer.has_method("take_all_smoke_grenade_markers"):
-			all_smoke_grenade_markers = path_drawer.take_all_smoke_grenade_markers()
-		all_door_markers = path_drawer.take_all_door_markers()
-		# Note: Waitマーカーのメッシュは別途取得（take_all_wait_markersがあれば）
-		if path_drawer.has_method("take_all_wait_markers"):
-			all_wait_markers = path_drawer.take_all_wait_markers()
-	else:
-		# シングルモードの場合、従来通り
-		var base_vision = path_drawer.get_vision_points().duplicate()
-		var base_run = path_drawer.get_run_segments().duplicate()
-		var base_clear = path_drawer.get_clear_points().duplicate()
-		var base_grenade = path_drawer.get_grenade_markers().duplicate()
-		var base_smoke_grenade = path_drawer.get_smoke_grenade_markers().duplicate()
-		var base_door = path_drawer.get_door_markers().duplicate()
-		var base_wait = path_drawer.get_wait_markers().duplicate()
-		var original_vision_markers = path_drawer.take_vision_markers()
-		var original_run_markers = path_drawer.take_run_markers()
-		var original_clear_markers = path_drawer.take_clear_markers()
-		var original_grenade_markers = path_drawer.take_grenade_markers()
-		var original_smoke_grenade_markers = path_drawer.take_smoke_grenade_markers() if path_drawer.has_method("take_smoke_grenade_markers") else []
-		var original_door_markers = path_drawer.take_door_markers()
-		var original_wait_markers = path_drawer.take_wait_markers()
-
-		# 全キャラクターに同じマーカーを適用するため、一時的に格納
-		for character in target_characters:
-			var cid = character.get_instance_id()
-			all_vision_points[cid] = base_vision.duplicate()
-			all_run_segments[cid] = base_run.duplicate()
-			all_clear_points[cid] = base_clear.duplicate()
-			all_grenade_markers_data[cid] = base_grenade.duplicate()
-			all_smoke_grenade_markers_data[cid] = base_smoke_grenade.duplicate()
-			all_door_markers_data[cid] = base_door.duplicate()
-			all_wait_markers_data[cid] = base_wait.duplicate()
-
-		# 元のマーカーは後で削除
-		free_marker_meshes(original_vision_markers)
-		free_marker_meshes(original_run_markers)
-		free_marker_meshes(original_clear_markers)
-		free_marker_meshes(original_grenade_markers)
-		free_marker_meshes(original_smoke_grenade_markers)
-		free_marker_meshes(original_door_markers)
-		free_marker_meshes(original_wait_markers)
+	# 元のマーカーメッシュを削除
+	free_marker_meshes(path_drawer.take_vision_markers())
+	free_marker_meshes(path_drawer.take_run_markers())
+	free_marker_meshes(path_drawer.take_clear_markers())
+	free_marker_meshes(path_drawer.take_grenade_markers())
+	if path_drawer.has_method("take_smoke_grenade_markers"):
+		free_marker_meshes(path_drawer.take_smoke_grenade_markers())
+	free_marker_meshes(path_drawer.take_door_markers())
+	free_marker_meshes(path_drawer.take_wait_markers())
 
 	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
 
 	# 元のパスの長さを計算
 	var base_length = _calculate_path_length(base_path)
 
-	# 対象キャラクターにパスを適用
-	var processed_count = 0
+	# 既存のパスがあれば削除
+	_clear_pending_path_for_character(char_id)
 
-	for character in target_characters:
-		var char_id = character.get_instance_id()
-		var char_pos = Vector3(character.global_position.x, 0, character.global_position.z)
+	# キャラクター位置からパス開始点への接続を含むパスを作成
+	var full_path: Array[Vector3] = []  # 移動用（スムージング済み）
+	var full_display_path: Array[Vector3] = []  # 表示用（生パス）
+	var connect_length: float = 0.0
 
-		# 既存のパスがあれば削除
-		_clear_pending_path_for_character(char_id)
+	if char_pos.distance_to(path_start) > 0.1:
+		# キャラクターがパス開始点にいない場合、接続線を追加
+		full_path.append(char_pos)
+		full_display_path.append(char_pos)
+		connect_length = char_pos.distance_to(path_start)
+	full_path.append_array(base_path)
+	full_display_path.append_array(display_path)
 
-		# キャラクター位置からパス開始点への接続を含むパスを作成
-		var full_path: Array[Vector3] = []  # 移動用（スムージング済み）
-		var full_display_path: Array[Vector3] = []  # 表示用（生パス）
-		var connect_length: float = 0.0
+	# マーカーの比率を再計算
+	var adjusted_vision_points = _adjust_ratios_for_connection(base_vision, connect_length, base_length)
+	var adjusted_run_segments = _adjust_run_ratios_for_connection(base_run, connect_length, base_length)
+	var adjusted_clear_points = _adjust_clear_ratios_for_connection(base_clear, connect_length, base_length)
+	var adjusted_grenade_markers = _adjust_grenade_ratios_for_connection(base_grenade, connect_length, base_length)
+	var adjusted_smoke_grenade_markers = _adjust_grenade_ratios_for_connection(base_smoke_grenade, connect_length, base_length)
+	var adjusted_door_markers = _adjust_door_ratios_for_connection(base_door, connect_length, base_length)
+	var adjusted_wait_markers = _adjust_wait_ratios_for_connection(base_wait, connect_length, base_length)
 
-		if char_pos.distance_to(path_start) > 0.1:
-			# キャラクターがパス開始点にいない場合、接続線を追加
-			full_path.append(char_pos)
-			full_display_path.append(char_pos)
-			connect_length = char_pos.distance_to(path_start)
-		full_path.append_array(base_path)
-		full_display_path.append_array(display_path)
+	# パスメッシュを作成（表示用の生パスを使用）
+	var path_mesh = _create_path_mesh(full_display_path, character)
 
-		# キャラクター固有の視線ポイントとRun区間を取得
-		var char_vision_points: Array[Dictionary] = []
-		if all_vision_points.has(char_id):
-			for vp in all_vision_points[char_id]:
-				char_vision_points.append(vp)
+	# マーカーを新規生成
+	var char_vision_markers_nodes = _create_vision_markers_for_path(
+		full_path, adjusted_vision_points, character
+	)
+	var char_run_markers_nodes = _create_run_markers_for_path(
+		full_path, adjusted_run_segments, character
+	)
+	var char_clear_markers_nodes = _create_clear_markers_for_path(
+		full_path, adjusted_clear_points, character
+	)
+	var char_grenade_markers_nodes = _create_grenade_markers_for_path(
+		full_path, adjusted_grenade_markers, character
+	)
+	var char_smoke_grenade_markers_nodes = _create_smoke_grenade_markers_for_path(
+		full_path, adjusted_smoke_grenade_markers, character
+	)
+	var char_door_markers_nodes = _create_door_markers_for_path(
+		full_path, adjusted_door_markers, character
+	)
+	var char_wait_markers_nodes = _create_wait_markers_for_path(
+		full_path, adjusted_wait_markers, character
+	)
 
-		var char_run_segments: Array[Dictionary] = []
-		if all_run_segments.has(char_id):
-			for seg in all_run_segments[char_id]:
-				char_run_segments.append(seg)
+	pending_paths[char_id] = {
+		"character": character,
+		"path": full_path,
+		"vision_points": adjusted_vision_points,
+		"run_segments": adjusted_run_segments,
+		"clear_points": adjusted_clear_points,
+		"grenade_markers_data": adjusted_grenade_markers,
+		"smoke_grenade_markers_data": adjusted_smoke_grenade_markers,
+		"door_markers_data": adjusted_door_markers,
+		"wait_markers_data": adjusted_wait_markers,
+		"path_mesh": path_mesh,
+		"vision_markers": char_vision_markers_nodes,
+		"run_markers": char_run_markers_nodes,
+		"clear_markers": char_clear_markers_nodes,
+		"grenade_markers": char_grenade_markers_nodes,
+		"smoke_grenade_markers": char_smoke_grenade_markers_nodes,
+		"door_markers": char_door_markers_nodes,
+		"wait_markers": char_wait_markers_nodes
+	}
 
-		var char_clear_points: Array[Dictionary] = []
-		if all_clear_points.has(char_id):
-			for cp in all_clear_points[char_id]:
-				char_clear_points.append(cp)
-
-		var char_grenade_markers: Array[Dictionary] = []
-		if all_grenade_markers_data.has(char_id):
-			for gm in all_grenade_markers_data[char_id]:
-				char_grenade_markers.append(gm)
-
-		var char_smoke_grenade_markers: Array[Dictionary] = []
-		if all_smoke_grenade_markers_data.has(char_id):
-			for sgm in all_smoke_grenade_markers_data[char_id]:
-				char_smoke_grenade_markers.append(sgm)
-
-		var char_door_markers: Array[Dictionary] = []
-		if all_door_markers_data.has(char_id):
-			for dm in all_door_markers_data[char_id]:
-				char_door_markers.append(dm)
-
-		var char_wait_markers: Array[Dictionary] = []
-		if all_wait_markers_data.has(char_id):
-			for wm in all_wait_markers_data[char_id]:
-				char_wait_markers.append(wm)
-
-		# 視線ポイントとRun区間とClearポイントとグレネード/スモークグレネード/ドア/Waitマーカーの比率を再計算
-		var adjusted_vision_points = _adjust_ratios_for_connection(char_vision_points, connect_length, base_length)
-		var adjusted_run_segments = _adjust_run_ratios_for_connection(char_run_segments, connect_length, base_length)
-		var adjusted_clear_points = _adjust_clear_ratios_for_connection(char_clear_points, connect_length, base_length)
-		var adjusted_grenade_markers = _adjust_grenade_ratios_for_connection(char_grenade_markers, connect_length, base_length)
-		var adjusted_smoke_grenade_markers = _adjust_grenade_ratios_for_connection(char_smoke_grenade_markers, connect_length, base_length)
-		var adjusted_door_markers = _adjust_door_ratios_for_connection(char_door_markers, connect_length, base_length)
-		var adjusted_wait_markers = _adjust_wait_ratios_for_connection(char_wait_markers, connect_length, base_length)
-
-		# パスメッシュを作成（表示用の生パスを使用）
-		var path_mesh = _create_path_mesh(full_display_path, character)
-
-		# マルチモードの場合、元のマーカーを削除して新しいマーカーを生成
-		if is_multi_mode:
-			if all_vision_markers.has(char_id):
-				free_marker_meshes(all_vision_markers[char_id])
-			if all_run_markers.has(char_id):
-				free_marker_meshes(all_run_markers[char_id])
-			if all_clear_markers.has(char_id):
-				free_marker_meshes(all_clear_markers[char_id])
-			if all_grenade_markers.has(char_id):
-				free_marker_meshes(all_grenade_markers[char_id])
-			if all_smoke_grenade_markers.has(char_id):
-				free_marker_meshes(all_smoke_grenade_markers[char_id])
-			if all_door_markers.has(char_id):
-				free_marker_meshes(all_door_markers[char_id])
-			if all_wait_markers.has(char_id):
-				free_marker_meshes(all_wait_markers[char_id])
-
-		# 各キャラクター用にマーカーを新規生成
-		var char_vision_markers_nodes = _create_vision_markers_for_path(
-			full_path, adjusted_vision_points, character
-		)
-		var char_run_markers_nodes = _create_run_markers_for_path(
-			full_path, adjusted_run_segments, character
-		)
-		var char_clear_markers_nodes = _create_clear_markers_for_path(
-			full_path, adjusted_clear_points, character
-		)
-		var char_grenade_markers_nodes = _create_grenade_markers_for_path(
-			full_path, adjusted_grenade_markers, character
-		)
-		var char_smoke_grenade_markers_nodes = _create_smoke_grenade_markers_for_path(
-			full_path, adjusted_smoke_grenade_markers, character
-		)
-		var char_door_markers_nodes = _create_door_markers_for_path(
-			full_path, adjusted_door_markers, character
-		)
-		var char_wait_markers_nodes = _create_wait_markers_for_path(
-			full_path, adjusted_wait_markers, character
-		)
-
-		pending_paths[char_id] = {
-			"character": character,
-			"path": full_path,
-			"vision_points": adjusted_vision_points,
-			"run_segments": adjusted_run_segments,
-			"clear_points": adjusted_clear_points,
-			"grenade_markers_data": adjusted_grenade_markers,
-			"smoke_grenade_markers_data": adjusted_smoke_grenade_markers,
-			"door_markers_data": adjusted_door_markers,
-			"wait_markers_data": adjusted_wait_markers,
-			"path_mesh": path_mesh,
-			"vision_markers": char_vision_markers_nodes,
-			"run_markers": char_run_markers_nodes,
-			"clear_markers": char_clear_markers_nodes,
-			"grenade_markers": char_grenade_markers_nodes,
-			"smoke_grenade_markers": char_smoke_grenade_markers_nodes,
-			"door_markers": char_door_markers_nodes,
-			"wait_markers": char_wait_markers_nodes
-		}
-
-		processed_count += 1
-	path_confirmed.emit(processed_count)
+	path_confirmed.emit(1)
 	return true
 
 

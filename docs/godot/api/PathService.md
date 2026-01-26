@@ -135,12 +135,6 @@ Clearポイント数を取得する。
 ### `has_incomplete_run_start() -> bool`
 Run開始のみ設定された未完了区間があるか判定する。
 
-### `is_multi_character_mode() -> bool`
-マルチキャラクターモード中か判定する。
-
-### `start_multi_character_mode(selected_chars: Array[Node]) -> void`
-マルチキャラクターモードを開始する。
-
 ### `set_active_edit_character(character: Node) -> void`
 編集中のキャラクターを設定する。
 
@@ -211,7 +205,5 @@ Run開始のみ設定された未完了区間があるか判定する。
 - `get_wait_marker_count() -> int`
 - `undo_last_marker() -> void`
 - `has_incomplete_run_start() -> bool`
-- `is_multi_character_mode() -> bool`
-- `start_multi_character_mode(selected_chars: Array[Node]) -> void`
 - `set_active_edit_character(character: Node) -> void`
 - `set_path_drawer_color(color: Color) -> void`

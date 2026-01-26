@@ -149,20 +149,16 @@ var _grenade_bounce_normal: Vector3 = Vector3.ZERO
 var _grenade_has_bounce: bool = false
 var _grenade_trajectory_mesh: MeshInstance3D = null
 
-## マーカー追加履歴（Undo用）- キャラクターID別に管理
-## シングルモード: _marker_history に追加
-## マルチモード: _character_markers[char_id].marker_history に追加
+## マーカー追加履歴（Undo用）
 var _marker_history: Array[int] = []  # MarkerType の配列
 
-## キャラクター別マーカー管理（マルチセレクト対応）
-## { char_id: { "vision_points": Array[Dictionary], "vision_meshes": Array[MeshInstance3D],
-##              "run_segments": Array[Dictionary], "run_meshes": Array[MeshInstance3D] } }
+## 現在編集中のキャラクター
+var _active_edit_character: Node = null
+
+## 非推奨: マルチキャラクターモード（常にfalse、後方互換用）
+var _multi_character_mode: bool = false
 var _character_markers: Dictionary = {}
-## キャラクター別マーカーコレクション（統一管理用）
-## { char_id: MarkerCollection }
 var _character_collections: Dictionary = {}
-var _active_edit_character: Node = null  # 現在編集中のキャラクター
-var _multi_character_mode: bool = false  # マルチキャラクターモード
 
 ## パス実行管理
 var _pending_path: PackedVector3Array = PackedVector3Array()
@@ -1024,8 +1020,7 @@ func clear() -> void:
 	_clear_door_markers()
 	_clear_wait_markers()
 	_marker_history.clear()
-	# マルチキャラクターモードもクリア
-	_clear_multi_character_markers()
+	_active_edit_character = null
 
 
 func _clear_vision_points() -> void:
@@ -1101,11 +1096,29 @@ func take_vision_markers() -> Array[MeshInstance3D]:
 	return markers
 
 
+## 全キャラクターのVisionマーカーを移譲
+func take_all_vision_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _vision_meshes.duplicate()
+		_vision_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
+
+
 ## Runマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_run_markers() -> Array[MeshInstance3D]:
 	var markers = _run_meshes.duplicate()
 	_run_meshes.clear()
 	return markers
+
+
+## 全キャラクターのRunマーカーを移譲
+func take_all_run_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _run_meshes.duplicate()
+		_run_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
 
 
 ## Clearマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
@@ -1115,11 +1128,29 @@ func take_clear_markers() -> Array[MeshInstance3D]:
 	return markers
 
 
+## 全キャラクターのClearマーカーを移譲
+func take_all_clear_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _clear_meshes.duplicate()
+		_clear_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
+
+
 ## グレネードマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_grenade_markers() -> Array[MeshInstance3D]:
 	var markers = _grenade_meshes.duplicate()
 	_grenade_meshes.clear()
 	return markers
+
+
+## 全キャラクターのグレネードマーカーを移譲
+func take_all_grenade_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _grenade_meshes.duplicate()
+		_grenade_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
 
 
 ## ドアマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
@@ -1129,11 +1160,29 @@ func take_door_markers() -> Array[MeshInstance3D]:
 	return markers
 
 
+## 全キャラクターのドアマーカーを移譲
+func take_all_door_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _door_meshes.duplicate()
+		_door_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
+
+
 ## スモークグレネードマーカーの所有権を移譲（呼び出し元が管理責任を持つ）
 func take_smoke_grenade_markers() -> Array[MeshInstance3D]:
 	var markers = _smoke_grenade_meshes.duplicate()
 	_smoke_grenade_meshes.clear()
 	return markers
+
+
+## 全キャラクターのスモークグレネードマーカーを移譲
+func take_all_smoke_grenade_markers() -> Dictionary:
+	if _active_edit_character:
+		var markers = _smoke_grenade_meshes.duplicate()
+		_smoke_grenade_meshes.clear()
+		return { _active_edit_character.get_instance_id(): markers }
+	return {}
 
 
 func get_drawn_path() -> PackedVector3Array:
@@ -1380,11 +1429,16 @@ func get_vision_points() -> Array[Dictionary]:
 	return _vision_points
 
 
-## 視線ポイント数を取得（マルチモードの場合はアクティブキャラクターのカウント）
+## 視線ポイント数を取得
 func get_vision_point_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_vision_point_count_for_character(_active_edit_character)
 	return _vision_points.size()
+
+
+## 全キャラクターの視線ポイントを取得
+func get_all_vision_points() -> Dictionary:
+	if _active_edit_character:
+		return { _active_edit_character.get_instance_id(): _vision_points }
+	return {}
 
 
 ## 最後の視線ポイントを削除
@@ -1435,11 +1489,16 @@ func get_run_segments() -> Array[Dictionary]:
 	return _run_segments
 
 
-## Run区間数を取得（マルチモードの場合はアクティブキャラクターのカウント）
+## Run区間数を取得
 func get_run_segment_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_run_segment_count_for_character(_active_edit_character)
 	return _run_segments.size()
+
+
+## 全キャラクターのRun区間を取得
+func get_all_run_segments() -> Dictionary:
+	if _active_edit_character:
+		return { _active_edit_character.get_instance_id(): _run_segments }
+	return {}
 
 
 ## 最後のRun区間を削除
@@ -1518,11 +1577,16 @@ func get_clear_points() -> Array[Dictionary]:
 	return _clear_points
 
 
-## Clearポイント数を取得（マルチモードの場合はアクティブキャラクターのカウント）
+## Clearポイント数を取得
 func get_clear_point_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_clear_point_count_for_character(_active_edit_character)
 	return _clear_points.size()
+
+
+## 全キャラクターのClearポイントを取得
+func get_all_clear_points() -> Dictionary:
+	if _active_edit_character:
+		return { _active_edit_character.get_instance_id(): _clear_points }
+	return {}
 
 
 ## 最後のClearポイントを削除
@@ -1930,72 +1994,16 @@ func _on_path_completed() -> void:
 
 
 ## ========================================
-## マルチキャラクターマーカー管理 API
+## キャラクター管理 API
 ## ========================================
-
-## マルチキャラクターモードを開始
-## @param characters: 対象キャラクター配列
-func start_multi_character_mode(characters: Array[Node]) -> void:
-	_multi_character_mode = true
-	_character_markers.clear()
-	_character_collections.clear()
-
-	# 各キャラクター用のマーカーストレージを初期化
-	for character in characters:
-		var char_id = character.get_instance_id()
-		# 従来のDictionary形式（後方互換）
-		_character_markers[char_id] = {
-			"character": character,
-			"vision_points": [] as Array[Dictionary],
-			"vision_meshes": [] as Array[MeshInstance3D],
-			"run_segments": [] as Array[Dictionary],
-			"run_meshes": [] as Array[MeshInstance3D],
-			"clear_points": [] as Array[Dictionary],
-			"clear_meshes": [] as Array[MeshInstance3D],
-			"grenade_markers": [] as Array[Dictionary],
-			"grenade_meshes": [] as Array[MeshInstance3D],
-			"smoke_grenade_markers": [] as Array[Dictionary],
-			"smoke_grenade_meshes": [] as Array[MeshInstance3D],
-			"door_markers": [] as Array[Dictionary],
-			"door_meshes": [] as Array[MeshInstance3D],
-			"marker_history": [] as Array[int]
-		}
-		# 新しいMarkerCollection形式
-		_character_collections[char_id] = MarkerCollectionScript.new()
-
-	# 最初のキャラクターをアクティブに設定
-	if characters.size() > 0:
-		set_active_edit_character(characters[0])
-
-
-
-## マルチキャラクターモードを終了
-func end_multi_character_mode() -> void:
-	_multi_character_mode = false
-	_active_edit_character = null
-	# マーカーデータはclear時にクリーンアップ
-
 
 ## 編集対象キャラクターを設定
 ## @param character: 編集対象キャラクター
 func set_active_edit_character(character: Node) -> void:
-	if not _multi_character_mode:
-		_active_edit_character = character
-		return
-
-	if not character:
-		return
-
-	var char_id = character.get_instance_id()
-	if not _character_markers.has(char_id):
-		return
-
 	_active_edit_character = character
-
-	# キャラクター色を適用
-	var char_color = CharacterColorManager.get_character_color(character)
-	_character_color = char_color
-
+	if character:
+		var char_color = CharacterColorManager.get_character_color(character)
+		_character_color = char_color
 
 
 ## アクティブな編集キャラクターを取得
@@ -2003,265 +2011,9 @@ func get_active_edit_character() -> Node:
 	return _active_edit_character
 
 
-## マルチキャラクターモードかどうか
+## マルチキャラクターモードかどうか（非推奨：常にfalse）
 func is_multi_character_mode() -> bool:
-	return _multi_character_mode
-
-
-## キャラクター別の視線ポイント数を取得
-func get_vision_point_count_for_character(character: Node) -> int:
-	if not character:
-		return 0
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].vision_points.size()
-	return 0
-
-
-## キャラクター別のRun区間数を取得
-func get_run_segment_count_for_character(character: Node) -> int:
-	if not character:
-		return 0
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].run_segments.size()
-	return 0
-
-
-## キャラクター別の視線ポイントを取得
-func get_vision_points_for_character(character: Node) -> Array[Dictionary]:
-	if not character:
-		return []
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].vision_points
-	return []
-
-
-## キャラクター別のRun区間を取得
-func get_run_segments_for_character(character: Node) -> Array[Dictionary]:
-	if not character:
-		return []
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].run_segments
-	return []
-
-
-## キャラクター別のClearポイント数を取得
-func get_clear_point_count_for_character(character: Node) -> int:
-	if not character:
-		return 0
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].clear_points.size()
-	return 0
-
-
-## キャラクター別のClearポイントを取得
-func get_clear_points_for_character(character: Node) -> Array[Dictionary]:
-	if not character:
-		return []
-	var char_id = character.get_instance_id()
-	if _character_markers.has(char_id):
-		return _character_markers[char_id].clear_points
-	return []
-
-
-## 全キャラクターの視線ポイントを取得
-## @return { char_id: Array[Dictionary] }
-func get_all_vision_points() -> Dictionary:
-	if not _multi_character_mode:
-		# シングルモードの場合、現在のキャラクターIDで返す
-		if _active_edit_character:
-			return { _active_edit_character.get_instance_id(): _vision_points }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].vision_points
-	return result
-
-
-## 全キャラクターのRun区間を取得
-## @return { char_id: Array[Dictionary] }
-func get_all_run_segments() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			return { _active_edit_character.get_instance_id(): _run_segments }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].run_segments
-	return result
-
-
-## 全キャラクターのClearポイントを取得
-## @return { char_id: Array[Dictionary] }
-func get_all_clear_points() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			return { _active_edit_character.get_instance_id(): _clear_points }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].clear_points
-	return result
-
-
-## マルチキャラクターモードで全マーカーをクリア
-func _clear_multi_character_markers() -> void:
-	for char_id in _character_markers:
-		var data = _character_markers[char_id]
-		for mesh in data.vision_meshes:
-			if is_instance_valid(mesh):
-				mesh.queue_free()
-		for mesh in data.run_meshes:
-			if is_instance_valid(mesh):
-				mesh.queue_free()
-		for mesh in data.clear_meshes:
-			if is_instance_valid(mesh):
-				mesh.queue_free()
-		if data.has("grenade_meshes"):
-			for mesh in data.grenade_meshes:
-				if is_instance_valid(mesh):
-					mesh.queue_free()
-		if data.has("smoke_grenade_meshes"):
-			for mesh in data.smoke_grenade_meshes:
-				if is_instance_valid(mesh):
-					mesh.queue_free()
-		if data.has("door_meshes"):
-			for mesh in data.door_meshes:
-				if is_instance_valid(mesh):
-					mesh.queue_free()
-		if data.has("wait_meshes"):
-			for mesh in data.wait_meshes:
-				if is_instance_valid(mesh):
-					mesh.queue_free()
-	_character_markers.clear()
-
-	# MarkerCollectionもクリア
-	for char_id in _character_collections:
-		var collection = _character_collections[char_id]
-		if collection:
-			collection.clear_all()
-	_character_collections.clear()
-
-	_active_edit_character = null
-	_multi_character_mode = false
-
-
-## 全キャラクターのVisionMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_vision_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _vision_meshes.duplicate()
-			_vision_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].vision_meshes.duplicate()
-		_character_markers[char_id].vision_meshes.clear()
-	return result
-
-
-## 全キャラクターのRunMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_run_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _run_meshes.duplicate()
-			_run_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].run_meshes.duplicate()
-		_character_markers[char_id].run_meshes.clear()
-	return result
-
-
-## 全キャラクターのClearMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_clear_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _clear_meshes.duplicate()
-			_clear_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		result[char_id] = _character_markers[char_id].clear_meshes.duplicate()
-		_character_markers[char_id].clear_meshes.clear()
-	return result
-
-
-## 全キャラクターのGrenadeMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_grenade_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _grenade_meshes.duplicate()
-			_grenade_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		if _character_markers[char_id].has("grenade_meshes"):
-			result[char_id] = _character_markers[char_id].grenade_meshes.duplicate()
-			_character_markers[char_id].grenade_meshes.clear()
-		else:
-			result[char_id] = []
-	return result
-
-
-## 全キャラクターのDoorMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_door_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _door_meshes.duplicate()
-			_door_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		if _character_markers[char_id].has("door_meshes"):
-			result[char_id] = _character_markers[char_id].door_meshes.duplicate()
-			_character_markers[char_id].door_meshes.clear()
-		else:
-			result[char_id] = []
-	return result
-
-
-## 全キャラクターのSmokeGrenadeMarkersを移譲
-## @return { char_id: Array[MeshInstance3D] }
-func take_all_smoke_grenade_markers() -> Dictionary:
-	if not _multi_character_mode:
-		if _active_edit_character:
-			var markers = _smoke_grenade_meshes.duplicate()
-			_smoke_grenade_meshes.clear()
-			return { _active_edit_character.get_instance_id(): markers }
-		return {}
-
-	var result: Dictionary = {}
-	for char_id in _character_markers:
-		if _character_markers[char_id].has("smoke_grenade_meshes"):
-			result[char_id] = _character_markers[char_id].smoke_grenade_meshes.duplicate()
-			_character_markers[char_id].smoke_grenade_meshes.clear()
-		else:
-			result[char_id] = []
-	return result
+	return false
 
 
 ## ========================================
@@ -2505,8 +2257,6 @@ func get_grenade_markers() -> Array[Dictionary]:
 
 ## グレネードマーカー数を取得
 func get_grenade_marker_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_grenade_marker_count_for_character(_active_edit_character)
 	return _grenade_markers.size()
 
 
@@ -2763,8 +2513,6 @@ func get_smoke_grenade_markers() -> Array[Dictionary]:
 
 ## スモークグレネードマーカー数を取得
 func get_smoke_grenade_marker_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_smoke_grenade_marker_count_for_character(_active_edit_character)
 	return _smoke_grenade_markers.size()
 
 
@@ -2946,8 +2694,6 @@ func get_door_markers() -> Array[Dictionary]:
 
 ## ドアマーカー数を取得
 func get_door_marker_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_door_marker_count_for_character(_active_edit_character)
 	return _door_markers.size()
 
 
@@ -3172,8 +2918,6 @@ func get_wait_markers() -> Array[Dictionary]:
 
 ## Waitマーカー数を取得
 func get_wait_marker_count() -> int:
-	if _multi_character_mode and _active_edit_character:
-		return get_wait_marker_count_for_character(_active_edit_character)
 	return _wait_markers.size()
 
 
@@ -3341,27 +3085,6 @@ func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Mes
 			return take_wait_markers()
 		ActionMarkerDataScript.Type.SMOKE_GRENADE:
 			return take_smoke_grenade_markers()
-		_:
-			return []
-
-
-## 指定キャラクターの指定タイプのマーカーデータを取得（統一API）
-func get_markers_for_character_by_type(character: Node, marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return get_vision_points_for_character(character)
-		ActionMarkerDataScript.Type.RUN:
-			return get_run_segments_for_character(character)
-		ActionMarkerDataScript.Type.CLEAR:
-			return get_clear_points_for_character(character)
-		ActionMarkerDataScript.Type.GRENADE:
-			return get_grenade_markers_for_character(character)
-		ActionMarkerDataScript.Type.DOOR:
-			return get_door_markers_for_character(character)
-		ActionMarkerDataScript.Type.WAIT:
-			return get_wait_markers_for_character(character)
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return get_smoke_grenade_markers_for_character(character)
 		_:
 			return []
 

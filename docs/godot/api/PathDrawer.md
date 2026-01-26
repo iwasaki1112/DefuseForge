@@ -300,82 +300,16 @@ match removed_type:
 
 PATHがUndoされると、パスとすべてのマーカーがクリアされ、`path_undone`シグナルが発火されます。PathServiceはこのシグナルを受けてマーカーパネルを非表示にしつつ、PathDrawerを再度有効化するため、ユーザーは新しいパスを描き直すことができます。
 
-### Multi-Character Mode API
-
-マルチセレクト時に各キャラクターに個別のマーカーを設定できるモード。
-
-#### start_multi_character_mode(characters: Array[Node]) -> void
-マルチキャラクターモードを開始する。
-
-**引数:**
-- `characters` - 対象キャラクター配列
-
-**動作:**
-- 各キャラクター用のマーカーストレージを初期化
-- 最初のキャラクターをアクティブに設定
-
-#### end_multi_character_mode() -> void
-マルチキャラクターモードを終了する。
+### キャラクター管理 API
 
 #### set_active_edit_character(character: Node) -> void
-編集対象キャラクターを設定する。マルチモードでキャラクター間を切り替える際に使用。
+編集対象キャラクターを設定する。
 
 **引数:**
 - `character` - 編集対象キャラクター
 
 #### get_active_edit_character() -> Node
 現在の編集対象キャラクターを取得する。
-
-#### is_multi_character_mode() -> bool
-マルチキャラクターモードかどうかを確認する。
-
-#### get_vision_point_count_for_character(character: Node) -> int
-指定キャラクターの視線ポイント数を取得する。
-
-#### get_run_segment_count_for_character(character: Node) -> int
-指定キャラクターのRun区間数を取得する。
-
-#### get_vision_points_for_character(character: Node) -> Array[Dictionary]
-指定キャラクターの視線ポイントを取得する。
-
-#### get_run_segments_for_character(character: Node) -> Array[Dictionary]
-指定キャラクターのRun区間を取得する。
-
-#### get_clear_point_count_for_character(character: Node) -> int
-指定キャラクターのClearポイント数を取得する。
-
-#### get_clear_points_for_character(character: Node) -> Array[Dictionary]
-指定キャラクターのClearポイントを取得する。
-
-#### get_all_vision_points() -> Dictionary
-全キャラクターの視線ポイントを取得する。
-
-**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとした視線ポイントの辞書
-
-#### get_all_run_segments() -> Dictionary
-全キャラクターのRun区間を取得する。
-
-**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたRun区間の辞書
-
-#### get_all_clear_points() -> Dictionary
-全キャラクターのClearポイントを取得する。
-
-**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたClearポイントの辞書
-
-#### take_all_vision_markers() -> Dictionary
-全キャラクターのVisionMarkersの所有権を移譲する。
-
-**戻り値:** `{ char_id: Array[MeshInstance3D] }`
-
-#### take_all_run_markers() -> Dictionary
-全キャラクターのRunMarkersの所有権を移譲する。
-
-**戻り値:** `{ char_id: Array[MeshInstance3D] }`
-
-#### take_all_clear_markers() -> Dictionary
-全キャラクターのClearMarkersの所有権を移譲する。
-
-**戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
 ### Grenade Marker API
 
@@ -559,32 +493,6 @@ if path_drawer.start_clear_mode():
 path_drawer.execute_with_vision(false)  # 歩行で実行（Run区間だけ走る）
 ```
 
-### マルチキャラクターモードの例
-
-```gdscript
-# マルチセレクト時の使用例
-var selected_characters: Array[Node] = [char_a, char_b]
-
-# マルチキャラクターモード開始
-path_drawer.start_multi_character_mode(selected_characters)
-
-# キャラクターAのマーカーを編集
-path_drawer.set_active_edit_character(char_a)
-path_drawer.start_vision_mode()
-# ユーザーがマーカーを追加...
-
-# キャラクターBに切り替え
-path_drawer.set_active_edit_character(char_b)
-# ユーザーが別のマーカーを追加...
-
-# 確定時に全キャラクターのマーカーを取得
-var all_vision = path_drawer.get_all_vision_points()
-# all_vision = { char_a_id: [...], char_b_id: [...] }
-
-# PathExecutionManagerに渡して確定
-path_execution_manager.confirm_path(selected_characters, path_drawer, char_a)
-```
-
 ## データ形式
 
 ### 視線ポイント（ターゲットポイントモード）
@@ -739,23 +647,8 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `execute_with_vision(run: bool = false) -> bool`
 - `has_pending_path() -> bool`
 - `clear_pending() -> void`
-- `start_multi_character_mode(characters: Array[Node]) -> void`
-- `end_multi_character_mode() -> void`
 - `set_active_edit_character(character: Node) -> void`
 - `get_active_edit_character() -> Node`
-- `is_multi_character_mode() -> bool`
-- `get_vision_point_count_for_character(character: Node) -> int`
-- `get_run_segment_count_for_character(character: Node) -> int`
-- `get_vision_points_for_character(character: Node) -> Array[Dictionary]`
-- `get_run_segments_for_character(character: Node) -> Array[Dictionary]`
-- `get_clear_point_count_for_character(character: Node) -> int`
-- `get_clear_points_for_character(character: Node) -> Array[Dictionary]`
-- `get_all_vision_points() -> Dictionary`
-- `get_all_run_segments() -> Dictionary`
-- `get_all_clear_points() -> Dictionary`
-- `take_all_vision_markers() -> Dictionary`
-- `take_all_run_markers() -> Dictionary`
-- `take_all_clear_markers() -> Dictionary`
 - `start_grenade_mode() -> bool`
 - `has_grenade_markers() -> bool`
 - `get_grenade_markers() -> Array[Dictionary]`

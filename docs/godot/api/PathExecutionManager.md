@@ -191,25 +191,12 @@ func _physics_process(delta: float) -> void:
 new_ratio = (connect_length + old_ratio * base_length) / new_length
 ```
 
-## マルチセレクト時のマーカー生成
+## マーカー生成
 
-複数キャラクター選択時、各キャラクターに対して個別のVisionMarker/RunMarkerを生成:
+パス確定時、キャラクターに対してマーカーを生成:
 
-### マルチキャラクターモード（PathDrawerで個別設定）
-
-PathDrawerがマルチキャラクターモード（`is_multi_character_mode() == true`）の場合：
-
-1. `path_drawer.get_all_vision_points()` で各キャラクターの視線ポイントを取得
-2. `path_drawer.get_all_run_segments()` で各キャラクターのRun区間を取得
-3. 各キャラクターのフルパス（接続線込み）に対して比率調整
-4. キャラクター別のマーカーを生成・適用
-
-### 従来モード（共通マーカー）
-
-PathDrawerが通常モード（`is_multi_character_mode() == false`）の場合：
-
-1. PathDrawerから共通マーカーの所有権を取得
-2. 各キャラクターのフルパス（接続線込み）に対して:
+1. PathDrawerからマーカーの所有権を取得
+2. キャラクターのフルパス（接続線込み）に対して:
    - 調整済み比率から`_calculate_position_on_path()`で座標計算
    - `_create_vision_markers_for_path()`でVisionMarker生成
    - `_create_run_markers_for_path()`でRunMarker生成

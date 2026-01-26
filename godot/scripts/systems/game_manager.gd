@@ -560,17 +560,6 @@ func has_incomplete_run_start() -> bool:
 	return path_service.has_incomplete_run_start() if path_service else false
 
 
-## マルチキャラクターモードか
-func is_multi_character_mode() -> bool:
-	return path_service.is_multi_character_mode() if path_service else false
-
-
-## マルチキャラクターモード開始
-func start_multi_character_mode(selected_chars: Array[Node]) -> void:
-	if path_service:
-		path_service.start_multi_character_mode(selected_chars)
-
-
 ## アクティブ編集キャラクターを設定
 func set_active_edit_character(character: Node) -> void:
 	if path_service:
@@ -590,14 +579,13 @@ func set_path_drawer_color(color: Color) -> void:
 ## コンテキストメニューを表示
 func _show_context_menu(screen_pos: Vector2, character: Node) -> void:
 	if context_menu:
-		var is_multi = selection_manager.get_selection_count() > 1
 		# キャラクターの体の中心を基準にメニューを表示
 		var menu_pos = screen_pos
 		if camera and character:
 			var character_center = character.global_position + Vector3(0, 0.9, 0)
 			menu_pos = camera.unproject_position(character_center)
 			menu_pos += context_menu_offset
-		context_menu.open(menu_pos, character, is_multi)
+		context_menu.open(menu_pos, character)
 
 
 ## マーカーパネルを表示

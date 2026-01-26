@@ -111,15 +111,10 @@ func start_move_mode() -> bool:
 	if not started:
 		return false
 
-	# マルチセレクトの場合
-	if selected_chars.size() > 1:
-		path_drawer.start_multi_character_mode(selected_chars)
-		if marker_edit_panel:
-			marker_edit_panel.setup(selected_chars, path_drawer)
-	else:
-		path_drawer.set_active_edit_character(primary)
-		if marker_edit_panel:
-			marker_edit_panel.setup(selected_chars, path_drawer)
+	# シングルキャラクターのみサポート
+	path_drawer.set_active_edit_character(primary)
+	if marker_edit_panel:
+		marker_edit_panel.setup([primary], path_drawer)
 
 	return true
 
@@ -291,13 +286,6 @@ func has_incomplete_run_start() -> bool:
 	return path_drawer.has_incomplete_run_start() if path_drawer else false
 
 
-func is_multi_character_mode() -> bool:
-	return path_drawer.is_multi_character_mode() if path_drawer else false
-
-
-func start_multi_character_mode(selected_chars: Array[Node]) -> void:
-	if path_drawer:
-		path_drawer.start_multi_character_mode(selected_chars)
 
 
 func set_active_edit_character(character: Node) -> void:
@@ -349,13 +337,9 @@ func _on_path_ready() -> void:
 	if start_vision_mode():
 		# マーカーパネルを再セットアップ（パスUndo後の再描画に対応）
 		if marker_edit_panel and selection_manager and selection_manager.has_selection():
-			var selected_chars: Array[Node] = []
-			for c in selection_manager.selected_characters:
-				selected_chars.append(c)
-			# マルチキャラクターモードを再設定
-			if path_drawer and not path_drawer.is_multi_character_mode() and selected_chars.size() > 1:
-				path_drawer.start_multi_character_mode(selected_chars)
-			marker_edit_panel.setup(selected_chars, path_drawer)
+			var primary = selection_manager.primary_character
+			if primary:
+				marker_edit_panel.setup([primary], path_drawer)
 		_show_marker_panel()
 	path_ready.emit()
 
