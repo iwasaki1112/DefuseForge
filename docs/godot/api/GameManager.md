@@ -295,6 +295,58 @@ GameManagerはゲームロジックを担当。以下はシーン固有：
 - デバッグ用WASD操作
 - 情報ラベルの表示内容
 
+## Multiplayer API
+
+### enable_multiplayer_mode(local_peer_id: int) -> void
+マルチプレイヤーモードを有効化する。
+
+```gdscript
+game_manager.enable_multiplayer_mode(multiplayer.get_unique_id())
+```
+
+### disable_multiplayer_mode() -> void
+マルチプレイヤーモードを無効化する。
+
+### is_multiplayer_mode() -> bool
+マルチプレイヤーモードかどうかを返す。
+
+### is_local_character(character: Node) -> bool
+キャラクターがローカルプレイヤーのものか判定する。
+
+### has_control_permission(character: Node) -> bool
+キャラクターの操作権限があるか判定する。
+
+### filter_local_characters(chars: Array) -> Array[Node]
+ローカルプレイヤーのキャラクターのみをフィルタする。
+
+### filter_remote_characters(chars: Array) -> Array[Node]
+リモートプレイヤーのキャラクターのみをフィルタする。
+
+### get_local_friendly_characters() -> Array[Node]
+ローカルプレイヤーの味方キャラクターを取得する。
+
+### register_character_with_network(character: Node, owner_peer_id: int, network_id: int) -> void
+ネットワーク情報付きでキャラクターを登録する。
+
+```gdscript
+game_manager.register_character_with_network(character, peer_id, net_id)
+```
+
+### find_character_by_network_id(network_id: int) -> GameCharacter
+ネットワークIDからキャラクターを検索する。
+
+### find_characters_by_owner(owner_peer_id: int) -> Array[GameCharacter]
+所有者のpeer_idからキャラクターを検索する。
+
+### get_all_character_snapshots() -> Array[SyncState.CharacterSnapshot]
+全キャラクターのスナップショットを取得する。
+
+### get_game_state_snapshot() -> SyncState.GameStateSnapshot
+ゲーム全体の状態スナップショットを取得する（ホスト用）。
+
+### apply_game_state_snapshot(snapshot: SyncState.GameStateSnapshot) -> void
+ゲーム状態スナップショットを適用する（クライアント用）。
+
 ## 関連クラス
 - [CharacterSelectionManager](CharacterSelectionManager.md)
 - [PathExecutionManager](PathExecutionManager.md)
@@ -307,6 +359,8 @@ GameManagerはゲームロジックを担当。以下はシーン固有：
 - [ContextMenuComponent](ContextMenuComponent.md)
 - [MarkerEditPanel](MarkerEditPanel.md)
 - [CharacterLabelManager](CharacterLabelManager.md)
+- [NetworkMessages](NetworkMessages.md)
+- [SyncState](SyncState.md)
 
 ## APIリファレンス
 

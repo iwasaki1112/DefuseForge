@@ -78,6 +78,10 @@ var _mesh_parent: Node3D = null
 var _map_container: Node3D = null
 var _ui_layer: CanvasLayer = null
 
+## マルチプレイヤー状態
+var _is_multiplayer_mode: bool = false
+var _local_peer_id: int = 0
+
 ## 設定
 var fow_map_size: Vector2 = Vector2(50, 50)
 var default_vision_fov: float = 90.0
@@ -1230,3 +1234,170 @@ func _resume_path_after_door(character: Node) -> void:
 			var controller = path_execution_manager._path_controllers[char_id]
 			if controller.has_method("resume_after_door"):
 				controller.resume_after_door()
+
+
+# ============================================
+# Multiplayer API
+# ============================================
+
+## マルチプレイヤーモードを有効化
+func enable_multiplayer_mode(local_peer_id: int) -> void:
+	_is_multiplayer_mode = true
+	_local_peer_id = local_peer_id
+	PlayerState.set_local_peer_id(local_peer_id)
+
+
+## マルチプレイヤーモードを無効化（シングルプレイヤーに戻す）
+func disable_multiplayer_mode() -> void:
+	_is_multiplayer_mode = false
+	_local_peer_id = 0
+	PlayerState.clear_multiplayer_session()
+
+
+## マルチプレイヤーモードかどうか
+func is_multiplayer_mode() -> bool:
+	return _is_multiplayer_mode
+
+
+## ローカルプレイヤーのpeer_idを取得
+func get_local_peer_id() -> int:
+	return _local_peer_id
+
+
+## キャラクターがローカルプレイヤーのものか判定
+func is_local_character(character: Node) -> bool:
+	if not _is_multiplayer_mode:
+		return true  # シングルプレイヤーモードでは全てローカル
+
+	var game_char := character as GameCharacter
+	if game_char:
+		return game_char.is_local()
+
+	return true  # GameCharacterでない場合はローカル扱い
+
+
+## キャラクターに対する操作権限があるか判定
+func has_control_permission(character: Node) -> bool:
+	# ローカルキャラクターでなければ操作不可
+	if not is_local_character(character):
+		return false
+
+	# 敵キャラクターは操作不可
+	if PlayerState.is_enemy(character):
+		return false
+
+	return true
+
+
+## ローカルキャラクターのみをフィルタリング
+func filter_local_characters(chars: Array) -> Array[Node]:
+	var result: Array[Node] = []
+	for character in chars:
+		if is_local_character(character):
+			result.append(character)
+	return result
+
+
+## リモートキャラクターのみをフィルタリング
+func filter_remote_characters(chars: Array) -> Array[Node]:
+	var result: Array[Node] = []
+	for character in chars:
+		if not is_local_character(character):
+			result.append(character)
+	return result
+
+
+## ローカルプレイヤーの味方キャラクター一覧を取得
+func get_local_friendly_characters() -> Array[Node]:
+	var result: Array[Node] = []
+	for character in characters:
+		if is_local_character(character) and PlayerState.is_friendly(character):
+			result.append(character)
+	return result
+
+
+## リモートプレイヤーのキャラクター一覧を取得
+func get_remote_characters() -> Array[Node]:
+	return filter_remote_characters(characters)
+
+
+## キャラクターを登録（マルチプレイヤー対応）
+## peer_idとnetwork_idを指定可能
+func register_character_with_network(
+	character: Node,
+	owner_peer_id: int = 0,
+	network_id: int = 0
+) -> void:
+	var game_char := character as GameCharacter
+	if game_char:
+		game_char.owner_peer_id = owner_peer_id
+		game_char.network_id = network_id
+
+	register_character(character)
+
+
+## ネットワークIDからキャラクターを検索
+func find_character_by_network_id(network_id: int) -> GameCharacter:
+	for character in characters:
+		var game_char := character as GameCharacter
+		if game_char and game_char.network_id == network_id:
+			return game_char
+	return null
+
+
+## peer_idからキャラクターを検索（複数可）
+func find_characters_by_owner(owner_peer_id: int) -> Array[GameCharacter]:
+	var result: Array[GameCharacter] = []
+	for character in characters:
+		var game_char := character as GameCharacter
+		if game_char and game_char.owner_peer_id == owner_peer_id:
+			result.append(game_char)
+	return result
+
+
+## 全キャラクターの状態をスナップショットとして取得
+func get_all_character_snapshots() -> Array[SyncState.CharacterSnapshot]:
+	var result: Array[SyncState.CharacterSnapshot] = []
+	for character in characters:
+		var game_char := character as GameCharacter
+		if game_char:
+			result.append(game_char.to_character_snapshot())
+	return result
+
+
+## ゲーム状態全体のスナップショットを取得
+func get_game_state_snapshot() -> SyncState.GameStateSnapshot:
+	var snapshot := SyncState.GameStateSnapshot.new()
+	snapshot.is_game_started = true
+	snapshot.round_number = 1  # TODO: ラウンド番号を管理
+
+	# ラウンド状態
+	if round_manager:
+		snapshot.round_state = round_manager.to_round_state()
+
+	# キャラクター状態
+	for character in characters:
+		var game_char := character as GameCharacter
+		if game_char:
+			snapshot.characters.append(game_char.to_character_state())
+
+	# 保留パス
+	if path_execution_manager:
+		var paths_by_player = path_execution_manager.get_all_pending_paths_by_player()
+		for player_id in paths_by_player:
+			snapshot.pending_paths[player_id] = paths_by_player[player_id]
+
+	return snapshot
+
+
+## ゲーム状態スナップショットを適用（クライアント側用）
+func apply_game_state_snapshot(snapshot: SyncState.GameStateSnapshot) -> void:
+	# ラウンド状態を適用
+	if round_manager and snapshot.round_state:
+		round_manager.apply_round_state(snapshot.round_state)
+
+	# キャラクター状態を適用
+	for char_state in snapshot.characters:
+		var game_char := find_character_by_network_id(char_state.character_id)
+		if game_char:
+			game_char.apply_remote_state(char_state)

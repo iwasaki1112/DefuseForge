@@ -207,12 +207,37 @@ new_ratio = (connect_length + old_ratio * base_length) / new_length
 - RunMarker START: 背景=キャラクター色、アイコン=白
 - RunMarker END: 背景=暗い色（char_color * 0.8/0.5/0.3）、アイコン=白
 
+## Multiplayer API
+
+### confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool
+プレイヤーIDに紐づけてパスを確定する（リモートプレイヤー用）。
+
+### get_pending_paths_for_player(player_id: int) -> Dictionary
+指定プレイヤーの保留パスを取得する。
+
+### get_all_pending_paths_by_player() -> Dictionary
+全プレイヤーの保留パスを取得する。
+
+### clear_pending_paths_for_player(player_id: int) -> void
+指定プレイヤーの保留パスをクリアする。
+
+### to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages.PathConfirmMessage
+キャラクターの保留パスをPathConfirmMessageに変換する。
+
+### get_all_pending_paths_as_messages(player_id: int) -> Array[NetworkMessages.PathConfirmMessage]
+プレイヤーの全保留パスをPathConfirmMessageの配列として取得する。
+
+### get_path_snapshot(character: Node) -> SyncState.PathSnapshot
+キャラクターのパススナップショットを取得する。
+
 ## 関連クラス
 
 - [CharacterSelectionManager](CharacterSelectionManager.md) - 選択管理
 - [PathDrawer](PathDrawer.md) - パス描画
 - [PathFollowingController](PathFollowingController.md) - パス追従
 - [PathLineMesh](PathLineMesh.md) - パスメッシュ描画
+- [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
+- [SyncState](SyncState.md) - 同期状態クラス
 
 ## APIリファレンス
 

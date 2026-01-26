@@ -38,6 +38,10 @@ signal door_marker_reached(character: Node, door: Node3D)
 ##                   "grenade_markers": Array, "smoke_grenade_markers": Array, "door_markers": Array, "wait_markers": Array } }
 var pending_paths: Dictionary = {}
 
+## プレイヤーごとの保留パス（マルチプレイヤー用）
+## { player_id: { character_id: PathConfirmMessage } }
+var _pending_paths_by_player: Dictionary = {}
+
 ## パス追従コントローラー { character_id -> PathFollowingController }
 var _path_controllers: Dictionary = {}
 
@@ -1029,3 +1033,218 @@ func free_marker_meshes(meshes: Array) -> void:
 		if mesh and is_instance_valid(mesh):
 			mesh.queue_free()
 #endregion
+
+
+# ============================================
+# Multiplayer API
+# ============================================
+
+## プレイヤーIDでパスを確定（ネットワーク同期用）
+## PathConfirmMessageから直接パスを登録する
+func confirm_path_for_player(
+	player_id: int,
+	path_msg: NetworkMessages.PathConfirmMessage,
+	character: Node
+) -> bool:
+	if not character or path_msg.path.is_empty():
+		return false
+
+	var char_id = character.get_instance_id()
+	var char_pos = character.global_position
+
+	# パスをArray[Vector3]に変換
+	var base_path: Array[Vector3] = []
+	for p in path_msg.path:
+		base_path.append(p)
+
+	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
+	var base_length = _calculate_path_length(base_path)
+
+	# 既存のパスがあれば削除
+	_clear_pending_path_for_character(char_id)
+
+	# キャラクター位置からパス開始点への接続を含むパスを作成
+	var full_path: Array[Vector3] = []
+	var connect_length: float = 0.0
+
+	if char_pos.distance_to(path_start) > 0.1:
+		full_path.append(char_pos)
+		connect_length = char_pos.distance_to(path_start)
+	full_path.append_array(base_path)
+
+	# マーカーデータを変換
+	var vision_points: Array[Dictionary] = []
+	for vp in path_msg.vision_markers:
+		vision_points.append(vp)
+	var run_segments: Array[Dictionary] = []
+	for rs in path_msg.run_segments:
+		run_segments.append(rs)
+	var clear_points: Array[Dictionary] = []
+	for cp in path_msg.clear_markers:
+		clear_points.append(cp)
+	var grenade_markers: Array[Dictionary] = []
+	for gm in path_msg.grenade_markers:
+		grenade_markers.append(gm)
+	var smoke_grenade_markers: Array[Dictionary] = []
+	for sgm in path_msg.smoke_grenade_markers:
+		smoke_grenade_markers.append(sgm)
+	var door_markers: Array[Dictionary] = []
+	for dm in path_msg.door_markers:
+		door_markers.append(dm)
+	var wait_markers: Array[Dictionary] = []
+	for wm in path_msg.wait_markers:
+		wait_markers.append(wm)
+
+	# マーカーの比率を再計算
+	var adjusted_vision = _adjust_ratios_for_connection(vision_points, connect_length, base_length)
+	var adjusted_run = _adjust_run_ratios_for_connection(run_segments, connect_length, base_length)
+	var adjusted_clear = _adjust_clear_ratios_for_connection(clear_points, connect_length, base_length)
+	var adjusted_grenade = _adjust_grenade_ratios_for_connection(grenade_markers, connect_length, base_length)
+	var adjusted_smoke_grenade = _adjust_grenade_ratios_for_connection(smoke_grenade_markers, connect_length, base_length)
+	var adjusted_door = _adjust_door_ratios_for_connection(door_markers, connect_length, base_length)
+	var adjusted_wait = _adjust_wait_ratios_for_connection(wait_markers, connect_length, base_length)
+
+	# パスメッシュを作成
+	var path_mesh = _create_path_mesh(full_path, character)
+
+	# マーカーを生成
+	var char_vision_markers_nodes = _create_vision_markers_for_path(full_path, adjusted_vision, character)
+	var char_run_markers_nodes = _create_run_markers_for_path(full_path, adjusted_run, character)
+	var char_clear_markers_nodes = _create_clear_markers_for_path(full_path, adjusted_clear, character)
+	var char_grenade_markers_nodes = _create_grenade_markers_for_path(full_path, adjusted_grenade, character)
+	var char_smoke_grenade_markers_nodes = _create_smoke_grenade_markers_for_path(full_path, adjusted_smoke_grenade, character)
+	var char_door_markers_nodes = _create_door_markers_for_path(full_path, adjusted_door, character)
+	var char_wait_markers_nodes = _create_wait_markers_for_path(full_path, adjusted_wait, character)
+
+	pending_paths[char_id] = {
+		"character": character,
+		"player_id": player_id,
+		"path": full_path,
+		"vision_points": adjusted_vision,
+		"run_segments": adjusted_run,
+		"clear_points": adjusted_clear,
+		"grenade_markers_data": adjusted_grenade,
+		"smoke_grenade_markers_data": adjusted_smoke_grenade,
+		"door_markers_data": adjusted_door,
+		"wait_markers_data": adjusted_wait,
+		"path_mesh": path_mesh,
+		"vision_markers": char_vision_markers_nodes,
+		"run_markers": char_run_markers_nodes,
+		"clear_markers": char_clear_markers_nodes,
+		"grenade_markers": char_grenade_markers_nodes,
+		"smoke_grenade_markers": char_smoke_grenade_markers_nodes,
+		"door_markers": char_door_markers_nodes,
+		"wait_markers": char_wait_markers_nodes
+	}
+
+	# プレイヤーごとのパス管理に追加
+	if not _pending_paths_by_player.has(player_id):
+		_pending_paths_by_player[player_id] = {}
+	_pending_paths_by_player[player_id][char_id] = path_msg
+
+	path_confirmed.emit(1)
+	return true
+
+
+## プレイヤーの保留パスを取得
+func get_pending_paths_for_player(player_id: int) -> Dictionary:
+	return _pending_paths_by_player.get(player_id, {}).duplicate()
+
+
+## 全プレイヤーの保留パスを取得
+func get_all_pending_paths_by_player() -> Dictionary:
+	return _pending_paths_by_player.duplicate()
+
+
+## プレイヤーの保留パスをクリア
+func clear_pending_paths_for_player(player_id: int) -> void:
+	if not _pending_paths_by_player.has(player_id):
+		return
+
+	var player_paths: Dictionary = _pending_paths_by_player[player_id]
+	for char_id in player_paths.keys():
+		_clear_pending_path_for_character(char_id)
+
+	_pending_paths_by_player.erase(player_id)
+
+
+## 保留パスをPathConfirmMessageに変換
+func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages.PathConfirmMessage:
+	if not character:
+		return null
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return null
+
+	var data: Dictionary = pending_paths[char_id]
+	var msg := NetworkMessages.PathConfirmMessage.new()
+	msg.player_id = player_id
+	msg.character_id = char_id
+	msg.timestamp = Time.get_ticks_msec()
+
+	# パスをコピー
+	if data.has("path"):
+		for p in data["path"]:
+			msg.path.append(p)
+
+	# マーカーデータをコピー
+	if data.has("vision_points"):
+		msg.vision_markers.assign(data["vision_points"])
+	if data.has("run_segments"):
+		msg.run_segments.assign(data["run_segments"])
+	if data.has("clear_points"):
+		msg.clear_markers.assign(data["clear_points"])
+	if data.has("grenade_markers_data"):
+		msg.grenade_markers.assign(data["grenade_markers_data"])
+	if data.has("smoke_grenade_markers_data"):
+		msg.smoke_grenade_markers.assign(data["smoke_grenade_markers_data"])
+	if data.has("door_markers_data"):
+		msg.door_markers.assign(data["door_markers_data"])
+	if data.has("wait_markers_data"):
+		msg.wait_markers.assign(data["wait_markers_data"])
+
+	return msg
+
+
+## 全保留パスをPathConfirmMessage配列に変換
+func get_all_pending_paths_as_messages(player_id: int) -> Array[NetworkMessages.PathConfirmMessage]:
+	var result: Array[NetworkMessages.PathConfirmMessage] = []
+
+	for char_id in pending_paths:
+		var data = pending_paths[char_id]
+		if not data.has("character"):
+			continue
+
+		var character = data["character"]
+		var msg = to_path_confirm_message(character, player_id)
+		if msg:
+			result.append(msg)
+
+	return result
+
+
+## パス実行状態をPathSnapshotに変換
+func get_path_snapshot(character: Node) -> SyncState.PathSnapshot:
+	if not character:
+		return null
+
+	var char_id = character.get_instance_id()
+	var snapshot := SyncState.PathSnapshot.new()
+	snapshot.character_id = char_id
+	snapshot.timestamp = Time.get_ticks_msec()
+
+	# 実行中かどうか
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		snapshot.is_executing = controller.is_following_path()
+		if controller.has_method("get_current_progress"):
+			snapshot.progress = controller.get_current_progress()
+
+	# 元のパスメッセージを参照
+	if _pending_paths_by_player.has(PlayerState.get_local_peer_id()):
+		var player_paths = _pending_paths_by_player[PlayerState.get_local_peer_id()]
+		if player_paths.has(char_id):
+			snapshot.path_message = player_paths[char_id]
+
+	return snapshot

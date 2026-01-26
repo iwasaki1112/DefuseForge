@@ -1,0 +1,289 @@
+class_name NetworkSerializer
+extends RefCounted
+## シリアライズ/デシリアライズユーティリティ
+##
+## ネットワーク転送用のデータ圧縮・展開を行う
+## パス座標の圧縮、マーカーデータのシリアライズなど
+
+# ============================================
+# Vector3配列の圧縮
+# ============================================
+
+## Vector3配列を圧縮してPackedByteArrayに変換
+## 各座標はint16として格納し、precision倍で丸める
+## フォーマット: [count:uint16][x:int16][y:int16][z:int16]...
+static func compress_vector3_array(arr: Array[Vector3], precision: int = NetworkConstants.POSITION_PRECISION) -> PackedByteArray:
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+
+	# 要素数（uint16）
+	buffer.put_u16(mini(arr.size(), 65535))
+
+	# 各座標を圧縮
+	for vec in arr:
+		buffer.put_16(int(vec.x * precision))
+		buffer.put_16(int(vec.y * precision))
+		buffer.put_16(int(vec.z * precision))
+
+	return buffer.data_array
+
+
+## PackedByteArrayからVector3配列を復元
+static func decompress_vector3_array(data: PackedByteArray, precision: int = NetworkConstants.POSITION_PRECISION) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+
+	if data.size() < 2:
+		return result
+
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+	buffer.data_array = data
+
+	# 要素数を読み取り
+	var count := buffer.get_u16()
+
+	# 各座標を復元
+	var inv_precision := 1.0 / precision
+	for i in count:
+		if buffer.get_position() + 6 > data.size():
+			break
+		var x := buffer.get_16() * inv_precision
+		var y := buffer.get_16() * inv_precision
+		var z := buffer.get_16() * inv_precision
+		result.append(Vector3(x, y, z))
+
+	return result
+
+
+# ============================================
+# パスメッセージのシリアライズ
+# ============================================
+
+## PathConfirmMessageを圧縮してPackedByteArrayに変換
+static func serialize_path_message(msg: NetworkMessages.PathConfirmMessage) -> PackedByteArray:
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+
+	# ヘッダー
+	buffer.put_32(msg.player_id)
+	buffer.put_32(msg.character_id)
+	buffer.put_64(msg.timestamp)
+
+	# パス座標を圧縮
+	var path_data := compress_vector3_array(msg.path)
+	buffer.put_u16(path_data.size())
+	buffer.put_data(path_data)
+
+	# マーカーデータ（JSON形式で簡易シリアライズ）
+	var markers_dict := {
+		"vision": msg.vision_markers,
+		"run": msg.run_segments,
+		"clear": msg.clear_markers,
+		"grenade": msg.grenade_markers,
+		"door": msg.door_markers,
+		"wait": msg.wait_markers,
+		"smoke": msg.smoke_grenade_markers,
+	}
+	var markers_json := JSON.stringify(markers_dict)
+	var markers_bytes := markers_json.to_utf8_buffer()
+	buffer.put_u32(markers_bytes.size())
+	buffer.put_data(markers_bytes)
+
+	return buffer.data_array
+
+
+## PackedByteArrayからPathConfirmMessageを復元
+static func deserialize_path_message(data: PackedByteArray) -> NetworkMessages.PathConfirmMessage:
+	var msg := NetworkMessages.PathConfirmMessage.new()
+
+	if data.size() < 18:  # 最小ヘッダーサイズ
+		return msg
+
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+	buffer.data_array = data
+
+	# ヘッダー読み取り
+	msg.player_id = buffer.get_32()
+	msg.character_id = buffer.get_32()
+	msg.timestamp = buffer.get_64()
+
+	# パス座標を復元
+	var path_size := buffer.get_u16()
+	if path_size > 0:
+		var path_data := buffer.get_data(path_size)[1] as PackedByteArray
+		msg.path = decompress_vector3_array(path_data)
+
+	# マーカーデータを復元
+	if buffer.get_position() + 4 <= data.size():
+		var markers_size := buffer.get_u32()
+		if markers_size > 0 and buffer.get_position() + markers_size <= data.size():
+			var markers_bytes := buffer.get_data(markers_size)[1] as PackedByteArray
+			var markers_json := markers_bytes.get_string_from_utf8()
+			var json := JSON.new()
+			if json.parse(markers_json) == OK:
+				var markers_dict: Dictionary = json.data
+				msg.vision_markers.assign(markers_dict.get("vision", []))
+				msg.run_segments.assign(markers_dict.get("run", []))
+				msg.clear_markers.assign(markers_dict.get("clear", []))
+				msg.grenade_markers.assign(markers_dict.get("grenade", []))
+				msg.door_markers.assign(markers_dict.get("door", []))
+				msg.wait_markers.assign(markers_dict.get("wait", []))
+				msg.smoke_grenade_markers.assign(markers_dict.get("smoke", []))
+
+	return msg
+
+
+# ============================================
+# ゲーム状態のシリアライズ
+# ============================================
+
+## GameStateSnapshotを圧縮してPackedByteArrayに変換
+static func serialize_game_state(snapshot: SyncState.GameStateSnapshot) -> PackedByteArray:
+	# 完全なスナップショットはJSON形式で簡易シリアライズ
+	var json := JSON.stringify(snapshot.to_dict())
+	return json.to_utf8_buffer()
+
+
+## PackedByteArrayからGameStateSnapshotを復元
+static func deserialize_game_state(data: PackedByteArray) -> SyncState.GameStateSnapshot:
+	var snapshot := SyncState.GameStateSnapshot.new()
+
+	var json_str := data.get_string_from_utf8()
+	var json := JSON.new()
+	if json.parse(json_str) == OK and json.data is Dictionary:
+		snapshot.from_dict(json.data)
+
+	return snapshot
+
+
+# ============================================
+# 汎用シリアライズ
+# ============================================
+
+## Dictionaryを圧縮してPackedByteArrayに変換
+static func serialize_dict(dict: Dictionary) -> PackedByteArray:
+	var json := JSON.stringify(dict)
+	return json.to_utf8_buffer()
+
+
+## PackedByteArrayからDictionaryを復元
+static func deserialize_dict(data: PackedByteArray) -> Dictionary:
+	var json_str := data.get_string_from_utf8()
+	var json := JSON.new()
+	if json.parse(json_str) == OK and json.data is Dictionary:
+		return json.data
+	return {}
+
+
+## ネットワークメッセージをラップして送信用フォーマットに変換
+## フォーマット: [msg_type:uint8][payload_size:uint32][payload:bytes]
+static func wrap_message(msg_type: NetworkConstants.MessageType, payload: PackedByteArray) -> PackedByteArray:
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+
+	buffer.put_u8(msg_type)
+	buffer.put_u32(payload.size())
+	buffer.put_data(payload)
+
+	return buffer.data_array
+
+
+## ラップされたメッセージをアンラップ
+## @return [msg_type: int, payload: PackedByteArray] または空配列（エラー時）
+static func unwrap_message(data: PackedByteArray) -> Array:
+	if data.size() < 5:
+		return []
+
+	var buffer := StreamPeerBuffer.new()
+	buffer.big_endian = false
+	buffer.data_array = data
+
+	var msg_type := buffer.get_u8()
+	var payload_size := buffer.get_u32()
+
+	if buffer.get_position() + payload_size > data.size():
+		return []
+
+	var payload := buffer.get_data(payload_size)[1] as PackedByteArray
+	return [msg_type, payload]
+
+
+# ============================================
+# 差分圧縮ユーティリティ（将来用）
+# ============================================
+
+## 2つのVector3配列の差分を計算
+## @return 差分データ（変更があったインデックスと値のペア配列）
+static func compute_path_delta(old_path: Array[Vector3], new_path: Array[Vector3]) -> Dictionary:
+	var changes: Array = []
+
+	# 長さの変更
+	var old_len := old_path.size()
+	var new_len := new_path.size()
+
+	# 変更されたポイントを検出
+	var min_len := mini(old_len, new_len)
+	for i in min_len:
+		if not old_path[i].is_equal_approx(new_path[i]):
+			changes.append({"i": i, "v": [new_path[i].x, new_path[i].y, new_path[i].z]})
+
+	# 追加されたポイント
+	for i in range(min_len, new_len):
+		changes.append({"i": i, "v": [new_path[i].x, new_path[i].y, new_path[i].z]})
+
+	return {
+		"old_len": old_len,
+		"new_len": new_len,
+		"changes": changes,
+	}
+
+
+## 差分データを適用してパスを更新
+static func apply_path_delta(base_path: Array[Vector3], delta: Dictionary) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	var new_len: int = delta.get("new_len", 0)
+	var changes: Array = delta.get("changes", [])
+
+	# 新しい長さで初期化（元のデータをコピー）
+	result.resize(new_len)
+	for i in mini(base_path.size(), new_len):
+		result[i] = base_path[i]
+
+	# 差分を適用
+	for change in changes:
+		var idx: int = change.get("i", 0)
+		var val: Array = change.get("v", [0, 0, 0])
+		if idx < new_len and val.size() >= 3:
+			result[idx] = Vector3(val[0], val[1], val[2])
+
+	return result
+
+
+# ============================================
+# バリデーション
+# ============================================
+
+## パスメッセージの妥当性を検証
+static func validate_path_message(msg: NetworkMessages.PathConfirmMessage) -> bool:
+	# パスが空でないこと
+	if msg.path.is_empty():
+		return false
+
+	# パス座標数が上限以内
+	if msg.path.size() > NetworkConstants.MAX_PATH_POINTS:
+		return false
+
+	# マーカー数が上限以内
+	if msg.vision_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+		return false
+	if msg.run_segments.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+		return false
+	if msg.clear_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+		return false
+	if msg.grenade_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+		return false
+	if msg.door_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+		return false
+
+	return true

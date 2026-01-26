@@ -266,3 +266,101 @@ func _clear_all_selection_markers() -> void:
 			marker.queue_free()
 
 	_selection_markers.clear()
+
+
+# ============================================
+# Multiplayer API
+# ============================================
+
+## プレイヤーごとの選択状態（マルチプレイヤー用）
+## { player_id: { "selected": Array[Node], "primary": Node } }
+var _selection_by_player: Dictionary = {}
+
+
+## プレイヤーの選択状態を設定（リモートプレイヤー用）
+func set_selection_for_player(player_id: int, selected: Array[Node], primary: Node) -> void:
+	_selection_by_player[player_id] = {
+		"selected": selected.duplicate(),
+		"primary": primary
+	}
+
+
+## プレイヤーの選択状態を取得
+func get_selection_for_player(player_id: int) -> Dictionary:
+	return _selection_by_player.get(player_id, { "selected": [], "primary": null })
+
+
+## プレイヤーの選択状態をクリア
+func clear_selection_for_player(player_id: int) -> void:
+	_selection_by_player.erase(player_id)
+
+
+## 全プレイヤーの選択状態をクリア
+func clear_all_player_selections() -> void:
+	_selection_by_player.clear()
+
+
+## 現在の選択状態をDictionaryに変換（ネットワーク同期用）
+func to_selection_dict() -> Dictionary:
+	var selected_ids: Array[int] = []
+	for character in selected_characters:
+		var game_char := character as GameCharacter
+		if game_char and game_char.network_id != 0:
+			selected_ids.append(game_char.network_id)
+		else:
+			selected_ids.append(character.get_instance_id())
+
+	var primary_id: int = 0
+	if primary_character:
+		var game_char := primary_character as GameCharacter
+		if game_char and game_char.network_id != 0:
+			primary_id = game_char.network_id
+		else:
+			primary_id = primary_character.get_instance_id()
+
+	return {
+		"selected_ids": selected_ids,
+		"primary_id": primary_id
+	}
+
+
+## Dictionaryから選択状態を復元（ネットワーク同期用）
+## character_resolver: network_id -> Node を返すCallable
+func from_selection_dict(data: Dictionary, character_resolver: Callable) -> void:
+	deselect_all()
+
+	var selected_ids: Array = data.get("selected_ids", [])
+	var primary_id: int = data.get("primary_id", 0)
+
+	for char_id in selected_ids:
+		var character = character_resolver.call(char_id)
+		if character:
+			add_to_selection(character)
+
+	# プライマリを更新（異なる場合）
+	if primary_id != 0:
+		var primary = character_resolver.call(primary_id)
+		if primary and primary != primary_character:
+			primary_character = primary
+			primary_changed.emit(primary_character)
+
+
+## キャラクターがローカルプレイヤーのものか確認してから選択
+## リモートキャラクターは選択不可
+func add_to_selection_if_local(character: Node) -> bool:
+	var game_char := character as GameCharacter
+	if game_char and not game_char.is_local():
+		return false  # リモートキャラクターは選択不可
+
+	add_to_selection(character)
+	return true
+
+
+## キャラクターがローカルプレイヤーのものか確認してからトグル選択
+func toggle_selection_if_local(character: Node) -> bool:
+	var game_char := character as GameCharacter
+	if game_char and not game_char.is_local():
+		return false  # リモートキャラクターは選択不可
+
+	toggle_selection(character)
+	return true

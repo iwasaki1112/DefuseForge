@@ -113,8 +113,33 @@ func _on_round_ended(winner: int, reason: int) -> void:
             print("Draw!")
 ```
 
+## Multiplayer API
+
+### is_authority() -> bool
+このインスタンスが権限を持つか（ホスト/サーバー判定）。
+
+### set_authority(authority: bool) -> void
+権限フラグを設定する。クライアント側は`false`に設定。
+
+### to_round_state() -> NetworkMessages.RoundStateMessage
+現在のラウンド状態をRoundStateMessageに変換する。
+
+### apply_round_state(state: NetworkMessages.RoundStateMessage) -> void
+RoundStateMessageからラウンド状態を適用する（クライアント側用）。権限がない場合のみ適用。
+
+### set_survivor_counts(ct_count: int, t_count: int) -> void
+外部から生存者数を直接設定する（ネットワーク同期用）。
+
+### set_remaining_time(time: float) -> void
+外部から残り時間を直接設定する（ネットワーク同期用）。
+
+### force_end_round(winner: int, reason: int) -> void
+ラウンドを強制終了する（ネットワーク同期用）。権限チェックなしで終了処理を実行。
+
 ## 関連クラス
 
 - [GameManager](GameManager.md) - RoundManagerを統合
 - [RoundHUD](RoundHUD.md) - タイマー・生存者数のUI表示
 - [GameCharacter](GameCharacter.md) - 追跡対象のキャラクター
+- [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
+- [SyncState](SyncState.md) - 同期状態クラス

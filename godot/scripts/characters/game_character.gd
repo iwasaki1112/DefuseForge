@@ -26,6 +26,7 @@ enum Team { NONE = 0, COUNTER_TERRORIST = 1, TERRORIST = 2 }
 # Signals
 # ============================================
 signal died(character: GameCharacter)
+signal state_changed(character: GameCharacter)  ## マルチプレイヤー用：状態変更通知
 
 # ============================================
 # Export Settings
@@ -35,6 +36,16 @@ signal died(character: GameCharacter)
 
 @export_group("Team Settings")
 @export var team: Team = Team.NONE
+
+# ============================================
+# Network Identity (Multiplayer)
+# ============================================
+
+## ネットワーク上のグローバルID（0はローカル専用）
+var network_id: int = 0
+
+## 所有者のpeer_id（0はローカル/未割当）
+var owner_peer_id: int = 0
 
 # ============================================
 # State
@@ -913,3 +924,136 @@ func _make_corpse_passable() -> void:
 	# Set collision_layer to 0 so other characters don't collide with this corpse
 	# Keep collision_mask unchanged so corpse still detects ground
 	collision_layer = 0
+
+
+# ============================================
+# Multiplayer API
+# ============================================
+
+## ローカルプレイヤーのキャラクターか判定
+## シングルプレイヤー時は常にtrue
+func is_local() -> bool:
+	if owner_peer_id == 0:
+		return true  # シングルプレイヤーモード
+	return owner_peer_id == PlayerState.get_local_peer_id()
+
+
+## ネットワークIDを設定
+func set_network_id(id: int) -> void:
+	network_id = id
+
+
+## 所有者のpeer_idを設定
+func set_owner_peer_id(peer_id: int) -> void:
+	owner_peer_id = peer_id
+
+
+## リモートからの状態更新を適用
+## ローカルキャラクターには適用しない（自分の入力が優先）
+func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
+	if is_local():
+		return  # ローカルキャラクターは自分で状態を管理
+
+	# 位置を更新
+	global_position = state.position
+
+	# 回転を更新
+	set_facing_direction(state.rotation)
+
+	# HPを更新
+	current_health = state.current_health
+
+	# 生存状態を更新
+	if is_alive and not state.is_alive:
+		# 死亡
+		is_alive = false
+		if vision:
+			vision.disable()
+		_hide_character_label()
+		_make_corpse_passable()
+		died.emit(self)
+	elif not is_alive and state.is_alive:
+		# 復活（通常は起こらないが念のため）
+		reset_health()
+
+	# しゃがみ状態を更新
+	if anim_ctrl and state.is_crouching != is_crouching():
+		toggle_crouch()
+
+
+## 現在の状態をCharacterStateMessageに変換
+func to_character_state() -> NetworkMessages.CharacterStateMessage:
+	var state := NetworkMessages.CharacterStateMessage.new()
+	state.character_id = network_id if network_id != 0 else get_instance_id()
+	state.position = global_position
+	state.rotation = atan2(_facing_direction.x, _facing_direction.z)
+	state.current_health = int(current_health)
+	state.is_alive = is_alive
+	state.is_crouching = is_crouching()
+	state.velocity = velocity
+	state.timestamp = Time.get_ticks_msec()
+
+	# アニメーション状態を取得
+	if anim_ctrl and anim_ctrl.has_method("get_current_animation"):
+		state.animation_state = anim_ctrl.get_current_animation()
+
+	return state
+
+
+## 現在の状態をCharacterSnapshotに変換（より詳細）
+func to_character_snapshot() -> SyncState.CharacterSnapshot:
+	var snapshot := SyncState.CharacterSnapshot.new()
+	snapshot.character_id = network_id if network_id != 0 else get_instance_id()
+	snapshot.owner_peer_id = owner_peer_id
+	snapshot.position = global_position
+	snapshot.rotation = atan2(_facing_direction.x, _facing_direction.z)
+	snapshot.facing_direction = _facing_direction
+	snapshot.velocity = velocity
+	snapshot.current_health = current_health
+	snapshot.max_health = max_health
+	snapshot.is_alive = is_alive
+	snapshot.is_crouching = is_crouching()
+	snapshot.team = team
+	snapshot.timestamp = Time.get_ticks_msec()
+
+	# 武器ID
+	if current_weapon:
+		snapshot.weapon_id = current_weapon.id
+
+	# アニメーション状態
+	if anim_ctrl and anim_ctrl.has_method("get_current_animation"):
+		snapshot.animation_state = anim_ctrl.get_current_animation()
+
+	return snapshot
+
+
+## CharacterSnapshotから状態を復元（リモートキャラクター用）
+func apply_character_snapshot(snapshot: SyncState.CharacterSnapshot) -> void:
+	if is_local():
+		return  # ローカルキャラクターは自分で状態を管理
+
+	global_position = snapshot.position
+	set_facing_direction(snapshot.rotation)
+	velocity = snapshot.velocity
+	current_health = snapshot.current_health
+
+	# 生存状態
+	if is_alive and not snapshot.is_alive:
+		is_alive = false
+		if vision:
+			vision.disable()
+		_hide_character_label()
+		_make_corpse_passable()
+		died.emit(self)
+	elif not is_alive and snapshot.is_alive:
+		reset_health()
+
+	# しゃがみ状態
+	if anim_ctrl and snapshot.is_crouching != is_crouching():
+		toggle_crouch()
+
+
+## 状態変更を通知（ネットワーク同期用）
+## HPや位置が大きく変わった時に呼ぶ
+func notify_state_changed() -> void:
+	state_changed.emit(self)

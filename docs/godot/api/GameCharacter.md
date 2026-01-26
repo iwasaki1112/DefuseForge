@@ -32,6 +32,13 @@
 |-----------|-----|----------|------|
 | `team` | `Team` | `Team.NONE` | 所属チーム |
 
+## Network Identity (Multiplayer)
+
+| 変数 | 型 | デフォルト | 説明 |
+|------|-----|----------|------|
+| `network_id` | `int` | `0` | ネットワーク上のグローバルID（0はローカル専用） |
+| `owner_peer_id` | `int` | `0` | 所有者のpeer_id（0はローカル/未割当） |
+
 ## State Variables
 
 | 変数 | 型 | デフォルト | 説明 |
@@ -234,12 +241,39 @@ character.equip_weapon(weapon)
 - マズルフラッシュ位置は`WeaponPreset.muzzle_flash_offset`を優先して使用
 - マズルフラッシュ回転は`WeaponPreset.muzzle_flash_rotation`を使用
 
+## Multiplayer API
+
+### is_local() -> bool
+ローカルプレイヤーのキャラクターか判定する。シングルプレイヤー時は常に`true`。
+
+### set_network_id(id: int) -> void
+ネットワークIDを設定する。
+
+### set_owner_peer_id(peer_id: int) -> void
+所有者のpeer_idを設定する。
+
+### apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void
+リモートからの状態更新を適用する。ローカルキャラクターには適用されない。
+
+### to_character_state() -> NetworkMessages.CharacterStateMessage
+現在の状態をCharacterStateMessageに変換する。
+
+### to_character_snapshot() -> SyncState.CharacterSnapshot
+現在の状態をCharacterSnapshotに変換する（より詳細）。
+
+### apply_character_snapshot(snapshot: SyncState.CharacterSnapshot) -> void
+CharacterSnapshotから状態を復元する（リモートキャラクター用）。
+
+### notify_state_changed() -> void
+状態変更を通知する（ネットワーク同期用）。
+
 ## APIリファレンス
 
 ### シグナル
 | シグナル | 引数 |
 |---------|------|
 | `died` | `character: GameCharacter` |
+| `state_changed` | `character: GameCharacter` |
 
 ### メソッド
 - `take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void`

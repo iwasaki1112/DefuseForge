@@ -123,6 +123,10 @@
 | Test | FreeCamera | テスト用オービットカメラ |
 | Test | LightingTest | ライティング確認用テストシーン |
 | Test | WeaponAdjustment | 武器位置・マズル調整ツール |
+| Network | NetworkConstants | ネットワーク定数定義（メッセージタイプ・同期設定・タイムアウト） |
+| Network | NetworkMessages | ネットワーク同期用メッセージ型（PathConfirm・RoundState・CharacterState・GameEvent） |
+| Network | SyncState | 同期状態クラス（GameStateSnapshot・PlayerStateData・CharacterSnapshot） |
+| Network | NetworkSerializer | シリアライズユーティリティ（Vector3圧縮・パスメッセージ・差分圧縮） |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
 

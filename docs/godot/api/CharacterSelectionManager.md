@@ -114,9 +114,51 @@ selection_manager.deselect_all()
 - キャラクター内の全MeshInstance3Dに自動適用
 - 選択解除時にオーバーライドマテリアルをクリアして元に戻す
 
+## Multiplayer API
+
+### set_selection_for_player(player_id: int, selected: Array[Node], primary: Node) -> void
+プレイヤーの選択状態を設定する（リモートプレイヤー用）。
+
+### get_selection_for_player(player_id: int) -> Dictionary
+プレイヤーの選択状態を取得する。
+
+```gdscript
+var selection = selection_manager.get_selection_for_player(peer_id)
+# { "selected": Array[Node], "primary": Node }
+```
+
+### clear_selection_for_player(player_id: int) -> void
+プレイヤーの選択状態をクリアする。
+
+### clear_all_player_selections() -> void
+全プレイヤーの選択状態をクリアする。
+
+### to_selection_dict() -> Dictionary
+現在の選択状態をDictionaryに変換する（ネットワーク同期用）。
+
+```gdscript
+var data = selection_manager.to_selection_dict()
+# { "selected_ids": Array[int], "primary_id": int }
+```
+
+### from_selection_dict(data: Dictionary, character_resolver: Callable) -> void
+Dictionaryから選択状態を復元する（ネットワーク同期用）。
+
+```gdscript
+selection_manager.from_selection_dict(data, func(id): return game_manager.find_character_by_network_id(id))
+```
+
+### add_to_selection_if_local(character: Node) -> bool
+キャラクターがローカルプレイヤーのものか確認してから選択に追加する。
+
+### toggle_selection_if_local(character: Node) -> bool
+キャラクターがローカルプレイヤーのものか確認してからトグル選択する。
+
 ## 関連クラス
 
 - [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
+- [GameCharacter](GameCharacter.md) - キャラクター管理
+- [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
 
 ## APIリファレンス
 

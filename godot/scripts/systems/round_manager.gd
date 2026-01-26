@@ -34,6 +34,9 @@ var _game_manager: GameManager = null
 var _registered_characters: Array[GameCharacter] = []
 var _last_timer_second: int = -1  # タイマー更新の最適化用
 
+## マルチプレイヤー用：このインスタンスが権限を持つか（ホスト/サーバー）
+var _is_authority: bool = true
+
 # ============================================
 # Public Methods
 # ============================================
@@ -169,3 +172,90 @@ func _on_character_died(_character: GameCharacter) -> void:
 	elif ct_alive_count == 0 and t_alive_count == 0:
 		# 両チーム全滅 → ドロー
 		end_round(GameCharacter.Team.NONE, EndReason.CT_ELIMINATED)
+
+
+# ============================================
+# Multiplayer API
+# ============================================
+
+## このインスタンスが権限を持つか（ホスト/サーバー判定）
+func is_authority() -> bool:
+	return _is_authority
+
+
+## 権限フラグを設定（クライアント側はfalseに設定）
+func set_authority(authority: bool) -> void:
+	_is_authority = authority
+
+
+## 現在のラウンド状態をRoundStateMessageに変換
+func to_round_state() -> NetworkMessages.RoundStateMessage:
+	var state := NetworkMessages.RoundStateMessage.new()
+	state.phase = current_phase
+	state.remaining_time = remaining_time
+	state.ct_alive_count = ct_alive_count
+	state.t_alive_count = t_alive_count
+	state.winner_team = winner_team
+	# end_reasonは終了時のみ有効
+	state.timestamp = Time.get_ticks_msec()
+	return state
+
+
+## RoundStateMessageからラウンド状態を適用（クライアント側用）
+## 権限がない場合のみ適用（権限がある場合は自分で状態を管理）
+func apply_round_state(state: NetworkMessages.RoundStateMessage) -> void:
+	if _is_authority:
+		return  # 権限がある場合は自分で状態を管理
+
+	var prev_phase := current_phase
+
+	# 状態を更新
+	current_phase = state.phase as RoundPhase
+	remaining_time = state.remaining_time
+	ct_alive_count = state.ct_alive_count
+	t_alive_count = state.t_alive_count
+	winner_team = state.winner_team
+
+	# フェーズ変更時のシグナル発火
+	if prev_phase != current_phase:
+		match current_phase:
+			RoundPhase.ACTIVE:
+				if prev_phase == RoundPhase.NONE:
+					round_started.emit()
+			RoundPhase.ENDED:
+				round_ended.emit(winner_team, state.end_reason)
+
+	# タイマー更新
+	var current_second := int(remaining_time)
+	if current_second != _last_timer_second:
+		_last_timer_second = current_second
+		timer_updated.emit(remaining_time)
+
+	# 生存者数変更
+	survivor_count_changed.emit(ct_alive_count, t_alive_count)
+
+
+## 外部から生存者数を直接設定（ネットワーク同期用）
+func set_survivor_counts(ct_count: int, t_count: int) -> void:
+	var changed := (ct_alive_count != ct_count or t_alive_count != t_count)
+	ct_alive_count = ct_count
+	t_alive_count = t_count
+	if changed:
+		survivor_count_changed.emit(ct_alive_count, t_alive_count)
+
+
+## 外部から残り時間を直接設定（ネットワーク同期用）
+func set_remaining_time(time: float) -> void:
+	remaining_time = maxf(0.0, time)
+	var current_second := int(remaining_time)
+	if current_second != _last_timer_second:
+		_last_timer_second = current_second
+		timer_updated.emit(remaining_time)
+
+
+## ラウンドを強制終了（ネットワーク同期用）
+## 権限チェックなしで終了処理を実行
+func force_end_round(winner: int, reason: int) -> void:
+	current_phase = RoundPhase.ENDED
+	winner_team = winner
+	round_ended.emit(winner, reason)
