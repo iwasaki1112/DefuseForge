@@ -5,10 +5,12 @@ extends RefCounted
 ## 各マーカー種別（Vision, Run, Clear等）のハンドラの共通機能を提供
 
 
-## マーカー追加シグナル
+## マーカー追加シグナル（サブクラスで使用）
+@warning_ignore("unused_signal")
 signal marker_added(marker_data: Dictionary)
 
-## マーカー削除シグナル
+## マーカー削除シグナル（サブクラスで使用）
+@warning_ignore("unused_signal")
 signal marker_removed(marker_data: Dictionary)
 
 ## タイムライン更新シグナル
