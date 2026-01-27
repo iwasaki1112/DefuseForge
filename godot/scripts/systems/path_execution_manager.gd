@@ -48,6 +48,9 @@ var _path_controllers: Dictionary = {}
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
 
+## 実行順序カウンター（衝突回避の優先度決定用）
+var _execution_order_counter: int = 0
+
 
 ## セットアップ
 func setup(mesh_parent: Node3D) -> void:
@@ -187,6 +190,9 @@ func execute_all_paths(run: bool) -> int:
 	if pending_paths.is_empty():
 		return 0
 
+	# 優先度カウンターをリセット
+	_execution_order_counter = 0
+
 	var executed_count = 0
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
@@ -249,6 +255,10 @@ func execute_all_paths(run: bool) -> int:
 		# コントローラーを取得または作成
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
+
+		# 衝突回避用の優先度を設定（先に実行されるほど低い値=高優先）
+		controller.set_movement_priority(_execution_order_counter)
+		_execution_order_counter += 1
 
 		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_markers_data, door_markers_data, wait_markers_data, smoke_grenade_markers_data):
 			executed_count += 1
@@ -485,6 +495,10 @@ func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: b
 	# コントローラーを取得または作成
 	var controller = _get_or_create_path_controller(character)
 	controller.setup(character)
+
+	# 衝突回避用の優先度を設定（直接パスは通常のパスより低い優先度）
+	controller.set_movement_priority(_execution_order_counter)
+	_execution_order_counter += 1
 
 	# 空のビジョン/Run/Clear/Grenade/Doorポイントでパス開始
 	var empty_vision: Array[Dictionary] = []
