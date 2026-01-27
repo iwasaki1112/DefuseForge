@@ -10,72 +10,80 @@ const OPTION_SCENE := "res://scenes/screens/option.tscn"
 const LOBBY_SCENE := "res://scenes/screens/lobby.tscn"
 const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
 const LOGO_TEXTURE := preload("res://assets/images/logo.png")
-
-var _welcome_label: Label
+const TRAINING_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/training-button.png")
+const MULTIPLAYER_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/multiplayer-button.png")
+const OPTION_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/option-button.png")
 
 
 func _ready() -> void:
 	_setup_ui()
-	_update_welcome_message()
-	SettingsManager.settings_changed.connect(_update_welcome_message)
 
 
 func _setup_ui() -> void:
-	# 中央配置の共通レイアウト（背景はシーンのTextureRectで設定）
-	var vbox := ScreenLayoutScript.create_centered_vbox(self, 30)
-
-	# ロゴ
+	# ロゴ（上部中央に配置）
 	var logo := TextureRect.new()
 	logo.texture = LOGO_TEXTURE
 	logo.expand_mode = TextureRect.EXPAND_KEEP_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	vbox.add_child(logo)
+	add_child(logo)
+	logo.anchor_left = 0.5
+	logo.anchor_right = 0.5
+	logo.anchor_top = 0.0
+	logo.anchor_bottom = 0.0
+	logo.offset_left = -logo.texture.get_width() / 2
+	logo.offset_right = logo.texture.get_width() / 2
+	logo.offset_top = 20
+	logo.offset_bottom = logo.texture.get_height() + 20
 
-	# Welcome メッセージ
-	_welcome_label = Label.new()
-	_welcome_label.add_theme_font_size_override("font_size", 24)
-	_welcome_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_welcome_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	vbox.add_child(_welcome_label)
+	# ボタンコンテナ（画面中央に配置）
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
 
-	# スペーサー
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 40)
-	vbox.add_child(spacer)
-
-	# ボタンコンテナ
 	var button_container := VBoxContainer.new()
-	button_container.add_theme_constant_override("separation", 15)
-	vbox.add_child(button_container)
+	button_container.add_theme_constant_override("separation", 0)
+	center.add_child(button_container)
 
-	# Trainingボタン
-	var training_btn := _create_menu_button("Training")
+	# スペーサー（この値を大きくするとボタンが下に移動）
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 200)
+	button_container.add_child(spacer)
+
+	# Trainingボタン（画像）
+	var training_btn := _create_texture_button(TRAINING_BUTTON_TEXTURE)
+	training_btn.custom_minimum_size = Vector2(500, 150)
 	training_btn.pressed.connect(_on_training_pressed)
 	button_container.add_child(training_btn)
 
-	# Multiplayerボタン
-	var multiplayer_btn := _create_menu_button("Multiplayer")
+	# Multiplayerボタン（画像）
+	var multiplayer_btn := _create_texture_button(MULTIPLAYER_BUTTON_TEXTURE)
+	multiplayer_btn.custom_minimum_size = Vector2(500, 150)
 	multiplayer_btn.pressed.connect(_on_multiplayer_pressed)
 	button_container.add_child(multiplayer_btn)
 
-	# Optionボタン
-	var option_btn := _create_menu_button("Option")
+	# Optionボタン（右上に配置、最後に追加して最前面に）
+	var option_btn := _create_texture_button(OPTION_BUTTON_TEXTURE)
 	option_btn.pressed.connect(_on_option_pressed)
-	button_container.add_child(option_btn)
+	option_btn.custom_minimum_size = Vector2(48, 48)
+	add_child(option_btn)
+	# 右上に固定（画面可変対応）
+	option_btn.anchor_left = 1.0
+	option_btn.anchor_right = 1.0
+	option_btn.anchor_top = 0.0
+	option_btn.anchor_bottom = 0.0
+	option_btn.offset_left = -68
+	option_btn.offset_right = -20
+	option_btn.offset_top = 20
+	option_btn.offset_bottom = 68
 
 
-func _create_menu_button(text: String) -> Button:
-	var btn := Button.new()
-	btn.text = text
+func _create_texture_button(texture: Texture2D) -> TextureButton:
+	var btn := TextureButton.new()
+	btn.texture_normal = texture
+	btn.ignore_texture_size = true
+	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	btn.custom_minimum_size = Vector2(250, 60)
-	btn.add_theme_font_size_override("font_size", 28)
 	return btn
-
-
-func _update_welcome_message() -> void:
-	if _welcome_label:
-		var player_name := SettingsManager.get_player_name()
-		_welcome_label.text = "Welcome, %s" % player_name
 
 
 func _on_training_pressed() -> void:
