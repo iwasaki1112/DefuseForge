@@ -45,17 +45,19 @@ func spawn_characters() -> void:
 		push_error("[MatchSetup] Cannot spawn characters - no map preset")
 		return
 
-	# CT側キャラクターをスポーン
-	var ct_presets = CharacterRegistry.get_counter_terrorists()
+	# CT側キャラクターをスポーン（alphaを2体）
+	var alpha_preset = CharacterRegistry.get_preset("alpha")
 	var ct_spawns = preset.spawn_points_ct
 	var ct_rotations = preset.spawn_rotations_ct
-	_spawn_team_characters(ct_presets, ct_spawns, ct_rotations)
+	if alpha_preset:
+		_spawn_team_characters([alpha_preset, alpha_preset], ct_spawns, ct_rotations)
 
-	# T側キャラクターをスポーン
-	var t_presets = CharacterRegistry.get_terrorists()
+	# T側キャラクターをスポーン（aresを2体）
+	var ares_preset = CharacterRegistry.get_preset("ares")
 	var t_spawns = preset.spawn_points_t
 	var t_rotations = preset.spawn_rotations_t
-	_spawn_team_characters(t_presets, t_spawns, t_rotations)
+	if ares_preset:
+		_spawn_team_characters([ares_preset, ares_preset], t_spawns, t_rotations)
 
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
