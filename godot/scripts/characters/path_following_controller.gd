@@ -264,8 +264,15 @@ func process(delta: float) -> void:
 		if _avoidance_timer >= avoidance_timeout or _check_avoidance_resolved():
 			_end_collision_halt()
 		else:
-			# Head-on検出時は側方回避に切り替え
-			if _avoidance_timer > 0.3 and _is_head_on_collision():
+			# 相手が非常に近い場合は即座に側方回避
+			if _avoidance_blocker and is_instance_valid(_avoidance_blocker):
+				var dist: float = _get_distance_to_ally(_avoidance_blocker)
+				if dist < collision_check_radius * 1.2:
+					_start_sidestep()
+					return
+
+			# Head-on検出時は側方回避に切り替え（0.15秒後）
+			if _avoidance_timer > 0.15 and _is_head_on_collision():
 				_start_sidestep()
 				return
 			# アイドルアニメーションを維持
@@ -437,10 +444,17 @@ func process(delta: float) -> void:
 		_collision_check_timer = 0.0
 		var ally_ahead: Node = _detect_ally_ahead(move_dir)
 		if ally_ahead:
-			# Head-on（対面移動）かどうかを先にチェック
-			_avoidance_blocker = ally_ahead  # 一時的に設定してチェック
-			var is_head_on: bool = _is_head_on_collision()
+			_avoidance_blocker = ally_ahead
 
+			# 相手との距離が非常に近い場合は即座に側方回避（物理的にブロックされている）
+			var distance_to_ally: float = _get_distance_to_ally(ally_ahead)
+			if distance_to_ally < collision_check_radius * 1.2:
+				# 近距離では優先度に関係なく両者が側方回避
+				_start_sidestep()
+				return
+
+			# Head-on（対面移動）かどうかをチェック
+			var is_head_on: bool = _is_head_on_collision()
 			if is_head_on:
 				# Head-onの場合は即座に側方回避
 				_start_sidestep()
@@ -854,6 +868,17 @@ func _finish() -> void:
 ## ========================================
 ## 衝突回避ロジック（Door Kickers 2スタイル）
 ## ========================================
+
+## 味方との距離を取得
+func _get_distance_to_ally(ally: Node) -> float:
+	if not _character or not ally:
+		return INF
+	var char_pos: Vector3 = _character.global_position
+	char_pos.y = 0
+	var ally_pos: Vector3 = ally.global_position
+	ally_pos.y = 0
+	return char_pos.distance_to(ally_pos)
+
 
 ## 前方の味方キャラクターを検出
 ## @param move_dir: 移動方向
