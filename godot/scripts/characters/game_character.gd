@@ -54,6 +54,15 @@ var current_health: float = 100.0
 var is_alive: bool = true
 
 # ============================================
+# Remote Interpolation (リモートキャラクター用補間)
+# ============================================
+var _remote_target_position: Vector3 = Vector3.ZERO
+var _remote_target_rotation: float = 0.0
+var _remote_target_velocity: Vector3 = Vector3.ZERO
+var _remote_interpolation_active: bool = false
+const REMOTE_INTERPOLATION_SPEED: float = 15.0  # 補間速度
+
+# ============================================
 # Facing Direction (一元管理)
 # ============================================
 ## キャラクターの向き（正規化済みXZ平面ベクトル）
@@ -954,19 +963,28 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 	if is_local():
 		return  # ローカルキャラクターは自分で状態を管理
 
-	# 位置を更新
-	global_position = state.position
+	# 補間を有効化し、目標位置を設定
+	_remote_interpolation_active = true
+	_remote_target_position = state.position
+	_remote_target_rotation = state.rotation
+	_remote_target_velocity = state.velocity
 
-	# 回転を更新
-	set_facing_direction(state.rotation)
+	# 初回受信時は即座に位置を設定（テレポート防止）
+	if global_position.distance_to(state.position) > 5.0:
+		global_position = state.position
+		set_facing_direction(state.rotation)
 
-	# HPを更新
+	# HPを更新（即座に反映）
 	current_health = state.current_health
 
-	# 生存状態を更新
+	# 生存状態を更新（即座に反映）
 	if is_alive and not state.is_alive:
-		# 死亡
+		# 死亡 - アニメーションを再生
 		is_alive = false
+		_remote_interpolation_active = false  # 死亡時は補間停止
+		if anim_ctrl and anim_ctrl.has_method("play_death"):
+			# リモート死亡の場合はデフォルト方向で再生
+			anim_ctrl.play_death(CharacterAnimationController.HitDirection.FRONT, false)
 		if vision:
 			vision.disable()
 		_hide_character_label()
@@ -976,9 +994,32 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 		# 復活（通常は起こらないが念のため）
 		reset_health()
 
-	# しゃがみ状態を更新
+	# しゃがみ状態を更新（即座に反映）
 	if anim_ctrl and state.is_crouching != is_crouching():
 		toggle_crouch()
+
+
+## リモートキャラクターの補間更新（毎フレーム呼び出し）
+func update_remote_interpolation(delta: float) -> void:
+	if not _remote_interpolation_active or is_local() or not is_alive:
+		return
+
+	# 位置の補間
+	global_position = global_position.lerp(_remote_target_position, REMOTE_INTERPOLATION_SPEED * delta)
+
+	# 回転の補間
+	var current_rot := atan2(_facing_direction.x, _facing_direction.z)
+	var target_rot := _remote_target_rotation
+	# 角度の差を正規化（-PI〜PI）
+	var rot_diff := fmod(target_rot - current_rot + PI, TAU) - PI
+	var new_rot := current_rot + rot_diff * REMOTE_INTERPOLATION_SPEED * delta
+	set_facing_direction(new_rot)
+
+	# アニメーション更新
+	if anim_ctrl:
+		var move_dir := _remote_target_velocity.normalized() if _remote_target_velocity.length_squared() > 0.01 else Vector3.ZERO
+		var is_running := _remote_target_velocity.length() > 3.0
+		anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
 
 
 ## 現在の状態をCharacterStateMessageに変換

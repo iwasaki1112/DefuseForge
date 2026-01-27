@@ -7,6 +7,7 @@ extends Control
 
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const OPTION_SCENE := "res://scenes/screens/option.tscn"
+const LOBBY_SCENE := "res://scenes/screens/lobby.tscn"
 const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
 const LOGO_TEXTURE := preload("res://assets/images/logo.png")
 
@@ -52,6 +53,11 @@ func _setup_ui() -> void:
 	training_btn.pressed.connect(_on_training_pressed)
 	button_container.add_child(training_btn)
 
+	# Multiplayerボタン
+	var multiplayer_btn := _create_menu_button("Multiplayer")
+	multiplayer_btn.pressed.connect(_on_multiplayer_pressed)
+	button_container.add_child(multiplayer_btn)
+
 	# Optionボタン
 	var option_btn := _create_menu_button("Option")
 	option_btn.pressed.connect(_on_option_pressed)
@@ -78,3 +84,7 @@ func _on_training_pressed() -> void:
 
 func _on_option_pressed() -> void:
 	get_tree().change_scene_to_file(OPTION_SCENE)
+
+
+func _on_multiplayer_pressed() -> void:
+	get_tree().change_scene_to_file(LOBBY_SCENE)

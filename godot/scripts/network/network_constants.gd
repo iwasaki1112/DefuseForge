@@ -26,6 +26,10 @@ enum MessageType {
 	PLAYER_READY = 6,
 	## チーム変更
 	TEAM_CHANGE = 7,
+	## プレイヤー入力
+	PLAYER_INPUT = 8,
+	## 選択状態更新
+	SELECTION_UPDATE = 9,
 }
 
 # ============================================
@@ -101,6 +105,12 @@ enum GameEventType {
 	WEAPON_FIRE = 4,
 	## リロード
 	RELOAD = 5,
+	## スモークグレネード投擲
+	SMOKE_GRENADE_THROW = 6,
+	## グレネード爆発（位置同期用）
+	GRENADE_EXPLODE = 7,
+	## スモーク展開（位置同期用）
+	SMOKE_DEPLOY = 8,
 }
 
 # ============================================
@@ -126,6 +136,10 @@ static func message_type_to_string(msg_type: MessageType) -> String:
 			return "PLAYER_READY"
 		MessageType.TEAM_CHANGE:
 			return "TEAM_CHANGE"
+		MessageType.PLAYER_INPUT:
+			return "PLAYER_INPUT"
+		MessageType.SELECTION_UPDATE:
+			return "SELECTION_UPDATE"
 		_:
 			return "UNKNOWN"
 
@@ -145,5 +159,11 @@ static func event_type_to_string(event_type: GameEventType) -> String:
 			return "WEAPON_FIRE"
 		GameEventType.RELOAD:
 			return "RELOAD"
+		GameEventType.SMOKE_GRENADE_THROW:
+			return "SMOKE_GRENADE_THROW"
+		GameEventType.GRENADE_EXPLODE:
+			return "GRENADE_EXPLODE"
+		GameEventType.SMOKE_DEPLOY:
+			return "SMOKE_DEPLOY"
 		_:
 			return "UNKNOWN"

@@ -29,6 +29,7 @@ var remaining_time: float = 0.0
 var ct_alive_count: int = 0
 var t_alive_count: int = 0
 var winner_team: int = 0  # GameCharacter.Team.NONE
+var end_reason: int = 0  # EndReason
 
 var _game_manager: GameManager = null
 var _registered_characters: Array[GameCharacter] = []
@@ -70,6 +71,7 @@ func end_round(winner: int, reason: EndReason) -> void:
 
 	current_phase = RoundPhase.ENDED
 	winner_team = winner
+	end_reason = reason
 	round_ended.emit(winner, reason)
 
 
@@ -196,7 +198,7 @@ func to_round_state() -> NetworkMessages.RoundStateMessage:
 	state.ct_alive_count = ct_alive_count
 	state.t_alive_count = t_alive_count
 	state.winner_team = winner_team
-	# end_reasonは終了時のみ有効
+	state.end_reason = end_reason
 	state.timestamp = Time.get_ticks_msec()
 	return state
 
@@ -258,4 +260,5 @@ func set_remaining_time(time: float) -> void:
 func force_end_round(winner: int, reason: int) -> void:
 	current_phase = RoundPhase.ENDED
 	winner_team = winner
+	end_reason = reason
 	round_ended.emit(winner, reason)

@@ -127,6 +127,9 @@
 | Network | NetworkMessages | ネットワーク同期用メッセージ型（PathConfirm・RoundState・CharacterState・GameEvent） |
 | Network | SyncState | 同期状態クラス（GameStateSnapshot・PlayerStateData・CharacterSnapshot） |
 | Network | NetworkSerializer | シリアライズユーティリティ（Vector3圧縮・パスメッセージ・差分圧縮） |
+| Network | LocalNetworkBus | ローカルネットワークシミュレーター（遅延・パケットロス対応） |
+| Network | MultiplayerSyncController | GameManagerとNetworkBus間の同期処理管理 |
+| Test | MultiplayerTestScreen | ローカルマルチプレイテストシーン（Host/Client切替） |
 
 詳細は `docs/godot/api/<クラス名>.md` を参照。
 
