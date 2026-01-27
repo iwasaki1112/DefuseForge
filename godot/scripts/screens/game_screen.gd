@@ -126,6 +126,7 @@ func _setup_round_hud() -> void:
 		game_manager.round_timer_updated.connect(_hud.update_timer)
 		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
 		game_manager.round_ended.connect(_round_hud.show_result)
+		game_manager.round_ended.connect(_on_round_ended)
 
 
 ## カメラのパン操作をセットアップ
@@ -248,6 +249,16 @@ func _on_timeline_data_changed() -> void:
 
 func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
+
+
+func _on_round_ended(_winner: int, _reason: int) -> void:
+	# すべてのキャラクターの移動を停止
+	if game_manager:
+		game_manager.cancel_all_path_following()
+
+	# 3秒後にマップ選択画面に遷移
+	await get_tree().create_timer(3.0).timeout
+	get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
 
 
 ## ========================================

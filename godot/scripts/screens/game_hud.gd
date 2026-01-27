@@ -13,6 +13,7 @@ const TIMER_NORMAL_COLOR := Color.WHITE
 
 @onready var _pending_paths_label: Label = $ControlPanel/PendingPathsLabel
 @onready var _timer_label: Label = %TimerLabel
+@onready var _execute_button: TextureButton = %ExecuteButton
 
 var _timeline_bar_ui: TimelineBarUI = null
 
@@ -43,7 +44,29 @@ func update_timer(remaining: float) -> void:
 
 
 func _on_execute_pressed() -> void:
+	_play_button_press_animation()
 	execute_all_requested.emit()
+
+
+## ボタン押下時のアニメーション演出
+func _play_button_press_animation() -> void:
+	if not _execute_button:
+		return
+
+	# 既存のTweenをキャンセル
+	var tween := create_tween()
+	tween.set_parallel(true)
+
+	# 拡大→縮小アニメーション
+	_execute_button.pivot_offset = _execute_button.size / 2
+	tween.tween_property(_execute_button, "scale", Vector2(1.15, 1.15), 0.08).set_ease(Tween.EASE_OUT)
+
+	# 透明度アニメーション（少し透明→不透明）
+	_execute_button.modulate.a = 0.7
+	tween.tween_property(_execute_button, "modulate:a", 1.0, 0.08).set_ease(Tween.EASE_OUT)
+
+	# 縮小アニメーション（元に戻る）
+	tween.chain().tween_property(_execute_button, "scale", Vector2(1.0, 1.0), 0.1).set_ease(Tween.EASE_IN_OUT)
 
 
 func _on_clear_pressed() -> void:
