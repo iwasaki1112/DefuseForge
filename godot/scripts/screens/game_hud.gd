@@ -29,16 +29,6 @@ const MARKER_DEAD_ALPHA := 0.3
 
 ## マーカーエディットパネル
 @onready var _marker_edit_panel: Control = %MarkerEditPanel
-@onready var _vision_button: TextureButton = %VisionButton
-@onready var _run_button: TextureButton = %RunButton
-@onready var _clear_marker_button: TextureButton = %ClearMarkerButton
-@onready var _grenade_button: TextureButton = %GrenadeButton
-@onready var _smoke_button: TextureButton = %SmokeButton
-@onready var _door_button: TextureButton = %DoorButton
-@onready var _wait_button: TextureButton = %WaitButton
-@onready var _undo_button: Button = %UndoButton
-@onready var _confirm_button: Button = %ConfirmButton
-@onready var _cancel_button: Button = %CancelButton
 
 var _timeline_bar_ui: TimelineBarUI = null
 
