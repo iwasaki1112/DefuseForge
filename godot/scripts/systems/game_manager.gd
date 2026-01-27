@@ -750,14 +750,16 @@ func _setup_marker_edit_panel() -> void:
 		marker_edit_panel.name = GameConstants.NODE_MARKER_EDIT_PANEL
 		_ui_layer.add_child(marker_edit_panel)
 
-		# 右側に配置
+		# 右側中央に配置
 		marker_edit_panel.anchor_left = 1.0
 		marker_edit_panel.anchor_right = 1.0
-		marker_edit_panel.anchor_top = 0.0
-		marker_edit_panel.anchor_bottom = 0.0
-		marker_edit_panel.offset_left = -240
+		marker_edit_panel.anchor_top = 0.5
+		marker_edit_panel.anchor_bottom = 0.5
+		marker_edit_panel.offset_left = -230
 		marker_edit_panel.offset_right = -10
-		marker_edit_panel.offset_top = 10
+		marker_edit_panel.offset_top = -100
+		marker_edit_panel.offset_bottom = 100
+		marker_edit_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 		marker_edit_panel.visible = false
 

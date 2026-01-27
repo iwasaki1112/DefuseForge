@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://dv8q5r2wxjk3p"]
+[gd_scene load_steps=16 format=3 uid="uid://dv8q5r2wxjk3p"]
 
 [ext_resource type="Script" uid="uid://d2sjfae0vmiq0" path="res://scripts/screens/game_hud.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://dsh3jkd6vqg47" path="res://assets/ui/game/go-button.png" id="2_go_button"]
@@ -8,6 +8,13 @@
 [ext_resource type="Texture2D" uid="uid://di3uao0ggld8a" path="res://assets/ui/game/character-marker-bravo.png" id="6_marker_bravo"]
 [ext_resource type="Texture2D" uid="uid://v8m8aqg30n4r" path="res://assets/ui/game/character-marker-ares.png" id="7_marker_ares"]
 [ext_resource type="Texture2D" uid="uid://sr7ejjxaeu23" path="res://assets/ui/game/character-marker-brim.png" id="8_marker_brim"]
+[ext_resource type="Texture2D" uid="uid://cni4c0fcbdcse" path="res://assets/ui/game/controller-pie-button.png" id="9_vision"]
+[ext_resource type="Texture2D" uid="uid://b51btltqb8lw3" path="res://assets/ui/game/controller-sprint-button.png" id="10_run"]
+[ext_resource type="Texture2D" uid="uid://chgadjp0wy277" path="res://assets/ui/game/controller-clear-button.png" id="11_clear"]
+[ext_resource type="Texture2D" uid="uid://br2r71qfd6ycd" path="res://assets/ui/game/controller-hand-granade-button.png" id="12_grenade"]
+[ext_resource type="Texture2D" uid="uid://cy0e6dkaxktoa" path="res://assets/ui/game/controller-somoke-granade-button.png" id="13_smoke"]
+[ext_resource type="Texture2D" uid="uid://tume5xbjh5ts" path="res://assets/ui/game/controller-door-button.png" id="14_door"]
+[ext_resource type="Texture2D" uid="uid://bp2ptj2kd3hbf" path="res://assets/ui/game/controller-wait-button.png" id="15_wait"]
 
 [node name="GameHUD" type="Control"]
 layout_mode = 3
@@ -130,9 +137,137 @@ texture_normal = ExtResource("8_marker_brim")
 ignore_texture_size = true
 stretch_mode = 5
 
+[node name="MarkerEditPanel" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -150.0
+offset_bottom = 150.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="VisionButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = -99.0
+offset_top = 72.0
+offset_right = -39.0
+offset_bottom = 132.0
+texture_normal = ExtResource("9_vision")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="RunButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = -29.0
+offset_top = 72.0
+offset_right = 31.0
+offset_bottom = 132.0
+texture_normal = ExtResource("10_run")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="ClearMarkerButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 41.0
+offset_top = 72.0
+offset_right = 101.0
+offset_bottom = 132.0
+texture_normal = ExtResource("11_clear")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="GrenadeButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 111.0
+offset_top = 72.0
+offset_right = 171.0
+offset_bottom = 132.0
+texture_normal = ExtResource("12_grenade")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="SmokeButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = -64.0
+offset_top = 152.0
+offset_right = -4.0
+offset_bottom = 212.0
+texture_normal = ExtResource("13_smoke")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="DoorButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 6.0
+offset_top = 152.0
+offset_right = 66.0
+offset_bottom = 212.0
+texture_normal = ExtResource("14_door")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="WaitButton" type="TextureButton" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 76.0
+offset_top = 152.0
+offset_right = 136.0
+offset_bottom = 212.0
+texture_normal = ExtResource("15_wait")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="UndoButton" type="Button" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = -44.0
+offset_top = 239.0
+offset_right = 26.0
+offset_bottom = 279.0
+text = "Undo"
+
+[node name="ConfirmButton" type="Button" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 36.0
+offset_top = 239.0
+offset_right = 136.0
+offset_bottom = 279.0
+text = "Confirm"
+
+[node name="CancelButton" type="Button" parent="MarkerEditPanel"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 146.0
+offset_top = 239.0
+offset_right = 226.0
+offset_bottom = 279.0
+text = "Cancel"
+
 [connection signal="pressed" from="ControlPanel/ClearButton" to="." method="_on_clear_pressed"]
 [connection signal="pressed" from="ExecuteButton" to="." method="_on_execute_pressed"]
 [connection signal="pressed" from="GameTimer/CharacterMarkers/MarkerAlpha" to="." method="_on_marker_pressed" binds= ["alpha"]]
 [connection signal="pressed" from="GameTimer/CharacterMarkers/MarkerBravo" to="." method="_on_marker_pressed" binds= ["bravo"]]
 [connection signal="pressed" from="GameTimer/CharacterMarkers/MarkerAres" to="." method="_on_marker_pressed" binds= ["ares"]]
 [connection signal="pressed" from="GameTimer/CharacterMarkers/MarkerBrim" to="." method="_on_marker_pressed" binds= ["brim"]]
+[connection signal="pressed" from="MarkerEditPanel/VisionButton" to="." method="_on_marker_edit_pressed" binds= ["vision"]]
+[connection signal="pressed" from="MarkerEditPanel/RunButton" to="." method="_on_marker_edit_pressed" binds= ["run"]]
+[connection signal="pressed" from="MarkerEditPanel/ClearMarkerButton" to="." method="_on_marker_edit_pressed" binds= ["clear"]]
+[connection signal="pressed" from="MarkerEditPanel/GrenadeButton" to="." method="_on_marker_edit_pressed" binds= ["grenade"]]
+[connection signal="pressed" from="MarkerEditPanel/SmokeButton" to="." method="_on_marker_edit_pressed" binds= ["smoke"]]
+[connection signal="pressed" from="MarkerEditPanel/DoorButton" to="." method="_on_marker_edit_pressed" binds= ["door"]]
+[connection signal="pressed" from="MarkerEditPanel/WaitButton" to="." method="_on_marker_edit_pressed" binds= ["wait"]]
+[connection signal="pressed" from="MarkerEditPanel/UndoButton" to="." method="_on_marker_undo_pressed"]
+[connection signal="pressed" from="MarkerEditPanel/ConfirmButton" to="." method="_on_marker_confirm_pressed"]
+[connection signal="pressed" from="MarkerEditPanel/CancelButton" to="." method="_on_marker_cancel_pressed"]

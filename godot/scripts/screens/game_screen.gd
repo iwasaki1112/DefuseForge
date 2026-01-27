@@ -98,6 +98,9 @@ func _setup_game_manager() -> void:
 		game_manager.all_paths_completed.connect(_on_all_paths_completed)
 		game_manager.paths_cleared.connect(_on_paths_cleared)
 		game_manager.timeline_data_changed.connect(_on_timeline_data_changed)
+		game_manager.path_ready.connect(_on_path_ready)
+		game_manager.path_mode_ended.connect(_on_path_mode_ended)
+		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
 
 
 func _setup_match_service() -> void:
@@ -115,6 +118,10 @@ func _setup_hud() -> void:
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
 		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
 		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
+		_hud.marker_edit_requested.connect(_on_marker_edit_requested)
+		_hud.marker_undo_requested.connect(_on_marker_undo_requested)
+		_hud.marker_confirm_requested.connect(_on_marker_confirm_requested)
+		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
 
 
 ## ラウンドHUDのセットアップ
@@ -208,6 +215,68 @@ func _on_execute_button_pressed() -> void:
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
+
+
+## マーカーエディットボタン押下時のコールバック
+func _on_marker_edit_requested(action: String) -> void:
+	if not game_manager or not game_manager.path_service:
+		return
+
+	var path_service = game_manager.path_service
+	if not path_service.has_pending_path():
+		return
+
+	match action:
+		"vision":
+			path_service.start_vision_mode()
+		"run":
+			path_service.start_run_mode()
+		"clear":
+			path_service.start_clear_mode()
+		"grenade":
+			path_service.start_grenade_mode()
+		"smoke":
+			path_service.start_smoke_grenade_mode()
+		"door":
+			path_service.start_door_mode()
+		"wait":
+			path_service.start_wait_mode()
+
+
+## Undoボタン押下時のコールバック
+func _on_marker_undo_requested() -> void:
+	if game_manager and game_manager.path_service:
+		game_manager.path_service.undo_last_marker()
+
+
+## Confirmボタン押下時のコールバック
+func _on_marker_confirm_requested() -> void:
+	if game_manager and game_manager.path_service:
+		game_manager.path_service.confirm_path()
+
+
+## Cancelボタン押下時のコールバック
+func _on_marker_cancel_requested() -> void:
+	if game_manager and game_manager.path_service:
+		game_manager.path_service.cancel_path()
+
+
+## パス描画完了時のコールバック（マーカー追加モードへ移行）
+func _on_path_ready() -> void:
+	if _hud:
+		_hud.show_marker_edit_panel()
+
+
+## パスモード終了時のコールバック
+func _on_path_mode_ended() -> void:
+	if _hud:
+		_hud.hide_marker_edit_panel()
+
+
+## パスモードキャンセル時のコールバック
+func _on_path_mode_cancelled() -> void:
+	if _hud:
+		_hud.hide_marker_edit_panel()
 
 
 ## ========================================

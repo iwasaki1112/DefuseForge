@@ -1,23 +1,24 @@
 extends VBoxContainer
 class_name MarkerEditPanel
 ## マルチキャラクター対応マーカー編集パネル
-## キャラクター選択＋Vision/Runマーカー設定UI
+## キャラクター選択＋Undo/Confirm/Cancel機能
+## ※マーカー追加ボタンはGameHUDに移動済み
 
 ## キャラクター選択時のシグナル
 signal character_selected(character: Node)
-## Vision追加要求シグナル
+## Vision追加要求シグナル（互換性のため維持）
 signal vision_add_requested(character: Node)
-## Run追加要求シグナル
+## Run追加要求シグナル（互換性のため維持）
 signal run_add_requested(character: Node)
-## Clear追加要求シグナル
+## Clear追加要求シグナル（互換性のため維持）
 signal clear_add_requested(character: Node)
-## Grenade追加要求シグナル
+## Grenade追加要求シグナル（互換性のため維持）
 signal grenade_add_requested(character: Node)
-## SmokeGrenade追加要求シグナル
+## SmokeGrenade追加要求シグナル（互換性のため維持）
 signal smoke_grenade_add_requested(character: Node)
-## Door追加要求シグナル
+## Door追加要求シグナル（互換性のため維持）
 signal door_add_requested(character: Node)
-## Wait追加要求シグナル
+## Wait追加要求シグナル（互換性のため維持）
 signal wait_add_requested(character: Node)
 ## 統一Undo要求シグナル
 signal undo_requested(character: Node)
@@ -30,15 +31,6 @@ signal cancel_requested()
 var _character_label: Label = null
 var _character_container: HBoxContainer = null
 var _character_buttons: Dictionary = {}  # { char_id: Button }
-
-## マーカー追加ボタン
-var _add_vision_button: Button = null
-var _add_run_button: Button = null
-var _add_clear_button: Button = null
-var _add_grenade_button: Button = null
-var _add_smoke_grenade_button: Button = null
-var _add_door_button: Button = null
-var _add_wait_button: Button = null
 
 ## 統一Undoボタン
 var _undo_button: Button = null
@@ -78,55 +70,15 @@ func _build_ui() -> void:
 	var sep1 = HSeparator.new()
 	add_child(sep1)
 
-	# マーカー追加ボタン（縦並び）
-	_add_vision_button = Button.new()
-	_add_vision_button.text = "Add Vision"
-	_add_vision_button.pressed.connect(_on_add_vision_pressed)
-	add_child(_add_vision_button)
-
-	_add_run_button = Button.new()
-	_add_run_button.text = "Add Run"
-	_add_run_button.pressed.connect(_on_add_run_pressed)
-	add_child(_add_run_button)
-
-	_add_clear_button = Button.new()
-	_add_clear_button.text = "Add Clear"
-	_add_clear_button.pressed.connect(_on_add_clear_pressed)
-	add_child(_add_clear_button)
-
-	_add_grenade_button = Button.new()
-	_add_grenade_button.text = "Add Grenade"
-	_add_grenade_button.pressed.connect(_on_add_grenade_pressed)
-	add_child(_add_grenade_button)
-
-	_add_smoke_grenade_button = Button.new()
-	_add_smoke_grenade_button.text = "Add Smoke"
-	_add_smoke_grenade_button.pressed.connect(_on_add_smoke_grenade_pressed)
-	add_child(_add_smoke_grenade_button)
-
-	_add_door_button = Button.new()
-	_add_door_button.text = "Add Door"
-	_add_door_button.pressed.connect(_on_add_door_pressed)
-	add_child(_add_door_button)
-
-	_add_wait_button = Button.new()
-	_add_wait_button.text = "Add Wait"
-	_add_wait_button.pressed.connect(_on_add_wait_pressed)
-	add_child(_add_wait_button)
-
-	# セパレータ2
-	var sep3 = HSeparator.new()
-	add_child(sep3)
-
 	# 統一Undoボタン
 	_undo_button = Button.new()
 	_undo_button.text = "Undo"
 	_undo_button.pressed.connect(_on_undo_pressed)
 	add_child(_undo_button)
 
-	# セパレータ4
-	var sep4 = HSeparator.new()
-	add_child(sep4)
+	# セパレータ2
+	var sep2 = HSeparator.new()
+	add_child(sep2)
 
 	# 確定ボタン
 	_confirm_button = Button.new()
@@ -293,48 +245,6 @@ func on_wait_marker_added() -> void:
 ## キャラクターボタン押下時
 func _on_character_button_pressed(character: Node) -> void:
 	set_active_character(character)
-
-
-## Add Vision押下時
-func _on_add_vision_pressed() -> void:
-	if _active_character:
-		vision_add_requested.emit(_active_character)
-
-
-## Add Run押下時
-func _on_add_run_pressed() -> void:
-	if _active_character:
-		run_add_requested.emit(_active_character)
-
-
-## Add Clear押下時
-func _on_add_clear_pressed() -> void:
-	if _active_character:
-		clear_add_requested.emit(_active_character)
-
-
-## Add Grenade押下時
-func _on_add_grenade_pressed() -> void:
-	if _active_character:
-		grenade_add_requested.emit(_active_character)
-
-
-## Add Smoke Grenade押下時
-func _on_add_smoke_grenade_pressed() -> void:
-	if _active_character:
-		smoke_grenade_add_requested.emit(_active_character)
-
-
-## Add Door押下時
-func _on_add_door_pressed() -> void:
-	if _active_character:
-		door_add_requested.emit(_active_character)
-
-
-## Add Wait押下時
-func _on_add_wait_pressed() -> void:
-	if _active_character:
-		wait_add_requested.emit(_active_character)
 
 
 ## 統一Undo押下時

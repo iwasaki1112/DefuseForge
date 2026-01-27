@@ -7,6 +7,10 @@ extends Control
 signal execute_all_requested()
 signal clear_paths_requested()
 signal character_marker_pressed(character: Node)
+signal marker_edit_requested(action: String)
+signal marker_undo_requested()
+signal marker_confirm_requested()
+signal marker_cancel_requested()
 
 const TIMER_WARNING_THRESHOLD := 10.0
 const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)
@@ -22,6 +26,19 @@ const MARKER_DEAD_ALPHA := 0.3
 @onready var _marker_bravo: TextureButton = %MarkerBravo
 @onready var _marker_ares: TextureButton = %MarkerAres
 @onready var _marker_brim: TextureButton = %MarkerBrim
+
+## マーカーエディットパネル
+@onready var _marker_edit_panel: Control = %MarkerEditPanel
+@onready var _vision_button: TextureButton = %VisionButton
+@onready var _run_button: TextureButton = %RunButton
+@onready var _clear_marker_button: TextureButton = %ClearMarkerButton
+@onready var _grenade_button: TextureButton = %GrenadeButton
+@onready var _smoke_button: TextureButton = %SmokeButton
+@onready var _door_button: TextureButton = %DoorButton
+@onready var _wait_button: TextureButton = %WaitButton
+@onready var _undo_button: Button = %UndoButton
+@onready var _confirm_button: Button = %ConfirmButton
+@onready var _cancel_button: Button = %CancelButton
 
 var _timeline_bar_ui: TimelineBarUI = null
 
@@ -257,3 +274,44 @@ func _on_marker_pressed(marker_name: String) -> void:
 		var character: Node = _marker_to_character[marker_name]
 		if is_instance_valid(character):
 			character_marker_pressed.emit(character)
+
+
+## ========================================
+## マーカーエディットパネルAPI
+## ========================================
+
+## マーカーエディットパネルを表示
+func show_marker_edit_panel() -> void:
+	if _marker_edit_panel:
+		_marker_edit_panel.visible = true
+
+
+## マーカーエディットパネルを非表示
+func hide_marker_edit_panel() -> void:
+	if _marker_edit_panel:
+		_marker_edit_panel.visible = false
+
+
+## マーカーエディットパネルの表示状態を取得
+func is_marker_edit_panel_visible() -> bool:
+	return _marker_edit_panel and _marker_edit_panel.visible
+
+
+## マーカーエディットボタン押下時のコールバック
+func _on_marker_edit_pressed(action: String) -> void:
+	marker_edit_requested.emit(action)
+
+
+## Undoボタン押下時のコールバック
+func _on_marker_undo_pressed() -> void:
+	marker_undo_requested.emit()
+
+
+## Confirmボタン押下時のコールバック
+func _on_marker_confirm_pressed() -> void:
+	marker_confirm_requested.emit()
+
+
+## Cancelボタン押下時のコールバック
+func _on_marker_cancel_pressed() -> void:
+	marker_cancel_requested.emit()
