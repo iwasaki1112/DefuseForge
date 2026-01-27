@@ -40,6 +40,7 @@ func _explode() -> void:
 	if _has_exploded:
 		return
 	_has_exploded = true
+	_is_active = false
 
 	# スモークエリアを生成
 	_deploy_smoke()
@@ -57,13 +58,13 @@ func _deploy_smoke() -> void:
 		push_warning("[SmokeGrenade] Smoke area scene not loaded")
 		return
 
-	var smoke_area = _smoke_area_scene.instantiate() as SmokeArea
+	var smoke_area: SmokeArea = _smoke_area_scene.instantiate() as SmokeArea
 	if not smoke_area:
 		push_warning("[SmokeGrenade] Failed to instantiate smoke area")
 		return
 
 	# 親ノードに追加（グレネードと同じ親）
-	var parent = get_parent()
+	var parent: Node = get_parent()
 	if parent:
 		parent.add_child(smoke_area)
 	else:

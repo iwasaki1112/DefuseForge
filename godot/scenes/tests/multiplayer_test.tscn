@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmultiplayer_test"]
+
+[ext_resource type="Script" path="res://scripts/tests/multiplayer_test.gd" id="1_script"]
+
+[node name="MultiplayerTestScreen" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 20, 20)
+fov = 30.0
+
+[node name="MapContainer" type="Node3D" parent="."]
+
+[node name="UILayer" type="CanvasLayer" parent="."]

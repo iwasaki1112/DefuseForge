@@ -108,7 +108,7 @@ class PlayerStateData extends RefCounted:
 	var is_ready: bool = false
 
 	## 接続済みフラグ
-	var is_connected: bool = true
+	var connection_active: bool = true
 
 	## 最終アクティブ時刻（msec）
 	var last_active_time: int = 0
@@ -138,7 +138,7 @@ class PlayerStateData extends RefCounted:
 			"team": team,
 			"money": money,
 			"is_ready": is_ready,
-			"is_connected": is_connected,
+			"connection_active": connection_active,
 			"last_active_time": last_active_time,
 			"wins": wins,
 			"losses": losses,
@@ -153,7 +153,7 @@ class PlayerStateData extends RefCounted:
 		team = data.get("team", 0)
 		money = data.get("money", 0)
 		is_ready = data.get("is_ready", false)
-		is_connected = data.get("is_connected", true)
+		connection_active = data.get("connection_active", true)
 		last_active_time = data.get("last_active_time", 0)
 		wins = data.get("wins", 0)
 		losses = data.get("losses", 0)

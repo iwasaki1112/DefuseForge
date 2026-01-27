@@ -2,7 +2,8 @@ class_name GrenadeMarkerHandler
 extends MarkerHandlerBase
 
 ## グレネードマーカーハンドラ
-## パス上からのグレネード投擲位置・目標・バウンスを管理するマーカーの入力・管理を担当
+## パス上からのグレネード投擲位置・目標を管理するマーカーの入力・管理を担当
+## 2タップ方式: 1.投擲位置 → 2.目標位置
 
 
 const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
@@ -22,15 +23,6 @@ var _pending_ratio: float = 0.0
 
 ## アンカー設定済みフラグ
 var _has_anchor: bool = false
-
-## バウンスポイント
-var _bounce_point: Vector3 = Vector3.ZERO
-
-## バウンス法線
-var _bounce_normal: Vector3 = Vector3.ZERO
-
-## バウンス設定済みフラグ
-var _has_bounce: bool = false
 
 ## 軌道プレビューメッシュ
 var _trajectory_mesh: MeshInstance3D = null
@@ -67,54 +59,33 @@ func _process_click(screen_pos: Vector2) -> bool:
 		_setup_trajectory_mesh()
 		return true
 
-	elif not _has_bounce:
-		# 2. 目標クリック
+	else:
+		# 2. 目標クリック → 直接投擲完了
 		var target_result = _raycast_wall_or_floor(screen_pos)
 		if target_result.is_empty():
 			return false
 
 		var hit_pos: Vector3 = target_result.position
-		var hit_normal: Vector3 = target_result.normal
 
-		# 壁かどうか判定（法線のY成分が小さければ壁）
-		var is_wall = abs(hit_normal.y) < 0.5
-
-		if is_wall:
-			# 壁の場合: バウンスポイントを設定
-			hit_pos.y = 1.0  # グレネードが壁に当たる高さ
-			_bounce_point = hit_pos
-			_bounce_normal = hit_normal
-			_has_bounce = true
-		else:
-			# 床の場合: 直接投擲完了
-			_finish_grenade_marker(hit_pos, Vector3.ZERO, Vector3.ZERO)
-		return true
-
-	else:
-		# 3. バウンス後の最終目標クリック
-		var ground_pos = _get_ground_position(screen_pos)
-		if ground_pos == null:
-			return false
-
-		_finish_grenade_marker(ground_pos, _bounce_point, _bounce_normal)
+		# 床の位置に投擲
+		_finish_grenade_marker(hit_pos)
 		return true
 
 
 ## グレネードマーカー完成
-func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_normal: Vector3) -> void:
-	var has_bounce = bounce_point.length_squared() > 0.001
+func _finish_grenade_marker(target_pos: Vector3) -> void:
 	var new_marker = {
 		"path_ratio": _pending_ratio,
 		"anchor": _pending_anchor,
 		"target_pos": target_pos,
-		"bounce_point": bounce_point if has_bounce else Vector3.ZERO,
-		"bounce_normal": bounce_normal if has_bounce else Vector3.ZERO
+		"bounce_point": Vector3.ZERO,
+		"bounce_normal": Vector3.ZERO
 	}
 
 	_grenade_markers.append(new_marker)
 
 	# マーカーメッシュを作成
-	var marker = _create_grenade_marker_node(_pending_anchor, target_pos, bounce_point)
+	var marker = _create_grenade_marker_node(_pending_anchor, target_pos)
 	_grenade_meshes.append(marker)
 
 	marker_added.emit(new_marker)
@@ -125,11 +96,11 @@ func _finish_grenade_marker(target_pos: Vector3, bounce_point: Vector3, bounce_n
 
 
 ## グレネードマーカーノード作成
-func _create_grenade_marker_node(anchor: Vector3, target: Vector3, bounce: Vector3) -> MeshInstance3D:
+func _create_grenade_marker_node(anchor: Vector3, target: Vector3) -> MeshInstance3D:
 	var marker = MeshInstance3D.new()
 	marker.set_script(GrenadeMarkerScript)
 	_add_child_to_drawer(marker)
-	marker.set_position_and_target(anchor, target, bounce)
+	marker.set_position_and_target(anchor, target, Vector3.ZERO)
 	marker.set_colors(_character_color, Color(1.0, 0.5, 0.0, 1.0))
 	marker.set_trajectory_color(Color(_character_color.r, _character_color.g * 0.7, _character_color.b * 0.3, 0.8))
 	return marker
@@ -167,15 +138,8 @@ func _update_trajectory_preview(screen_pos: Vector2) -> void:
 	im.surface_begin(Mesh.PRIMITIVE_LINES)
 
 	var start_pos = _pending_anchor + Vector3(0, 0.05, 0)
-
-	if _has_bounce:
-		im.surface_add_vertex(start_pos)
-		im.surface_add_vertex(_bounce_point)
-		im.surface_add_vertex(_bounce_point)
-		im.surface_add_vertex(target_pos)
-	else:
-		im.surface_add_vertex(start_pos)
-		im.surface_add_vertex(target_pos)
+	im.surface_add_vertex(start_pos)
+	im.surface_add_vertex(target_pos)
 
 	im.surface_end()
 	_trajectory_mesh.mesh = im
@@ -193,9 +157,6 @@ func _reset_pending_state() -> void:
 	_has_anchor = false
 	_pending_anchor = Vector3.ZERO
 	_pending_ratio = 0.0
-	_has_bounce = false
-	_bounce_point = Vector3.ZERO
-	_bounce_normal = Vector3.ZERO
 	_cleanup_trajectory_mesh()
 
 
