@@ -18,8 +18,12 @@
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `stuck_threshold` | `float` | `0.01` | スタック検出の移動距離閾値 |
-| `stuck_timeout` | `float` | `1.0` | スタック判定時間（秒）- この時間進めないと次のポイントへスキップ |
+| `stuck_timeout` | `float` | `0.5` | スタック判定時間（秒）- この時間進めないと次のポイントへスキップ |
 | `final_destination_radius` | `float` | `0.1` | 最終目的地への到達判定半径 |
+| `ally_collision_radius` | `float` | `1.0` | 味方との衝突検出半径 |
+| `collision_check_radius` | `float` | `0.8` | 前方衝突検出の横方向半径 |
+| `collision_check_distance` | `float` | `1.5` | 前方衝突検出の距離 |
+| `avoidance_timeout` | `float` | `3.0` | 衝突回避タイムアウト（秒）- この時間経過で強制解除 |
 
 ## Signals
 
@@ -75,6 +79,17 @@ CombatAwarenessComponentを設定する。
 パス追従中か確認する。
 
 **戻り値:** 追従中なら`true`
+
+### set_movement_priority(priority: int) -> void
+衝突回避用の移動優先度を設定する。`PathExecutionManager`から自動的に呼ばれる。
+
+**引数:**
+- `priority` - 優先度（低い値ほど高優先）
+
+### get_movement_priority() -> int
+現在の移動優先度を取得する。
+
+**戻り値:** 優先度の値
 
 ### process(delta: float) -> void
 毎フレームの処理を実行する。`_physics_process`から呼び出す。
@@ -261,6 +276,27 @@ Waitマーカーに到達すると、以下の処理が行われる：
 
 これにより、DoorMarkerがなくても閉じたドアを貫通することはなく、ドアが開くまで待機する。
 
+### 衝突回避（Door Kickers 2スタイル）
+
+複数キャラクターがパス上で衝突した場合のデッドロックを防ぐため、優先度に基づく協調的移動を実装:
+
+1. **前方検出**: 100ms間隔で前方60度・1.5m以内の味方を検出
+2. **優先度比較**: 検出した味方と優先度を比較し、自分が低優先度なら待機
+3. **待機終了条件**:
+   - 相手が離れた（距離 > 2.25m）
+   - 相手がパス追従を完了
+   - 相手が死亡
+   - タイムアウト（3秒）
+
+**優先度ルール:**
+| 優先度 | 条件 |
+|--------|------|
+| 最高 | 先に移動開始したキャラクター（低い`priority`値） |
+| 高 | パス進行率が高いキャラクター |
+| 低 | 上記が同等な場合、キャラクターIDが小さい方 |
+
+これにより、キャラクター同士が押し合ってデッドロックする問題を回避し、自然な「譲り合い」動作を実現する。
+
 ## APIリファレンス
 
 ### シグナル
@@ -274,7 +310,10 @@ Waitマーカーに到達すると、以下の処理が行われる：
 ### メソッド
 - `setup(character: CharacterBody3D) -> void`
 - `set_combat_awareness(component: Node) -> void`
-- `start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],`
+- `start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [], ...) -> bool`
 - `cancel() -> void`
 - `is_following_path() -> bool`
 - `process(delta: float) -> void`
+- `set_movement_priority(priority: int) -> void`
+- `get_movement_priority() -> int`
+- `get_current_progress() -> float`

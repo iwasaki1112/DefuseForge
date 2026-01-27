@@ -19,8 +19,14 @@ signal door_marker_reached(index: int, door: Node3D)
 @export var final_destination_radius: float = 0.1  ## 最終目的地への到達判定半径
 @export var ally_collision_radius: float = 1.0  ## 味方との衝突検出半径
 
+## 衝突回避設定
+@export var collision_check_radius: float = 0.8  ## 前方衝突検出の半径
+@export var collision_check_distance: float = 1.5  ## 前方衝突検出の距離
+@export var avoidance_timeout: float = 3.0  ## 回避タイムアウト（この時間経過で強制解除）
+
 ## キャッシュ設定
 const CHARACTERS_CACHE_INTERVAL: float = 0.15  ## キャラクターキャッシュ更新間隔（150ms）
+const COLLISION_CHECK_INTERVAL: float = 0.1  ## 衝突検出間隔（100ms、モバイル最適化）
 
 ## 内部状態
 var _character: CharacterBody3D = null
@@ -55,6 +61,13 @@ var _active_target_point: Vector3 = Vector3.ZERO  # ターゲットポイント�
 ## スタック検出用
 var _last_position: Vector3 = Vector3.ZERO
 var _stuck_time: float = 0.0
+
+## 衝突回避状態
+var _is_avoiding_collision: bool = false  ## 衝突回避中フラグ（待機状態）
+var _avoidance_blocker: Node = null  ## 回避対象の相手キャラクター
+var _avoidance_timer: float = 0.0  ## 回避継続時間
+var _movement_priority: int = 0  ## 移動優先度（低いほど高優先）
+var _collision_check_timer: float = 0.0  ## 衝突検出タイマー
 
 ## パス長キャッシュ（毎フレーム再計算を回避）
 var _cached_total_length: float = 0.0
@@ -177,6 +190,16 @@ func is_following_path() -> bool:
 	return _is_following
 
 
+## 移動優先度を設定（PathExecutionManagerから呼ばれる）
+func set_movement_priority(priority: int) -> void:
+	_movement_priority = priority
+
+
+## 移動優先度を取得
+func get_movement_priority() -> int:
+	return _movement_priority
+
+
 ## 毎フレームの処理（_physics_processから呼び出す）
 func process(delta: float) -> void:
 	if not _is_following:
@@ -210,11 +233,25 @@ func process(delta: float) -> void:
 			_update_idle_animation_while_waiting()
 			return  # まだ閉じているので待機継続
 
+	# 衝突回避待機中の場合
+	if _is_avoiding_collision:
+		_avoidance_timer += delta
+		# タイムアウトまたは衝突解消で待機終了
+		if _avoidance_timer >= avoidance_timeout or _check_avoidance_resolved():
+			_end_collision_halt()
+		else:
+			# アイドルアニメーションを維持
+			_update_idle_animation_while_waiting()
+			return  # 待機継続
+
 	# キャラクターキャッシュ更新（150ms間隔）
 	_characters_cache_timer += delta
 	if _characters_cache_timer >= CHARACTERS_CACHE_INTERVAL:
 		_characters_cache_timer = 0.0
 		_characters_cache = get_tree().get_nodes_in_group("characters")
+
+	# 衝突検出タイマー更新（100ms間隔）
+	_collision_check_timer += delta
 
 	if not _character or _current_path.size() == 0:
 		_finish()
@@ -366,6 +403,16 @@ func process(delta: float) -> void:
 		# アイドルアニメーションに切り替え
 		_update_idle_animation_while_waiting()
 		return
+
+	# 衝突回避チェック（100ms間隔）
+	if _collision_check_timer >= COLLISION_CHECK_INTERVAL:
+		_collision_check_timer = 0.0
+		var ally_ahead: Node = _detect_ally_ahead(move_dir)
+		if ally_ahead and _should_yield_to(ally_ahead):
+			# 自分が低優先度なので待機開始
+			_start_collision_halt(ally_ahead)
+			_update_idle_animation_while_waiting()
+			return
 
 	# 物理移動
 	_character.velocity.x = move_dir.x * speed
@@ -757,6 +804,167 @@ func _finish() -> void:
 	_last_move_direction = Vector3.ZERO
 
 	path_completed.emit()
+
+
+## ========================================
+## 衝突回避ロジック（Door Kickers 2スタイル）
+## ========================================
+
+## 前方の味方キャラクターを検出
+## @param move_dir: 移動方向
+## @return: 前方に味方がいればそのNode、いなければnull
+func _detect_ally_ahead(move_dir: Vector3) -> Node:
+	if not _character or move_dir.length_squared() < 0.001:
+		return null
+
+	var char_pos: Vector3 = _character.global_position
+	char_pos.y = 0
+
+	# キャッシュを使用して味方をチェック
+	for other in _characters_cache:
+		if other == _character:
+			continue
+		if not is_instance_valid(other):
+			continue
+		if "is_alive" in other and not other.is_alive:
+			continue
+		if not _is_ally(other):
+			continue
+
+		var other_pos: Vector3 = other.global_position
+		other_pos.y = 0
+
+		# 距離チェック
+		var distance: float = char_pos.distance_to(other_pos)
+		if distance > collision_check_distance:
+			continue
+
+		# 方向チェック（前方にいるか）
+		var to_other: Vector3 = (other_pos - char_pos).normalized()
+		var dot: float = move_dir.normalized().dot(to_other)
+		if dot < 0.5:  # 前方60度以外は無視
+			continue
+
+		# 横方向の距離チェック（パス上の衝突判定）
+		var perpendicular: Vector3 = to_other - move_dir.normalized() * dot
+		if perpendicular.length() > collision_check_radius:
+			continue
+
+		return other
+
+	return null
+
+
+## 相手に道を譲るべきかを判定
+## @param other: 比較対象のキャラクター
+## @return: 自分が待機すべきならtrue
+func _should_yield_to(other: Node) -> bool:
+	if not other:
+		return false
+
+	# 相手のPathFollowingControllerを取得
+	var other_controller: Node = null
+	var other_id: int = other.get_instance_id()
+
+	# PathExecutionManagerからコントローラーを探す
+	var path_exec_manager = get_node_or_null("/root/GameScreen/PathExecutionManager")
+	if not path_exec_manager:
+		# fallback: 親ノードから探す
+		for sibling in get_parent().get_children():
+			if sibling.name.begins_with("PathFollowingController_") and sibling != self:
+				if sibling.name.ends_with(str(other_id)):
+					other_controller = sibling
+					break
+	else:
+		if path_exec_manager.has_method("_get_or_create_path_controller"):
+			# 直接アクセスできないので、_path_controllersを参照
+			if "_path_controllers" in path_exec_manager:
+				var controllers: Dictionary = path_exec_manager._path_controllers
+				if controllers.has(other_id):
+					other_controller = controllers[other_id]
+
+	if not other_controller:
+		# 相手がパス追従中でなければ、こちらが進む
+		return false
+
+	if not other_controller.is_following_path():
+		# 相手がパス追従中でなければ、こちらが進む
+		return false
+
+	var other_priority: int = other_controller.get_movement_priority()
+	var my_priority: int = _movement_priority
+
+	# 優先度ルール:
+	# 1. 優先度が低い数値 = 先に実行開始 = 高優先
+	# 2. 優先度が同じ場合はパス進行率で比較
+	# 3. それでも同じならキャラクターIDで決定
+	if my_priority != other_priority:
+		return my_priority > other_priority  # 自分の数値が大きい = 後から開始 = 譲る
+
+	# パス進行率で比較（進んでいる方が優先）
+	var my_progress: float = _calculate_path_progress()
+	var other_progress: float = 0.0
+	if other_controller.has_method("get_current_progress"):
+		other_progress = other_controller.get_current_progress()
+
+	if absf(my_progress - other_progress) > 0.05:
+		return my_progress < other_progress  # 相手の方が進んでいれば譲る
+
+	# 最終手段: キャラクターIDで決定（小さい方が優先）
+	return _character.get_instance_id() > other.get_instance_id()
+
+
+## 衝突回避の待機を開始
+func _start_collision_halt(blocker: Node) -> void:
+	_is_avoiding_collision = true
+	_avoidance_blocker = blocker
+	_avoidance_timer = 0.0
+
+	# キャラクターを停止
+	if _character:
+		_character.velocity = Vector3.ZERO
+
+
+## 衝突回避の待機を終了
+func _end_collision_halt() -> void:
+	_is_avoiding_collision = false
+	_avoidance_blocker = null
+	_avoidance_timer = 0.0
+
+
+## 衝突が解消されたかチェック
+## @return: 解消されていればtrue
+func _check_avoidance_resolved() -> bool:
+	if not _avoidance_blocker:
+		return true
+
+	if not is_instance_valid(_avoidance_blocker):
+		return true
+
+	# 相手が死亡した場合
+	if "is_alive" in _avoidance_blocker and not _avoidance_blocker.is_alive:
+		return true
+
+	# 相手がパス追従を完了した場合
+	var other_id: int = _avoidance_blocker.get_instance_id()
+	var path_exec_manager = get_node_or_null("/root/GameScreen/PathExecutionManager")
+	if path_exec_manager and "_path_controllers" in path_exec_manager:
+		var controllers: Dictionary = path_exec_manager._path_controllers
+		if controllers.has(other_id):
+			var other_controller = controllers[other_id]
+			if not other_controller.is_following_path():
+				return true
+
+	# 相手との距離が離れた場合
+	if _character:
+		var char_pos: Vector3 = _character.global_position
+		char_pos.y = 0
+		var blocker_pos: Vector3 = _avoidance_blocker.global_position
+		blocker_pos.y = 0
+		if char_pos.distance_to(blocker_pos) > collision_check_distance * 1.5:
+			return true
+
+	return false
 
 
 ## 味方判定
