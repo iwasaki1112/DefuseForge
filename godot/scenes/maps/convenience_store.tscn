@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/maps/conveniens_store.gltf" id="1_gltf"]
-[ext_resource type="Script" path="res://scripts/maps/conveniens_store.gd" id="2_script"]
+[ext_resource type="Script" path="res://scripts/maps/convenience_store.gd" id="2_script"]
 
 [node name="ConveniensStore" instance=ExtResource("1_gltf")]
 script = ExtResource("2_script")

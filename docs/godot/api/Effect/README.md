@@ -11,6 +11,7 @@
 | [PathInputHandler](PathInputHandler.md) | 入力処理統括（マーカーハンドラへの委譲） |
 | [PathState](PathState.md) | パス状態管理（描画状態・モード・有効フラグ等） |
 | [MarkerHandlerBase](MarkerHandlerBase.md) | マーカーハンドラ基底クラス（共通インターフェース） |
+| [MarkerHandlers](MarkerHandlers.md) | 各アクションマーカー（Vision/Run/Clear等）の入力ハンドラ詳細 |
 | [PathLineMesh](PathLineMesh.md) | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | [RunMarker](RunMarker.md) | Run区間の開始/終点を示すマーカー（ActionMarker継承） |
 | [VisionMarker](VisionMarker.md) | 円＋矢印で視線方向を示すマーカー（ActionMarker継承） |
