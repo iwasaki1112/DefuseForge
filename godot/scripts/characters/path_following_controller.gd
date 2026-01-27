@@ -1130,15 +1130,20 @@ func _calculate_sidestep_direction() -> Vector3:
 	var blocker_pos: Vector3 = _avoidance_blocker.global_position
 	blocker_pos.y = 0
 
-	# 両者を結ぶ線に垂直な方向（グローバル座標系で一貫）
-	var between: Vector3 = (blocker_pos - char_pos).normalized()
-	var perpendicular: Vector3 = Vector3(between.z, 0, -between.x)
-
-	# キャラクターIDで方向を決定（小さいIDが+perpendicular、大きいIDが-perpendicular）
-	# これにより両者が必ず反対方向に移動する
 	var my_id: int = _character.get_instance_id()
 	var other_id: int = _avoidance_blocker.get_instance_id()
 
+	# 常に小さいID→大きいIDの方向でbetweenを計算（両者で一貫）
+	var between: Vector3
+	if my_id < other_id:
+		between = (blocker_pos - char_pos).normalized()
+	else:
+		between = (char_pos - blocker_pos).normalized()
+
+	# グローバル座標系で一貫した垂直方向
+	var perpendicular: Vector3 = Vector3(between.z, 0, -between.x)
+
+	# 小さいIDが+perpendicular、大きいIDが-perpendicular
 	var primary: Vector3
 	var secondary: Vector3
 	if my_id < other_id:
