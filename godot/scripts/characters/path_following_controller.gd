@@ -1120,6 +1120,7 @@ func _start_sidestep() -> void:
 
 ## 側方回避方向を計算
 ## 壁を避けて安全な方向を選択
+## キャラクターIDに基づいて一貫した方向を決定（両者が反対方向に避ける）
 func _calculate_sidestep_direction() -> Vector3:
 	if not _character or not _avoidance_blocker:
 		return Vector3.ZERO
@@ -1129,22 +1130,23 @@ func _calculate_sidestep_direction() -> Vector3:
 	var blocker_pos: Vector3 = _avoidance_blocker.global_position
 	blocker_pos.y = 0
 
-	# 相手への方向
-	var to_blocker: Vector3 = (blocker_pos - char_pos).normalized()
+	# 両者を結ぶ線に垂直な方向（グローバル座標系で一貫）
+	var between: Vector3 = (blocker_pos - char_pos).normalized()
+	var perpendicular: Vector3 = Vector3(between.z, 0, -between.x)
 
-	# 左右の候補方向
-	var right: Vector3 = Vector3(to_blocker.z, 0, -to_blocker.x)
-	var left: Vector3 = Vector3(-to_blocker.z, 0, to_blocker.x)
+	# キャラクターIDで方向を決定（小さいIDが+perpendicular、大きいIDが-perpendicular）
+	# これにより両者が必ず反対方向に移動する
+	var my_id: int = _character.get_instance_id()
+	var other_id: int = _avoidance_blocker.get_instance_id()
 
-	# 優先度に基づいて方向を決定（優先度低い方が右に避ける）
 	var primary: Vector3
 	var secondary: Vector3
-	if _movement_priority % 2 == 0:
-		primary = right
-		secondary = left
+	if my_id < other_id:
+		primary = perpendicular
+		secondary = -perpendicular
 	else:
-		primary = left
-		secondary = right
+		primary = -perpendicular
+		secondary = perpendicular
 
 	# 壁チェック
 	if _is_direction_clear(primary):
