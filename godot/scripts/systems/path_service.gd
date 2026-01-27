@@ -22,21 +22,18 @@ var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
 var path_execution_manager: PathExecutionManager = null
 var path_mode_controller: PathModeController = null
-var marker_edit_panel: MarkerEditPanel = null
 
 
 func setup(
 	drawer: PathDrawer,
 	sel_manager: CharacterSelectionManager,
 	exec_manager: PathExecutionManager,
-	mode_controller: PathModeController,
-	marker_panel: MarkerEditPanel
+	mode_controller: PathModeController
 ) -> void:
 	path_drawer = drawer
 	selection_manager = sel_manager
 	path_execution_manager = exec_manager
 	path_mode_controller = mode_controller
-	marker_edit_panel = marker_panel
 
 	if path_execution_manager:
 		path_execution_manager.path_confirmed.connect(_on_path_confirmed)
@@ -59,19 +56,6 @@ func setup(
 		path_mode_controller.mode_ended.connect(_on_path_mode_ended)
 		path_mode_controller.mode_cancelled.connect(_on_path_mode_cancelled)
 		path_mode_controller.path_ready.connect(_on_path_ready)
-
-	if marker_edit_panel:
-		marker_edit_panel.character_selected.connect(_on_marker_panel_character_selected)
-		marker_edit_panel.vision_add_requested.connect(_on_marker_panel_vision_add)
-		marker_edit_panel.run_add_requested.connect(_on_marker_panel_run_add)
-		marker_edit_panel.clear_add_requested.connect(_on_marker_panel_clear_add)
-		marker_edit_panel.grenade_add_requested.connect(_on_marker_panel_grenade_add)
-		marker_edit_panel.smoke_grenade_add_requested.connect(_on_marker_panel_smoke_grenade_add)
-		marker_edit_panel.door_add_requested.connect(_on_marker_panel_door_add)
-		marker_edit_panel.wait_add_requested.connect(_on_marker_panel_wait_add)
-		marker_edit_panel.undo_requested.connect(_on_marker_panel_undo)
-		marker_edit_panel.confirm_requested.connect(_on_marker_panel_confirm)
-		marker_edit_panel.cancel_requested.connect(_on_marker_panel_cancel)
 
 
 ## ========================================
@@ -113,8 +97,6 @@ func start_move_mode() -> bool:
 
 	# シングルキャラクターのみサポート
 	path_drawer.set_active_edit_character(primary)
-	if marker_edit_panel:
-		marker_edit_panel.setup([primary], path_drawer)
 
 	return true
 
@@ -286,8 +268,6 @@ func has_incomplete_run_start() -> bool:
 	return path_drawer.has_incomplete_run_start() if path_drawer else false
 
 
-
-
 func set_active_edit_character(character: Node) -> void:
 	if path_drawer:
 		path_drawer.set_active_edit_character(character)
@@ -299,21 +279,6 @@ func set_path_drawer_color(color: Color) -> void:
 
 
 ## ========================================
-## UI操作
-## ========================================
-
-func _show_marker_panel() -> void:
-	if marker_edit_panel:
-		marker_edit_panel.visible = true
-
-
-func _hide_marker_panel() -> void:
-	if marker_edit_panel:
-		marker_edit_panel.visible = false
-		marker_edit_panel.clear()
-
-
-## ========================================
 ## シグナルハンドラ
 ## ========================================
 
@@ -322,25 +287,17 @@ func _on_path_mode_started(character: Node) -> void:
 
 
 func _on_path_mode_ended() -> void:
-	_hide_marker_panel()
 	mode_ended.emit()
 
 
 func _on_path_mode_cancelled() -> void:
-	_hide_marker_panel()
 	mode_cancelled.emit()
 
 
 func _on_path_ready() -> void:
 	# 視線ポイントモードへ移行
 	# パス終点付近にVisionマーカーを追加すると、その方向で最終向きが固定される
-	if start_vision_mode():
-		# マーカーパネルを再セットアップ（パスUndo後の再描画に対応）
-		if marker_edit_panel and selection_manager and selection_manager.has_selection():
-			var primary = selection_manager.primary_character
-			if primary:
-				marker_edit_panel.setup([primary], path_drawer)
-		_show_marker_panel()
+	start_vision_mode()
 	path_ready.emit()
 
 
@@ -361,106 +318,36 @@ func _on_path_mode_changed(mode: int) -> void:
 
 
 func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_vision_point_added()
 	vision_point_added.emit(anchor, direction)
 
 
 func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_run_segment_added()
 	run_segment_added.emit(start_ratio, end_ratio)
 
 
 func _on_clear_point_added(path_ratio: float) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_clear_point_added()
 	clear_point_added.emit(path_ratio)
 
 
 func _on_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_grenade_marker_added()
 	grenade_marker_added.emit(path_ratio, target_pos)
 
 
 func _on_smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_smoke_grenade_marker_added()
 	smoke_grenade_marker_added.emit(path_ratio, target_pos)
 
 
 func _on_door_marker_added(path_ratio: float, door: Node3D) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_door_marker_added()
 	door_marker_added.emit(path_ratio, door)
 
 
 func _on_wait_marker_added(path_ratio: float, wait_duration: float) -> void:
-	if marker_edit_panel:
-		marker_edit_panel.on_wait_marker_added()
 	wait_marker_added.emit(path_ratio, wait_duration)
 
 
 func _on_path_undone() -> void:
-	# パスがUndoされたらマーカーパネルを非表示にするが、
-	# パスモードは維持して再度パスを描けるようにする
-	_hide_marker_panel()
-
-	# PathDrawerを再度描画可能な状態にする
+	# パスがUndoされたらパスモードは維持して再度パスを描けるようにする
 	if path_drawer and selection_manager and selection_manager.has_selection():
 		var primary = selection_manager.primary_character
 		if primary:
 			path_drawer.enable(primary)
-
-
-func _on_marker_panel_character_selected(character: Node) -> void:
-	var char_color = CharacterColorManager.get_character_color(character)
-	set_path_drawer_color(char_color)
-
-
-func _on_marker_panel_vision_add(_character: Node) -> void:
-	if has_pending_path():
-		start_vision_mode()
-
-
-func _on_marker_panel_run_add(_character: Node) -> void:
-	if has_pending_path():
-		start_run_mode()
-
-
-func _on_marker_panel_clear_add(_character: Node) -> void:
-	if has_pending_path():
-		start_clear_mode()
-
-
-func _on_marker_panel_grenade_add(_character: Node) -> void:
-	if has_pending_path():
-		start_grenade_mode()
-
-
-func _on_marker_panel_smoke_grenade_add(_character: Node) -> void:
-	if has_pending_path():
-		start_smoke_grenade_mode()
-
-
-func _on_marker_panel_door_add(_character: Node) -> void:
-	if has_pending_path():
-		start_door_mode()
-
-
-func _on_marker_panel_wait_add(_character: Node) -> void:
-	if has_pending_path():
-		start_wait_mode()
-
-
-func _on_marker_panel_undo(_character: Node) -> void:
-	undo_last_marker()
-
-
-func _on_marker_panel_confirm() -> void:
-	confirm_path()
-
-
-func _on_marker_panel_cancel() -> void:
-	cancel_path()

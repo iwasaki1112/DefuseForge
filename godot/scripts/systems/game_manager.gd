@@ -7,7 +7,6 @@ const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
 const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
 const RotationCtrl = preload("res://scripts/characters/character_rotation_controller.gd")
 const ContextMenuScene = preload("res://scenes/ui/context_menu_component.tscn")
-const MarkerEditPanelScript = preload("res://scripts/ui/marker_edit_panel.gd")
 const WeaponShopModalScript = preload("res://scripts/ui/weapon_shop_modal.gd")
 const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
 const PathServiceScript = preload("res://scripts/systems/path_service.gd")
@@ -67,7 +66,6 @@ var context_menu: Control = null
 
 @export_group("コンテキストメニュー")
 @export var context_menu_offset: Vector2 = Vector2(7.82, 32.19)  ## メニュー位置のスクリーン座標オフセット
-var marker_edit_panel: VBoxContainer = null
 var label_manager: CharacterLabelManager = null
 var weapon_shop_modal: Control = null
 
@@ -111,7 +109,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_vision_service()
 	_setup_map_manager()
 	_setup_context_menu()
-	_setup_marker_edit_panel()
 	_setup_weapon_shop_modal()
 	_setup_path_service()
 	_setup_label_manager()
@@ -743,27 +740,6 @@ func _update_context_menu_follow() -> void:
 	context_menu.update_screen_position(base_pos + context_menu_offset)
 
 
-func _setup_marker_edit_panel() -> void:
-	if marker_edit_panel == null:
-		marker_edit_panel = VBoxContainer.new()
-		marker_edit_panel.set_script(MarkerEditPanelScript)
-		marker_edit_panel.name = GameConstants.NODE_MARKER_EDIT_PANEL
-		_ui_layer.add_child(marker_edit_panel)
-
-		# 右側中央に配置
-		marker_edit_panel.anchor_left = 1.0
-		marker_edit_panel.anchor_right = 1.0
-		marker_edit_panel.anchor_top = 0.5
-		marker_edit_panel.anchor_bottom = 0.5
-		marker_edit_panel.offset_left = -230
-		marker_edit_panel.offset_right = -10
-		marker_edit_panel.offset_top = -100
-		marker_edit_panel.offset_bottom = 100
-		marker_edit_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-
-		marker_edit_panel.visible = false
-
-
 func _setup_weapon_shop_modal() -> void:
 	if weapon_shop_modal == null:
 		weapon_shop_modal = Control.new()
@@ -790,8 +766,7 @@ func _setup_path_service() -> void:
 			path_drawer,
 			selection_manager,
 			path_execution_manager,
-			path_mode_controller,
-			marker_edit_panel
+			path_mode_controller
 		)
 		path_service.mode_started.connect(_on_path_mode_started)
 		path_service.mode_ended.connect(_on_path_mode_ended)
