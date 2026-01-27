@@ -8,7 +8,7 @@ var camera: Camera3D = null
 var pan_speed: float = 0.05
 
 ## モバイル向けパン速度（PCより低感度に設定）
-var mobile_pan_speed: float = 0.001
+var mobile_pan_speed: float = 0.00005
 
 ## ズーム設定
 var zoom_speed: float = 1.0

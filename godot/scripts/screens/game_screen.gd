@@ -51,6 +51,7 @@ func _ready() -> void:
 	_match_setup_service.determine_player_team()
 	_load_map()
 	_match_setup_service.spawn_characters()
+	_register_character_markers()
 	_update_team_display()
 	_match_setup_service.setup_camera_for_player()
 	_setup_money()
@@ -113,6 +114,7 @@ func _setup_hud() -> void:
 		_hud.setup()
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
 		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
+		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
 
 
 ## ラウンドHUDのセットアップ
@@ -160,6 +162,20 @@ func _setup_money() -> void:
 	PlayerState.money_changed.connect(_on_money_changed)
 	# 初期表示更新
 	_update_money_display()
+
+
+## キャラクターマーカーを登録
+func _register_character_markers() -> void:
+	if not _hud or not game_manager:
+		return
+
+	# プレイヤーチームのキャラクターをマーカーに登録
+	var player_team: GameCharacter.Team = PlayerState.get_player_team()
+	for character in game_manager.characters:
+		if not is_instance_valid(character):
+			continue
+		if character.team == player_team and not character.marker_name.is_empty():
+			_hud.register_character_marker(character)
 
 
 ## チーム表示を更新
@@ -259,6 +275,30 @@ func _on_round_ended(_winner: int, _reason: int) -> void:
 	# 3秒後にマップ選択画面に遷移
 	await get_tree().create_timer(3.0).timeout
 	get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
+
+
+## キャラクターマーカー押下時のコールバック
+func _on_character_marker_pressed(character: Node) -> void:
+	if not is_instance_valid(character) or not camera:
+		return
+
+	# キャラクターの位置にカメラをパン
+	var target_pos: Vector3 = character.global_position
+	_pan_camera_to_position(target_pos)
+
+
+## カメラを指定位置にパン（アニメーション付き）
+func _pan_camera_to_position(target_pos: Vector3) -> void:
+	if not camera:
+		return
+
+	# カメラの高さを維持しながらXZ平面で移動
+	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 5.0)
+
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
 
 
 ## ========================================

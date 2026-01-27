@@ -19,6 +19,14 @@ const COLOR_PALETTE: Array[Color] = [
 	Color(0.0, 0.8, 0.8),   # F: シアン
 ]
 
+## マーカー名に基づく固定色（alpha/ares, bravo/brim）
+const MARKER_COLOR_MAP: Dictionary = {
+	"alpha": Color("F95D5D"),  # 赤/コーラル
+	"ares": Color("F95D5D"),   # 赤/コーラル
+	"bravo": Color("22D168"),  # 緑
+	"brim": Color("22D168"),   # 緑
+}
+
 ## デフォルト色（未割り当て時）
 const DEFAULT_COLOR: Color = Color(0.5, 0.5, 0.5)
 
@@ -89,10 +97,15 @@ func release_color(character: Node) -> void:
 
 ## キャラクターの色を取得
 ## @param character: キャラクター
-## @return: 割り当てられた色（未割り当ての場合はDEFAULT_COLOR）
+## @return: 割り当てられた色（マーカー名があればMARKER_COLOR_MAP優先、なければパレット）
 func get_character_color(character: Node) -> Color:
 	if not character:
 		return DEFAULT_COLOR
+
+	# マーカー名がある場合はMARKER_COLOR_MAPを優先
+	if character.get("marker_name") and not character.marker_name.is_empty():
+		if MARKER_COLOR_MAP.has(character.marker_name):
+			return MARKER_COLOR_MAP[character.marker_name]
 
 	var char_id = character.get_instance_id()
 	if not _color_assignments.has(char_id):
@@ -132,6 +145,15 @@ func get_label_char(index: int) -> String:
 	if index < 0 or index >= COLOR_PALETTE.size():
 		return "?"
 	return String.chr(65 + index)  # 65 = 'A'
+
+
+## マーカー名から色を取得（alpha/ares, bravo/brimの固定色対応）
+## @param marker_name: マーカー名（alpha, bravo, ares, brim）
+## @return: 対応する色（未登録の場合はDEFAULT_COLOR）
+func get_color_by_marker_name(marker_name: String) -> Color:
+	if MARKER_COLOR_MAP.has(marker_name):
+		return MARKER_COLOR_MAP[marker_name]
+	return DEFAULT_COLOR
 
 
 ## キャラクターのラベル文字を取得

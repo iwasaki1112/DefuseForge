@@ -37,6 +37,10 @@ signal state_changed(character: GameCharacter)  ## マルチプレイヤー用�
 @export_group("Team Settings")
 @export var team: Team = Team.NONE
 
+@export_group("UI Settings")
+## キャラクターマーカー名（alpha, bravo, ares, brim）
+@export var marker_name: String = ""
+
 # ============================================
 # Network Identity (Multiplayer)
 # ============================================

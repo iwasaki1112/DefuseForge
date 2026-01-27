@@ -6,20 +6,34 @@ extends Control
 
 signal execute_all_requested()
 signal clear_paths_requested()
+signal character_marker_pressed(character: Node)
 
 const TIMER_WARNING_THRESHOLD := 10.0
 const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)
 const TIMER_NORMAL_COLOR := Color.WHITE
+const MARKER_DEAD_ALPHA := 0.3
 
 @onready var _pending_paths_label: Label = $ControlPanel/PendingPathsLabel
 @onready var _timer_label: Label = %TimerLabel
 @onready var _execute_button: TextureButton = %ExecuteButton
+@warning_ignore("unused_private_class_variable")
+@onready var _character_markers: HBoxContainer = %CharacterMarkers
+@onready var _marker_alpha: TextureButton = %MarkerAlpha
+@onready var _marker_bravo: TextureButton = %MarkerBravo
+@onready var _marker_ares: TextureButton = %MarkerAres
+@onready var _marker_brim: TextureButton = %MarkerBrim
 
 var _timeline_bar_ui: TimelineBarUI = null
+
+## マーカー名とキャラクターのマッピング
+var _marker_to_character: Dictionary = {}
+## マーカー名とマーカーボタンのマッピング
+var _name_to_marker: Dictionary = {}
 
 
 func setup() -> void:
 	_build_timeline_bar()
+	_setup_character_markers()
 
 
 func set_pending_paths(count: int) -> void:
@@ -160,3 +174,86 @@ func update_execution_time(elapsed_time: float) -> void:
 ## タイムラインバーUIを取得
 func get_timeline_bar_ui() -> TimelineBarUI:
 	return _timeline_bar_ui
+
+
+## ========================================
+## キャラクターマーカーAPI
+## ========================================
+
+## マーカーの初期設定
+func _setup_character_markers() -> void:
+	_name_to_marker = {
+		"alpha": _marker_alpha,
+		"bravo": _marker_bravo,
+		"ares": _marker_ares,
+		"brim": _marker_brim,
+	}
+	# 全マーカーを初期状態でリセット（登録時に表示される）
+	for marker in _name_to_marker.values():
+		if marker:
+			marker.visible = false
+			marker.modulate.a = 1.0
+	print("[GameHUD] Character markers setup complete")
+
+
+## キャラクターをマーカーに登録（marker_nameで指定）
+func register_character_marker(character: GameCharacter) -> void:
+	if not character or character.marker_name.is_empty():
+		print("[GameHUD] register_character_marker: skipped (no character or empty marker_name)")
+		return
+
+	var marker_name := character.marker_name
+	print("[GameHUD] Registering marker: %s" % marker_name)
+	if not _name_to_marker.has(marker_name):
+		push_warning("[GameHUD] Unknown marker name: %s" % marker_name)
+		return
+
+	var marker: TextureButton = _name_to_marker[marker_name]
+	if not marker:
+		return
+
+	# マッピングを保存
+	_marker_to_character[marker_name] = character
+
+	# マーカーを表示
+	marker.visible = true
+	marker.modulate.a = 1.0
+
+	# キャラクターの死亡シグナルを接続
+	if not character.died.is_connected(_on_character_died):
+		character.died.connect(_on_character_died)
+
+
+## 全キャラクターのマーカーをクリア
+func clear_character_markers() -> void:
+	_marker_to_character.clear()
+	for marker_name in _name_to_marker.keys():
+		var marker: TextureButton = _name_to_marker[marker_name]
+		if marker:
+			marker.visible = false
+			marker.modulate.a = 1.0
+
+
+## キャラクター死亡時のコールバック
+func _on_character_died(character: GameCharacter) -> void:
+	# 該当するマーカーを探して透明化
+	for marker_name in _marker_to_character.keys():
+		if _marker_to_character[marker_name] == character:
+			var marker: TextureButton = _name_to_marker.get(marker_name)
+			if marker:
+				_animate_marker_death(marker)
+			break
+
+
+## マーカー死亡アニメーション
+func _animate_marker_death(marker: TextureButton) -> void:
+	var tween := create_tween()
+	tween.tween_property(marker, "modulate:a", MARKER_DEAD_ALPHA, 0.3).set_ease(Tween.EASE_OUT)
+
+
+## マーカークリック時のコールバック
+func _on_marker_pressed(marker_name: String) -> void:
+	if _marker_to_character.has(marker_name):
+		var character: Node = _marker_to_character[marker_name]
+		if is_instance_valid(character):
+			character_marker_pressed.emit(character)

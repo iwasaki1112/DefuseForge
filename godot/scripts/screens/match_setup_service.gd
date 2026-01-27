@@ -45,19 +45,21 @@ func spawn_characters() -> void:
 		push_error("[MatchSetup] Cannot spawn characters - no map preset")
 		return
 
-	# CT側キャラクターをスポーン（alphaを2体）
+	# CT側キャラクターをスポーン（alpha, bravo）
 	var alpha_preset = CharacterRegistry.get_preset("alpha")
 	var ct_spawns = preset.spawn_points_ct
 	var ct_rotations = preset.spawn_rotations_ct
+	var ct_marker_names := ["alpha", "bravo"]
 	if alpha_preset:
-		_spawn_team_characters([alpha_preset, alpha_preset], ct_spawns, ct_rotations)
+		_spawn_team_characters([alpha_preset, alpha_preset], ct_spawns, ct_rotations, ct_marker_names)
 
-	# T側キャラクターをスポーン（aresを2体）
+	# T側キャラクターをスポーン（ares, brim）
 	var ares_preset = CharacterRegistry.get_preset("ares")
 	var t_spawns = preset.spawn_points_t
 	var t_rotations = preset.spawn_rotations_t
+	var t_marker_names := ["ares", "brim"]
 	if ares_preset:
-		_spawn_team_characters([ares_preset, ares_preset], t_spawns, t_rotations)
+		_spawn_team_characters([ares_preset, ares_preset], t_spawns, t_rotations, t_marker_names)
 
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
@@ -83,13 +85,16 @@ func setup_camera_for_player() -> void:
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
 
 
-func _spawn_team_characters(presets: Array, spawn_points: Array, spawn_rotations: Array) -> void:
+func _spawn_team_characters(presets: Array, spawn_points: Array, spawn_rotations: Array, marker_names: Array = []) -> void:
 	var count := mini(presets.size(), spawn_points.size())
 	for i in range(count):
 		var char_preset = presets[i]
 		var spawn_pos: Vector3 = spawn_points[i]
 		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
 		if character:
+			# マーカー名を設定
+			if i < marker_names.size():
+				character.marker_name = marker_names[i]
 			# add_child()前に向きを設定（readyコールバックで適用される）
 			if i < spawn_rotations.size():
 				var spawn_rot: float = spawn_rotations[i]

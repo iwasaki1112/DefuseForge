@@ -34,9 +34,10 @@ func _setup_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# 上部バー
+	# 上部バー（非表示）
 	_top_bar = HBoxContainer.new()
 	_top_bar.name = "TopBar"
+	_top_bar.visible = false
 	_top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_top_bar.offset_top = 10
 	_top_bar.offset_bottom = 60
