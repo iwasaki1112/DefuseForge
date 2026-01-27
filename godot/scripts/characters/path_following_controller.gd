@@ -436,11 +436,22 @@ func process(delta: float) -> void:
 	if _collision_check_timer >= COLLISION_CHECK_INTERVAL:
 		_collision_check_timer = 0.0
 		var ally_ahead: Node = _detect_ally_ahead(move_dir)
-		if ally_ahead and _should_yield_to(ally_ahead):
-			# 自分が低優先度なので待機開始
-			_start_collision_halt(ally_ahead)
-			_update_idle_animation_while_waiting()
-			return
+		if ally_ahead:
+			# Head-on（対面移動）かどうかを先にチェック
+			_avoidance_blocker = ally_ahead  # 一時的に設定してチェック
+			var is_head_on: bool = _is_head_on_collision()
+
+			if is_head_on:
+				# Head-onの場合は即座に側方回避
+				_start_sidestep()
+				return
+			elif _should_yield_to(ally_ahead):
+				# Head-onでなく、自分が低優先度なら待機
+				_start_collision_halt(ally_ahead)
+				_update_idle_animation_while_waiting()
+				return
+			else:
+				_avoidance_blocker = null  # 高優先度なので進む
 
 	# 物理移動
 	_character.velocity.x = move_dir.x * speed
@@ -1028,7 +1039,43 @@ func _is_head_on_collision() -> bool:
 	if other_controller._is_avoiding_collision:
 		return true
 
+	# 相手が自分に向かって移動しているかチェック
+	if _check_moving_toward_each_other(other_controller):
+		return true
+
 	return false
+
+
+## 相手が自分に向かって移動しているかチェック
+func _check_moving_toward_each_other(other_controller: Node) -> bool:
+	if not _character or not _avoidance_blocker:
+		return false
+
+	var my_pos: Vector3 = _character.global_position
+	my_pos.y = 0
+	var other_pos: Vector3 = _avoidance_blocker.global_position
+	other_pos.y = 0
+
+	# 自分から相手への方向
+	var to_other: Vector3 = (other_pos - my_pos).normalized()
+
+	# 相手のパス上の次の目標点を取得
+	if other_controller._current_path.size() == 0:
+		return false
+
+	var other_path_index: int = other_controller._path_index
+	if other_path_index >= other_controller._current_path.size():
+		return false
+
+	var other_target: Vector3 = other_controller._current_path[other_path_index]
+	other_target.y = 0
+
+	# 相手の移動方向
+	var other_move_dir: Vector3 = (other_target - other_pos).normalized()
+
+	# 相手が自分の方に向かっているか（移動方向が自分への方向と逆）
+	var dot: float = other_move_dir.dot(to_other)
+	return dot < HEAD_ON_THRESHOLD  # -0.3以下なら対面移動
 
 
 ## 側方回避を開始
