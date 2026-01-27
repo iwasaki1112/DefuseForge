@@ -30,8 +30,8 @@ func _setup_ui() -> void:
 	logo.anchor_right = 0.5
 	logo.anchor_top = 0.0
 	logo.anchor_bottom = 0.0
-	logo.offset_left = -logo.texture.get_width() / 2
-	logo.offset_right = logo.texture.get_width() / 2
+	logo.offset_left = -logo.texture.get_width() / 2.0
+	logo.offset_right = logo.texture.get_width() / 2.0
 	logo.offset_top = 20
 	logo.offset_bottom = logo.texture.get_height() + 20
 

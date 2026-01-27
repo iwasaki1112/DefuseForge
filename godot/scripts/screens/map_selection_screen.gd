@@ -10,11 +10,15 @@ signal map_selected(preset_id: String)
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const GAME_SCENE := "res://scenes/screens/game.tscn"
 const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
+const BACKGROUND_TEXTURE := preload("res://assets/ui/map_selection/background.png")
+const BACK_BUTTON_TEXTURE := preload("res://assets/ui/map_selection/back-button.png")
+const START_BUTTON_TEXTURE := preload("res://assets/ui/map_selection/start-button.png")
+const MAP_CARD_TEXTURE := preload("res://assets/ui/map_selection/map-card-1-button.png")
 
-var _map_container: GridContainer
+var _map_container: HBoxContainer
 var _selected_map_id: String = ""
-var _map_cards: Dictionary[String, PanelContainer] = {}  # { map_id: PanelContainer }
-var _start_btn: Button
+var _map_cards: Dictionary[String, TextureButton] = {}  # { map_id: TextureButton }
+var _start_btn: TextureButton
 
 
 func _ready() -> void:
@@ -23,81 +27,74 @@ func _ready() -> void:
 
 
 func _setup_ui() -> void:
-	# 背景色
-	ScreenLayoutScript.add_solid_background(self)
+	# 背景画像
+	var bg := TextureRect.new()
+	bg.texture = BACKGROUND_TEXTURE
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	add_child(bg)
 
-	# メインコンテナ
-	var main_vbox := VBoxContainer.new()
-	main_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	main_vbox.set_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 40)
-	main_vbox.add_theme_constant_override("separation", 20)
-	add_child(main_vbox)
-
-	# ヘッダー
-	var header := _create_header()
-	main_vbox.add_child(header)
-
-	# マップ一覧（スクロール可能）
+	# マップ一覧（横スクロール、縦中央配置）
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	main_vbox.add_child(scroll)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	add_child(scroll)
+	# 縦中央に配置
+	scroll.anchor_left = 0.0
+	scroll.anchor_right = 1.0
+	scroll.anchor_top = 0.5
+	scroll.anchor_bottom = 0.5
+	scroll.offset_left = 0
+	scroll.offset_right = 0
+	scroll.offset_top = -180
+	scroll.offset_bottom = 180
 
-	_map_container = GridContainer.new()
-	_map_container.columns = 2
-	_map_container.add_theme_constant_override("h_separation", 20)
-	_map_container.add_theme_constant_override("v_separation", 20)
-	_map_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_map_container)
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
 
-	# フッター（開始ボタン）
-	var footer := _create_footer()
-	main_vbox.add_child(footer)
+	_map_container = HBoxContainer.new()
+	_map_container.add_theme_constant_override("separation", 0)
+	center.add_child(_map_container)
 
-
-func _create_header() -> Control:
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 20)
-
-	# 戻るボタン
-	var back_btn := Button.new()
-	back_btn.text = "< Back"
-	back_btn.custom_minimum_size = Vector2(100, 50)
-	back_btn.add_theme_font_size_override("font_size", 20)
+	# Backボタン（左下に配置）
+	var back_btn := _create_texture_button(BACK_BUTTON_TEXTURE)
 	back_btn.pressed.connect(_on_back_pressed)
-	hbox.add_child(back_btn)
+	back_btn.custom_minimum_size = Vector2(300, 120)
+	add_child(back_btn)
+	back_btn.anchor_left = 0.0
+	back_btn.anchor_right = 0.0
+	back_btn.anchor_top = 1.0
+	back_btn.anchor_bottom = 1.0
+	back_btn.offset_left = 20
+	back_btn.offset_right = 320
+	back_btn.offset_top = -140
+	back_btn.offset_bottom = -20
 
-	# タイトル
-	var title := Label.new()
-	title.text = "Select Map"
-	title.add_theme_font_size_override("font_size", 36)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hbox.add_child(title)
-
-	# スペーサー（左右対称用）
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(100, 0)
-	hbox.add_child(spacer)
-
-	return hbox
-
-
-func _create_footer() -> Control:
-	var hbox := HBoxContainer.new()
-	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	hbox.add_theme_constant_override("separation", 20)
-
-	_start_btn = Button.new()
-	_start_btn.name = "StartButton"
-	_start_btn.text = "Start Game"
-	_start_btn.custom_minimum_size = Vector2(250, 60)
-	_start_btn.add_theme_font_size_override("font_size", 28)
-	_start_btn.disabled = true
+	# Startボタン（右下に配置）
+	_start_btn = _create_texture_button(START_BUTTON_TEXTURE)
 	_start_btn.pressed.connect(_on_start_pressed)
-	hbox.add_child(_start_btn)
+	_start_btn.custom_minimum_size = Vector2(300, 120)
+	_start_btn.disabled = true
+	add_child(_start_btn)
+	_start_btn.anchor_left = 1.0
+	_start_btn.anchor_right = 1.0
+	_start_btn.anchor_top = 1.0
+	_start_btn.anchor_bottom = 1.0
+	_start_btn.offset_left = -320
+	_start_btn.offset_right = -20
+	_start_btn.offset_top = -140
+	_start_btn.offset_bottom = -20
 
-	return hbox
+
+func _create_texture_button(texture: Texture2D) -> TextureButton:
+	var btn := TextureButton.new()
+	btn.texture_normal = texture
+	btn.ignore_texture_size = true
+	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	return btn
 
 
 func _load_maps() -> void:
@@ -117,86 +114,14 @@ func _load_maps() -> void:
 		_map_cards[preset.id] = card
 
 
-func _create_map_card(preset: MapPreset) -> Control:
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(300, 200)
-
-	# スタイルボックス
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.2, 0.2, 0.25, 1.0)
-	style.set_corner_radius_all(8)
-	style.set_border_width_all(2)
-	style.border_color = Color(0.3, 0.3, 0.35, 1.0)
-	card.add_theme_stylebox_override("panel", style)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 15)
-	margin.add_theme_constant_override("margin_right", 15)
-	margin.add_theme_constant_override("margin_top", 15)
-	margin.add_theme_constant_override("margin_bottom", 15)
-	card.add_child(margin)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	margin.add_child(vbox)
-
-	# サムネイル（あれば）
-	var thumbnail_rect := TextureRect.new()
-	thumbnail_rect.custom_minimum_size = Vector2(270, 100)
-	thumbnail_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	thumbnail_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-
-	if preset.thumbnail:
-		thumbnail_rect.texture = preset.thumbnail
-	else:
-		# プレースホルダー
-		var placeholder := ColorRect.new()
-		placeholder.color = Color(0.15, 0.15, 0.2, 1.0)
-		placeholder.custom_minimum_size = Vector2(270, 100)
-
-		var placeholder_label := Label.new()
-		placeholder_label.text = "No Preview"
-		placeholder_label.add_theme_font_size_override("font_size", 16)
-		placeholder_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-		placeholder_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		placeholder_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		placeholder_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-		placeholder.add_child(placeholder_label)
-
-		vbox.add_child(placeholder)
-		thumbnail_rect.queue_free()
-		thumbnail_rect = null
-
-	if thumbnail_rect:
-		vbox.add_child(thumbnail_rect)
-
-	# マップ名
-	var name_label := Label.new()
-	name_label.text = preset.display_name if preset.display_name else preset.id
-	name_label.add_theme_font_size_override("font_size", 22)
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(name_label)
-
-	# 説明
-	if preset.description:
-		var desc_label := Label.new()
-		desc_label.text = preset.description
-		desc_label.add_theme_font_size_override("font_size", 14)
-		desc_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-		vbox.add_child(desc_label)
-
-	# クリック検出用ボタン（透明）
-	var click_btn := Button.new()
-	click_btn.flat = true
-	click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
-	click_btn.pressed.connect(_on_map_card_pressed.bind(preset.id))
-	card.add_child(click_btn)
-
-	# メタデータとしてIDを保持
+func _create_map_card(preset: MapPreset) -> TextureButton:
+	var card := TextureButton.new()
+	card.texture_normal = MAP_CARD_TEXTURE
+	card.ignore_texture_size = true
+	card.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT
+	card.custom_minimum_size = Vector2(240, 320)
+	card.pressed.connect(_on_map_card_pressed.bind(preset.id))
 	card.set_meta("map_id", preset.id)
-
 	return card
 
 
@@ -207,17 +132,15 @@ func _on_map_card_pressed(map_id: String) -> void:
 func _select_map(map_id: String) -> void:
 	# 前の選択を解除
 	if _selected_map_id and _map_cards.has(_selected_map_id):
-		var prev_card := _map_cards[_selected_map_id] as PanelContainer
-		var prev_style := prev_card.get_theme_stylebox("panel") as StyleBoxFlat
-		prev_style.border_color = Color(0.3, 0.3, 0.35, 1.0)
+		var prev_card := _map_cards[_selected_map_id]
+		prev_card.modulate = Color.WHITE
 
 	_selected_map_id = map_id
 
 	# 新しい選択をハイライト
 	if _map_cards.has(map_id):
-		var card := _map_cards[map_id] as PanelContainer
-		var style := card.get_theme_stylebox("panel") as StyleBoxFlat
-		style.border_color = Color(0.3, 0.7, 1.0, 1.0)
+		var card := _map_cards[map_id]
+		card.modulate = Color(0.7, 0.9, 1.0, 1.0)
 
 	# 開始ボタンを有効化
 	if _start_btn:

@@ -294,7 +294,7 @@ func _start_touch_drag(pos: Vector2) -> void:
 
 
 ## 1本指タッチドラッグ更新
-func _update_touch_drag(pos: Vector2, relative: Vector2) -> void:
+func _update_touch_drag(_pos: Vector2, relative: Vector2) -> void:
 	if not camera or not _touch_drag_active:
 		return
 
