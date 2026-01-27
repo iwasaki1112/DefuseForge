@@ -220,51 +220,86 @@ func throw_with_velocity(start_pos: Vector3, velocity: Vector3) -> void:
 
 
 ## 放物線軌道の初速度を計算
-## 近距離は直線的に転がす、遠距離のみ放物線
-func _calculate_throw_velocity(start: Vector3, target: Vector3, _arc_height: float) -> Vector3:
+## ターゲット位置に正確に到達する軌道を計算
+func _calculate_throw_velocity(start: Vector3, target: Vector3, arc_height: float) -> Vector3:
 	var displacement: Vector3 = target - start
-	var horizontal := Vector3(displacement.x, 0, displacement.z)
+	var horizontal: Vector3 = Vector3(displacement.x, 0, displacement.z)
 	var horizontal_distance: float = horizontal.length()
 	var delta_y: float = displacement.y  # 高さの差（負 = 下向き）
+	var g: float = throw_gravity
 
-	# 投擲速度（距離に応じて調整、ゆっくり転がす）
-	var throw_speed: float = clamp(horizontal_distance * 0.5, 2.0, 5.0)
+	# 非常に近い場合はシンプルに
+	if horizontal_distance < 0.5:
+		return Vector3(displacement.x, 1.0, displacement.z).normalized() * 3.0
 
-	# ターゲットへの3D方向（将来の使用のため保持）
-	var _direction: Vector3 = displacement.normalized()
+	# 水平方向の単位ベクトル
+	var horizontal_dir: Vector3 = horizontal.normalized()
 
-	# 近〜中距離（8m以下）: ほぼ直線的に投げる
-	if horizontal_distance < 8.0:
-		# 落下を補正するため、わずかに上向きに調整
-		# 飛行時間 ≈ 距離 / 速度
-		var flight_time: float = horizontal_distance / throw_speed
-		# 落下量 = 0.5 * g * t^2
-		var drop: float = 0.5 * throw_gravity * flight_time * flight_time
-		# 落下を補正する上向き成分
-		var up_compensation: float = (drop - delta_y) / flight_time
+	# === 放物線軌道の計算 ===
+	# 運動方程式:
+	# x(t) = vx * t → vx = horizontal_distance / T
+	# y(t) = vy * t - 0.5 * g * t² → vy = (delta_y + 0.5 * g * T²) / T
+	#
+	# 弧の高さから飛行時間を決定:
+	# 頂点高さ h = vy² / (2g)
+	# vy = sqrt(2 * g * h)
+	#
+	# 飛行時間 T は delta_y = vy*T - 0.5*g*T² を解く
 
-		# 最小限の上向き成分（転がし感を出す）
-		up_compensation = max(up_compensation, 0.5)
-		# 上向き成分を制限（山なりにならないよう）
-		up_compensation = min(up_compensation, 3.0)
-
-		return horizontal.normalized() * throw_speed + Vector3.UP * up_compensation
+	# 弧の高さを決定（距離に応じて調整）
+	var peak_height: float
+	if arc_height > 0:
+		peak_height = arc_height
 	else:
-		# 遠距離（8m以上）: 放物線
-		# 低めの弧（最大1.5m）
-		var peak_height: float = min(1.5, horizontal_distance * 0.15)
-		peak_height = max(peak_height, -delta_y + 0.2)
+		# デフォルト: 距離に応じた低い弧
+		peak_height = clampf(horizontal_distance * 0.1, 0.3, 2.0)
+		# 下向きに投げる場合は弧を高くする必要がある
+		if delta_y < 0:
+			peak_height = maxf(peak_height, absf(delta_y) * 0.3 + 0.3)
 
-		var vy: float = sqrt(2.0 * throw_gravity * peak_height)
-		var time_up: float = vy / throw_gravity
-		var fall_height: float = peak_height - delta_y
-		if fall_height < 0.1:
-			fall_height = 0.1
-		var time_down: float = sqrt(2.0 * fall_height / throw_gravity)
-		var total_time: float = time_up + time_down
-		var horizontal_speed: float = horizontal_distance / total_time
+	# 垂直初速度: vy = sqrt(2 * g * h)
+	var vy: float = sqrt(2.0 * g * peak_height)
 
-		return horizontal.normalized() * horizontal_speed + Vector3.UP * vy
+	# 飛行時間を計算
+	# delta_y = vy * T - 0.5 * g * T²
+	# 0.5 * g * T² - vy * T + delta_y = 0
+	# T = (vy + sqrt(vy² - 2 * g * delta_y)) / g
+	var discriminant: float = vy * vy - 2.0 * g * delta_y
+
+	var flight_time: float
+	if discriminant >= 0:
+		# 正の解を取る（着地時間）
+		flight_time = (vy + sqrt(discriminant)) / g
+	else:
+		# 判別式が負 = 弧が低すぎる
+		# 弧を高くして再計算
+		peak_height = absf(delta_y) + 1.0
+		vy = sqrt(2.0 * g * peak_height)
+		discriminant = vy * vy - 2.0 * g * delta_y
+		flight_time = (vy + sqrt(discriminant)) / g
+
+	# 飛行時間の最小値を確保
+	flight_time = maxf(flight_time, 0.2)
+
+	# 水平速度: vx = horizontal_distance / T
+	var horizontal_speed: float = horizontal_distance / flight_time
+
+	# 速度制限（あまりに速すぎる/遅すぎる場合は調整）
+	if horizontal_speed > 15.0:
+		# 速度を制限して飛行時間を再計算
+		horizontal_speed = 15.0
+		flight_time = horizontal_distance / horizontal_speed
+		# vyを再計算して正確にターゲットに到達
+		vy = (delta_y + 0.5 * g * flight_time * flight_time) / flight_time
+	elif horizontal_speed < 1.0 and horizontal_distance > 0.5:
+		horizontal_speed = 1.0
+		flight_time = horizontal_distance / horizontal_speed
+		vy = (delta_y + 0.5 * g * flight_time * flight_time) / flight_time
+
+	# 最終速度ベクトル
+	var velocity: Vector3 = horizontal_dir * horizontal_speed + Vector3.UP * vy
+
+	return velocity
 
 
 ## 導火線タイムアウト時
@@ -332,143 +367,3 @@ func force_explode() -> void:
 func explode_at_position(pos: Vector3) -> void:
 	global_position = pos
 	_explode()
-
-
-## バウンス投擲（くの字投げ）
-## バウンスポイントを経由してターゲットに向かう軌道で投擲
-## start_pos: 投擲開始位置
-## bounce_pos: バウンスポイント（壁/エッジ位置）
-## bounce_normal: バウンス面の法線
-## target_pos: 最終目標位置
-## thrower: 投げたキャラクター（オプション）
-func throw_with_bounce(start_pos: Vector3, bounce_pos: Vector3, bounce_normal: Vector3, target_pos: Vector3, thrower: Node3D = null) -> void:
-	_thrower = thrower
-	global_position = start_pos
-
-	# 初速度を計算（反射の法則を使用）
-	var velocity: Vector3 = _calculate_bounce_throw_velocity(start_pos, bounce_pos, target_pos, bounce_normal)
-	initial_velocity = velocity  # 保存（ネットワーク同期用）
-	_velocity = velocity
-	_is_active = true
-	_is_grounded = false
-
-	# 導火線タイマー開始
-	_fuse_timer.start()
-
-
-## バウンス投擲用の初速度を計算
-## バウンスポイントに到達した時点での速度方向が、反射後にターゲットへ向かうように計算
-func _calculate_bounce_throw_velocity(start: Vector3, bounce: Vector3, target: Vector3, bounce_normal: Vector3) -> Vector3:
-	# バウンスポイントが近すぎる場合は直接投擲
-	var dist_to_bounce: float = start.distance_to(bounce)
-	if dist_to_bounce < 0.5:
-		return _calculate_throw_velocity(start, target, default_arc_height)
-
-	# 法線を正規化
-	var normal: Vector3 = bounce_normal.normalized()
-
-	# 法線がほぼ上向き（床バウンス）の場合は直接投擲
-	if absf(normal.y) > 0.9:
-		return _calculate_throw_velocity(start, bounce, default_arc_height)
-
-	# === Step 1: 必要な出射方向を計算 ===
-	# バウンス後にターゲットへ向かう方向
-	var outgoing_dir: Vector3 = (target - bounce).normalized()
-
-	# === Step 2: 必要な入射方向を計算 ===
-	# bounce() は反射の逆演算なので、outgoing.bounce(normal) = incoming
-	var incoming_dir: Vector3 = outgoing_dir.bounce(normal).normalized()
-
-	# === Step 3: 飛行時間を計算 ===
-	# バウンスポイントに到達し、到達時の速度方向がincoming_dirになるように
-	#
-	# 運動方程式:
-	# x(t) = x0 + vx*t
-	# y(t) = y0 + vy*t - 0.5*g*t²
-	# z(t) = z0 + vz*t
-	#
-	# 到達時の速度:
-	# vel_x(t) = vx
-	# vel_y(t) = vy - g*t
-	# vel_z(t) = vz
-	#
-	# 条件:
-	# 1. bounce = start + (vx*t, vy*t - 0.5*g*t², vz*t)
-	# 2. 速度方向 ∝ incoming_dir
-
-	var g: float = throw_gravity
-	var d: Vector3 = bounce - start  # 変位
-
-	# 水平方向の制約から飛行時間を計算
-	# 水平速度 = d_h / t であり、これが incoming_dir の水平成分と平行である必要
-	var d_h: Vector3 = Vector3(d.x, 0, d.z)
-	var incoming_h: Vector3 = Vector3(incoming_dir.x, 0, incoming_dir.z)
-	var d_h_len: float = d_h.length()
-	var incoming_h_len: float = incoming_h.length()
-
-	if d_h_len < 0.1 or incoming_h_len < 0.01:
-		# 真上からのバウンス - 直接投擲にフォールバック
-		return _calculate_throw_velocity(start, bounce, default_arc_height)
-
-	# 水平方向の整合性チェック
-	var d_h_dir: Vector3 = d_h.normalized()
-	var incoming_h_dir: Vector3 = incoming_h.normalized()
-	var horizontal_alignment: float = d_h_dir.dot(incoming_h_dir)
-
-	# 水平方向が逆向きの場合（物理的に不可能）
-	if horizontal_alignment < 0.1:
-		# 直接バウンスポイントに投げる（反射は諦める）
-		return _calculate_throw_velocity(start, bounce, default_arc_height)
-
-	# === Step 4: 飛行時間 t を解く ===
-	# 到達時の速度ベクトル vel(t) = (vx, vy - g*t, vz) が incoming_dir と平行
-	#
-	# vx = d.x / t
-	# vz = d.z / t
-	# vy = (d.y + 0.5*g*t²) / t
-	#
-	# vel(t) = (d.x/t, d.y/t + 0.5*g*t - g*t, d.z/t)
-	#        = (d.x/t, d.y/t - 0.5*g*t, d.z/t)
-	#
-	# vel(t) ∝ incoming_dir より:
-	# (d.x/t) / incoming.x = (d.y/t - 0.5*g*t) / incoming.y = (d.z/t) / incoming.z
-	#
-	# 水平成分から: d.x / incoming.x = d.z / incoming.z （整合性は上で確認済み）
-	# 垂直と水平から: (d.x/t) / incoming.x = (d.y/t - 0.5*g*t) / incoming.y
-	#
-	# k = d.x / incoming.x とすると:
-	# k = (d.y - 0.5*g*t²) / incoming.y
-	# d.y - 0.5*g*t² = k * incoming.y
-	# 0.5*g*t² = d.y - k * incoming.y
-	# t² = 2*(d.y - k * incoming.y) / g
-	#
-	# k = d_h_len / incoming_h_len (水平方向のスケール)
-
-	var k: float = d_h_len / incoming_h_len
-	var t_squared: float = 2.0 * (d.y - k * incoming_dir.y) / g
-
-	var t: float
-	if t_squared > 0.01:
-		t = sqrt(t_squared)
-	else:
-		# 解が存在しない場合 - 飛行時間を推定してフォールバック
-		t = d_h_len / 8.0  # 8 m/s を基準
-		t = clampf(t, 0.3, 2.0)
-
-	# 飛行時間の制限
-	t = clampf(t, 0.2, 3.0)
-
-	# === Step 5: 初速度を計算 ===
-	var vx: float = d.x / t
-	var vz: float = d.z / t
-	var vy: float = (d.y + 0.5 * g * t * t) / t
-
-	# 速度の大きさ制限
-	var velocity: Vector3 = Vector3(vx, vy, vz)
-	var speed: float = velocity.length()
-	if speed > 20.0:
-		velocity = velocity.normalized() * 20.0
-	elif speed < 2.0:
-		velocity = velocity.normalized() * 2.0
-
-	return velocity

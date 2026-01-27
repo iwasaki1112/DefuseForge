@@ -1122,7 +1122,7 @@ func _on_smoke_grenade_marker_reached(character: Node, marker_data: Dictionary) 
 
 ## グレネードを生成して投擲（内部ヘルパー）
 ## 戻り値: [grenade, velocity, grenade_id] のトリプル
-func _spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, bounce_point: Vector3, thrower: Node3D = null) -> Array:
+func _spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
 	var grenade = GrenadeScene.instantiate() as Grenade
 	if not grenade:
 		return [null, Vector3.ZERO, 0]
@@ -1138,19 +1138,15 @@ func _spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, bounce_po
 	# 爆発シグナルを接続
 	grenade.exploded.connect(_on_grenade_exploded.bind(grenade_id, false))
 
-	if bounce_point != Vector3.ZERO and bounce_point.length_squared() > 0.001:
-		var bounce_normal = (target_pos - bounce_point).normalized()
-		bounce_normal.y = 0
-		grenade.throw_with_bounce(start_pos, bounce_point, bounce_normal, target_pos, thrower)
-	else:
-		grenade.throw(start_pos, target_pos, thrower)
+	# ターゲット位置に直接投擲
+	grenade.throw(start_pos, target_pos, thrower)
 
 	return [grenade, grenade.initial_velocity, grenade_id]
 
 
 ## スモークグレネードを生成して投擲（内部ヘルパー）
 ## 戻り値: [smoke_grenade, velocity, grenade_id] のトリプル
-func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, bounce_point: Vector3, thrower: Node3D = null) -> Array:
+func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
 	var smoke_grenade = SmokeGrenadeScene.instantiate() as SmokeGrenade
 	if not smoke_grenade:
 		return [null, Vector3.ZERO, 0]
@@ -1167,12 +1163,8 @@ func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, bou
 	# 爆発シグナルを接続（スモークはis_smoke=true）
 	smoke_grenade.exploded.connect(_on_grenade_exploded.bind(grenade_id, true))
 
-	if bounce_point != Vector3.ZERO and bounce_point.length_squared() > 0.001:
-		var bounce_normal = (target_pos - bounce_point).normalized()
-		bounce_normal.y = 0
-		smoke_grenade.throw_with_bounce(start_pos, bounce_point, bounce_normal, target_pos, thrower)
-	else:
-		smoke_grenade.throw(start_pos, target_pos, thrower)
+	# ターゲット位置に直接投擲
+	smoke_grenade.throw(start_pos, target_pos, thrower)
 
 	return [smoke_grenade, smoke_grenade.initial_velocity, grenade_id]
 
