@@ -19,6 +19,7 @@
 - パスメッシュ・マーカーの管理
 - 全キャラクター同時パス実行
 - PathFollowingControllerの動的生成・管理
+- **衝突回避用の優先度割り当て**（実行順序に基づく）
 
 ## シグナル
 
@@ -69,6 +70,11 @@ func confirm_path(
 # 戻り値: 実行したキャラクター数
 func execute_all_paths(run: bool) -> int
 ```
+
+**衝突回避優先度の割り当て:**
+実行時に各キャラクターへ`_execution_order_counter`に基づく優先度を自動割り当て:
+- 先に実行されるキャラクター = 低い優先度値 = 高優先
+- この優先度は`PathFollowingController`の衝突回避で使用される
 
 ### パスクリア
 
