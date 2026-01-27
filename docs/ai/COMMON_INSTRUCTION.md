@@ -52,86 +52,8 @@
 既存クラスの仕様・使用例・内部動作が記載されており、実装の整合性を保つために重要。
 
 ### クラス別APIドキュメント
-| カテゴリ | クラス | 概要 |
-|---------|--------|------|
-| Animation | CharacterAnimationController | 8方向ストレイフ・リコイル・デスを統合制御 |
-| Animation | RecoilModifier | SkeletonModifier3Dで発射時の反動を適用 |
-| Animation | LeanModifier | SkeletonModifier3Dで上半身リーンを適用 |
-| Character | GameCharacter | HP・チーム・死亡処理を管理するCharacterBody3D |
-| Character | VisionComponent | シャドウキャスト法でFoW用の可視ポリゴンを計算 |
-| Character | CombatAwarenessComponent | 敵検出・自動照準を管理するコンポーネント |
-| Character | PathFollowingController | パス追従＋視線ポイント＋Run/Clear/Grenade/Doorマーカー処理＋スタック検出を行う再利用可能コントローラー |
-| Character | CharacterRotationController | 視線方向変更のスムーズな回転制御 |
-| Effect | ActionMarker | アクションマーカーの基底クラス（Vision/Clear/Run/Door/Grenadeの共通機能） |
-| Effect | ActionMarkerData | マーカーデータの統一基底クラス＋各種マーカーデータサブクラス |
-| Effect | MarkerCollection | マーカーの統一管理コレクション（タイプ別管理・Undo対応） |
-| Effect | PathDrawer | マウスドラッグでパス描画（ドア貫通可能）＋視線ポイント＋Run/Clear/Grenade/Doorマーカー設定 |
-| Effect | PathCalculator | パス計算ユーティリティ（最近点検索・オフセット計算等の静的メソッド） |
-| Effect | PathRaycastHelper | レイキャスト・壁検出ユーティリティ（静的メソッド） |
-| Effect | PathInputHandler | 入力処理統括（マーカーハンドラへの委譲） |
-| Effect | PathState | パス状態管理（描画状態・モード・有効フラグ等） |
-| Effect | MarkerHandlerBase | マーカーハンドラ基底クラス（共通インターフェース） |
-| Effect | PathLineMesh | 破線＋終点ドーナツ円のパスメッシュ描画 |
-| Effect | RunMarker | Run区間の開始/終点を示すマーカー（ActionMarker継承） |
-| Effect | VisionMarker | 円＋矢印で視線方向を示すマーカー（ActionMarker継承） |
-| Effect | ClearMarker | Clearポイント（視線・Runリセット）を示すマーカー（ActionMarker継承） |
-| Effect | GrenadeMarker | パス上のグレネード投擲位置＋軌道を示すマーカー（ActionMarker継承） |
-| Effect | DoorMarker | パス上のドアキック位置＋対象ドアを示すマーカー（ActionMarker継承） |
-| Effect | CharacterSelectedMarker | 選択中キャラクター足元の回転マーカー |
-| Util | GameConstants | ノード名・グループ名・アニメ名などの共有定数 |
-| Util | CameraPanController | 画面ドラッグ/ピンチによるカメラ移動・ズーム制御 |
-| Util | PathSmoother | RDP間引き＋Catmull-Rom補間でパススムージング |
-| Map | Bank | マップ初期化（壁/ドアのコリジョン設定） |
-| Registry | CharacterRegistry | プリセット管理＋キャラクター生成（Autoload） |
-| Registry | WeaponRegistry | 武器プリセット管理（Autoload） |
-| Registry | MapRegistry | マッププリセット管理＋マップインスタンス化（Autoload） |
-| Resource | CharacterPreset | キャラクター定義（ID・チーム・モデル・ステータス） |
-| Resource | WeaponPreset | 武器定義（ID・カテゴリー・ダメージ・リコイル） |
-| Resource | MapPreset | マップ定義（ID・シーン・サイズ・スポーン位置） |
-| Resource | EnvironmentPreset | 環境プリセット定義（ライティング・影・レンダリング品質・ポストプロセス） |
-| Resource | ContextMenuItem | コンテキストメニュー項目定義 |
-| System | FogOfWarSystem | SubViewport+シェーダーでFog of Warを描画 |
-| System | PlayerState | プレイヤーチーム管理＋味方/敵分類＋お金管理（Autoload） |
-| System | EnemyVisibilitySystem | 味方視界に基づく敵キャラクター可視性制御 |
-| System | CharacterColorManager | キャラクター個別色管理（Autoload） |
-| System | CharacterSelectionManager | 複数キャラクター選択＋アウトライン表示管理 |
-| System | CharacterSetupService | キャラクター初期セットアップを担当 |
-| System | PathExecutionManager | パス確定・実行・pending_paths管理 |
-| System | IdleCharacterManager | アイドル中キャラクターの状態更新管理 |
-| System | PathModeController | パスモード状態管理（開始・確定・キャンセル） |
-| System | PathService | パス描画・編集・実行の調整サービス |
-| System | VisionService | 視界関連の更新・同期サービス |
-| System | MapManager | マップライフサイクル管理・クリーンアップ |
-| System | EnvironmentSetup | 環境設定コンポーネント（ライティング・レンダリング品質・ポストプロセス） |
-| System | GameManager | コアゲームシステム初期化・更新の一元管理 |
-| System | MatchSetupService | マッチ開始時のセットアップを担当 |
-| System | SettingsManager | 設定管理（プレイヤー名保存・選択マップ保持）（Autoload） |
-| System | InputController | ゲーム画面の入力処理コントローラー |
-| System | RoundManager | ラウンド状態管理・タイマー・生存者数追跡・勝敗判定 |
-| Screen | MainMenuScreen | メインメニュー画面 |
-| Screen | MapSelectionScreen | マップ選択画面 |
-| Screen | OptionScreen | オプション設定画面 |
-| Screen | GameScreen | ゲームプレイ画面（マップロード・キャラクタースポーン） |
-| UI | ContextMenuComponent | タップ時のコンテキストメニューUI |
-| UI | CharacterLabelManager | 味方キャラクターの頭上ラベル（A, B, C...）管理 |
-| UI | GameHUD | ゲーム画面の操作パネルUI |
-| UI | MarkerEditPanel | マルチキャラクター対応マーカー編集パネル |
-| UI | ScreenLayout | 画面UIの共通レイアウト生成ヘルパー |
-| UI | WeaponShopModal | 武器購入モーダル（BUYメニュー） |
-| UI | RoundHUD | ラウンドタイマー・生存者数・結果表示UI |
-| Weapon | Grenade | 投擲グレネード（放物線軌道・跳ね返り・時間爆発） |
-| Test | FreeCamera | テスト用オービットカメラ |
-| Test | LightingTest | ライティング確認用テストシーン |
-| Test | WeaponAdjustment | 武器位置・マズル調整ツール |
-| Network | NetworkConstants | ネットワーク定数定義（メッセージタイプ・同期設定・タイムアウト） |
-| Network | NetworkMessages | ネットワーク同期用メッセージ型（PathConfirm・RoundState・CharacterState・GameEvent） |
-| Network | SyncState | 同期状態クラス（GameStateSnapshot・PlayerStateData・CharacterSnapshot） |
-| Network | NetworkSerializer | シリアライズユーティリティ（Vector3圧縮・パスメッセージ・差分圧縮） |
-| Network | LocalNetworkBus | ローカルネットワークシミュレーター（遅延・パケットロス対応） |
-| Network | MultiplayerSyncController | GameManagerとNetworkBus間の同期処理管理 |
-| Test | MultiplayerTestScreen | ローカルマルチプレイテストシーン（Host/Client切替） |
-
-詳細は `docs/godot/api/<クラス名>.md` を参照。
+詳細は `docs/godot/api/README.md` を参照。
+各クラスの仕様・使用例・内部動作が記載されており、実装の整合性を保つために重要。
 
 ### 実装後のドキュメント更新（必須）
 **実装が完了したら、必ず関連するAPIドキュメントを更新すること。**
