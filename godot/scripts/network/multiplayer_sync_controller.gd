@@ -404,10 +404,8 @@ func _handle_character_update_binary(data: Dictionary) -> void:
 func _handle_character_batch_update_binary(data: Dictionary) -> void:
 	var binary := _get_binary_from_data(data)
 	if binary.is_empty():
-		print("[SYNC] Binary data is empty!")
 		return
 	var states := NetworkSerializer.deserialize_character_states_binary(binary)
-	print("[SYNC] Received batch update: %d states, binary size: %d" % [states.size(), binary.size()])
 	for char_state in states:
 		_apply_character_state(char_state)
 
@@ -416,19 +414,15 @@ func _handle_character_batch_update_binary(data: Dictionary) -> void:
 func _get_binary_from_data(data: Dictionary) -> PackedByteArray:
 	var raw = data.get("binary", null)
 	if raw == null:
-		print("[SYNC] No 'binary' key in data: %s" % str(data))
 		return PackedByteArray()
 
 	# 既にPackedByteArrayの場合
 	if raw is PackedByteArray:
-		print("[SYNC] Binary is PackedByteArray, size: %d" % raw.size())
 		return raw
 
 	# 文字列（Base64）の場合
 	if raw is String:
-		var decoded := Marshalls.base64_to_raw(raw)
-		print("[SYNC] Binary is Base64 String, decoded size: %d" % decoded.size())
-		return decoded
+		return Marshalls.base64_to_raw(raw)
 
 	# 配列の場合（JSONでint配列になることがある）
 	if raw is Array:
@@ -436,10 +430,8 @@ func _get_binary_from_data(data: Dictionary) -> PackedByteArray:
 		result.resize(raw.size())
 		for i in raw.size():
 			result[i] = raw[i]
-		print("[SYNC] Binary is Array, size: %d" % result.size())
 		return result
 
-	print("[SYNC] Unknown binary type: %s" % typeof(raw))
 	return PackedByteArray()
 
 
@@ -447,15 +439,8 @@ func _get_binary_from_data(data: Dictionary) -> PackedByteArray:
 func _apply_character_state(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var character := game_manager.find_character_by_network_id(char_state.character_id)
 	if character:
-		var is_local := character.is_local()
-		if not is_local:
+		if not character.is_local():
 			character.apply_remote_state(char_state)
-		# デバッグ: 30回に1回だけログ出力
-		if randi() % 30 == 0:
-			print("[SYNC] CharUpdate id=%d is_local=%s owner=%d my_peer=%d pos=%s" % [
-				char_state.character_id, is_local, character.owner_peer_id, peer_id, char_state.position])
-	else:
-		print("[SYNC] Character not found: id=%d" % char_state.character_id)
 	character_updated_remote.emit(char_state)
 
 
