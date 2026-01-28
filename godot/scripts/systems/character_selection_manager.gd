@@ -27,10 +27,15 @@ var outline_color: Color = Color(0.0, 0.8, 1.0, 1.0)
 var outline_thickness: float = 3.5
 
 
-## 選択リストにキャラクターを追加
+## キャラクターを選択（既存の選択は解除される）
 func add_to_selection(character: Node) -> void:
 	if selected_characters.has(character):
 		return
+
+	# 既存の選択を全て解除（シングルセレクトのみ）
+	for c in selected_characters.duplicate():
+		_remove_outline(c)
+	selected_characters.clear()
 
 	selected_characters.append(character)
 	primary_character = character
