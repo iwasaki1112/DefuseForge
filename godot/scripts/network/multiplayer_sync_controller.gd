@@ -17,7 +17,6 @@ var peer_id: int = 0
 var is_host: bool = false
 
 ## 同期設定
-var _sync_timer: float = 0.0
 var _sync_interval: float = 1.0 / NetworkConstants.SYNC_RATE_HZ
 var _auto_sync_enabled: bool = true
 
@@ -45,7 +44,7 @@ func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
 		game_manager.round_manager.set_authority(true)
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if not _auto_sync_enabled:
 		return
 
@@ -58,8 +57,8 @@ func _process(delta: float) -> void:
 			# ホストは全状態を送信
 			send_state_sync()
 		else:
-			# クライアントは自分のキャラクター状態のみ送信（デルタ検出付き）
-			_send_local_character_states_with_delta()
+			# クライアントも同じ頻度で送信（デルタ検出は後で最適化）
+			send_local_character_states()
 
 
 ## 状態同期を送信（Host→Client）
@@ -135,8 +134,9 @@ func _send_local_character_states_with_delta() -> void:
 		_idle_skip_counter = 0
 
 	# 送信すべき状態がある場合のみ送信
-	if not states_to_send.is_empty():
-		send_character_batch_update_binary(states_to_send)
+	# 一時的に従来方式を使用（デバッグ用）
+	for state in states_to_send:
+		send_character_update(state)  # バイナリではなく従来のJSON方式
 
 
 ## 状態に有意な変化があるか判定
@@ -216,18 +216,20 @@ func send_character_update(char_state: NetworkMessages.CharacterStateMessage) ->
 ## キャラクター更新をバイナリ形式で送信（高効率版）
 func send_character_update_binary(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var binary_data := NetworkSerializer.serialize_character_state_binary(char_state)
+	# JSON経由で送信するためBase64エンコード
+	var encoded := Marshalls.raw_to_base64(binary_data)
 
 	if is_host:
 		network_bus.broadcast_from_host(
 			NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY,
-			{"binary": binary_data}
+			{"binary": encoded}
 		)
 	else:
 		network_bus.send_message(
 			peer_id,
 			LocalNetworkBus.HOST_PEER_ID,
 			NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY,
-			{"binary": binary_data}
+			{"binary": encoded}
 		)
 
 
@@ -237,18 +239,20 @@ func send_character_batch_update_binary(states: Array[NetworkMessages.CharacterS
 		return
 
 	var binary_data := NetworkSerializer.serialize_character_states_binary(states)
+	# JSON経由で送信するためBase64エンコード
+	var encoded := Marshalls.raw_to_base64(binary_data)
 
 	if is_host:
 		network_bus.broadcast_from_host(
 			NetworkConstants.MessageType.CHARACTER_BATCH_UPDATE_BINARY,
-			{"binary": binary_data}
+			{"binary": encoded}
 		)
 	else:
 		network_bus.send_message(
 			peer_id,
 			LocalNetworkBus.HOST_PEER_ID,
 			NetworkConstants.MessageType.CHARACTER_BATCH_UPDATE_BINARY,
-			{"binary": binary_data}
+			{"binary": encoded}
 		)
 
 
@@ -390,7 +394,7 @@ func _handle_character_update(data: Dictionary) -> void:
 
 
 func _handle_character_update_binary(data: Dictionary) -> void:
-	var binary: PackedByteArray = data.get("binary", PackedByteArray())
+	var binary := _get_binary_from_data(data)
 	if binary.is_empty():
 		return
 	var char_state := NetworkSerializer.deserialize_character_state_binary(binary)
@@ -398,23 +402,60 @@ func _handle_character_update_binary(data: Dictionary) -> void:
 
 
 func _handle_character_batch_update_binary(data: Dictionary) -> void:
-	var binary: PackedByteArray = data.get("binary", PackedByteArray())
+	var binary := _get_binary_from_data(data)
 	if binary.is_empty():
+		print("[SYNC] Binary data is empty!")
 		return
 	var states := NetworkSerializer.deserialize_character_states_binary(binary)
+	print("[SYNC] Received batch update: %d states, binary size: %d" % [states.size(), binary.size()])
 	for char_state in states:
 		_apply_character_state(char_state)
+
+
+## Dictionaryからバイナリデータを取得（JSON経由で文字列化される場合に対応）
+func _get_binary_from_data(data: Dictionary) -> PackedByteArray:
+	var raw = data.get("binary", null)
+	if raw == null:
+		print("[SYNC] No 'binary' key in data: %s" % str(data))
+		return PackedByteArray()
+
+	# 既にPackedByteArrayの場合
+	if raw is PackedByteArray:
+		print("[SYNC] Binary is PackedByteArray, size: %d" % raw.size())
+		return raw
+
+	# 文字列（Base64）の場合
+	if raw is String:
+		var decoded := Marshalls.base64_to_raw(raw)
+		print("[SYNC] Binary is Base64 String, decoded size: %d" % decoded.size())
+		return decoded
+
+	# 配列の場合（JSONでint配列になることがある）
+	if raw is Array:
+		var result := PackedByteArray()
+		result.resize(raw.size())
+		for i in raw.size():
+			result[i] = raw[i]
+		print("[SYNC] Binary is Array, size: %d" % result.size())
+		return result
+
+	print("[SYNC] Unknown binary type: %s" % typeof(raw))
+	return PackedByteArray()
 
 
 ## キャラクター状態を適用（共通処理）
 func _apply_character_state(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var character := game_manager.find_character_by_network_id(char_state.character_id)
 	if character:
-		if not character.is_local():
+		var is_local := character.is_local()
+		if not is_local:
 			character.apply_remote_state(char_state)
 		# デバッグ: 30回に1回だけログ出力
 		if randi() % 30 == 0:
-			print("[SYNC] CharUpdate id=%d is_local=%s pos=%s" % [char_state.character_id, character.is_local(), char_state.position])
+			print("[SYNC] CharUpdate id=%d is_local=%s owner=%d my_peer=%d pos=%s" % [
+				char_state.character_id, is_local, character.owner_peer_id, peer_id, char_state.position])
+	else:
+		print("[SYNC] Character not found: id=%d" % char_state.character_id)
 	character_updated_remote.emit(char_state)
 
 
