@@ -107,24 +107,28 @@ var _segment_pivot_offset: Vector2 = Vector2(256, 256)
 		return _segment_move_texture
 	set(value):
 		_segment_move_texture = value
+		_segment_image_cache.erase("move")
 		_queue_editor_refresh()
 @export var segment_rotation_texture: Texture2D:
 	get:
 		return _segment_rotation_texture
 	set(value):
 		_segment_rotation_texture = value
+		_segment_image_cache.erase("rotate")
 		_queue_editor_refresh()
 @export var segment_buy_texture: Texture2D:
 	get:
 		return _segment_buy_texture
 	set(value):
 		_segment_buy_texture = value
+		_segment_image_cache.erase("buy")
 		_queue_editor_refresh()
 @export var segment_crouch_texture: Texture2D:
 	get:
 		return _segment_crouch_texture
 	set(value):
 		_segment_crouch_texture = value
+		_segment_image_cache.erase("crouch")
 		_queue_editor_refresh()
 @export var segment_move_rotation_degrees: float = 0.0:
 	get:
@@ -179,6 +183,7 @@ var _current_character: CharacterBody3D = null
 var _is_open: bool = false
 var _tween: Tween
 var _item_tween: Tween
+var _segment_image_cache: Dictionary = {}  # アルファ判定用の画像キャッシュ
 
 
 func _ready() -> void:
@@ -458,30 +463,24 @@ func _gui_input(event: InputEvent) -> void:
 			var from_center = local_pos - center
 			var dist_from_center = from_center.length()
 
-			# セグメントテクスチャモードの場合、角度ベースでセグメントを判定
-			# 回転したセグメントは_menu_rootの境界外にはみ出すため、距離ベースで判定
+			# セグメントテクスチャモードの場合、アルファベースでセグメントを判定
+			# 各セグメント画像の形状に正確に一致するクリック検出
 			if use_segment_textures and _has_any_segment_texture():
-				# 内側半径（中央の穴）と外側半径（メニュー範囲）
-				var menu_radius = min(_menu_root.size.x, _menu_root.size.y) * 0.5
-				var inner_radius = menu_radius * 0.3  # 中央30%は穴
-				var outer_radius = menu_radius * 1.2  # 外側は20%余裕を持たせる
-
-				# 範囲外はGameManagerに委譲
-				if dist_from_center > outer_radius:
-					return
-
-				# 中央の穴は背景クリック
-				if dist_from_center < inner_radius:
-					var character = _current_character
-					close()
-					background_clicked.emit(character)
-					get_viewport().set_input_as_handled()
-					return
-
-				# 角度からセグメントを特定
+				# セグメント画像でアルファ判定
 				var action_id = _get_segment_at_angle(from_center)
 				if action_id != "":
 					_on_button_pressed(action_id)
+					get_viewport().set_input_as_handled()
+					return
+
+				# どのセグメントにもヒットしない場合、中央付近なら背景クリック
+				# 外側なら何もしない（GameManagerに委譲）
+				var menu_radius = min(_menu_root.size.x, _menu_root.size.y) * 0.5
+				if dist_from_center < menu_radius * 0.5:
+					# 中央付近は背景クリックとして処理
+					var character = _current_character
+					close()
+					background_clicked.emit(character)
 					get_viewport().set_input_as_handled()
 				return
 
@@ -580,47 +579,70 @@ func _has_any_segment_texture() -> bool:
 	return segment_move_texture or segment_rotation_texture or segment_buy_texture or segment_crouch_texture
 
 
-## 角度からセグメントのaction_idを取得
-## 4分割メニュー: 各セグメントは90度ずつ
-## move=0°, rotate=90°, buy=180°, crouch=270° (標準設定の場合)
+## クリック位置からセグメントのaction_idを取得（アルファベースの判定）
+## 各セグメントの画像アルファ値をチェックして、実際の画像形状と一致する判定を行う
 func _get_segment_at_angle(from_center: Vector2) -> String:
-	# atan2で角度を取得（-PI～PIの範囲、Y軸上向きが0）
-	var angle = atan2(from_center.x, -from_center.y)  # 上向きを0度とする
-	# 0～TAUの範囲に正規化
-	if angle < 0:
-		angle += TAU
+	# 全セグメントをチェックし、アルファ値が有効なものを探す
+	var segments = ["move", "rotate", "buy", "crouch"]
 
-	# 角度を度数に変換
-	var angle_deg = rad_to_deg(angle)
+	for action_id in segments:
+		var texture = _get_segment_texture(action_id)
+		if not texture:
+			continue
+		if _is_point_on_segment_alpha(from_center, action_id, texture):
+			return action_id
 
-	# セグメント数（現在は4固定）
-	var segment_count = 4
-	var segment_angle = 360.0 / segment_count  # 90度
+	return ""
 
-	# 各セグメントの中心角度を計算し、最も近いセグメントを見つける
-	var segments = [
-		{"id": "move", "center": segment_move_rotation_degrees},
-		{"id": "rotate", "center": segment_rotation_rotation_degrees},
-		{"id": "buy", "center": segment_buy_rotation_degrees},
-		{"id": "crouch", "center": segment_crouch_rotation_degrees},
-	]
 
-	var best_id = ""
-	var best_diff = 999.0
+## クリック位置がセグメント画像上にあるかをアルファ値でチェック
+## セグメントの回転とスケールを考慮してテクスチャ座標に変換
+func _is_point_on_segment_alpha(from_center: Vector2, action_id: String, texture: Texture2D) -> bool:
+	# セグメントの回転角度を取得
+	var rotation_deg = _get_segment_rotation_degrees(action_id)
+	var rotation_rad = deg_to_rad(-rotation_deg)  # 逆回転で元の画像座標に戻す
 
-	for seg in segments:
-		# セグメントの中心角度（正規化）
-		var center = fmod(seg["center"] + 360.0, 360.0)
-		# クリック角度との差（最短距離）
-		var diff = absf(angle_deg - center)
-		if diff > 180.0:
-			diff = 360.0 - diff
-		# 45度以内なら候補
-		if diff < segment_angle / 2.0 and diff < best_diff:
-			best_diff = diff
-			best_id = seg["id"]
+	# 1. クリック位置を逆回転してセグメントのローカル座標に変換
+	var local_point = from_center.rotated(rotation_rad)
 
-	return best_id
+	# 2. スケールを考慮（表示座標から元のテクスチャ座標へ）
+	var tex_coord_from_pivot = local_point / segment_scale
+
+	# 3. ピボットオフセットを加算してテクスチャ座標に変換
+	var tex_coord = tex_coord_from_pivot + segment_pivot_offset
+
+	# テクスチャ範囲外は無効
+	var tex_size = texture.get_size()
+	if tex_coord.x < 0 or tex_coord.x >= tex_size.x:
+		return false
+	if tex_coord.y < 0 or tex_coord.y >= tex_size.y:
+		return false
+
+	# キャッシュから画像を取得（なければ作成）
+	var image = _get_cached_segment_image(action_id, texture)
+	if not image:
+		return false
+
+	var pixel = image.get_pixelv(Vector2i(tex_coord))
+	return pixel.a > 0.1  # アルファが10%以上なら有効
+
+
+## セグメント画像をキャッシュから取得（パフォーマンス最適化）
+func _get_cached_segment_image(action_id: String, texture: Texture2D) -> Image:
+	if _segment_image_cache.has(action_id):
+		return _segment_image_cache[action_id]
+
+	var image = texture.get_image()
+	if not image:
+		return null
+
+	# 圧縮されている場合はデコンプレス
+	if image.is_compressed():
+		image = image.duplicate()
+		image.decompress()
+
+	_segment_image_cache[action_id] = image
+	return image
 
 
 func _get_segment_base_size() -> float:
