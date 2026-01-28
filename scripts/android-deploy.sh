@@ -1,16 +1,27 @@
 #!/bin/bash
-# Android USB Deploy Script
+# Android Build & Deploy Script
 # Usage: ./scripts/android-deploy.sh
 
 set -e
 
 APK_PATH="godot/builds/android/godot.apk"
+BUILD_DIR="godot/builds/android"
+
+# ビルドディレクトリ作成
+mkdir -p "$BUILD_DIR"
+
+# Godotでビルド
+echo "Building Android APK..."
+godot --headless --path godot --export-debug "Android" "builds/android/godot.apk"
 
 if [ ! -f "$APK_PATH" ]; then
-    echo "Error: APK file not found at $APK_PATH"
-    echo "Run 'godot --headless --path godot --export-debug \"Android\" builds/android/godot.apk' first"
+    echo "Error: Build failed. APK file not found at $APK_PATH"
     exit 1
 fi
+
+echo ""
+echo "Build complete: $APK_PATH"
+echo ""
 
 # Check if adb is available
 if ! command -v adb &> /dev/null; then
