@@ -189,8 +189,9 @@ func set_facing_direction_vec(direction: Vector3) -> void:
 	if direction.length_squared() < 0.001:
 		return
 	_facing_direction = direction.normalized()
-	# AnimationControllerのモデル向きを更新
-	if anim_ctrl:
+	# ローカルキャラクターのみ即座にモデル向きを更新
+	# リモートキャラクターは update_remote_interpolation() で四元数SLERP補間を使用
+	if is_local() and anim_ctrl:
 		anim_ctrl.set_model_direction(_facing_direction)
 
 
@@ -1068,7 +1069,11 @@ func update_remote_interpolation(delta: float) -> void:
 	else:
 		# バッファベースの補間を適用
 		global_position = interpolated.position
-		set_facing_direction(interpolated.rotation)
+		set_facing_direction(interpolated.rotation)  # _facing_direction を更新
+
+		# 回転は四元数SLERPで滑らかに補間（ローカルと同じ方式）
+		if anim_ctrl and anim_ctrl.has_method("update_model_rotation_smooth"):
+			anim_ctrl.update_model_rotation_smooth(_facing_direction, delta)
 
 		# アニメーション更新（明示的な状態を使用）
 		if anim_ctrl:
@@ -1145,12 +1150,16 @@ func _apply_fallback_interpolation(delta: float) -> void:
 	# 位置の補間
 	global_position = global_position.lerp(_remote_target_position, FALLBACK_SPEED * delta)
 
-	# 回転の補間
+	# 回転の補間（_facing_direction を更新）
 	var current_rot := atan2(_facing_direction.x, _facing_direction.z)
 	var target_rot := _remote_target_rotation
 	var rot_diff := fmod(target_rot - current_rot + PI, TAU) - PI
 	var new_rot := current_rot + rot_diff * FALLBACK_SPEED * delta
 	set_facing_direction(new_rot)
+
+	# 回転は四元数SLERPで滑らかに補間（ローカルと同じ方式）
+	if anim_ctrl and anim_ctrl.has_method("update_model_rotation_smooth"):
+		anim_ctrl.update_model_rotation_smooth(_facing_direction, delta)
 
 	# アニメーション更新（明示的な状態を使用）
 	if anim_ctrl:

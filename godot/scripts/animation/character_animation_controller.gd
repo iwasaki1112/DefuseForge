@@ -273,6 +273,34 @@ func set_model_direction(direction: Vector3) -> void:
 	var target_basis := Basis.looking_at(-direction, Vector3.UP)  # ← -direction 必須！
 	_model.transform.basis = target_basis
 
+
+## リモートキャラクター用の回転補間速度（ローカルより少し速く追従）
+const REMOTE_ROTATION_SPEED: float = 20.0
+
+## リモートキャラクター用の回転更新（四元数SLERPで滑らかに補間）
+## ローカルキャラクターと同じ補間方式を使用し、滑らかで一貫した回転を実現
+## target_direction: ターゲット方向（正規化不要、内部で処理）
+## delta: フレーム時間
+func update_model_rotation_smooth(target_direction: Vector3, delta: float) -> void:
+	if not _model or target_direction.length_squared() < 0.001:
+		return
+
+	var look_dir := target_direction.normalized()
+	look_dir.y = 0
+
+	if look_dir.length_squared() < 0.001:
+		return
+
+	# 四元数SLERPで滑らかに補間（ローカルの_update_model_rotationと同じ方式）
+	# -look_dir 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
+	var target_basis := Basis.looking_at(-look_dir, Vector3.UP)
+	var target_quat := target_basis.get_rotation_quaternion()
+	var current_quat := Quaternion(_model.transform.basis)
+	var new_quat := current_quat.slerp(target_quat, REMOTE_ROTATION_SPEED * delta)
+	_model.transform.basis = Basis(new_quat)
+
+	_aim_direction = look_dir
+
 ## Play death animation
 ## hit_direction: Direction the hit came FROM (determines fall direction)
 ## headshot: Reserved for future use

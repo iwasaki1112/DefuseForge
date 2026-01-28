@@ -839,6 +839,10 @@ func _finish() -> void:
 			# アイドル状態に遷移（移動方向をゼロに）
 			anim_ctrl.update_animation(Vector3.ZERO, final_dir, false, 0.016)
 
+			# _facing_direction を更新してネットワーク同期に反映
+			# これにより、パス完了時の向きがリモート側で正しく表示される
+			_character._facing_direction = final_dir.normalized()
+
 	_is_following = false
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
