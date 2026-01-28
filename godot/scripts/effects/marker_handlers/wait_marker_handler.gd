@@ -107,7 +107,6 @@ func _finish_press() -> void:
 	_wait_meshes.append(marker)
 
 	marker_added.emit(new_marker)
-	_notify_timeline_changed()
 
 
 ## プレビューマーカー作成
@@ -137,7 +136,6 @@ func update_preview() -> void:
 	var current_time = Time.get_ticks_msec() / 1000.0
 	var duration = clampf(current_time - _press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 	_preview_marker.set_wait_duration(duration)
-	_notify_timeline_changed()
 
 
 ## Waitマーカーノード作成

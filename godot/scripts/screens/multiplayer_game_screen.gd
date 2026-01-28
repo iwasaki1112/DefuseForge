@@ -367,15 +367,11 @@ func _on_path_confirmed(_count: int) -> void:
 
 
 func _on_paths_execution_started(_count: int) -> void:
-	if _hud:
-		_hud.start_timeline_execution()
+	pass
 
 
 func _on_all_paths_completed() -> void:
 	_update_pending_paths_label()
-	if _hud:
-		_hud.stop_timeline_execution()
-		_hud.clear_all_timelines()
 
 
 func _on_round_ended(winner: int, reason: int) -> void:

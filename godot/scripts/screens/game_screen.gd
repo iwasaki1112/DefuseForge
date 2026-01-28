@@ -10,7 +10,6 @@ const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
 const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
 const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_service.gd")
-const TimelineCalculatorScript := preload("res://scripts/utils/timeline_calculator.gd")
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -34,10 +33,6 @@ var _match_setup_service: MatchSetupService = null
 
 ## デバッグ
 var _vision_debug_enabled: bool = false
-
-## タイムライン状態
-var _timeline_executing: bool = false
-var _timeline_elapsed_time: float = 0.0  ## 実行開始からの経過時間
 
 
 
@@ -97,7 +92,6 @@ func _setup_game_manager() -> void:
 		game_manager.paths_execution_started.connect(_on_paths_execution_started)
 		game_manager.all_paths_completed.connect(_on_all_paths_completed)
 		game_manager.paths_cleared.connect(_on_paths_cleared)
-		game_manager.timeline_data_changed.connect(_on_timeline_data_changed)
 		game_manager.path_ready.connect(_on_path_ready)
 		game_manager.path_mode_ended.connect(_on_path_mode_ended)
 		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
@@ -288,11 +282,6 @@ func _physics_process(delta: float) -> void:
 	if _camera_pan_controller:
 		_camera_pan_controller.process(delta)
 
-	# タイムライン進行状況を更新（実時間ベース）
-	if _timeline_executing:
-		_timeline_elapsed_time += delta
-		_update_timeline_progress()
-
 
 ## ========================================
 ## シグナルハンドラ
@@ -304,32 +293,18 @@ func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
 
 func _on_path_confirmed(_count: int) -> void:
 	_update_pending_paths_label()
-	_update_timeline_from_pending_paths()
 
 
 func _on_paths_execution_started(_count: int) -> void:
-	_timeline_executing = true
-	_timeline_elapsed_time = 0.0  ## 経過時間をリセット
-	if _hud:
-		_hud.start_timeline_execution()
+	pass
 
 
 func _on_all_paths_completed() -> void:
 	_update_pending_paths_label()
-	_timeline_executing = false
-	if _hud:
-		_hud.stop_timeline_execution()
-		_hud.clear_all_timelines()
 
 
 func _on_paths_cleared() -> void:
 	_update_pending_paths_label()
-	if _hud:
-		_hud.clear_all_timelines()
-
-
-func _on_timeline_data_changed() -> void:
-	_update_timeline_preview()
 
 
 func _on_money_changed(_new_amount: int) -> void:
@@ -368,203 +343,6 @@ func _pan_camera_to_position(target_pos: Vector3) -> void:
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_QUAD)
 	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
-
-
-## ========================================
-## タイムライン管理
-## ========================================
-
-## 保留パスからタイムラインを更新
-func _update_timeline_from_pending_paths() -> void:
-	if not _hud or not game_manager or not game_manager.path_execution_manager:
-		return
-
-	var pending = game_manager.path_execution_manager.pending_paths
-	for char_id in pending:
-		var data = pending[char_id]
-		if not data.has("character") or not data.has("path"):
-			continue
-
-		var character = data["character"]
-		if not is_instance_valid(character):
-			continue
-
-		# パスデータを取得
-		var path: Array[Vector3] = []
-		for p in data.get("path", []):
-			path.append(p)
-
-		# マーカーデータを取得
-		var run_segments: Array[Dictionary] = []
-		for seg in data.get("run_segments", []):
-			run_segments.append(seg)
-
-		var wait_markers: Array[Dictionary] = []
-		for wm in data.get("wait_markers_data", []):
-			wait_markers.append(wm)
-
-		var door_markers: Array[Dictionary] = []
-		for dm in data.get("door_markers_data", []):
-			door_markers.append(dm)
-
-		var vision_markers: Array[Dictionary] = []
-		for vm in data.get("vision_points", []):
-			vision_markers.append(vm)
-
-		var clear_markers: Array[Dictionary] = []
-		for cm in data.get("clear_points", []):
-			clear_markers.append(cm)
-
-		var grenade_markers: Array[Dictionary] = []
-		for gm in data.get("grenade_markers_data", []):
-			grenade_markers.append(gm)
-
-		var smoke_grenade_markers: Array[Dictionary] = []
-		for sm in data.get("smoke_grenade_markers_data", []):
-			smoke_grenade_markers.append(sm)
-
-		# キャラクターラベルと色を取得
-		var label_text = CharacterColorManager.get_character_label(character)
-		var char_color = CharacterColorManager.get_character_color(character)
-
-		# タイムラインを設定
-		_hud.set_character_timeline(
-			character, path, run_segments, wait_markers, door_markers,
-			vision_markers, clear_markers, grenade_markers, smoke_grenade_markers,
-			label_text, char_color
-		)
-
-
-## 編集中のパスからタイムラインをプレビュー更新
-func _update_timeline_preview() -> void:
-	if not _hud or not game_manager or not game_manager.path_drawer:
-		return
-
-	var path_drawer = game_manager.path_drawer
-
-	# パスが存在しない場合はタイムラインをクリア（描画中/拡張中も含めて判定）
-	if not path_drawer.has_preview_path():
-		_hud.clear_all_timelines()
-		return
-
-	# 対象キャラクターを取得（選択中キャラクターまたは編集中キャラクター）
-	var target_characters: Array[Node] = []
-	if game_manager.selection_manager:
-		target_characters = game_manager.selection_manager.get_path_targets()
-
-	# ターゲットがいない場合、プライマリキャラクターを使用
-	if target_characters.is_empty() and game_manager.selection_manager:
-		var primary = game_manager.selection_manager.primary_character
-		if primary:
-			target_characters.append(primary)
-
-	if target_characters.is_empty():
-		return
-
-	# パスデータを取得（描画中は_path_points、それ以外は_pending_path）
-	var preview_path = path_drawer.get_preview_path()
-	var path: Array[Vector3] = []
-	for p in preview_path:
-		path.append(p)
-
-	if path.size() < 2:
-		return
-
-	# マルチキャラクターモードかチェック
-	var is_multi_mode = path_drawer.is_multi_character_mode()
-
-	for character in target_characters:
-		if not is_instance_valid(character):
-			continue
-
-		var char_id = character.get_instance_id()
-
-		# マーカーデータを取得
-		var run_segments: Array[Dictionary] = []
-		var wait_markers: Array[Dictionary] = []
-		var door_markers: Array[Dictionary] = []
-		var vision_markers: Array[Dictionary] = []
-		var clear_markers: Array[Dictionary] = []
-		var grenade_markers: Array[Dictionary] = []
-		var smoke_grenade_markers: Array[Dictionary] = []
-
-		if is_multi_mode:
-			# マルチモード：キャラクター別のマーカーを取得
-			var all_run = path_drawer.get_all_run_segments()
-			var all_wait = path_drawer.get_all_wait_markers()
-			var all_door = path_drawer.get_all_door_markers()
-			var all_vision = path_drawer.get_all_vision_points()
-			var all_clear = path_drawer.get_all_clear_points()
-			var all_grenade = path_drawer.get_all_grenade_markers()
-			var all_smoke_grenade = path_drawer.get_all_smoke_grenade_markers()
-
-			if all_run.has(char_id):
-				for seg in all_run[char_id]:
-					run_segments.append(seg)
-			if all_wait.has(char_id):
-				for wm in all_wait[char_id]:
-					wait_markers.append(wm)
-			if all_door.has(char_id):
-				for dm in all_door[char_id]:
-					door_markers.append(dm)
-			if all_vision.has(char_id):
-				for vm in all_vision[char_id]:
-					vision_markers.append(vm)
-			if all_clear.has(char_id):
-				for cm in all_clear[char_id]:
-					clear_markers.append(cm)
-			if all_grenade.has(char_id):
-				for gm in all_grenade[char_id]:
-					grenade_markers.append(gm)
-			if all_smoke_grenade.has(char_id):
-				for sm in all_smoke_grenade[char_id]:
-					smoke_grenade_markers.append(sm)
-		else:
-			# シングルモード：共通のマーカーを使用
-			for seg in path_drawer.get_run_segments():
-				run_segments.append(seg)
-			for wm in path_drawer.get_wait_markers():
-				wait_markers.append(wm)
-			for dm in path_drawer.get_door_markers():
-				door_markers.append(dm)
-			for vm in path_drawer.get_vision_points():
-				vision_markers.append(vm)
-			for cm in path_drawer.get_clear_points():
-				clear_markers.append(cm)
-			for gm in path_drawer.get_grenade_markers():
-				grenade_markers.append(gm)
-			for sm in path_drawer.get_smoke_grenade_markers():
-				smoke_grenade_markers.append(sm)
-
-		# キャラクターラベルと色を取得
-		var label_text = CharacterColorManager.get_character_label(character)
-		var char_color = CharacterColorManager.get_character_color(character)
-
-		# タイムラインを設定
-		_hud.set_character_timeline(
-			character, path, run_segments, wait_markers, door_markers,
-			vision_markers, clear_markers, grenade_markers, smoke_grenade_markers,
-			label_text, char_color
-		)
-
-
-## タイムライン進行状況を更新（実時間ベース）
-func _update_timeline_progress() -> void:
-	if not _hud:
-		return
-
-	# 経過時間でプログレスラインを更新
-	_hud.update_execution_time(_timeline_elapsed_time)
-
-
-## キャラクターIDからキャラクターを取得
-func _find_character_by_id(char_id: int) -> Node:
-	if not game_manager:
-		return null
-	for character in game_manager.characters:
-		if character.get_instance_id() == char_id:
-			return character
-	return null
 
 
 ## SmokeAreaManagerを取得（VisionComponentから呼び出される）

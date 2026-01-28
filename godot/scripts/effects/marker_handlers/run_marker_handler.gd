@@ -62,7 +62,6 @@ func _handle_click(screen_pos: Vector2) -> bool:
 		_create_run_marker(result.point, RunMarkerScript.RunMarkerType.END)
 
 		marker_added.emit(new_segment)
-		_notify_timeline_changed()
 
 		# 開始点をクリア
 		_current_run_start = {}

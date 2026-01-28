@@ -89,7 +89,6 @@ func _finish_grenade_marker(target_pos: Vector3) -> void:
 	_grenade_meshes.append(marker)
 
 	marker_added.emit(new_marker)
-	_notify_timeline_changed()
 
 	# 状態をリセット
 	_reset_pending_state()

@@ -51,7 +51,6 @@ func _handle_click(screen_pos: Vector2) -> bool:
 	_clear_meshes.insert(insert_idx, marker)
 
 	marker_added.emit(new_point)
-	_notify_timeline_changed()
 	return true
 
 

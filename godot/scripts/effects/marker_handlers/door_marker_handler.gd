@@ -62,7 +62,6 @@ func _process_door_click(screen_pos: Vector2) -> bool:
 	_door_meshes.append(marker)
 
 	marker_added.emit(new_marker)
-	_notify_timeline_changed()
 	return true
 
 

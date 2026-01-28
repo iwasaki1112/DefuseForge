@@ -71,11 +71,14 @@ var _avoidance_blocker: Node = null  ## 回避対象の相手キャラクター
 var _avoidance_timer: float = 0.0  ## 回避継続時間
 var _movement_priority: int = 0  ## 移動優先度（低いほど高優先）
 var _collision_check_timer: float = 0.0  ## 衝突検出タイマー
+var _avoidance_cooldown_timer: float = 0.0  ## 回避クールダウンタイマー
 
 ## 側方回避設定
 const SIDESTEP_DURATION: float = 0.5  ## 側方回避の継続時間
 const SIDESTEP_DISTANCE: float = 0.8  ## 側方回避の距離
-const HEAD_ON_THRESHOLD: float = -0.3  ## Head-on判定の閾値（相手の移動方向とのdot）
+const HEAD_ON_THRESHOLD: float = -0.5  ## Head-on判定の閾値（より正面のみ検出、約60度）
+const SIDESTEP_SPEED_FACTOR: float = 1.0  ## 側方移動の速度倍率（通常速度）
+const AVOIDANCE_COOLDOWN: float = 0.5  ## 回避後のクールダウン時間（再検出防止）
 
 ## パス長キャッシュ（毎フレーム再計算を回避）
 var _cached_total_length: float = 0.0
@@ -207,6 +210,10 @@ func is_following_path() -> bool:
 ## 移動優先度を設定（PathExecutionManagerから呼ばれる）
 func set_movement_priority(priority: int) -> void:
 	_movement_priority = priority
+	# 優先度に基づいて衝突検出タイミングをずらす
+	# 高優先度（小さい数値）は早く検出し、先に行動を開始
+	# 低優先度は遅く検出し、相手が既に行動中ならスキップ
+	_collision_check_timer = COLLISION_CHECK_INTERVAL - float(priority) * 0.03
 
 
 ## 移動優先度を取得
@@ -250,32 +257,22 @@ func process(delta: float) -> void:
 	# 側方回避中の場合
 	if _is_sidestepping:
 		_sidestep_timer += delta
-		if _sidestep_timer >= SIDESTEP_DURATION or _check_avoidance_resolved():
+		# 終了条件: 時間経過、すれ違い完了、または衝突解消
+		if _sidestep_timer >= SIDESTEP_DURATION or _has_passed_blocker() or _check_avoidance_resolved():
 			_end_sidestep()
 		else:
 			# 側方移動を実行
 			_execute_sidestep(delta)
 			return  # 側方回避継続
 
-	# 衝突回避待機中の場合
+	# 衝突回避待機中の場合（低優先度キャラは停止して待つだけ）
 	if _is_avoiding_collision:
 		_avoidance_timer += delta
 		# タイムアウトまたは衝突解消で待機終了
 		if _avoidance_timer >= avoidance_timeout or _check_avoidance_resolved():
 			_end_collision_halt()
 		else:
-			# 相手が非常に近い場合は即座に側方回避
-			if _avoidance_blocker and is_instance_valid(_avoidance_blocker):
-				var dist: float = _get_distance_to_ally(_avoidance_blocker)
-				if dist < collision_check_radius * 1.2:
-					_start_sidestep()
-					return
-
-			# Head-on検出時は側方回避に切り替え（0.15秒後）
-			if _avoidance_timer > 0.15 and _is_head_on_collision():
-				_start_sidestep()
-				return
-			# アイドルアニメーションを維持
+			# アイドルアニメーションを維持（sidestepはしない）
 			_update_idle_animation_while_waiting()
 			return  # 待機継続
 
@@ -287,6 +284,10 @@ func process(delta: float) -> void:
 
 	# 衝突検出タイマー更新（100ms間隔）
 	_collision_check_timer += delta
+
+	# 回避クールダウンタイマー更新
+	if _avoidance_cooldown_timer > 0:
+		_avoidance_cooldown_timer -= delta
 
 	if not _character or _current_path.size() == 0:
 		_finish()
@@ -439,30 +440,30 @@ func process(delta: float) -> void:
 		_update_idle_animation_while_waiting()
 		return
 
-	# 衝突回避チェック（100ms間隔）
-	if _collision_check_timer >= COLLISION_CHECK_INTERVAL:
+	# 衝突回避チェック（100ms間隔、クールダウン中はスキップ）
+	if _collision_check_timer >= COLLISION_CHECK_INTERVAL and _avoidance_cooldown_timer <= 0:
 		_collision_check_timer = 0.0
 		var ally_ahead: Node = _detect_ally_ahead(move_dir)
 		if ally_ahead:
 			_avoidance_blocker = ally_ahead
+			var dist: float = _get_distance_to_ally(ally_ahead)
+			var head_on: bool = _is_head_on_collision()
+			var should_yield: bool = _should_yield_to(ally_ahead)
 
-			# 相手との距離が非常に近い場合は即座に側方回避（物理的にブロックされている）
-			var distance_to_ally: float = _get_distance_to_ally(ally_ahead)
-			if distance_to_ally < collision_check_radius * 1.2:
-				# 近距離では優先度に関係なく両者が側方回避
+			# 相手が sidestep 中なら、こちらは通常通り進む
+			if _is_other_sidestepping(ally_ahead):
+				_avoidance_blocker = null
+			# 相手との距離が非常に近い場合 or Head-on
+			elif dist < collision_check_radius * 1.2 or head_on:
+				# 低優先度が sidestep して避ける、高優先度はそのまま進む
+				if should_yield:
+					_start_sidestep()
+					return
+				else:
+					_avoidance_blocker = null
+			elif should_yield:
+				# 追いつきなど: 低優先度が sidestep
 				_start_sidestep()
-				return
-
-			# Head-on（対面移動）かどうかをチェック
-			var is_head_on: bool = _is_head_on_collision()
-			if is_head_on:
-				# Head-onの場合は即座に側方回避
-				_start_sidestep()
-				return
-			elif _should_yield_to(ally_ahead):
-				# Head-onでなく、自分が低優先度なら待機
-				_start_collision_halt(ally_ahead)
-				_update_idle_animation_while_waiting()
 				return
 			else:
 				_avoidance_blocker = null  # 高優先度なので進む
@@ -984,6 +985,51 @@ func _should_yield_to(other: Node) -> bool:
 	return _character.get_instance_id() > other.get_instance_id()
 
 
+## 相手が既に回避行動中かチェック
+## 相手が迂回中 or 待機中なら、こちらは通常通り進む
+func _is_other_already_avoiding(other: Node) -> bool:
+	if not other:
+		return false
+
+	var other_id: int = other.get_instance_id()
+	var other_controller: Node = null
+
+	# 親ノードの兄弟から探す（PathFollowingControllerは同じ親の下にある）
+	for sibling in get_parent().get_children():
+		if sibling != self and sibling.has_method("is_following_path"):
+			if "_character" in sibling and sibling._character:
+				if sibling._character.get_instance_id() == other_id:
+					other_controller = sibling
+					break
+
+	if not other_controller:
+		return false
+
+	# 相手が迂回中または待機中なら true
+	return other_controller._is_sidestepping or other_controller._is_avoiding_collision
+
+
+## 相手が sidestep 中かチェック（停止ではなく実際に動いている）
+func _is_other_sidestepping(other: Node) -> bool:
+	if not other:
+		return false
+
+	var other_id: int = other.get_instance_id()
+	var other_controller: Node = null
+
+	for sibling in get_parent().get_children():
+		if sibling != self and sibling.has_method("is_following_path"):
+			if "_character" in sibling and sibling._character:
+				if sibling._character.get_instance_id() == other_id:
+					other_controller = sibling
+					break
+
+	if not other_controller:
+		return false
+
+	return other_controller._is_sidestepping
+
+
 ## 衝突回避の待機を開始
 func _start_collision_halt(blocker: Node) -> void:
 	_is_avoiding_collision = true
@@ -1035,6 +1081,38 @@ func _check_avoidance_resolved() -> bool:
 			return true
 
 	return false
+
+
+## 相手がすれ違ったか判定
+## 相手が自分の背後にいる場合はすれ違い完了とみなす
+func _has_passed_blocker() -> bool:
+	if not _avoidance_blocker or not is_instance_valid(_avoidance_blocker):
+		return true
+
+	if not _character:
+		return false
+
+	var my_pos: Vector3 = _character.global_position
+	my_pos.y = 0
+	var blocker_pos: Vector3 = _avoidance_blocker.global_position
+	blocker_pos.y = 0
+
+	# 自分の進行方向を取得
+	var my_move_dir: Vector3 = Vector3.ZERO
+	if _path_index < _current_path.size():
+		var target = _current_path[_path_index]
+		target.y = 0
+		my_move_dir = (target - my_pos).normalized()
+
+	if my_move_dir.length_squared() < 0.001:
+		return false
+
+	var to_blocker: Vector3 = blocker_pos - my_pos
+	to_blocker.y = 0
+
+	# 相手が自分の背後にいる = すれ違い完了
+	# dot < -0.3 は相手が約107度以上後方にいる状態
+	return my_move_dir.dot(to_blocker.normalized()) < -0.3
 
 
 ## Head-on（対面）衝突かどうかを判定
@@ -1118,46 +1196,34 @@ func _start_sidestep() -> void:
 	_sidestep_timer = 0.0
 
 
-## 側方回避方向を計算
-## 壁を避けて安全な方向を選択
-## キャラクターIDに基づいて一貫した方向を決定（両者が反対方向に避ける）
+## 側方回避方向を計算（右側通行ルール）
+## 進行方向の右側を優先し、壁がある場合は左側へ
 func _calculate_sidestep_direction() -> Vector3:
 	if not _character or not _avoidance_blocker:
 		return Vector3.ZERO
 
 	var char_pos: Vector3 = _character.global_position
 	char_pos.y = 0
-	var blocker_pos: Vector3 = _avoidance_blocker.global_position
-	blocker_pos.y = 0
 
-	var my_id: int = _character.get_instance_id()
-	var other_id: int = _avoidance_blocker.get_instance_id()
+	# 自分の進行方向を取得
+	var my_move_dir: Vector3 = Vector3.ZERO
+	if _path_index < _current_path.size():
+		var target = _current_path[_path_index]
+		target.y = 0
+		my_move_dir = (target - char_pos).normalized()
 
-	# 常に小さいID→大きいIDの方向でbetweenを計算（両者で一貫）
-	var between: Vector3
-	if my_id < other_id:
-		between = (blocker_pos - char_pos).normalized()
-	else:
-		between = (char_pos - blocker_pos).normalized()
+	if my_move_dir.length_squared() < 0.001:
+		return Vector3.ZERO
 
-	# グローバル座標系で一貫した垂直方向
-	var perpendicular: Vector3 = Vector3(between.z, 0, -between.x)
+	# 進行方向の右側（車線ルール）
+	# 右方向 = 進行方向ベクトルを時計回りに90度回転
+	var right: Vector3 = Vector3(my_move_dir.z, 0, -my_move_dir.x)
 
-	# 小さいIDが+perpendicular、大きいIDが-perpendicular
-	var primary: Vector3
-	var secondary: Vector3
-	if my_id < other_id:
-		primary = perpendicular
-		secondary = -perpendicular
-	else:
-		primary = -perpendicular
-		secondary = perpendicular
-
-	# 壁チェック
-	if _is_direction_clear(primary):
-		return primary
-	elif _is_direction_clear(secondary):
-		return secondary
+	# 壁チェック: 右が空いていれば右、なければ左
+	if _is_direction_clear(right):
+		return right
+	elif _is_direction_clear(-right):
+		return -right
 
 	return Vector3.ZERO  # どちらも壁がある場合
 
@@ -1191,7 +1257,7 @@ func _execute_sidestep(delta: float) -> void:
 	if not anim_ctrl:
 		return
 
-	var speed: float = anim_ctrl.get_current_speed() * 0.7  # 通常速度の70%
+	var speed: float = anim_ctrl.get_current_speed() * SIDESTEP_SPEED_FACTOR
 
 	# 側方移動
 	_character.velocity.x = _sidestep_direction.x * speed
@@ -1214,6 +1280,7 @@ func _end_sidestep() -> void:
 	_sidestep_timer = 0.0
 	_avoidance_blocker = null
 	_avoidance_timer = 0.0
+	_avoidance_cooldown_timer = AVOIDANCE_COOLDOWN  # クールダウン開始
 
 
 ## 味方判定

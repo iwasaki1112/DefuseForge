@@ -30,8 +30,6 @@ signal rotation_cancelled()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
-## タイムラインデータ変更シグナル（リアルタイムプレビュー用）
-signal timeline_data_changed()
 ## コンテキストメニュー操作シグナル
 signal context_action_requested(action_id: String, character: Node)
 ## グレネード投擲シグナル
@@ -49,7 +47,6 @@ var selection_manager: CharacterSelectionManager = null
 var path_execution_manager: PathExecutionManager = null
 var idle_manager: IdleCharacterManager = null
 var path_mode_controller: PathModeController = null
-var timeline_manager: TimelineManager = null
 var fog_of_war_system: Node3D = null
 var enemy_visibility_system: Node = null
 var smoke_area_manager: SmokeAreaManager = null
@@ -101,7 +98,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_selection_manager()
 	_setup_path_execution_manager(mesh_parent)
 	_setup_idle_manager()
-	_setup_timeline_manager()
 	_setup_smoke_area_manager()
 	_setup_path_drawer()
 	_setup_path_mode_controller()
@@ -646,14 +642,6 @@ func _setup_idle_manager() -> void:
 		)
 
 
-func _setup_timeline_manager() -> void:
-	if timeline_manager == null:
-		timeline_manager = TimelineManager.new()
-		timeline_manager.name = "TimelineManager"
-		add_child(timeline_manager)
-		timeline_manager.timeline_updated.connect(_on_timeline_data_changed)
-
-
 func _setup_smoke_area_manager() -> void:
 	if smoke_area_manager == null:
 		smoke_area_manager = SmokeAreaManager.new()
@@ -667,7 +655,7 @@ func _setup_path_drawer() -> void:
 		path_drawer.set_script(PathDrawerScript)
 		path_drawer.name = GameConstants.NODE_PATH_DRAWER
 		add_child(path_drawer)
-		path_drawer.setup(camera, null, timeline_manager)
+		path_drawer.setup(camera, null)
 
 
 func _setup_path_mode_controller() -> void:
@@ -832,10 +820,6 @@ func _on_path_mode_cancelled() -> void:
 
 func _on_path_ready() -> void:
 	path_ready.emit()
-
-
-func _on_timeline_data_changed() -> void:
-	timeline_data_changed.emit()
 
 
 func _on_path_confirmed(count: int) -> void:

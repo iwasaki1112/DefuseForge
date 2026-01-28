@@ -13,9 +13,6 @@ signal marker_added(marker_data: Dictionary)
 @warning_ignore("unused_signal")
 signal marker_removed(marker_data: Dictionary)
 
-## タイムライン更新シグナル
-signal timeline_changed()
-
 
 ## PathDrawerへの参照
 var _path_drawer: Node3D = null
@@ -130,13 +127,6 @@ func _has_pending_path() -> bool:
 func _add_child_to_drawer(node: Node) -> void:
 	if _path_drawer:
 		_path_drawer.add_child(node)
-
-
-## タイムライン更新を通知
-func _notify_timeline_changed() -> void:
-	timeline_changed.emit()
-	if _path_drawer and _path_drawer.has_method("_notify_timeline_changed"):
-		_path_drawer._notify_timeline_changed()
 
 
 ## 壁または床へのレイキャスト

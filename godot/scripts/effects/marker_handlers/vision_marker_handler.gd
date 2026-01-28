@@ -112,7 +112,6 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	_vision_meshes.insert(insert_idx, marker)
 
 	marker_added.emit(new_point)
-	_notify_timeline_changed()
 
 
 ## 視線マーカーノード作成

@@ -22,7 +22,6 @@ signal door_marker_added(path_ratio: float, door: Node3D)
 signal wait_marker_added(path_ratio: float, wait_duration: float)
 signal path_undone()
 signal mode_changed(mode: int)
-signal timeline_data_changed()
 #endregion
 
 #region エクスポート設定
@@ -66,10 +65,6 @@ var _character_color: Color = Color(1.0, 1.0, 1.0)
 var _marker_history: Array[int] = []
 var _active_edit_character: Node = null
 
-var _timeline_manager: TimelineManager = null
-var _last_timeline_update_time: float = 0.0
-const TIMELINE_UPDATE_THROTTLE_MS: float = 50.0
-
 ## マーカーハンドラ
 var _vision_handler: VisionMarkerHandler
 var _run_handler: RunMarkerHandler
@@ -111,19 +106,12 @@ func _setup_handlers() -> void:
 
 	# ハンドラのシグナル接続
 	_vision_handler.marker_added.connect(_on_vision_marker_added)
-	_vision_handler.timeline_changed.connect(_notify_timeline_changed)
 	_run_handler.marker_added.connect(_on_run_marker_added)
-	_run_handler.timeline_changed.connect(_notify_timeline_changed)
 	_clear_handler.marker_added.connect(_on_clear_marker_added)
-	_clear_handler.timeline_changed.connect(_notify_timeline_changed)
 	_grenade_handler.marker_added.connect(_on_grenade_marker_added)
-	_grenade_handler.timeline_changed.connect(_notify_timeline_changed)
 	_smoke_grenade_handler.marker_added.connect(_on_smoke_grenade_marker_added)
-	_smoke_grenade_handler.timeline_changed.connect(_notify_timeline_changed)
 	_door_handler.marker_added.connect(_on_door_marker_added)
-	_door_handler.timeline_changed.connect(_notify_timeline_changed)
 	_wait_handler.marker_added.connect(_on_wait_marker_added)
-	_wait_handler.timeline_changed.connect(_notify_timeline_changed)
 
 
 func _setup_handlers_with_camera() -> void:
@@ -195,10 +183,9 @@ func _on_wait_marker_added(data: Dictionary) -> void:
 
 
 #region セットアップ API
-func setup(camera: Camera3D, character: Node3D = null, timeline_manager: TimelineManager = null) -> void:
+func setup(camera: Camera3D, character: Node3D = null) -> void:
 	_camera = camera
 	_character = character
-	_timeline_manager = timeline_manager
 	_setup_handlers_with_camera()
 
 
@@ -354,7 +341,6 @@ func _add_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
-	_notify_timeline_changed_throttled()
 
 
 func _finish_drawing() -> void:
@@ -369,7 +355,6 @@ func _finish_drawing() -> void:
 		_marker_history.append(MarkerType.PATH)
 
 	drawing_finished.emit(_path_points)
-	_notify_timeline_changed()
 #endregion
 
 
@@ -417,7 +402,6 @@ func _add_extend_point(pos: Vector3) -> void:
 
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
-	_notify_timeline_changed_throttled()
 
 
 func _finish_extending_path() -> void:
@@ -431,7 +415,6 @@ func _finish_extending_path() -> void:
 		_marker_history.append(MarkerType.PATH_EXTENSION)
 
 	drawing_finished.emit(_path_points)
-	_notify_timeline_changed()
 #endregion
 
 
@@ -469,22 +452,6 @@ func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
 func _raycast_door(screen_pos: Vector2) -> Node3D:
 	var space_state = get_world_3d().direct_space_state
 	return PathRaycastHelper.raycast_door(_camera, space_state, screen_pos)
-
-
-func _notify_timeline_changed() -> void:
-	if _timeline_manager:
-		_timeline_manager.mark_dirty()
-	else:
-		timeline_data_changed.emit()
-
-
-func _notify_timeline_changed_throttled() -> bool:
-	var current_time = Time.get_ticks_msec()
-	if current_time - _last_timeline_update_time < TIMELINE_UPDATE_THROTTLE_MS:
-		return false
-	_last_timeline_update_time = current_time
-	_notify_timeline_changed()
-	return true
 #endregion
 
 
@@ -797,9 +764,6 @@ func undo_last_marker() -> int:
 		MarkerType.PATH_EXTENSION:
 			_undo_path_extension()
 
-	if last_type != MarkerType.PATH:
-		_notify_timeline_changed()
-
 	return last_type
 
 
@@ -819,7 +783,6 @@ func _undo_path() -> void:
 	_marker_history.clear()
 
 	path_undone.emit()
-	_notify_timeline_changed()
 
 
 func _undo_path_extension() -> void:
@@ -1130,7 +1093,6 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 func _emit_drawing_finished_after_restore() -> void:
 	if _path_points.size() >= 2:
 		drawing_finished.emit(_path_points)
-		_notify_timeline_changed()
 #endregion
 
 
