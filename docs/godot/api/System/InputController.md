@@ -2,7 +2,7 @@
 
 ## 概要
 
-ゲーム画面での入力処理をまとめるコントローラー。左クリックの入力をモードに応じてカメラ移動またはPathDrawerに委譲する。
+ゲーム画面での入力処理を統括するコントローラー。PC（マウス）とモバイル（タッチ）の両方の入力に対応し、カメラ操作、パス描画、キャラクター選択などの機能を適切に振り分ける。
 
 ## クラス情報
 
@@ -14,81 +14,68 @@
 | プロパティ | 型 | 説明 |
 |-----------|-----|------|
 | `game_manager` | `GameManager` | 操作対象のGameManager |
-| `camera_pan_controller` | `CameraPanController` | カメラ平行移動コントローラー |
+| `camera_pan_controller` | `CameraPanController` | カメラ平行移動・ズームコントローラー |
 
-## 入力優先順位
+## 入力処理フロー
 
-左クリック処理は以下の優先順位で分岐する:
+入力は以下の優先順位で処理される:
 
-### パスモードOFF
-- **ドラッグ（5px以上移動）** → カメラ移動
-- **クリック（5px未満）** → キャラクター選択等
+### 1. ピンチズーム / マルチタッチ (最優先)
+- **2本指以上** または **ピンチ操作中** は、現在のモードに関わらず常にカメラズーム/パンとして処理される。
+- これにより、パス描画中であってもいつでもカメラ操作が可能。
 
-### パスモードON - MOVEMENTモード
-- **すべて** → PathDrawer（パス描画）
+### 2. パスモード (Path Mode)
+`GameManager.is_path_mode()` が true の場合:
 
-### パスモードON - マーカーモード（Vision/Run/Clear）
-- **パス上クリック（0.5m以内）** → PathDrawer（マーカー設定）
-- **パス外ドラッグ** → カメラ移動を許可
+- **PathDrawer描画中**: 入力を `PathDrawer` に委譲。
+- **新規パス描画**: `PathDrawer` に委譲。
+- **マーカーモード (Vision/Run等)**:
+    - **パス上タップ/ドラッグ**: `PathDrawer` に委譲（マーカー配置）。
+    - **パス外**: カメラパンとして処理（1本指ドラッグ）。
 
-## 入力フロー
+### 3. 通常モード (Default)
+- **1本指タップ**: キャラクター選択 (`game_manager.handle_click`)。
+- **1本指ドラッグ**: カメラパン (`CameraPanController`)。
 
-```
-左クリック押下:
-  └ パスモードOFF?
-      → YES → CameraPanControllerでドラッグ開始候補
-  └ パスモードON + MOVEMENTモード?
-      → YES → PathDrawerに委譲（パス描画開始）
-  └ パスモードON + マーカーモード?
-      → パス上(0.5m以内)? → YES → PathDrawerに委譲
-                        → NO  → CameraPanControllerでドラッグ開始候補
+### 4. 回転モード (Rotation Mode)
+- `game_manager.handle_rotation_input` に委譲。
 
-左クリック移動:
-  └ PathDrawer描画中?
-      → YES → PathDrawerに委譲
-  └ CameraPanControllerドラッグ候補中?
-      → 閾値(5px)超過? → YES → カメラ移動開始
-                       → NO  → 待機
+## PC vs モバイルの挙動
 
-左クリック解放:
-  └ カメラドラッグ成立?
-      → YES → カメラ移動終了
-      → NO  → クリック処理（キャラクター選択等）
-```
+### モバイル (Touch)
+- **タップ vs パン**: `CameraPanController` 内で閾値判定を行い、短いタップはクリック（選択）、移動量が大きい場合はパンとして扱う。
+- **Pathモード**: パス上かどうかの判定 (`_get_ground_position`) を行い、パス上なら編集、パス外ならカメラ操作となる。
+
+### PC (Mouse)
+- **左クリック**: `_handle_left_click` で処理。
+- **ドラッグ**: `_handle_left_drag` で処理。
+- 基本的なロジックはモバイルと同様だが、マウスイベントベースで動作する。
 
 ## メソッド
 
-### `setup(manager: GameManager, pan_controller: CameraPanController) -> void`
+### セットアップ
+#### `setup(manager: GameManager, pan_controller: CameraPanController) -> void`
 必要な参照を設定する。
 
-### `_unhandled_input(event: InputEvent) -> void`
-左クリックによるカメラ移動/パス描画、パス/回転モードの入力処理を行う。
+### 入力ハンドリング
+#### `_unhandled_input(event: InputEvent) -> void`
+メインの入力処理。タッチイベント、マウスイベントを受け取り、優先順位に従って処理を振り分ける。
 
-- ズーム入力（ホイール/ピンチ）は常に処理
-- 左クリック押下/移動/解放は優先順位に従って分岐
+#### `_input(event: InputEvent) -> void`
+ESCキーなどのグローバルショートカット処理。
+- パスフォロー中のキャンセル
+- 回転モードのキャンセル
+- パスモードのキャンセル
 
-### `_input(event: InputEvent) -> void`
-ESC入力のキャンセル処理を行う。
+## 内部ヘルパーメソッド
 
-## 使用例
-
-```gdscript
-var input_controller := InputController.new()
-add_child(input_controller)
-input_controller.setup(game_manager, camera_pan_controller)
-```
+- `_is_touch_active() -> bool`: タッチ操作中かどうか判定。
+- `_get_ground_position(screen_pos) -> Vector3`: スクリーン座標から地面座標（Y=0平面）へのレイキャストを行う。
+- `_get_path_drawer() -> PathDrawer`: PathDrawerインスタンスを取得。
 
 ## 関連クラス
 
 - [GameScreen](GameScreen.md)
 - [GameManager](GameManager.md)
-- [CameraPanController](CameraPanController.md)
-- [PathDrawer](PathDrawer.md)
-
-## APIリファレンス
-
-### シグナル
-なし
-
-### メソッド
-- `setup(manager: GameManager, pan_controller: CameraPanController) -> void`
+- [CameraPanController](../Util/CameraPanController.md)
+- [PathDrawer](../Effect/PathDrawer.md)

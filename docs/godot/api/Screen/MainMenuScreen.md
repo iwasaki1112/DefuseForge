@@ -2,7 +2,7 @@
 
 ## 概要
 
-ゲーム起動時に表示されるメインメニュー画面。TrainingとOptionへ遷移する。
+ゲーム起動時に表示されるメインメニュー画面。Training、Multiplayer、Option画面への遷移を提供する。
 
 ## クラス情報
 
@@ -14,47 +14,41 @@
 
 | 定数 | 値 | 説明 |
 |-----|-----|------|
-| `MAP_SELECTION_SCENE` | `res://scenes/screens/map_selection.tscn` | マップ選択画面 |
+| `MAP_SELECTION_SCENE` | `res://scenes/screens/map_selection.tscn` | マップ選択画面（Training） |
 | `OPTION_SCENE` | `res://scenes/screens/option.tscn` | オプション画面 |
+| `LOBBY_SCENE` | `res://scenes/screens/lobby.tscn` | ロビー画面（Multiplayer） |
 
-## プロパティ
+## UI構成
 
-| プロパティ | 型 | 説明 |
-|-----------|-----|------|
-| `_welcome_label` | `Label` | プレイヤー名のウェルカム表示 |
+- **Logo**: 画面上部中央に表示されるゲームロゴ。
+- **Button Container**: 画面中央に配置されるボタン群。
+    - **Training Button**: ソロプレイ/トレーニングモードへ（マップ選択へ遷移）。
+    - **Multiplayer Button**: マルチプレイモードへ（ロビーへ遷移）。
+- **Option Button**: 画面右上に配置される設定ボタン（アイコン）。
 
 ## メソッド
 
 ### `_ready() -> void`
-UI構築後、プレイヤー名表示を更新し、設定変更シグナルを購読する。
+UIを構築する (`_setup_ui` を呼び出す)。
 
 ### `_setup_ui() -> void`
-背景・タイトル・ボタンを含むメニューUIを生成する。
+コードベースでUI要素（ロゴ、ボタンなど）を動的に生成・配置する。
+`ScreenLayout` を使用せず、直接 `Control` ノードを生成してレイアウトしている。
 
-### `_update_welcome_message() -> void`
-`SettingsManager`からプレイヤー名を取得して表示する。
+### `_create_texture_button(texture: Texture2D) -> TextureButton`
+画像ボタンを作成するヘルパーメソッド。
 
 ### `_on_training_pressed() -> void`
 Trainingボタン押下時にマップ選択画面へ遷移。
 
+### `_on_multiplayer_pressed() -> void`
+Multiplayerボタン押下時にロビー画面へ遷移。
+
 ### `_on_option_pressed() -> void`
 Optionボタン押下時にオプション画面へ遷移。
-
-## 依存関係
-
-- **SettingsManager**: プレイヤー名の取得
-- **ScreenLayout**: 背景/中央配置の共通レイアウト
 
 ## 関連クラス
 
 - [MapSelectionScreen](MapSelectionScreen.md)
+- [LobbyScreen](LobbyScreen.md)
 - [OptionScreen](OptionScreen.md)
-- [SettingsManager](SettingsManager.md)
-
-## APIリファレンス
-
-### シグナル
-なし
-
-### メソッド
-なし

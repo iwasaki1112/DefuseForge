@@ -1,273 +1,131 @@
 # PathExecutionManager
 
-パス実行管理。パス確定・実行・pending_paths管理を担当。
+## 概要
 
-## 基本情報
+パスの確定・保存・実行を一元管理するクラス。`GameManager`の下で動作し、各キャラクターのパス追従コントローラー（`PathFollowingController`）の生成とライフサイクル管理、およびネットワーク同期のためのデータ管理を行う。
 
-| 項目 | 値 |
-|------|-----|
-| 継承元 | `Node` |
-| クラス名 | `PathExecutionManager` |
-| ファイルパス | `scripts/systems/path_execution_manager.gd` |
+## クラス情報
+
+- **継承**: `Node`
+- **ファイル**: `scripts/systems/path_execution_manager.gd`
+- **クラス名**: `PathExecutionManager`
 
 ## 機能
 
-- パス確定（複数キャラクターへの同一パス適用）
-- **マルチキャラクターモード対応**（各キャラクター個別のマーカー）
-- 接続線の自動生成（キャラクター位置 → パス開始点）
-- 視線ポイント・Run区間の比率自動調整
-- パスメッシュ・マーカーの管理
-- 全キャラクター同時パス実行
-- PathFollowingControllerの動的生成・管理
-- **衝突回避用の優先度割り当て**（実行順序に基づく）
+- **パス確定**: PathDrawerで描画されたパスをキャラクターごとの実行用データに変換して保存。
+- **接続線自動生成**: キャラクターの現在位置からパス開始点までの移動経路を自動補完。
+- **マーカー再計算**: 接続線の長さに応じて、視線やアクションマーカーのパス上の位置（比率）を再計算。
+- **パス実行**: 保存されたパスデータに基づき、`PathFollowingController`を生成して移動を開始。
+- **衝突回避優先度**: 実行順序に基づいて各キャラクターに移動優先度を割り当て。
+- **マルチプレイヤー同期**: ネットワーク経由で受信したパスデータの登録・管理。
 
 ## シグナル
 
 | シグナル | 引数 | 説明 |
 |---------|------|------|
-| `path_confirmed` | `character_count: int` | パス確定時 |
-| `paths_execution_started` | `count: int` | 全パス実行開始時 |
-| `all_paths_completed` | なし | 全パス完了時 |
-| `paths_cleared` | なし | パスクリア時 |
-| `character_path_completed` | `character: Node` | 個別キャラクターのパス完了時 |
+| `path_confirmed` | `character_count: int` | パスが確定された時 |
+| `paths_execution_started` | `count: int` | 全パスの実行が開始された時 |
+| `all_paths_completed` | なし | 全キャラクターの移動が完了した時 |
+| `paths_cleared` | なし | 全ての保留パスがクリアされた時 |
+| `character_path_completed` | `character: Node` | 個別のキャラクターが移動完了した時 |
 | `grenade_marker_reached` | `character: Node, marker_data: Dictionary` | グレネードマーカー到達時 |
+| `smoke_grenade_marker_reached` | `character: Node, marker_data: Dictionary` | スモークマーカー到達時 |
 | `door_marker_reached` | `character: Node, door: Node3D` | ドアマーカー到達時 |
 
-## プロパティ
+## Public API
 
-| プロパティ | 型 | 説明 |
-|-----------|-----|------|
-| `pending_paths` | `Dictionary` | 保留中のパス（キャラクターID → パスデータ） |
+### Setup
 
-## メソッド
+#### `setup(mesh_parent: Node3D) -> void`
+パスメッシュやコントローラーを追加する親ノードを設定する。
 
-### セットアップ
+### Path Confirmation
 
-```gdscript
-# セットアップ（パスメッシュの親ノードを指定）
-func setup(mesh_parent: Node3D) -> void
-```
+#### `confirm_path(target_characters: Array[Node], path_drawer: Node, _primary_character: Node) -> bool`
+PathDrawerの描画データを取得し、対象キャラクター（現在はシングルのみサポート）の保留パスとして確定する。
+元のマーカーメッシュは削除され、キャラクターごとの新しいマーカーが生成される。
 
-### パス確定
+### Execution
 
-```gdscript
-# パスを確定して保存
-# target_characters: パス適用対象
-# path_drawer: PathDrawerノード
-# primary_character: プライマリキャラクター
-func confirm_path(
-    target_characters: Array[Node],
-    path_drawer: Node,
-    primary_character: Node
-) -> bool
-```
+#### `execute_all_paths(run: bool) -> int`
+保留中の全てのパスを実行開始する。
+各キャラクターに`PathFollowingController`を割り当て、実行順序に基づく優先度を設定する。
 
-### パス実行
+#### `execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: bool = false) -> bool`
+UI操作を経ずに、直接指定座標への移動を実行する（ドアキック時の自動移動など）。
 
-```gdscript
-# 全キャラクターのパスを同時実行
-# run: true=走り、false=歩き
-# 戻り値: 実行したキャラクター数
-func execute_all_paths(run: bool) -> int
-```
+### Management
 
-**衝突回避優先度の割り当て:**
-実行時に各キャラクターへ`_execution_order_counter`に基づく優先度を自動割り当て:
-- 先に実行されるキャラクター = 低い優先度値 = 高優先
-- この優先度は`PathFollowingController`の衝突回避で使用される
+#### `clear_all_pending_paths() -> void`
+全ての保留パスデータとメッシュを削除する。
 
-### パスクリア
+#### `cancel_all_path_following() -> void`
+実行中の全ての移動をキャンセルする。
 
-```gdscript
-# 全ての保留パスをクリア
-func clear_all_pending_paths() -> void
+#### `cancel_path_following(character: Node, clear_pending: bool = true) -> void`
+指定キャラクターの移動をキャンセルする。
 
-# 保留パス数を取得
-func get_pending_path_count() -> int
-```
+#### `process_controllers(delta: float) -> void`
+毎フレーム呼び出し、各コントローラーの更新処理を行う。
 
-### パス追従状態の確認
+### Query
 
-```gdscript
-# パス追従中のコントローラーがあるか
-func is_any_path_following_active() -> bool
+#### `get_pending_path_count() -> int`
+保留中のパス数を取得。
 
-# 指定キャラクターがパス追従中か
-func is_character_following_path(character: Node) -> bool
+#### `has_pending_path_for_character(character: Node) -> bool`
+指定キャラクターに保留パスが存在するか確認。
 
-# 全てのパス追従をキャンセル
-func cancel_all_path_following() -> void
+#### `is_any_path_following_active() -> bool`
+いずれかのキャラクターが移動中か確認。
 
-# 指定キャラクターのパス追従をキャンセル
-# clear_pending: trueの場合、該当キャラの保留パス/マーカーも削除
-func cancel_path_following(character: Node, clear_pending: bool = true) -> void
-```
+#### `is_character_following_path(character: Node) -> bool`
+指定キャラクターが移動中か確認。
 
-### フレーム処理
+#### `get_character_progress(character: Node) -> float`
+指定キャラクターの現在のパス進行率（0.0〜1.0）を取得。
 
-```gdscript
-# 全パス追従コントローラーを処理（毎フレーム呼ぶ）
-func process_controllers(delta: float) -> void
+#### `get_all_progress() -> Dictionary`
+全アクティブキャラクターの進行状況と待機状態を取得。
 
-# パス追従完了時のコールバック
-func on_path_following_completed(character: Node) -> void
-```
+### Multiplayer API
 
-### 内部メソッド（マーカー生成）
+#### `confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool`
+ネットワークメッセージからパスを確定する（他プレイヤーのパス受信時）。
 
-```gdscript
-# path_ratioからパス上の絶対座標を計算
-func _calculate_position_on_path(path: Array[Vector3], ratio: float) -> Vector3
+#### `get_pending_paths_for_player(player_id: int) -> Dictionary`
+指定プレイヤーIDに関連付けられた保留パスを取得。
 
-# 調整済み視線ポイントから新しいVisionMarkerを生成
-func _create_vision_markers_for_path(
-    path: Array[Vector3],
-    adjusted_vision_points: Array[Dictionary],
-    character: Node
-) -> Array[MeshInstance3D]
+#### `to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages.PathConfirmMessage`
+キャラクターの保留パスをネットワーク送信用のメッセージ形式に変換。
 
-# 調整済みRun区間から新しいRunMarkerを生成
-func _create_run_markers_for_path(
-    path: Array[Vector3],
-    adjusted_run_segments: Array[Dictionary],
-    character: Node
-) -> Array[MeshInstance3D]
-```
+#### `get_path_snapshot(character: Node) -> SyncState.PathSnapshot`
+キャラクターの現在の移動状態（実行中か、進行率はいくつか）をスナップショットとして取得。
 
-## 使用例
+## データ構造
 
-```gdscript
-var path_execution_manager = PathExecutionManager.new()
-add_child(path_execution_manager)
-path_execution_manager.setup(self)
-
-# シグナル接続
-path_execution_manager.path_confirmed.connect(_on_path_confirmed)
-path_execution_manager.all_paths_completed.connect(_on_all_paths_completed)
-
-# パス確定
-var targets = selection_manager.get_path_targets()
-if path_execution_manager.confirm_path(targets, path_drawer, primary):
-    print("Path confirmed for %d characters" % targets.size())
-
-# パス実行
-var count = path_execution_manager.execute_all_paths(false)  # 歩き
-
-# 毎フレーム処理
-func _physics_process(delta: float) -> void:
-    path_execution_manager.process_controllers(delta)
-```
-
-## パスデータ構造
-
-`pending_paths` の各エントリ:
+### Pending Path Dictionary
+`pending_paths` には以下の構造でデータが保持される:
 
 ```gdscript
 {
-    "character": Node,                         # キャラクターノード
-    "path": Array[Vector3],                    # パスポイント（接続線含む）
-    "vision_points": Array[Dictionary],        # 視線ポイント
-    "run_segments": Array[Dictionary],         # Run区間
-    "clear_points": Array[Dictionary],         # Clearポイント
-    "grenade_markers_data": Array[Dictionary], # グレネードマーカーデータ
-    "door_markers_data": Array[Dictionary],    # ドアマーカーデータ
-    "wait_markers_data": Array[Dictionary],    # Waitマーカーデータ
-    "path_mesh": MeshInstance3D,               # パスメッシュ
-    "vision_markers": Array[MeshInstance3D],   # 視線マーカー
-    "run_markers": Array[MeshInstance3D],      # Runマーカー
-    "clear_markers": Array[MeshInstance3D],    # Clearマーカー
-    "grenade_markers": Array[MeshInstance3D],  # グレネードマーカー
-    "door_markers": Array[MeshInstance3D],     # ドアマーカー
-    "wait_markers": Array[MeshInstance3D]      # Waitマーカー
+    character_id: {
+        "character": Node,
+        "path": Array[Vector3],
+        "vision_points": Array[Dictionary],
+        "run_segments": Array[Dictionary],
+        "clear_points": Array[Dictionary],
+        "grenade_markers_data": Array[Dictionary],
+        # ... 他マーカーデータ
+        "path_mesh": MeshInstance3D,
+        "vision_markers": Array[MeshInstance3D],
+        # ... 他マーカーメッシュ
+    }
 }
 ```
 
-## 接続線と比率調整
-
-複数キャラクターに同一パスを適用する場合:
-
-1. 各キャラクターの現在位置からパス開始点への接続線を追加
-2. 視線ポイント・Run区間の比率を接続線の長さ分だけ調整
-3. パス全体の長さが変わるため、比率を再計算
-
-```
-キャラクター位置 → [接続線] → パス開始点 → [描画パス] → パス終点
-
-比率調整:
-new_ratio = (connect_length + old_ratio * base_length) / new_length
-```
-
-## マーカー生成
-
-パス確定時、キャラクターに対してマーカーを生成:
-
-1. PathDrawerからマーカーの所有権を取得
-2. キャラクターのフルパス（接続線込み）に対して:
-   - 調整済み比率から`_calculate_position_on_path()`で座標計算
-   - `_create_vision_markers_for_path()`でVisionMarker生成
-   - `_create_run_markers_for_path()`でRunMarker生成
-3. 元のマーカーを削除
-
-マーカーの色はキャラクター個別色に基づいて設定:
-- VisionMarker: 背景=暗い色（char_color * 0.3）、矢印=キャラクター色
-- RunMarker START: 背景=キャラクター色、アイコン=白
-- RunMarker END: 背景=暗い色（char_color * 0.8/0.5/0.3）、アイコン=白
-
-## Multiplayer API
-
-### confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool
-プレイヤーIDに紐づけてパスを確定する（リモートプレイヤー用）。
-
-### get_pending_paths_for_player(player_id: int) -> Dictionary
-指定プレイヤーの保留パスを取得する。
-
-### get_all_pending_paths_by_player() -> Dictionary
-全プレイヤーの保留パスを取得する。
-
-### clear_pending_paths_for_player(player_id: int) -> void
-指定プレイヤーの保留パスをクリアする。
-
-### to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages.PathConfirmMessage
-キャラクターの保留パスをPathConfirmMessageに変換する。
-
-### get_all_pending_paths_as_messages(player_id: int) -> Array[NetworkMessages.PathConfirmMessage]
-プレイヤーの全保留パスをPathConfirmMessageの配列として取得する。
-
-### get_path_snapshot(character: Node) -> SyncState.PathSnapshot
-キャラクターのパススナップショットを取得する。
-
 ## 関連クラス
 
-- [CharacterSelectionManager](CharacterSelectionManager.md) - 選択管理
-- [PathDrawer](PathDrawer.md) - パス描画
-- [PathFollowingController](PathFollowingController.md) - パス追従
-- [PathLineMesh](PathLineMesh.md) - パスメッシュ描画
-- [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
-- [SyncState](SyncState.md) - 同期状態クラス
-
-## APIリファレンス
-
-### シグナル
-| シグナル | 引数 |
-|---------|------|
-| `path_confirmed` | `character_count: int` |
-| `paths_execution_started` | `count: int` |
-| `all_paths_completed` | なし |
-| `paths_cleared` | なし |
-| `character_path_completed` | `character: Node` |
-| `grenade_marker_reached` | `character: Node, marker_data: Dictionary` |
-| `door_marker_reached` | `character: Node, door: Node3D` |
-
-### メソッド
-- `setup(mesh_parent: Node3D) -> void`
-- `confirm_path(`
-- `execute_all_paths(run: bool) -> int`
-- `clear_all_pending_paths() -> void`
-- `get_pending_path_count() -> int`
-- `is_any_path_following_active() -> bool`
-- `is_character_following_path(character: Node) -> bool`
-- `cancel_all_path_following() -> void`
-- `cancel_path_following(character: Node, clear_pending: bool = true) -> void`
-- `process_controllers(delta: float) -> void`
-- `on_path_following_completed(_character: Node) -> void`
-- `execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: bool = false) -> bool`
+- [PathFollowingController](../Character/PathFollowingController.md)
+- [PathDrawer](../Effect/PathDrawer.md)
+- [NetworkMessages](../Network/NetworkMessages.md)

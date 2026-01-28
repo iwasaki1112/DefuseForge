@@ -1,6 +1,7 @@
 # RoundHUD
 
-ラウンドHUD。タイマー、生存者数、ラウンド結果を表示するUI。
+ラウンドHUD。生存者数とラウンド結果を表示するUI。
+（タイマー表示機能は `GameHUD` に移動しました）
 
 ## 基本情報
 
@@ -14,23 +15,19 @@
 
 | 定数 | 型 | 値 | 説明 |
 |-----|-----|-----|------|
-| `TIMER_WARNING_THRESHOLD` | float | 10.0 | 残り時間警告閾値（秒） |
-| `TIMER_WARNING_COLOR` | Color | 赤 | 警告時のタイマー色 |
-| `TIMER_NORMAL_COLOR` | Color | 白 | 通常時のタイマー色 |
 | `CT_COLOR` | Color | 青 | CTの表示色 |
 | `T_COLOR` | Color | オレンジ | Tの表示色 |
 
 ## UI構成
 
 ### 上部バー
-画面上部中央に配置。
+画面上部中央に配置（設定により非表示の場合あり）。
 
 ```
-[CT: 3]  [1:30]  [T: 2]
+[CT: 3]         [T: 2]
 ```
 
 - **CTラベル**: CT生存者数（青色）
-- **タイマー**: 残り時間（分:秒形式）
 - **Tラベル**: T生存者数（オレンジ色）
 
 ### 結果オーバーレイ
@@ -44,28 +41,22 @@
 
 ## メソッド
 
-### update_timer(remaining: float) -> void
-タイマー表示を更新。残り10秒以下で警告色に変更。
-
-```gdscript
-round_hud.update_timer(45.5)  # "0:45" と表示
-```
-
-### update_survivor_counts(ct: int, t: int) -> void
+### `update_survivor_counts(ct: int, t: int) -> void`
 生存者数表示を更新。
 
 ```gdscript
 round_hud.update_survivor_counts(3, 2)  # "CT: 3", "T: 2" と表示
 ```
 
-### show_result(winner: int, reason: int) -> void
+### `show_result(winner: int, _reason: int) -> void`
 結果オーバーレイを表示。フェードインアニメーション付き。
+`_reason` 引数は現在使用されていないが、シグナル接続の互換性のために維持されている。
 
 ```gdscript
 round_hud.show_result(GameCharacter.Team.COUNTER_TERRORIST, RoundManager.EndReason.T_ELIMINATED)
 ```
 
-### hide_result() -> void
+### `hide_result() -> void`
 結果オーバーレイを非表示にする。
 
 ## 使用例
@@ -77,13 +68,12 @@ func _setup_round_hud() -> void:
     _round_hud.name = GameConstants.NODE_ROUND_HUD
     ui_layer.add_child(_round_hud)
 
-    game_manager.round_timer_updated.connect(_round_hud.update_timer)
     game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
     game_manager.round_ended.connect(_round_hud.show_result)
 ```
 
 ## 関連クラス
 
-- [RoundManager](RoundManager.md) - ラウンド状態管理
-- [GameHUD](GameHUD.md) - 操作パネルUI
-- [GameScreen](GameScreen.md) - RoundHUDを統合
+- [RoundManager](../System/RoundManager.md)
+- [GameHUD](GameHUD.md)
+- [GameScreen](../Screen/GameScreen.md)
