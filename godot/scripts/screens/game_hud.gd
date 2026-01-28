@@ -30,6 +30,22 @@ const MARKER_DEAD_ALPHA := 0.3
 
 ## マーカーエディットパネル
 @onready var _marker_edit_panel: Control = %MarkerEditPanel
+@onready var _vision_button: TextureButton = %VisionButton
+@onready var _run_button: TextureButton = %RunButton
+@onready var _clear_marker_button: TextureButton = %ClearMarkerButton
+@onready var _grenade_button: TextureButton = %GrenadeButton
+@onready var _smoke_button: TextureButton = %SmokeButton
+@onready var _door_button: TextureButton = %DoorButton
+@onready var _wait_button: TextureButton = %WaitButton
+
+## アクティブボタンの色
+const BUTTON_ACTIVE_COLOR := Color(0.5, 1.0, 0.5, 1.0)
+const BUTTON_NORMAL_COLOR := Color(1.0, 1.0, 1.0, 1.0)
+
+## アクション名とボタンのマッピング
+var _action_to_button: Dictionary = {}
+## 現在アクティブなアクション
+var _active_action: String = ""
 
 ## マーカー名とキャラクターのマッピング
 var _marker_to_character: Dictionary = {}
@@ -39,6 +55,7 @@ var _name_to_marker: Dictionary = {}
 
 func setup() -> void:
 	_setup_character_markers()
+	_setup_marker_edit_buttons()
 
 
 func set_pending_paths(count: int) -> void:
@@ -198,16 +215,31 @@ func _on_marker_pressed(marker_name: String) -> void:
 ## マーカーエディットパネルAPI
 ## ========================================
 
+## マーカーエディットボタンの初期設定
+func _setup_marker_edit_buttons() -> void:
+	_action_to_button = {
+		"vision": _vision_button,
+		"run": _run_button,
+		"clear": _clear_marker_button,
+		"grenade": _grenade_button,
+		"smoke": _smoke_button,
+		"door": _door_button,
+		"wait": _wait_button,
+	}
+
+
 ## マーカーエディットパネルを表示
 func show_marker_edit_panel() -> void:
 	if _marker_edit_panel:
 		_marker_edit_panel.visible = true
+		_reset_marker_edit_buttons()
 
 
 ## マーカーエディットパネルを非表示
 func hide_marker_edit_panel() -> void:
 	if _marker_edit_panel:
 		_marker_edit_panel.visible = false
+		_reset_marker_edit_buttons()
 
 
 ## マーカーエディットパネルの表示状態を取得
@@ -217,7 +249,32 @@ func is_marker_edit_panel_visible() -> bool:
 
 ## マーカーエディットボタン押下時のコールバック
 func _on_marker_edit_pressed(action: String) -> void:
+	_set_active_marker_edit_button(action)
 	marker_edit_requested.emit(action)
+
+
+## アクティブなボタンを設定
+func _set_active_marker_edit_button(action: String) -> void:
+	# 前のアクティブボタンをリセット
+	if _active_action != "" and _action_to_button.has(_active_action):
+		var prev_button: TextureButton = _action_to_button[_active_action]
+		if prev_button:
+			prev_button.modulate = BUTTON_NORMAL_COLOR
+
+	# 新しいアクティブボタンを設定
+	_active_action = action
+	if _action_to_button.has(action):
+		var button: TextureButton = _action_to_button[action]
+		if button:
+			button.modulate = BUTTON_ACTIVE_COLOR
+
+
+## 全マーカーエディットボタンをリセット
+func _reset_marker_edit_buttons() -> void:
+	_active_action = ""
+	for button in _action_to_button.values():
+		if button:
+			button.modulate = BUTTON_NORMAL_COLOR
 
 
 ## Undoボタン押下時のコールバック
