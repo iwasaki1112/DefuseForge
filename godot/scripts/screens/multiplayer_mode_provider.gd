@@ -3,17 +3,20 @@ extends GameModeProvider
 ## Multiplayerモード用プロバイダー
 ##
 ## ネットワーク同期あり。NetworkManagerとSyncControllerを使用。
+## ネットワーク関連の処理をすべてこのクラスに集約。
 
 var network_manager: NetworkManager = null
 var sync_controller: MultiplayerSyncController = null
 
+var _game_screen: Node = null
+var _game_manager: GameManager = null
 var _local_peer_id: int = 0
 var _is_host: bool = false
 
 
-func setup(net_manager: NetworkManager, sync_ctrl: MultiplayerSyncController) -> void:
+## NetworkManagerを設定（LobbyScreenから呼ばれる）
+func setup_network(net_manager: NetworkManager) -> void:
 	network_manager = net_manager
-	sync_controller = sync_ctrl
 	_local_peer_id = network_manager.get_local_peer_id()
 	_is_host = network_manager.is_host()
 	PlayerState.set_local_peer_id(_local_peer_id)
@@ -21,6 +24,42 @@ func setup(net_manager: NetworkManager, sync_ctrl: MultiplayerSyncController) ->
 
 func get_mode_name() -> String:
 	return "multiplayer"
+
+
+func initialize(game_screen: Node, game_manager: GameManager) -> void:
+	_game_screen = game_screen
+	_game_manager = game_manager
+
+	# SyncControllerをセットアップ
+	_setup_sync_controller()
+
+	# ネットワークイベントを接続
+	_connect_network_events()
+
+
+func _setup_sync_controller() -> void:
+	if not network_manager or not _game_screen:
+		return
+
+	# ネットワークバスをラップするアダプタを作成
+	var network_adapter := NetworkBusAdapter.new()
+	network_adapter.setup(network_manager)
+	_game_screen.add_child(network_adapter)
+
+	sync_controller = MultiplayerSyncController.new()
+	sync_controller.name = "SyncController"
+	_game_screen.add_child(sync_controller)
+	sync_controller.setup(network_adapter, _game_manager, _local_peer_id, _is_host)
+
+
+func _connect_network_events() -> void:
+	if not network_manager or not _game_manager:
+		return
+
+	network_manager.peer_disconnected.connect(_on_peer_disconnected)
+	network_manager.message_received.connect(_on_network_message)
+	_game_manager.grenade_network_event.connect(_on_grenade_network_event)
+	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 
 
 func determine_player_team() -> void:
@@ -59,7 +98,39 @@ func on_round_ended(_winner: int, _reason: int) -> void:
 		sync_controller.send_round_state()
 
 
-func on_grenade_thrown(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int) -> void:
+func can_start_round() -> bool:
+	return _is_host
+
+
+func is_host() -> bool:
+	return _is_host
+
+
+func get_player_count() -> int:
+	if network_manager:
+		return network_manager.get_players().size()
+	return 1
+
+
+func cleanup() -> void:
+	if network_manager:
+		network_manager.disconnect_from_game()
+
+
+## ========================================
+## ネットワークイベントハンドラ
+## ========================================
+
+func _on_peer_disconnected(peer_id: int) -> void:
+	print("[MultiplayerModeProvider] Peer %d disconnected" % peer_id)
+
+
+func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void:
+	# sync_controllerが処理
+	pass
+
+
+func _on_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int) -> void:
 	if not sync_controller:
 		return
 
@@ -79,7 +150,7 @@ func on_grenade_thrown(start_pos: Vector3, velocity: Vector3, is_smoke: bool, gr
 	sync_controller.send_game_event(event)
 
 
-func on_grenade_exploded(grenade_id: int, position: Vector3, is_smoke: bool) -> void:
+func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: bool) -> void:
 	if not sync_controller:
 		return
 
@@ -89,27 +160,8 @@ func on_grenade_exploded(grenade_id: int, position: Vector3, is_smoke: bool) -> 
 	event.target_id = 0
 	event.data = {
 		"grenade_id": grenade_id,
-		"pos_x": position.x,
-		"pos_y": position.y,
-		"pos_z": position.z,
+		"pos_x": pos.x,
+		"pos_y": pos.y,
+		"pos_z": pos.z,
 	}
 	sync_controller.send_game_event(event)
-
-
-func can_start_round() -> bool:
-	return _is_host
-
-
-func is_host() -> bool:
-	return _is_host
-
-
-func get_player_count() -> int:
-	if network_manager:
-		return network_manager.get_players().size()
-	return 1
-
-
-func cleanup() -> void:
-	if network_manager:
-		network_manager.disconnect_from_game()

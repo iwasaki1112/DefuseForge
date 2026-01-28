@@ -35,10 +35,6 @@ var _input_controller: InputController = null
 ## 設定
 var _map_id: String = ""
 
-## ネットワーク専用（Multiplayerモード時のみ使用）
-var _network_manager: NetworkManager = null
-var _sync_controller: MultiplayerSyncController = null
-
 ## キャラクター管理
 var _network_id_counter: int = 1
 
@@ -58,15 +54,11 @@ func _ready() -> void:
 
 ## Multiplayerモードでセットアップ（LobbyScreenから呼ばれる）
 func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
-	_network_manager = net_manager
 	_map_id = map_id
-
-	# SyncControllerをセットアップ
-	_setup_sync_controller()
 
 	# MultiplayerModeProviderをセットアップ
 	var mp_provider := MultiplayerModeProvider.new()
-	mp_provider.setup(_network_manager, _sync_controller)
+	mp_provider.setup_network(net_manager)
 	_mode_provider = mp_provider
 
 	_initialize_game()
@@ -76,6 +68,10 @@ func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 func _initialize_game() -> void:
 	_setup_environment()
 	_setup_game_manager()
+
+	# Providerを初期化（ネットワーク接続などを行う）
+	_mode_provider.initialize(self, game_manager)
+
 	_mode_provider.determine_player_team()
 	_load_map()
 	_spawn_characters()
@@ -88,13 +84,6 @@ func _initialize_game() -> void:
 	_setup_camera_pan()
 	_setup_input_controller()
 	_setup_camera_for_player()
-
-	# Multiplayer用のネットワークイベント接続
-	if _network_manager:
-		_network_manager.peer_disconnected.connect(_on_peer_disconnected)
-		_network_manager.message_received.connect(_on_network_message)
-		game_manager.grenade_network_event.connect(_on_grenade_network_event)
-		game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
@@ -136,24 +125,6 @@ func _setup_game_manager() -> void:
 		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
 		game_manager.round_timer_updated.connect(_on_round_timer_updated)
 		game_manager.round_ended.connect(_on_round_ended)
-
-
-func _setup_sync_controller() -> void:
-	if not _network_manager:
-		return
-
-	# ネットワークバスをラップするアダプタを作成
-	var network_adapter := NetworkBusAdapter.new()
-	network_adapter.setup(_network_manager)
-	add_child(network_adapter)
-
-	_sync_controller = MultiplayerSyncController.new()
-	_sync_controller.name = "SyncController"
-	add_child(_sync_controller)
-
-	var local_peer_id := _network_manager.get_local_peer_id()
-	var is_host := _network_manager.is_host()
-	_sync_controller.setup(network_adapter, game_manager, local_peer_id, is_host)
 
 
 func _load_map() -> void:
@@ -491,26 +462,6 @@ func _on_round_ended(winner: int, reason: int) -> void:
 	# 3秒後にマップ選択画面に遷移
 	await get_tree().create_timer(3.0).timeout
 	get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
-
-
-## ========================================
-## ネットワークイベント（Multiplayerモード専用）
-## ========================================
-
-func _on_peer_disconnected(peer_id: int) -> void:
-	print("[GameScreen] Peer %d disconnected" % peer_id)
-
-
-func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void:
-	pass
-
-
-func _on_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int) -> void:
-	_mode_provider.on_grenade_thrown(start_pos, velocity, is_smoke, grenade_id)
-
-
-func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: bool) -> void:
-	_mode_provider.on_grenade_exploded(grenade_id, pos, is_smoke)
 
 
 ## ========================================

@@ -9,6 +9,11 @@ func get_mode_name() -> String:
 	return "base"
 
 
+## 初期化（GameScreenとGameManagerへの参照を受け取る）
+func initialize(_game_screen: Node, _game_manager: GameManager) -> void:
+	pass
+
+
 ## プレイヤーのチームを決定
 func determine_player_team() -> void:
 	pass
@@ -31,16 +36,6 @@ func on_execute_paths(_count: int) -> void:
 
 ## ラウンド終了時のコールバック
 func on_round_ended(_winner: int, _reason: int) -> void:
-	pass
-
-
-## グレネード投擲イベント
-func on_grenade_thrown(_start_pos: Vector3, _velocity: Vector3, _is_smoke: bool, _grenade_id: int) -> void:
-	pass
-
-
-## グレネード爆発イベント
-func on_grenade_exploded(_grenade_id: int, _position: Vector3, _is_smoke: bool) -> void:
 	pass
 
 
