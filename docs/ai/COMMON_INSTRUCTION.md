@@ -31,6 +31,24 @@
 - **マップ選択画面**: `scenes/screens/map_selection.tscn` / `scripts/screens/map_selection_screen.gd`
 - **設定画面**: `scenes/screens/option.tscn` / `scripts/screens/option_screen.gd`
 - **ゲーム本編画面**: `scenes/screens/game.tscn` / `scripts/screens/game_screen.gd`
+- **マルチプレイヤーロビー**: `scenes/screens/lobby.tscn` / `scripts/screens/lobby_screen.gd`
+
+## ゲームモードアーキテクチャ
+
+GameScreenはProviderパターンを採用し、TrainingとMultiplayerを統合：
+
+```
+GameScreen (統合されたゲーム画面)
+    └── GameModeProvider (モード抽象化)
+          ├── TrainingModeProvider (シングルプレイヤー)
+          └── MultiplayerModeProvider (マルチプレイヤー)
+```
+
+- **GameScreen**: 共通処理（マップ、キャラクター、HUD、カメラ）
+- **TrainingModeProvider**: ローカル処理のみ
+- **MultiplayerModeProvider**: NetworkManager/SyncController保持、ネットワーク同期
+
+詳細: `docs/godot/api/Screen/README.md`
 
 ## game-flowの読み方（最短導線）
 1. **画面遷移図**: 起動からゲーム開始までの流れを把握
