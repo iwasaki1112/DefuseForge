@@ -115,6 +115,27 @@ gcloud run services describe rescueforge-relay --region asia-northeast1
 
 詳細: `docs/godot/api/Network/NetworkManager.md`
 
+### ラグ補償アーキテクチャ
+
+リモートキャラクターの滑らかな描画のため、以下の技術を採用：
+
+| 技術 | 説明 | 設定値 |
+|------|------|--------|
+| **補間バッファ** | 受信状態を80ms遅らせて2点間補間 | `INTERPOLATION_DELAY = 0.08` |
+| **外挿** | パケットロス時に速度ベースで予測 | `MAX_EXTRAPOLATION_TIME = 0.15` |
+| **Tick分離** | シミュレーション60Hz / ネット送信15Hz | `NETWORK_SEND_HZ = 15` |
+| **対称送信** | Host/Client両方が同じ15Hzで送信 | 非対称だとラグ差が発生 |
+
+```
+受信状態: ──●──────●──────●──────●───→ 時間
+                           ↑
+                    描画位置（80ms遅延で補間）
+```
+
+**チューニング**: `network_constants.gd` の `INTERPOLATION_DELAY` を調整
+- 大きく(120ms): より滑らか、ラグ増
+- 小さく(50ms): レスポンス良、カクつき増
+
 ## game-flowの読み方（最短導線）
 1. **画面遷移図**: 起動からゲーム開始までの流れを把握
 2. **GameScreen**: 初期化処理と主要システムの関係を把握

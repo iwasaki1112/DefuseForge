@@ -17,9 +17,13 @@ var peer_id: int = 0
 var is_host: bool = false
 
 ## 同期設定
-var _sync_timer: float = 0.0
 var _sync_interval: float = 1.0 / NetworkConstants.SYNC_RATE_HZ
 var _auto_sync_enabled: bool = true
+
+## Tick管理（Phase 3: Tick分離）
+var _tick_counter: int = 0
+var _last_sent_states: Dictionary = {}  # character_id -> last_state for delta detection
+var _idle_skip_counter: int = 0  # 静止時の送信スキップカウンター
 
 
 func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
@@ -40,18 +44,20 @@ func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
 		game_manager.round_manager.set_authority(true)
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if not _auto_sync_enabled:
 		return
 
-	_sync_timer += delta
-	if _sync_timer >= _sync_interval:
-		_sync_timer = 0.0
+	# Tick-based送信（Phase 3）
+	_tick_counter += 1
+
+	# 送信タイミングの判定
+	if _tick_counter % NetworkConstants.SEND_EVERY_N_TICKS == 0:
 		if is_host:
 			# ホストは全状態を送信
 			send_state_sync()
 		else:
-			# クライアントは自分のキャラクター状態のみ送信
+			# クライアントも同じ頻度で送信（デルタ検出は後で最適化）
 			send_local_character_states()
 
 
@@ -70,14 +76,92 @@ func send_state_sync() -> void:
 
 
 ## ローカルキャラクターの状態をホストに送信（Client→Host）
+## バイナリ形式で一括送信することで帯域を削減
 func send_local_character_states() -> void:
 	if is_host or not game_manager:
 		return
 
 	var my_characters := game_manager.find_characters_by_owner(peer_id)
+	if my_characters.is_empty():
+		return
+
+	# 複数キャラクターを一括でバイナリ送信
+	var states: Array[NetworkMessages.CharacterStateMessage] = []
 	for character in my_characters:
-		var char_state := character.to_character_state()
-		send_character_update(char_state)
+		states.append(character.to_character_state())
+
+	send_character_batch_update_binary(states)
+
+
+## デルタ検出付きでローカルキャラクター状態を送信
+## 変化がない場合は送信頻度を下げる
+func _send_local_character_states_with_delta() -> void:
+	if is_host or not game_manager:
+		return
+
+	var my_characters := game_manager.find_characters_by_owner(peer_id)
+	if my_characters.is_empty():
+		return
+
+	var states_to_send: Array[NetworkMessages.CharacterStateMessage] = []
+	var all_idle := true
+
+	for character in my_characters:
+		var current_state := character.to_character_state()
+		var char_id := current_state.character_id
+
+		# 前回の状態と比較
+		var should_send := true
+		if _last_sent_states.has(char_id):
+			var last_state: NetworkMessages.CharacterStateMessage = _last_sent_states[char_id]
+			should_send = _has_significant_change(last_state, current_state)
+
+		# 速度チェック（静止判定）
+		if current_state.velocity.length() > NetworkConstants.IDLE_VELOCITY_THRESHOLD:
+			all_idle = false
+
+		if should_send:
+			states_to_send.append(current_state)
+			_last_sent_states[char_id] = current_state
+
+	# 静止時は送信頻度を下げる
+	if all_idle:
+		_idle_skip_counter += 1
+		if _idle_skip_counter < NetworkConstants.IDLE_SEND_MULTIPLIER:
+			return
+		_idle_skip_counter = 0
+	else:
+		_idle_skip_counter = 0
+
+	# 送信すべき状態がある場合のみ送信
+	# 一時的に従来方式を使用（デバッグ用）
+	for state in states_to_send:
+		send_character_update(state)  # バイナリではなく従来のJSON方式
+
+
+## 状態に有意な変化があるか判定
+func _has_significant_change(old_state: NetworkMessages.CharacterStateMessage, new_state: NetworkMessages.CharacterStateMessage) -> bool:
+	# 位置の変化（1cm以上）
+	if old_state.position.distance_to(new_state.position) > 0.01:
+		return true
+
+	# 回転の変化（1度以上）
+	if absf(old_state.rotation - new_state.rotation) > deg_to_rad(1.0):
+		return true
+
+	# HPの変化
+	if old_state.current_health != new_state.current_health:
+		return true
+
+	# 生存状態の変化
+	if old_state.is_alive != new_state.is_alive:
+		return true
+
+	# しゃがみ状態の変化
+	if old_state.is_crouching != new_state.is_crouching:
+		return true
+
+	return false
 
 
 ## パス確定を送信
@@ -129,6 +213,49 @@ func send_character_update(char_state: NetworkMessages.CharacterStateMessage) ->
 		)
 
 
+## キャラクター更新をバイナリ形式で送信（高効率版）
+func send_character_update_binary(char_state: NetworkMessages.CharacterStateMessage) -> void:
+	var binary_data := NetworkSerializer.serialize_character_state_binary(char_state)
+	# JSON経由で送信するためBase64エンコード
+	var encoded := Marshalls.raw_to_base64(binary_data)
+
+	if is_host:
+		network_bus.broadcast_from_host(
+			NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY,
+			{"binary": encoded}
+		)
+	else:
+		network_bus.send_message(
+			peer_id,
+			LocalNetworkBus.HOST_PEER_ID,
+			NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY,
+			{"binary": encoded}
+		)
+
+
+## 複数キャラクター状態を一括送信（バイナリ形式）
+func send_character_batch_update_binary(states: Array[NetworkMessages.CharacterStateMessage]) -> void:
+	if states.is_empty():
+		return
+
+	var binary_data := NetworkSerializer.serialize_character_states_binary(states)
+	# JSON経由で送信するためBase64エンコード
+	var encoded := Marshalls.raw_to_base64(binary_data)
+
+	if is_host:
+		network_bus.broadcast_from_host(
+			NetworkConstants.MessageType.CHARACTER_BATCH_UPDATE_BINARY,
+			{"binary": encoded}
+		)
+	else:
+		network_bus.send_message(
+			peer_id,
+			LocalNetworkBus.HOST_PEER_ID,
+			NetworkConstants.MessageType.CHARACTER_BATCH_UPDATE_BINARY,
+			{"binary": encoded}
+		)
+
+
 ## ラウンド状態を送信（Host→Client）
 func send_round_state() -> void:
 	if not is_host or not game_manager.round_manager:
@@ -159,6 +286,21 @@ func send_game_event(event: NetworkMessages.GameEventMessage) -> void:
 			NetworkConstants.MessageType.GAME_EVENT,
 			data
 		)
+
+
+## アニメーションイベントを即時送信
+## 発砲、リロード、ヒットリアクションなどの瞬間的なアニメーションに使用
+func send_animation_event(character_id: int, anim_event: NetworkConstants.AnimationEventType, extra_data: Dictionary = {}) -> void:
+	var event := NetworkMessages.GameEventMessage.new()
+	event.event_type = NetworkConstants.GameEventType.ANIMATION_EVENT
+	event.source_id = character_id
+	event.data = {
+		"anim_type": anim_event,
+		"timestamp": Time.get_ticks_msec()
+	}
+	event.data.merge(extra_data)
+
+	send_game_event(event)
 
 
 ## 選択状態を送信
@@ -197,6 +339,10 @@ func _on_message_received(from_peer: int, to_peer: int, msg_type: int, data: Dic
 			_handle_path_execute(data)
 		NetworkConstants.MessageType.CHARACTER_UPDATE:
 			_handle_character_update(data)
+		NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY:
+			_handle_character_update_binary(data)
+		NetworkConstants.MessageType.CHARACTER_BATCH_UPDATE_BINARY:
+			_handle_character_batch_update_binary(data)
 		NetworkConstants.MessageType.ROUND_STATE:
 			_handle_round_state(data)
 		NetworkConstants.MessageType.GAME_EVENT:
@@ -244,13 +390,57 @@ func _handle_path_execute(data: Dictionary) -> void:
 
 func _handle_character_update(data: Dictionary) -> void:
 	var char_state := _dict_to_char_state(data)
+	_apply_character_state(char_state)
+
+
+func _handle_character_update_binary(data: Dictionary) -> void:
+	var binary := _get_binary_from_data(data)
+	if binary.is_empty():
+		return
+	var char_state := NetworkSerializer.deserialize_character_state_binary(binary)
+	_apply_character_state(char_state)
+
+
+func _handle_character_batch_update_binary(data: Dictionary) -> void:
+	var binary := _get_binary_from_data(data)
+	if binary.is_empty():
+		return
+	var states := NetworkSerializer.deserialize_character_states_binary(binary)
+	for char_state in states:
+		_apply_character_state(char_state)
+
+
+## Dictionaryからバイナリデータを取得（JSON経由で文字列化される場合に対応）
+func _get_binary_from_data(data: Dictionary) -> PackedByteArray:
+	var raw = data.get("binary", null)
+	if raw == null:
+		return PackedByteArray()
+
+	# 既にPackedByteArrayの場合
+	if raw is PackedByteArray:
+		return raw
+
+	# 文字列（Base64）の場合
+	if raw is String:
+		return Marshalls.base64_to_raw(raw)
+
+	# 配列の場合（JSONでint配列になることがある）
+	if raw is Array:
+		var result := PackedByteArray()
+		result.resize(raw.size())
+		for i in raw.size():
+			result[i] = raw[i]
+		return result
+
+	return PackedByteArray()
+
+
+## キャラクター状態を適用（共通処理）
+func _apply_character_state(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var character := game_manager.find_character_by_network_id(char_state.character_id)
 	if character:
 		if not character.is_local():
 			character.apply_remote_state(char_state)
-		# デバッグ: 10回に1回だけログ出力
-		if randi() % 30 == 0:
-			print("[SYNC] CharUpdate id=%d is_local=%s pos=%s" % [char_state.character_id, character.is_local(), char_state.position])
 	character_updated_remote.emit(char_state)
 
 
@@ -289,6 +479,8 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			_apply_grenade_explode_event(event)
 		NetworkConstants.GameEventType.SMOKE_DEPLOY:
 			_apply_smoke_deploy_event(event)
+		NetworkConstants.GameEventType.ANIMATION_EVENT:
+			_apply_animation_event(event)
 
 
 func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
@@ -379,6 +571,77 @@ func _apply_smoke_deploy_event(event: NetworkMessages.GameEventMessage) -> void:
 	var grenade_id: int = event.data.get("grenade_id", 0)
 	print("[SMOKE DEPLOY RECV] id=", grenade_id, " pos=", position)
 	game_manager.handle_grenade_explode_from_network(grenade_id, position, true)
+
+
+func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
+	var character := game_manager.find_character_by_network_id(event.source_id)
+	if not character or character.is_local():
+		return  # ローカルキャラクターは自分でアニメーション管理
+
+	var anim_type: int = event.data.get("anim_type", 0)
+	var timestamp: int = event.data.get("timestamp", 0)
+
+	# レイテンシ補正（アニメーション開始位置を調整）
+	var latency_sec := (Time.get_ticks_msec() - timestamp) / 1000.0
+	latency_sec = clampf(latency_sec, 0.0, 0.5)  # 最大500msまで
+
+	var anim_ctrl = character.anim_ctrl
+	if not anim_ctrl:
+		return
+
+	match anim_type:
+		NetworkConstants.AnimationEventType.FIRE:
+			# 発砲アニメーション（レイテンシ補正付き）
+			if anim_ctrl.has_method("play_fire_animation"):
+				anim_ctrl.play_fire_animation()
+				# アニメーションを進める（レイテンシ補正）
+				_seek_animation_forward(anim_ctrl, latency_sec)
+
+		NetworkConstants.AnimationEventType.RELOAD:
+			if anim_ctrl.has_method("play_reload"):
+				anim_ctrl.play_reload()
+				_seek_animation_forward(anim_ctrl, latency_sec)
+
+		NetworkConstants.AnimationEventType.HIT_REACTION:
+			var direction: int = event.data.get("direction", 0)
+			if anim_ctrl.has_method("play_hit_reaction"):
+				anim_ctrl.play_hit_reaction(direction)
+
+		NetworkConstants.AnimationEventType.DEATH:
+			var direction: int = event.data.get("direction", 0)
+			if anim_ctrl.has_method("play_death"):
+				anim_ctrl.play_death(direction, false)
+
+		NetworkConstants.AnimationEventType.GRENADE_THROW:
+			if anim_ctrl.has_method("play_grenade_throw"):
+				anim_ctrl.play_grenade_throw()
+				_seek_animation_forward(anim_ctrl, latency_sec)
+
+		NetworkConstants.AnimationEventType.CROUCH_START:
+			if character.has_method("set_crouching"):
+				character.set_crouching(true)
+
+		NetworkConstants.AnimationEventType.CROUCH_END:
+			if character.has_method("set_crouching"):
+				character.set_crouching(false)
+
+
+## アニメーションを指定秒数分進める（レイテンシ補正用）
+func _seek_animation_forward(anim_ctrl: Node, seconds: float) -> void:
+	if seconds <= 0.0:
+		return
+
+	# AnimationPlayerを取得してseek
+	var anim_player: AnimationPlayer = null
+	if anim_ctrl.has_method("get_animation_player"):
+		anim_player = anim_ctrl.get_animation_player()
+	elif anim_ctrl.get("animation_player") != null:
+		anim_player = anim_ctrl.animation_player
+
+	if anim_player and anim_player.is_playing():
+		var current_pos := anim_player.current_animation_position
+		var new_pos := current_pos + seconds
+		anim_player.seek(new_pos, true)
 
 
 # ============================================

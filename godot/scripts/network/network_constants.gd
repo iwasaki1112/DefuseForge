@@ -30,17 +30,46 @@ enum MessageType {
 	PLAYER_INPUT = 8,
 	## 選択状態更新
 	SELECTION_UPDATE = 9,
+	## キャラクター状態更新（バイナリ形式）
+	CHARACTER_UPDATE_BINARY = 10,
+	## 複数キャラクター状態一括更新（バイナリ形式）
+	CHARACTER_BATCH_UPDATE_BINARY = 11,
 }
 
 # ============================================
 # 同期設定
 # ============================================
 
-## 同期レート（Hz）- 1秒あたりの同期回数
-const SYNC_RATE_HZ: int = 30
+## シミュレーションTick（Hz）- ゲームロジック更新頻度
+const SIMULATION_TICK_HZ: int = 60
+
+## ネットワーク送信Tick（Hz）- ネットワーク更新頻度
+const NETWORK_SEND_HZ: int = 15
+
+## 送信間隔（シミュレーションTickごと）
+const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 4
+
+## 同期レート（Hz）- 後方互換用（NETWORK_SEND_HZを使用推奨）
+const SYNC_RATE_HZ: int = NETWORK_SEND_HZ
 
 ## 同期間隔（秒）
-const SYNC_INTERVAL: float = 1.0 / SYNC_RATE_HZ
+const SYNC_INTERVAL: float = 1.0 / NETWORK_SEND_HZ
+
+## 補間バッファ遅延（秒）- リモートキャラクターの描画遅延
+## 高いほど滑らかだがラグが増える（推奨: 60-120ms）
+const INTERPOLATION_DELAY: float = 0.08
+
+## スナップショットバッファサイズ（約1秒分のデータを保持）
+const SNAPSHOT_BUFFER_SIZE: int = 30
+
+## 外挿の最大時間（秒）- パケット途切れ時の予測限界
+const MAX_EXTRAPOLATION_TIME: float = 0.15
+
+## 静止時の送信間引き閾値（速度がこれ以下なら送信頻度を下げる）
+const IDLE_VELOCITY_THRESHOLD: float = 0.1
+
+## 静止時の送信間隔倍率（通常の何倍の間隔で送信するか）
+const IDLE_SEND_MULTIPLIER: int = 3
 
 ## 位置精度（1cm単位 = 100）
 ## Vector3座標をintに変換する際の乗数
@@ -124,6 +153,27 @@ enum GameEventType {
 	GRENADE_EXPLODE = 7,
 	## スモーク展開（位置同期用）
 	SMOKE_DEPLOY = 8,
+	## アニメーションイベント（即時同期）
+	ANIMATION_EVENT = 9,
+}
+
+
+## アニメーションイベントタイプ（即時同期用）
+enum AnimationEventType {
+	## 発砲アニメーション
+	FIRE = 0,
+	## リロードアニメーション
+	RELOAD = 1,
+	## ヒットリアクション
+	HIT_REACTION = 2,
+	## 死亡アニメーション
+	DEATH = 3,
+	## グレネード投擲アニメーション
+	GRENADE_THROW = 4,
+	## しゃがみ開始
+	CROUCH_START = 5,
+	## しゃがみ終了
+	CROUCH_END = 6,
 }
 
 # ============================================
