@@ -129,7 +129,7 @@ func _setup_game_manager() -> void:
 
 func _load_map() -> void:
 	if _map_id.is_empty():
-		push_error("[GameScreen] No map selected")
+		push_warning("[GameScreen] No map selected - will be set later for multiplayer")
 		return
 
 	var map_instance := game_manager.load_map(_map_id, false)
@@ -139,7 +139,7 @@ func _load_map() -> void:
 
 func _spawn_characters() -> void:
 	if not game_manager.has_map():
-		push_error("[GameScreen] Cannot spawn characters - no map loaded")
+		push_warning("[GameScreen] Cannot spawn characters - no map loaded yet")
 		return
 
 	var preset = game_manager.get_current_map_preset()
@@ -247,7 +247,8 @@ func _setup_input_controller() -> void:
 
 func _setup_money() -> void:
 	PlayerState.reset_money()
-	PlayerState.money_changed.connect(_on_money_changed)
+	if not PlayerState.money_changed.is_connected(_on_money_changed):
+		PlayerState.money_changed.connect(_on_money_changed)
 	_update_money_display()
 
 
@@ -486,7 +487,18 @@ func cleanup() -> void:
 	_cleanup_before_transition()
 
 
+var _cleanup_done: bool = false
+
 func _cleanup_before_transition() -> void:
+	if _cleanup_done:
+		return
+	_cleanup_done = true
+
+	# マップとキャラクターのクリーンアップ
+	if game_manager:
+		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
+		print("[GameScreen] Map and characters cleaned up")
+
 	# PlayerStateのシグナル切断
 	if PlayerState.money_changed.is_connected(_on_money_changed):
 		PlayerState.money_changed.disconnect(_on_money_changed)
@@ -504,8 +516,10 @@ func _cleanup_before_transition() -> void:
 		_status_label.queue_free()
 		_status_label = null
 
-	# Providerのクリーンアップ
-	_mode_provider.cleanup()
+	# Providerのクリーンアップ（WebSocket切断含む）
+	if _mode_provider:
+		_mode_provider.cleanup()
+		print("[GameScreen] Network cleanup completed")
 
 
 func _exit_tree() -> void:

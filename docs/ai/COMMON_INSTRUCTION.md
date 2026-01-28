@@ -16,6 +16,7 @@
 
 ## リポジトリ構成（概要）
 - **`godot/`**: ゲーム本体（Godotプロジェクト）
+- **`server/relay/`**: WebSocketリレーサーバー（Go）
 - **`docs/`**: ドキュメント群（Godot仕様・API・AI向け指示）
 - **`blender/`**: マップ/アセット制作関連
 - **`tools/`**: 開発支援ツール類
@@ -49,6 +50,70 @@ GameScreen (統合されたゲーム画面)
 - **MultiplayerModeProvider**: NetworkManager/SyncController保持、ネットワーク同期
 
 詳細: `docs/godot/api/Screen/README.md`
+
+## マルチプレイヤーアーキテクチャ
+
+WebSocketリレーサーバー方式を採用：
+
+```
+┌─────────┐     ┌─────────────────┐     ┌─────────┐
+│ Player1 │────▶│   Cloud Run     │◀────│ Player2 │
+│ (Host)  │◀────│ WebSocket Relay │────▶│(Client) │
+└─────────┘     └─────────────────┘     └─────────┘
+```
+
+- **リレーサーバー**: `server/relay/` (Go, Cloud Run)
+- **NetworkManager**: WebSocketPeerベースのルーム管理
+- **LobbyScreen**: ルームリスト表示・参加UI
+
+### ローカル開発
+
+```bash
+# サーバー起動
+cd server/relay && go run .
+
+# Godot側でローカルサーバーに接続
+# network_constants.gd の USE_LOCAL_RELAY = true
+```
+
+### GCP Cloud Run デプロイ
+
+**プロジェクト**: rescueforge
+**リージョン**: asia-northeast1 (東京)
+**サービスURL**: `wss://rescueforge-relay-344342786567.asia-northeast1.run.app/ws`
+
+```bash
+# デプロイ
+cd server/relay
+gcloud run deploy rescueforge-relay \
+  --source . \
+  --platform managed \
+  --region asia-northeast1 \
+  --allow-unauthenticated \
+  --session-affinity \
+  --min-instances=1
+
+# ヘルスチェック
+curl https://rescueforge-relay-344342786567.asia-northeast1.run.app/health
+
+# ログ確認
+gcloud run services logs read rescueforge-relay --region asia-northeast1 --limit 30
+
+# サービス情報
+gcloud run services describe rescueforge-relay --region asia-northeast1
+```
+
+| オプション | 説明 |
+|-----------|------|
+| `--session-affinity` | WebSocket用にセッション維持 |
+| `--min-instances=1` | コールドスタート回避（重要） |
+| `--max-instances=3` | 最大インスタンス数 |
+
+**トラブルシューティング**:
+- 接続失敗時: ログ確認 → サーバー再デプロイ
+- WebSocket 101成功だがメッセージ未処理: デッドロックの可能性 → 再デプロイ
+
+詳細: `docs/godot/api/Network/NetworkManager.md`
 
 ## game-flowの読み方（最短導線）
 1. **画面遷移図**: 起動からゲーム開始までの流れを把握

@@ -37,7 +37,7 @@ enum MessageType {
 # ============================================
 
 ## 同期レート（Hz）- 1秒あたりの同期回数
-const SYNC_RATE_HZ: int = 20
+const SYNC_RATE_HZ: int = 30
 
 ## 同期間隔（秒）
 const SYNC_INTERVAL: float = 1.0 / SYNC_RATE_HZ
@@ -54,6 +54,19 @@ const MAX_PATH_POINTS: int = 256
 
 ## マーカーの最大数（各種類ごと）
 const MAX_MARKERS_PER_TYPE: int = 32
+
+# ============================================
+# リレーサーバー設定
+# ============================================
+
+## リレーサーバーURL（本番環境）
+const RELAY_SERVER_URL: String = "wss://rescueforge-relay-344342786567.asia-northeast1.run.app/ws"
+
+## ローカル開発用URL
+const RELAY_SERVER_URL_LOCAL: String = "ws://localhost:8080/ws"
+
+## 開発モードフラグ（trueならローカルサーバーに接続）
+const USE_LOCAL_RELAY: bool = false
 
 # ============================================
 # タイムアウト設定

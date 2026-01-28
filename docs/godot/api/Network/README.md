@@ -9,4 +9,4 @@
 | [LocalNetworkBus](LocalNetworkBus.md) | ローカルネットワークシミュレーター（遅延・パケットロス対応） |
 | [MultiplayerSyncController](MultiplayerSyncController.md) | GameManagerとNetworkBus間の同期処理管理 |
 | [NetworkBusAdapter](NetworkBusAdapter.md) | NetworkManagerをLocalNetworkBus互換にするアダプタ |
-| [NetworkManager](NetworkManager.md) | ENetによるマルチプレイヤー接続・プレイヤー管理 |
+| [NetworkManager](NetworkManager.md) | WebSocketリレーサーバー経由のマルチプレイ接続・ルーム管理 |

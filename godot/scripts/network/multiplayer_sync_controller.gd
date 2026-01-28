@@ -245,8 +245,12 @@ func _handle_path_execute(data: Dictionary) -> void:
 func _handle_character_update(data: Dictionary) -> void:
 	var char_state := _dict_to_char_state(data)
 	var character := game_manager.find_character_by_network_id(char_state.character_id)
-	if character and not character.is_local():
-		character.apply_remote_state(char_state)
+	if character:
+		if not character.is_local():
+			character.apply_remote_state(char_state)
+		# デバッグ: 10回に1回だけログ出力
+		if randi() % 30 == 0:
+			print("[SYNC] CharUpdate id=%d is_local=%s pos=%s" % [char_state.character_id, character.is_local(), char_state.position])
 	character_updated_remote.emit(char_state)
 
 

@@ -46,9 +46,6 @@ Thumbs.db
 # Visual Studio Code
 .vscode/
 
-# Claude Code
-.claude/
-
 # MCP config (contains local paths)
 .mcp.json
 

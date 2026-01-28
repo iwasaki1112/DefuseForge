@@ -113,8 +113,20 @@ func get_player_count() -> int:
 
 
 func cleanup() -> void:
+	# シグナル切断
 	if network_manager:
+		if network_manager.peer_disconnected.is_connected(_on_peer_disconnected):
+			network_manager.peer_disconnected.disconnect(_on_peer_disconnected)
+		if network_manager.message_received.is_connected(_on_network_message):
+			network_manager.message_received.disconnect(_on_network_message)
+		# WebSocket切断
 		network_manager.disconnect_from_game()
+		print("[MultiplayerModeProvider] WebSocket disconnected")
+
+	if _game_manager and _game_manager.grenade_network_event.is_connected(_on_grenade_network_event):
+		_game_manager.grenade_network_event.disconnect(_on_grenade_network_event)
+	if _game_manager and _game_manager.grenade_explode_network_event.is_connected(_on_grenade_explode_network_event):
+		_game_manager.grenade_explode_network_event.disconnect(_on_grenade_explode_network_event)
 
 
 ## ========================================

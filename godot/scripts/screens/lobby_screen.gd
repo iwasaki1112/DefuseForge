@@ -1,7 +1,7 @@
 extends Control
 class_name LobbyScreen
 ## ロビー画面
-## ルーム作成・参加・プレイヤー一覧・準備状態を管理
+## WebSocketリレーサーバー経由のルーム作成・参加・プレイヤー一覧・準備状態を管理
 
 const GAME_SCENE := "res://scenes/screens/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
@@ -9,11 +9,11 @@ const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 
 ## 状態
 enum LobbyState {
-	MENU,       # 初期メニュー
-	HOSTING,    # ホスト中
-	JOINING,    # 参加中（入力）
-	CONNECTING, # 接続中
-	IN_LOBBY,   # ロビー内
+	MENU,           # 初期メニュー
+	ROOM_NAME_INPUT, # ルーム名入力（ホスト用）
+	ROOM_LIST,      # ルーム一覧（参加用）
+	CONNECTING,     # 接続中
+	IN_LOBBY,       # ロビー内
 }
 
 var _state: LobbyState = LobbyState.MENU
@@ -30,10 +30,16 @@ var _host_button: Button
 var _join_button: Button
 var _back_button: Button
 
-var _join_panel: VBoxContainer
-var _ip_input: LineEdit
-var _connect_button: Button
-var _cancel_button: Button
+var _room_name_panel: VBoxContainer
+var _room_name_input: LineEdit
+var _create_button: Button
+var _room_name_cancel_button: Button
+
+var _room_list_panel: VBoxContainer
+var _room_list_container: VBoxContainer
+var _refresh_button: Button
+var _room_list_back_button: Button
+var _room_list_status: Label
 
 var _lobby_panel: VBoxContainer
 var _info_label: Label
@@ -63,9 +69,9 @@ func _process(delta: float) -> void:
 			# ゲーム開始を全員に通知
 			_network_manager.broadcast_message(
 				NetworkConstants.MessageType.ROUND_STATE,
-				{"action": "start_game", "map_id": "park"}
+				{"action": "start_game", "map_id": "bank"}
 			)
-			_start_game("park")
+			_start_game("bank")
 		else:
 			# カウントダウン表示更新
 			var seconds := ceili(_countdown_time)
@@ -90,6 +96,9 @@ func _setup_network_manager() -> void:
 	_network_manager.all_peers_ready.connect(_on_all_peers_ready)
 	_network_manager.message_received.connect(_on_network_message)
 	_network_manager.players_updated.connect(_on_players_updated)
+	_network_manager.room_list_received.connect(_on_room_list_received)
+	_network_manager.room_created.connect(_on_room_created)
+	_network_manager.room_joined.connect(_on_room_joined)
 
 
 func _setup_ui() -> void:
@@ -135,9 +144,13 @@ func _setup_ui() -> void:
 	_menu_panel = _create_menu_panel()
 	main_container.add_child(_menu_panel)
 
-	# 参加パネル
-	_join_panel = _create_join_panel()
-	main_container.add_child(_join_panel)
+	# ルーム名入力パネル
+	_room_name_panel = _create_room_name_panel()
+	main_container.add_child(_room_name_panel)
+
+	# ルームリストパネル
+	_room_list_panel = _create_room_list_panel()
+	main_container.add_child(_room_list_panel)
 
 	# ロビーパネル
 	_lobby_panel = _create_lobby_panel()
@@ -169,34 +182,78 @@ func _create_menu_panel() -> VBoxContainer:
 	return panel
 
 
-func _create_join_panel() -> VBoxContainer:
+func _create_room_name_panel() -> VBoxContainer:
 	var panel := VBoxContainer.new()
 	panel.add_theme_constant_override("separation", 15)
 
-	var ip_label := Label.new()
-	ip_label.text = "ホストのIPアドレス:"
-	panel.add_child(ip_label)
+	var label := Label.new()
+	label.text = "ルーム名を入力:"
+	panel.add_child(label)
 
-	_ip_input = LineEdit.new()
-	_ip_input.placeholder_text = "192.168.x.x"
-	_ip_input.custom_minimum_size = Vector2(300, 40)
-	panel.add_child(_ip_input)
+	_room_name_input = LineEdit.new()
+	_room_name_input.placeholder_text = "My Room"
+	_room_name_input.custom_minimum_size = Vector2(300, 40)
+	panel.add_child(_room_name_input)
 
 	var btn_container := HBoxContainer.new()
 	btn_container.add_theme_constant_override("separation", 10)
 	panel.add_child(btn_container)
 
-	_connect_button = Button.new()
-	_connect_button.text = "接続"
-	_connect_button.custom_minimum_size = Vector2(145, 50)
-	_connect_button.pressed.connect(_on_connect_pressed)
-	btn_container.add_child(_connect_button)
+	_create_button = Button.new()
+	_create_button.text = "作成"
+	_create_button.custom_minimum_size = Vector2(145, 50)
+	_create_button.pressed.connect(_on_create_room_pressed)
+	btn_container.add_child(_create_button)
 
-	_cancel_button = Button.new()
-	_cancel_button.text = "キャンセル"
-	_cancel_button.custom_minimum_size = Vector2(145, 50)
-	_cancel_button.pressed.connect(_on_cancel_pressed)
-	btn_container.add_child(_cancel_button)
+	_room_name_cancel_button = Button.new()
+	_room_name_cancel_button.text = "キャンセル"
+	_room_name_cancel_button.custom_minimum_size = Vector2(145, 50)
+	_room_name_cancel_button.pressed.connect(_on_room_name_cancel_pressed)
+	btn_container.add_child(_room_name_cancel_button)
+
+	return panel
+
+
+func _create_room_list_panel() -> VBoxContainer:
+	var panel := VBoxContainer.new()
+	panel.add_theme_constant_override("separation", 15)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 10)
+	panel.add_child(header)
+
+	var header_label := Label.new()
+	header_label.text = "ルーム一覧"
+	header_label.add_theme_font_size_override("font_size", 20)
+	header_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(header_label)
+
+	_refresh_button = Button.new()
+	_refresh_button.text = "更新"
+	_refresh_button.custom_minimum_size = Vector2(80, 35)
+	_refresh_button.pressed.connect(_on_refresh_pressed)
+	header.add_child(_refresh_button)
+
+	# スクロールコンテナ
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(300, 200)
+	panel.add_child(scroll)
+
+	_room_list_container = VBoxContainer.new()
+	_room_list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_room_list_container.add_theme_constant_override("separation", 5)
+	scroll.add_child(_room_list_container)
+
+	_room_list_status = Label.new()
+	_room_list_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_room_list_status.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	panel.add_child(_room_list_status)
+
+	_room_list_back_button = Button.new()
+	_room_list_back_button.text = "戻る"
+	_room_list_back_button.custom_minimum_size = Vector2(300, 50)
+	_room_list_back_button.pressed.connect(_on_room_list_back_pressed)
+	panel.add_child(_room_list_back_button)
 
 	return panel
 
@@ -239,25 +296,39 @@ func _create_lobby_panel() -> VBoxContainer:
 func _show_menu() -> void:
 	_state = LobbyState.MENU
 	_menu_panel.visible = true
-	_join_panel.visible = false
+	_room_name_panel.visible = false
+	_room_list_panel.visible = false
 	_lobby_panel.visible = false
 	_status_label.text = ""
 
 
-func _show_join_input() -> void:
-	_state = LobbyState.JOINING
+func _show_room_name_input() -> void:
+	_state = LobbyState.ROOM_NAME_INPUT
 	_menu_panel.visible = false
-	_join_panel.visible = true
+	_room_name_panel.visible = true
+	_room_list_panel.visible = false
 	_lobby_panel.visible = false
-	_status_label.text = "ホストのIPアドレスを入力"
-	_ip_input.text = ""
-	_ip_input.grab_focus()
+	_status_label.text = ""
+	_room_name_input.text = ""
+	_room_name_input.grab_focus()
+
+
+func _show_room_list() -> void:
+	_state = LobbyState.ROOM_LIST
+	_menu_panel.visible = false
+	_room_name_panel.visible = false
+	_room_list_panel.visible = true
+	_lobby_panel.visible = false
+	_status_label.text = ""
+	_room_list_status.text = "読み込み中..."
+	_refresh_room_list()
 
 
 func _show_connecting() -> void:
 	_state = LobbyState.CONNECTING
 	_menu_panel.visible = false
-	_join_panel.visible = false
+	_room_name_panel.visible = false
+	_room_list_panel.visible = false
 	_lobby_panel.visible = false
 	_status_label.text = "接続中..."
 
@@ -265,19 +336,21 @@ func _show_connecting() -> void:
 func _show_lobby() -> void:
 	_state = LobbyState.IN_LOBBY
 	_menu_panel.visible = false
-	_join_panel.visible = false
+	_room_name_panel.visible = false
+	_room_list_panel.visible = false
 	_lobby_panel.visible = true
 
 	_ready_button.visible = true
 
 	if _network_manager.is_host():
-		var ip := _network_manager.get_local_ip()
-		var port := _network_manager.get_port()
-		_info_label.text = "ホスト中\nIP: %s\nPort: %d" % [ip, port]
+		var room_id := _network_manager.get_room_id()
+		var room_name := _network_manager.get_room_name()
+		_info_label.text = "ホスト中\nルーム: %s\nID: %s" % [room_name, room_id]
 		# ホストのチームをPlayerStateに設定
 		PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 	else:
-		_info_label.text = "接続済み"
+		var room_id := _network_manager.get_room_id()
+		_info_label.text = "参加中\nルームID: %s" % room_id
 
 	_status_label.text = ""
 	_countdown_label.visible = false
@@ -317,44 +390,101 @@ func _get_team_name(team: int) -> String:
 			return "--"
 
 
+func _refresh_room_list() -> void:
+	_room_list_status.text = "読み込み中..."
+	_network_manager.request_room_list()
+
+
+func _update_room_list(rooms: Array) -> void:
+	# クリア
+	for child in _room_list_container.get_children():
+		child.queue_free()
+
+	if rooms.is_empty():
+		_room_list_status.text = "利用可能なルームがありません"
+		return
+
+	_room_list_status.text = "%d 件のルーム" % rooms.size()
+
+	for room in rooms:
+		var room_item := _create_room_item(room)
+		_room_list_container.add_child(room_item)
+
+
+func _create_room_item(room: Dictionary) -> HBoxContainer:
+	var container := HBoxContainer.new()
+	container.add_theme_constant_override("separation", 10)
+
+	var info_label := Label.new()
+	var room_name: String = room.get("name", "Unknown")
+	var player_count: int = room.get("player_count", 0)
+	var max_players: int = room.get("max_players", 4)
+	info_label.text = "%s (%d/%d)" % [room_name, player_count, max_players]
+	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.add_child(info_label)
+
+	var join_btn := Button.new()
+	join_btn.text = "参加"
+	join_btn.custom_minimum_size = Vector2(70, 35)
+	join_btn.disabled = player_count >= max_players
+	var room_id: String = room.get("id", "")
+	join_btn.pressed.connect(_on_room_join_pressed.bind(room_id))
+	container.add_child(join_btn)
+
+	return container
+
+
 ## ========================================
 ## ボタンハンドラ
 ## ========================================
 
 func _on_host_pressed() -> void:
-	var player_name := SettingsManager.get_player_name()
-	if player_name.is_empty():
-		player_name = "Host"
-
-	if _network_manager.host_game(NetworkManager.DEFAULT_PORT, player_name):
-		_show_lobby()
+	_show_room_name_input()
 
 
 func _on_join_pressed() -> void:
-	_show_join_input()
+	_show_room_list()
 
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
-func _on_connect_pressed() -> void:
-	var ip := _ip_input.text.strip_edges()
-	if ip.is_empty():
-		_status_label.text = "IPアドレスを入力してください"
-		return
+func _on_create_room_pressed() -> void:
+	var room_name := _room_name_input.text.strip_edges()
+	if room_name.is_empty():
+		room_name = "Room"
 
 	var player_name := SettingsManager.get_player_name()
 	if player_name.is_empty():
-		player_name = "Client"
+		player_name = "Host"
 
 	_show_connecting()
-	if not _network_manager.join_game(ip, NetworkManager.DEFAULT_PORT, player_name):
-		_show_join_input()
+	if not _network_manager.create_room(room_name, player_name):
+		_show_room_name_input()
 
 
-func _on_cancel_pressed() -> void:
+func _on_room_name_cancel_pressed() -> void:
 	_show_menu()
+
+
+func _on_refresh_pressed() -> void:
+	_refresh_room_list()
+
+
+func _on_room_list_back_pressed() -> void:
+	_network_manager.disconnect_from_game()
+	_show_menu()
+
+
+func _on_room_join_pressed(room_id: String) -> void:
+	var player_name := SettingsManager.get_player_name()
+	if player_name.is_empty():
+		player_name = "Player"
+
+	_show_connecting()
+	if not _network_manager.join_room(room_id, player_name):
+		_show_room_list()
 
 
 func _on_ready_pressed() -> void:
@@ -380,8 +510,10 @@ func _on_connection_state_changed(state: NetworkManager.ConnectionState) -> void
 	match state:
 		NetworkManager.ConnectionState.CONNECTED:
 			_show_lobby()
+		NetworkManager.ConnectionState.HOST:
+			_show_lobby()
 		NetworkManager.ConnectionState.DISCONNECTED:
-			if _state != LobbyState.MENU:
+			if _state != LobbyState.MENU and _state != LobbyState.ROOM_LIST:
 				_status_label.text = "切断されました"
 				_show_menu()
 
@@ -396,7 +528,8 @@ func _on_peer_disconnected(_peer_id: int) -> void:
 
 func _on_connection_failed(reason: String) -> void:
 	_status_label.text = reason
-	_show_menu()
+	if _state == LobbyState.CONNECTING:
+		_show_menu()
 
 
 func _on_all_peers_ready() -> void:
@@ -422,12 +555,25 @@ func _on_players_updated() -> void:
 			PlayerState.set_player_team(my_team)
 
 
+func _on_room_list_received(rooms: Array) -> void:
+	if _state == LobbyState.ROOM_LIST:
+		_update_room_list(rooms)
+
+
+func _on_room_created(_room_id: String) -> void:
+	_show_lobby()
+
+
+func _on_room_joined(_room_id: String) -> void:
+	_show_lobby()
+
+
 func _on_network_message(_from_peer: int, msg_type: int, data: Dictionary) -> void:
 	if msg_type == NetworkConstants.MessageType.ROUND_STATE:
 		var action: String = data.get("action", "")
 		match action:
 			"start_game":
-				var map_id: String = data.get("map_id", "park")
+				var map_id: String = data.get("map_id", "bank")
 				_start_game(map_id)
 			"countdown_start":
 				_start_countdown()

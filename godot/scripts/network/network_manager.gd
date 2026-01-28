@@ -1,7 +1,7 @@
 extends Node
 class_name NetworkManager
 ## ネットワーク接続管理
-## ENetを使用したP2P接続（ホスト/クライアント）
+## WebSocketリレーサーバー経由でのマルチプレイ接続
 
 ## 接続状態
 enum ConnectionState {
@@ -20,108 +20,223 @@ signal message_received(from_peer: int, msg_type: int, data: Dictionary)
 signal all_peers_ready()
 signal players_updated()
 
+## ルーム関連シグナル
+signal room_list_received(rooms: Array)
+signal room_created(room_id: String)
+signal room_joined(room_id: String)
+
 ## 設定
-const DEFAULT_PORT: int = 7777
 const MAX_PLAYERS: int = 4
 
 ## 状態
 var _state: ConnectionState = ConnectionState.DISCONNECTED
 var _local_peer_id: int = 0
-var _host_ip: String = ""
-var _port: int = DEFAULT_PORT
-var _peer: ENetMultiplayerPeer = null
+var _room_id: String = ""
+var _room_name: String = ""
+
+## WebSocket
+var _ws: WebSocketPeer = null
+var _heartbeat_timer: float = 0.0
+
+## リトライ用
+var _pending_action_sent: Dictionary = {}  # 送信済みアクション（リトライ用）
+var _pending_action_timer: float = 0.0
+var _pending_action_retries: int = 0
+const PENDING_ACTION_TIMEOUT: float = 3.0  # 3秒でリトライ
+const PENDING_ACTION_MAX_RETRIES: int = 3
 
 ## プレイヤー情報
 var _players: Dictionary = {}  # { peer_id: { "name": String, "ready": bool, "team": int } }
 
 
 func _ready() -> void:
-	# マルチプレイヤーシグナル接続
-	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	multiplayer.connected_to_server.connect(_on_connected_to_server)
-	multiplayer.connection_failed.connect(_on_connection_failed)
-	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	if _ws == null:
+		return
+
+	_ws.poll()
+
+	var ws_state := _ws.get_ready_state()
+
+	match ws_state:
+		WebSocketPeer.STATE_OPEN:
+			# 保留中のアクションを実行
+			_check_pending_action()
+
+			# 送信済みアクションのリトライチェック
+			_check_pending_action_retry(delta)
+
+			# リトライ失敗で切断された場合は終了
+			if _ws == null:
+				return
+
+			# メッセージ受信処理
+			while _ws.get_available_packet_count() > 0:
+				var packet := _ws.get_packet()
+				_handle_server_message(packet.get_string_from_utf8())
+
+			# ハートビート
+			_heartbeat_timer += delta
+			if _heartbeat_timer >= NetworkConstants.HEARTBEAT_INTERVAL:
+				_heartbeat_timer = 0.0
+				_send_to_server({"type": "HEARTBEAT"})
+
+		WebSocketPeer.STATE_CONNECTING:
+			pass  # 接続中
+
+		WebSocketPeer.STATE_CLOSING:
+			pass  # クローズ中
+
+		WebSocketPeer.STATE_CLOSED:
+			var code := _ws.get_close_code()
+			var reason := _ws.get_close_reason()
+			print("NetworkManager: WebSocket closed (code: %d, reason: %s)" % [code, reason])
+			_handle_disconnect()
 
 
 ## ========================================
 ## 接続管理
 ## ========================================
 
-## ホストとしてゲームを開始
-func host_game(port: int = DEFAULT_PORT, player_name: String = "Host") -> bool:
+## リレーサーバーに接続
+func _connect_to_relay() -> bool:
+	if _ws != null:
+		_ws.close()
+
+	_ws = WebSocketPeer.new()
+
+	var url: String
+	if NetworkConstants.USE_LOCAL_RELAY:
+		url = NetworkConstants.RELAY_SERVER_URL_LOCAL
+	else:
+		url = NetworkConstants.RELAY_SERVER_URL
+
+	var error := _ws.connect_to_url(url)
+	if error != OK:
+		push_error("NetworkManager: Failed to connect to relay: %s" % error_string(error))
+		return false
+
+	print("NetworkManager: Connecting to relay server: %s" % url)
+	return true
+
+
+## ルームを作成（ホストとして開始）
+func create_room(room_name: String = "Room", player_name: String = "Host") -> bool:
 	if _state != ConnectionState.DISCONNECTED:
 		push_warning("NetworkManager: Already connected")
 		return false
 
-	_peer = ENetMultiplayerPeer.new()
-	var error := _peer.create_server(port, MAX_PLAYERS)
-	if error != OK:
-		push_error("NetworkManager: Failed to create server: %s" % error_string(error))
-		connection_failed.emit("サーバー作成失敗: %s" % error_string(error))
+	if not _connect_to_relay():
+		connection_failed.emit("リレーサーバーへの接続失敗")
 		return false
 
-	multiplayer.multiplayer_peer = _peer
-	_port = port
-	_local_peer_id = 1  # ホストは常にID=1
-	_state = ConnectionState.HOST
+	_state = ConnectionState.CONNECTING
+	_room_name = room_name
+	connection_state_changed.emit(_state)
 
-	# 自分自身をプレイヤーリストに追加（ホストは常にCT）
-	_players[_local_peer_id] = {
+	# 接続完了後にルーム作成を送信（_process内で接続完了を検出）
+	_pending_action = {
+		"type": "CREATE_ROOM",
+		"room_name": room_name,
+		"player_name": player_name
+	}
+
+	# 仮のプレイヤー情報
+	_players[0] = {
 		"name": player_name,
 		"ready": false,
 		"team": GameCharacter.Team.COUNTER_TERRORIST
 	}
 
-	connection_state_changed.emit(_state)
-	players_updated.emit()
-	print("NetworkManager: Hosting on port %d" % port)
+	print("NetworkManager: Creating room: %s" % room_name)
+	return true
+
+var _pending_action: Dictionary = {}
+
+
+## ルーム一覧を取得
+func request_room_list() -> bool:
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		# 未接続の場合は一時的に接続
+		if not _connect_to_relay():
+			return false
+
+		_pending_action = {"type": "LIST_ROOMS"}
+		return true
+
+	_send_to_server({"type": "LIST_ROOMS"})
 	return true
 
 
-## クライアントとしてゲームに参加
-func join_game(ip: String, port: int = DEFAULT_PORT, player_name: String = "Client") -> bool:
+## ルームに参加
+func join_room(room_id: String, player_name: String = "Client") -> bool:
 	if _state != ConnectionState.DISCONNECTED:
 		push_warning("NetworkManager: Already connected")
 		return false
 
-	_peer = ENetMultiplayerPeer.new()
-	var error := _peer.create_client(ip, port)
-	if error != OK:
-		push_error("NetworkManager: Failed to connect: %s" % error_string(error))
-		connection_failed.emit("接続失敗: %s" % error_string(error))
-		return false
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		if not _connect_to_relay():
+			connection_failed.emit("リレーサーバーへの接続失敗")
+			return false
 
-	multiplayer.multiplayer_peer = _peer
-	_host_ip = ip
-	_port = port
 	_state = ConnectionState.CONNECTING
+	connection_state_changed.emit(_state)
 
-	# 仮のプレイヤー情報（接続成功後に正式登録）
+	_pending_action = {
+		"type": "JOIN_ROOM",
+		"room_id": room_id,
+		"player_name": player_name
+	}
+
+	# 仮のプレイヤー情報
 	_players[0] = {
 		"name": player_name,
 		"ready": false,
 		"team": GameCharacter.Team.NONE
 	}
 
-	connection_state_changed.emit(_state)
-	print("NetworkManager: Connecting to %s:%d" % [ip, port])
+	print("NetworkManager: Joining room: %s" % room_id)
 	return true
 
 
 ## 切断
 func disconnect_from_game() -> void:
-	if _peer:
-		_peer.close()
-		_peer = null
+	if _ws != null:
+		if _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			_send_to_server({"type": "LEAVE_ROOM"})
+		_ws.close()
+		_ws = null
 
-	multiplayer.multiplayer_peer = null
 	_state = ConnectionState.DISCONNECTED
 	_local_peer_id = 0
+	_room_id = ""
+	_room_name = ""
 	_players.clear()
+	_pending_action = {}
 
 	connection_state_changed.emit(_state)
 	print("NetworkManager: Disconnected")
+
+
+func _handle_disconnect() -> void:
+	if _state == ConnectionState.DISCONNECTED:
+		return
+
+	_ws = null
+	_clear_pending_action_sent()
+	_pending_action = {}
+	var was_connected := _state == ConnectionState.CONNECTED or _state == ConnectionState.HOST
+	_state = ConnectionState.DISCONNECTED
+	_local_peer_id = 0
+	_room_id = ""
+	_players.clear()
+
+	connection_state_changed.emit(_state)
+	if was_connected:
+		connection_failed.emit("接続が切断されました")
 
 
 ## ========================================
@@ -136,8 +251,11 @@ func set_ready(is_ready: bool) -> void:
 	if _players.has(_local_peer_id):
 		_players[_local_peer_id]["ready"] = is_ready
 
-	# 全プレイヤーに通知
-	rpc("_sync_player_ready", _local_peer_id, is_ready)
+	# 全プレイヤーに通知（リレー経由）
+	broadcast_message(NetworkConstants.MessageType.PLAYER_READY, {
+		"peer_id": _local_peer_id,
+		"ready": is_ready
+	})
 
 	# ホストは全員準備完了チェック
 	if is_host() and _check_all_ready():
@@ -153,7 +271,10 @@ func set_team(team: int) -> void:
 		_players[_local_peer_id]["team"] = team
 
 	# 全プレイヤーに通知
-	rpc("_sync_player_team", _local_peer_id, team)
+	broadcast_message(NetworkConstants.MessageType.TEAM_CHANGE, {
+		"peer_id": _local_peer_id,
+		"team": team
+	})
 
 
 ## プレイヤー一覧を取得
@@ -177,12 +298,25 @@ func _check_all_ready() -> bool:
 ## メッセージ送受信
 ## ========================================
 
+## サーバーにJSONメッセージを送信
+func _send_to_server(data: Dictionary) -> void:
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	var json := JSON.stringify(data)
+	_ws.send_text(json)
+
+
 ## メッセージを送信（特定のピアへ）
 func send_message(to_peer: int, msg_type: int, data: Dictionary) -> void:
 	if _state == ConnectionState.DISCONNECTED:
 		return
 
-	rpc_id(to_peer, "_receive_message", _local_peer_id, msg_type, data)
+	_send_to_server({
+		"type": "RELAY",
+		"to": to_peer,
+		"msg_type": msg_type,
+		"data": data
+	})
 
 
 ## メッセージをブロードキャスト（全員へ）
@@ -190,7 +324,12 @@ func broadcast_message(msg_type: int, data: Dictionary) -> void:
 	if _state == ConnectionState.DISCONNECTED:
 		return
 
-	rpc("_receive_message", _local_peer_id, msg_type, data)
+	_send_to_server({
+		"type": "RELAY",
+		"to": 0,  # 0=ブロードキャスト
+		"msg_type": msg_type,
+		"data": data
+	})
 
 
 ## メッセージをホストへ送信
@@ -202,131 +341,264 @@ func send_to_host(msg_type: int, data: Dictionary) -> void:
 		# 自分がホストなら自分で処理
 		message_received.emit(_local_peer_id, msg_type, data)
 	else:
-		rpc_id(1, "_receive_message", _local_peer_id, msg_type, data)
+		send_message(1, msg_type, data)  # ホストはpeer_id=1
 
 
-@rpc("any_peer", "reliable")
-func _receive_message(from_peer: int, msg_type: int, data: Dictionary) -> void:
+## サーバーからのメッセージを処理
+func _handle_server_message(json_string: String) -> void:
+	# 複数のJSONが連結されている場合を処理
+	var messages := _split_json_messages(json_string)
+	for msg_str in messages:
+		_process_single_message(msg_str)
+
+
+## 連結されたJSONメッセージを分割
+func _split_json_messages(data: String) -> Array[String]:
+	var results: Array[String] = []
+	var depth := 0
+	var start := 0
+
+	for i in range(data.length()):
+		var c := data[i]
+		if c == "{":
+			if depth == 0:
+				start = i
+			depth += 1
+		elif c == "}":
+			depth -= 1
+			if depth == 0:
+				results.append(data.substr(start, i - start + 1))
+
+	return results
+
+
+## 単一のJSONメッセージを処理
+func _process_single_message(json_string: String) -> void:
+	var json := JSON.new()
+	if json.parse(json_string) != OK:
+		push_error("NetworkManager: Invalid JSON: %s" % json_string)
+		return
+
+	var msg: Dictionary = json.data
+	var msg_type: String = msg.get("type", "")
+	var payload = msg.get("payload", {})
+
+	match msg_type:
+		"ROOM_CREATED":
+			_on_room_created(payload)
+		"ROOM_LIST":
+			_on_room_list(payload)
+		"ROOM_JOINED":
+			_on_room_joined(payload)
+		"PEER_CONNECTED":
+			_on_peer_connected_relay(payload)
+		"PEER_DISCONNECTED":
+			_on_peer_disconnected_relay(payload)
+		"MESSAGE":
+			_on_relay_message(payload)
+		"ERROR":
+			_on_error(payload)
+		"HEARTBEAT_ACK":
+			pass  # ハートビート応答
+		_:
+			print("NetworkManager: Unknown message type: %s" % msg_type)
+
+
+## WebSocket接続完了時の処理（_processから呼び出し）
+func _check_pending_action() -> void:
+	if _pending_action.is_empty():
+		return
+
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+
+	print("NetworkManager: Sending pending action: %s" % _pending_action.get("type", "unknown"))
+	_send_to_server(_pending_action)
+
+	# リトライ用に保存
+	_pending_action_sent = _pending_action.duplicate()
+	_pending_action_timer = 0.0
+	_pending_action_retries = 0
+	_pending_action = {}
+
+
+## 送信済みアクションのリトライチェック
+func _check_pending_action_retry(delta: float) -> void:
+	if _pending_action_sent.is_empty():
+		return
+
+	_pending_action_timer += delta
+
+	if _pending_action_timer >= PENDING_ACTION_TIMEOUT:
+		_pending_action_retries += 1
+
+		if _pending_action_retries > PENDING_ACTION_MAX_RETRIES:
+			print("NetworkManager: Action failed after %d retries: %s" % [PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
+			_pending_action_sent = {}
+			_handle_disconnect()
+			return
+
+		print("NetworkManager: Retrying action (%d/%d): %s" % [_pending_action_retries, PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
+		_send_to_server(_pending_action_sent)
+		_pending_action_timer = 0.0
+
+
+## 送信済みアクションをクリア（レスポンス受信時に呼ぶ）
+func _clear_pending_action_sent() -> void:
+	_pending_action_sent = {}
+	_pending_action_timer = 0.0
+	_pending_action_retries = 0
+
+
+## ========================================
+## サーバーメッセージハンドラ
+## ========================================
+
+func _on_room_created(payload: Dictionary) -> void:
+	_clear_pending_action_sent()
+	_room_id = payload.get("room_id", "")
+	_local_peer_id = payload.get("peer_id", 1)
+	_state = ConnectionState.HOST
+
+	# 仮プレイヤー情報を正式IDで更新
+	if _players.has(0):
+		var info: Dictionary = _players[0]
+		_players.erase(0)
+		_players[_local_peer_id] = info
+
+	connection_state_changed.emit(_state)
+	room_created.emit(_room_id)
+	players_updated.emit()
+	print("NetworkManager: Room created - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+
+
+func _on_room_list(payload: Dictionary) -> void:
+	_clear_pending_action_sent()
+	var rooms: Array = payload.get("rooms", [])
+	room_list_received.emit(rooms)
+
+
+func _on_room_joined(payload: Dictionary) -> void:
+	_clear_pending_action_sent()
+	_room_id = payload.get("room_id", "")
+	_local_peer_id = payload.get("peer_id", 0)
+	_state = ConnectionState.CONNECTED
+
+	# 仮プレイヤー情報を正式IDで更新
+	if _players.has(0):
+		var info: Dictionary = _players[0]
+		_players.erase(0)
+		_players[_local_peer_id] = info
+
+	# 既存プレイヤー情報を追加
+	var players_data: Array = payload.get("players", [])
+	for player in players_data:
+		var pid: int = player.get("peer_id", 0)
+		if pid != _local_peer_id and pid > 0:
+			_players[pid] = {
+				"name": player.get("name", "Player"),
+				"ready": false,
+				"team": GameCharacter.Team.COUNTER_TERRORIST if pid == 1 else GameCharacter.Team.NONE
+			}
+
+	# チーム自動割り当て
+	_auto_assign_team()
+
+	connection_state_changed.emit(_state)
+	room_joined.emit(_room_id)
+	players_updated.emit()
+	print("NetworkManager: Joined room - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+
+
+func _on_peer_connected_relay(payload: Dictionary) -> void:
+	var pid: int = payload.get("peer_id", 0)
+	var pname: String = payload.get("name", "Player")
+
+	if pid == 0 or pid == _local_peer_id:
+		return
+
+	# チーム自動割り当て
+	var assigned_team := _get_team_to_assign()
+
+	_players[pid] = {
+		"name": pname,
+		"ready": false,
+		"team": assigned_team
+	}
+
+	peer_connected.emit(pid)
+	players_updated.emit()
+	print("NetworkManager: Peer connected - ID: %d, Name: %s" % [pid, pname])
+
+
+func _on_peer_disconnected_relay(payload: Dictionary) -> void:
+	var pid: int = payload.get("peer_id", 0)
+	_players.erase(pid)
+	peer_disconnected.emit(pid)
+	players_updated.emit()
+	print("NetworkManager: Peer disconnected - ID: %d" % pid)
+
+
+func _on_relay_message(payload: Dictionary) -> void:
+	var from_peer: int = payload.get("from", 0)
+	var msg_type: int = payload.get("msg_type", 0)
+	var data: Dictionary = payload.get("data", {})
+
+	# プレイヤー情報更新メッセージの処理
+	match msg_type:
+		NetworkConstants.MessageType.PLAYER_READY:
+			var pid: int = data.get("peer_id", 0)
+			var is_ready: bool = data.get("ready", false)
+			if _players.has(pid):
+				_players[pid]["ready"] = is_ready
+			players_updated.emit()
+			if is_host() and _check_all_ready():
+				all_peers_ready.emit()
+
+		NetworkConstants.MessageType.TEAM_CHANGE:
+			var pid: int = data.get("peer_id", 0)
+			var team: int = data.get("team", 0)
+			if _players.has(pid):
+				_players[pid]["team"] = team
+			players_updated.emit()
+
 	message_received.emit(from_peer, msg_type, data)
 
 
+func _on_error(payload: Dictionary) -> void:
+	_clear_pending_action_sent()
+	var error_msg: String = payload.get("message", "Unknown error")
+	push_error("NetworkManager: Server error: %s" % error_msg)
+	connection_failed.emit(error_msg)
+
+
 ## ========================================
-## プレイヤー同期RPC
+## チーム割り当て
 ## ========================================
 
-@rpc("any_peer", "reliable", "call_local")
-func _sync_player_ready(peer_id: int, is_ready: bool) -> void:
-	if _players.has(peer_id):
-		_players[peer_id]["ready"] = is_ready
-
-	# ホストは全員準備完了チェック
-	if is_host() and _check_all_ready():
-		all_peers_ready.emit()
+func _auto_assign_team() -> void:
+	if _local_peer_id == 1:
+		# ホストは常にCT
+		_players[_local_peer_id]["team"] = GameCharacter.Team.COUNTER_TERRORIST
+	else:
+		_players[_local_peer_id]["team"] = _get_team_to_assign()
 
 
-@rpc("any_peer", "reliable", "call_local")
-func _sync_player_team(peer_id: int, team: int) -> void:
-	if _players.has(peer_id):
-		_players[peer_id]["team"] = team
-
-
-@rpc("authority", "reliable")
-func _sync_all_players(players_data: Dictionary) -> void:
-	_players = players_data.duplicate(true)
-	players_updated.emit()
-
-
-@rpc("any_peer", "reliable")
-func _register_client_info(peer_id: int, info: Dictionary) -> void:
-	if not is_host():
-		return
-
-	# クライアントの情報を更新
-	_players[peer_id] = info.duplicate(true)
-
-	# チームを自動割り当て（CTとTを交互に）
+func _get_team_to_assign() -> int:
 	var ct_count := 0
 	var t_count := 0
+
 	for pid in _players:
-		if pid == peer_id:
-			continue
 		var team: int = _players[pid].get("team", GameCharacter.Team.NONE)
 		if team == GameCharacter.Team.COUNTER_TERRORIST:
 			ct_count += 1
 		elif team == GameCharacter.Team.TERRORIST:
 			t_count += 1
 
-	# 人数が少ない方のチームに割り当て
-	var assigned_team: int
 	if ct_count <= t_count:
-		assigned_team = GameCharacter.Team.COUNTER_TERRORIST
+		return GameCharacter.Team.COUNTER_TERRORIST
 	else:
-		assigned_team = GameCharacter.Team.TERRORIST
-	_players[peer_id]["team"] = assigned_team
-
-	# 全プレイヤー情報を再同期
-	rpc("_sync_all_players", _players)
-
-	# ホスト側のUIも更新
-	players_updated.emit()
-
-
-## ========================================
-## 接続イベントハンドラ
-## ========================================
-
-func _on_peer_connected(peer_id: int) -> void:
-	print("NetworkManager: Peer connected: %d" % peer_id)
-
-	if is_host():
-		# ホストは新しいプレイヤーを登録
-		_players[peer_id] = {
-			"name": "Player %d" % peer_id,
-			"ready": false,
-			"team": GameCharacter.Team.NONE
-		}
-
-		# 全プレイヤー情報を同期
-		rpc("_sync_all_players", _players)
-
-	peer_connected.emit(peer_id)
-
-
-func _on_peer_disconnected(peer_id: int) -> void:
-	print("NetworkManager: Peer disconnected: %d" % peer_id)
-	_players.erase(peer_id)
-	peer_disconnected.emit(peer_id)
-
-
-func _on_connected_to_server() -> void:
-	print("NetworkManager: Connected to server")
-	_local_peer_id = multiplayer.get_unique_id()
-	_state = ConnectionState.CONNECTED
-
-	# 仮のプレイヤー情報を正式なIDで更新
-	if _players.has(0):
-		var player_info: Dictionary = _players[0]
-		_players.erase(0)
-		_players[_local_peer_id] = player_info
-
-		# ホストに自分のプレイヤー情報を送信
-		rpc_id(1, "_register_client_info", _local_peer_id, player_info)
-
-	connection_state_changed.emit(_state)
-
-
-func _on_connection_failed() -> void:
-	print("NetworkManager: Connection failed")
-	_state = ConnectionState.DISCONNECTED
-	_peer = null
-	multiplayer.multiplayer_peer = null
-	connection_failed.emit("接続に失敗しました")
-	connection_state_changed.emit(_state)
-
-
-func _on_server_disconnected() -> void:
-	print("NetworkManager: Server disconnected")
-	disconnect_from_game()
+		return GameCharacter.Team.TERRORIST
 
 
 ## ========================================
@@ -353,25 +625,39 @@ func get_state() -> ConnectionState:
 	return _state
 
 
-## 接続先IPを取得
-func get_host_ip() -> String:
-	return _host_ip
+## ルームIDを取得
+func get_room_id() -> String:
+	return _room_id
 
 
-## ポートを取得
+## ルーム名を取得
+func get_room_name() -> String:
+	return _room_name
+
+
+## ポートを取得（互換性のため維持）
 func get_port() -> int:
-	return _port
+	return 0
 
 
-## ローカルIPアドレスを取得（ホスト表示用）
+## ローカルIPを取得（互換性のため維持 - リレー方式では不使用）
 func get_local_ip() -> String:
-	var addresses := IP.get_local_addresses()
-	for addr in addresses:
-		# IPv4でプライベートアドレスを優先
-		if addr.begins_with("192.168.") or addr.begins_with("10.") or addr.begins_with("172."):
-			return addr
-	# 見つからなければ最初のIPv4
-	for addr in addresses:
-		if addr.count(".") == 3 and not addr.begins_with("127."):
-			return addr
-	return "127.0.0.1"
+	return ""
+
+
+## ========================================
+## 後方互換性のためのAPI（非推奨）
+## ========================================
+
+## [非推奨] host_game - create_room()を使用してください
+func host_game(_port: int = 0, player_name: String = "Host") -> bool:
+	push_warning("NetworkManager: host_game() is deprecated. Use create_room() instead.")
+	return create_room("Room", player_name)
+
+
+## [非推奨] join_game - join_room()を使用してください
+func join_game(_ip: String, _port: int = 0, _player_name: String = "Client") -> bool:
+	push_warning("NetworkManager: join_game() is deprecated. Use join_room() instead.")
+	# IPからルームID抽出を試みる（互換性のため）
+	# 実際にはルームリストからIDを取得して使用すべき
+	return false

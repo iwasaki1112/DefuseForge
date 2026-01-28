@@ -64,7 +64,7 @@ var _remote_target_position: Vector3 = Vector3.ZERO
 var _remote_target_rotation: float = 0.0
 var _remote_target_velocity: Vector3 = Vector3.ZERO
 var _remote_interpolation_active: bool = false
-const REMOTE_INTERPOLATION_SPEED: float = 15.0  # 補間速度
+const REMOTE_INTERPOLATION_SPEED: float = 25.0  # 補間速度（高いほどスムーズ）
 
 # ============================================
 # Facing Direction (一元管理)

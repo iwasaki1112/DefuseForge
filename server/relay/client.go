@@ -1,0 +1,343 @@
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+const (
+	// 書き込みタイムアウト
+	writeWait = 10 * time.Second
+	// Pong受信タイムアウト
+	pongWait = 60 * time.Second
+	// Ping送信間隔
+	pingPeriod = (pongWait * 9) / 10
+	// 最大メッセージサイズ
+	maxMessageSize = 64 * 1024
+)
+
+// Client WebSocket接続を管理
+type Client struct {
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	room   *Room
+	peerID int
+	name   string
+	closed bool // チャネルがcloseされたかどうか
+	mu     sync.RWMutex
+}
+
+// NewClient 新しいクライアントを作成
+func NewClient(hub *Hub, conn *websocket.Conn) *Client {
+	return &Client{
+		hub:  hub,
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
+}
+
+// GetPeerID ピアIDを取得
+func (c *Client) GetPeerID() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.peerID
+}
+
+// SetPeerID ピアIDを設定
+func (c *Client) SetPeerID(id int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.peerID = id
+}
+
+// GetName 名前を取得
+func (c *Client) GetName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.name
+}
+
+// SetName 名前を設定
+func (c *Client) SetName(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.name = name
+}
+
+// GetRoom ルームを取得
+func (c *Client) GetRoom() *Room {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.room
+}
+
+// SetRoom ルームを設定
+func (c *Client) SetRoom(room *Room) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.room = room
+}
+
+// SendMessage メッセージを送信
+func (c *Client) SendMessage(msg ServerMessage) {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return
+	}
+	c.mu.RUnlock()
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error marshaling message: %v", err)
+		return
+	}
+
+	// panicをrecover（チャネルクローズの競合を防ぐ）
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("SendMessage recovered from panic: %v", r)
+		}
+	}()
+
+	select {
+	case c.send <- data:
+	default:
+		// バッファがいっぱいの場合はクライアントを切断
+		c.hub.unregister <- c
+	}
+}
+
+// MarkClosed クライアントをclose済みとしてマーク
+func (c *Client) MarkClosed() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+}
+
+// readPump WebSocketからメッセージを読み取るループ
+func (c *Client) readPump() {
+	defer func() {
+		c.hub.unregister <- c
+		c.conn.Close()
+	}()
+
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	for {
+		_, message, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error: %v", err)
+			}
+			break
+		}
+
+		log.Printf("Received message: %s", string(message))
+
+		var msg ClientMessage
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Error unmarshaling message: %v", err)
+			c.SendMessage(NewErrorMessage("Invalid message format"))
+			continue
+		}
+
+		log.Printf("Parsed message type: %s", msg.Type)
+		c.handleMessage(msg)
+	}
+}
+
+// writePump クライアントへメッセージを書き込むループ
+func (c *Client) writePump() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			w, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			w.Write(message)
+
+			// バッファ内の残りメッセージも送信
+			n := len(c.send)
+			for i := 0; i < n; i++ {
+				w.Write([]byte{'\n'})
+				w.Write(<-c.send)
+			}
+
+			if err := w.Close(); err != nil {
+				return
+			}
+
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// handleMessage メッセージを処理
+func (c *Client) handleMessage(msg ClientMessage) {
+	switch msg.Type {
+	case MsgTypeCreateRoom:
+		c.handleCreateRoom(msg)
+	case MsgTypeListRooms:
+		c.handleListRooms()
+	case MsgTypeJoinRoom:
+		c.handleJoinRoom(msg)
+	case MsgTypeLeaveRoom:
+		c.handleLeaveRoom()
+	case MsgTypeRelay:
+		c.handleRelay(msg)
+	case MsgTypeHeartbeat:
+		c.SendMessage(NewServerMessage(MsgTypeHeartbeatAck, nil))
+	default:
+		c.SendMessage(NewErrorMessage("Unknown message type: " + msg.Type))
+	}
+}
+
+// handleCreateRoom ルーム作成
+func (c *Client) handleCreateRoom(msg ClientMessage) {
+	if c.GetRoom() != nil {
+		c.SendMessage(NewErrorMessage("Already in a room"))
+		return
+	}
+
+	roomName := msg.RoomName
+	if roomName == "" {
+		roomName = "Room"
+	}
+
+	playerName := msg.PlayerName
+	if playerName == "" {
+		playerName = "Host"
+	}
+	c.SetName(playerName)
+
+	room := c.hub.CreateRoom(roomName)
+	room.AddClient(c)
+
+	c.SendMessage(NewServerMessage(MsgTypeRoomCreated, RoomCreatedPayload{
+		RoomID: room.ID,
+		PeerID: c.GetPeerID(),
+	}))
+
+	log.Printf("Room created: %s (%s) by %s", room.Name, room.ID, playerName)
+}
+
+// handleListRooms ルーム一覧取得
+func (c *Client) handleListRooms() {
+	rooms := c.hub.GetRoomList()
+	c.SendMessage(NewServerMessage(MsgTypeRoomList, RoomListPayload{
+		Rooms: rooms,
+	}))
+}
+
+// handleJoinRoom ルーム参加
+func (c *Client) handleJoinRoom(msg ClientMessage) {
+	if c.GetRoom() != nil {
+		c.SendMessage(NewErrorMessage("Already in a room"))
+		return
+	}
+
+	room := c.hub.GetRoom(msg.RoomID)
+	if room == nil {
+		c.SendMessage(NewErrorMessage("Room not found"))
+		return
+	}
+
+	if room.IsFull() {
+		c.SendMessage(NewErrorMessage("Room is full"))
+		return
+	}
+
+	playerName := msg.PlayerName
+	if playerName == "" {
+		playerName = "Player"
+	}
+	c.SetName(playerName)
+
+	room.AddClient(c)
+
+	// 既存プレイヤー一覧を取得
+	players := room.GetPlayerList()
+
+	c.SendMessage(NewServerMessage(MsgTypeRoomJoined, RoomJoinedPayload{
+		RoomID:  room.ID,
+		PeerID:  c.GetPeerID(),
+		Players: players,
+	}))
+
+	// 他のプレイヤーに新規参加を通知
+	room.BroadcastExcept(c, NewServerMessage(MsgTypePeerConnected, PeerEventPayload{
+		PeerID: c.GetPeerID(),
+		Name:   c.GetName(),
+	}))
+
+	log.Printf("Player %s joined room %s (%s)", playerName, room.Name, room.ID)
+}
+
+// handleLeaveRoom ルーム退出
+func (c *Client) handleLeaveRoom() {
+	room := c.GetRoom()
+	if room == nil {
+		return
+	}
+
+	peerID := c.GetPeerID()
+	room.RemoveClient(c)
+
+	// 他のプレイヤーに退出を通知
+	room.Broadcast(NewServerMessage(MsgTypePeerDisconnected, PeerEventPayload{
+		PeerID: peerID,
+	}))
+
+	log.Printf("Player %s left room %s", c.GetName(), room.Name)
+}
+
+// handleRelay メッセージリレー
+func (c *Client) handleRelay(msg ClientMessage) {
+	room := c.GetRoom()
+	if room == nil {
+		c.SendMessage(NewErrorMessage("Not in a room"))
+		return
+	}
+
+	relayMsg := NewServerMessage(MsgTypeMessage, RelayPayload{
+		From:    c.GetPeerID(),
+		MsgType: msg.MsgType,
+		Data:    msg.Data,
+	})
+
+	if msg.To == 0 {
+		// ブロードキャスト（自分以外全員）
+		room.BroadcastExcept(c, relayMsg)
+	} else {
+		// ユニキャスト（特定のピアへ）
+		room.SendTo(msg.To, relayMsg)
+	}
+}
