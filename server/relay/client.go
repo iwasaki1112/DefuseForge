@@ -309,14 +309,22 @@ func (c *Client) handleLeaveRoom() {
 	}
 
 	peerID := c.GetPeerID()
-	room.RemoveClient(c)
+	roomID := room.ID
+	roomName := room.Name
+	isEmpty := room.RemoveClient(c)
 
-	// 他のプレイヤーに退出を通知
-	room.Broadcast(NewServerMessage(MsgTypePeerDisconnected, PeerEventPayload{
-		PeerID: peerID,
-	}))
+	// ルームが空になった場合は削除
+	if isEmpty {
+		c.hub.RemoveRoom(roomID)
+		log.Printf("Room %s (%s) removed - no players remaining", roomName, roomID)
+	} else {
+		// 他のプレイヤーに退出を通知
+		room.Broadcast(NewServerMessage(MsgTypePeerDisconnected, PeerEventPayload{
+			PeerID: peerID,
+		}))
+	}
 
-	log.Printf("Player %s left room %s", c.GetName(), room.Name)
+	log.Printf("Player %s left room %s", c.GetName(), roomName)
 }
 
 // handleRelay メッセージリレー
