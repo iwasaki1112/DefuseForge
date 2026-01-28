@@ -1086,19 +1086,22 @@ func _get_interpolated_state() -> Dictionary:
 		var before: Dictionary = _snapshot_buffer[i]
 		var after: Dictionary = _snapshot_buffer[i + 1]
 
-		if before.time <= target_time and target_time <= after.time:
-			var t := (target_time - before.time) / (after.time - before.time)
+		var before_time: float = before.time
+		var after_time: float = after.time
+		if before_time <= target_time and target_time <= after_time:
+			var t: float = (target_time - before_time) / (after_time - before_time)
 			t = clampf(t, 0.0, 1.0)
 			_is_extrapolating = false
 			return {
 				"position": (before.position as Vector3).lerp(after.position, t),
-				"rotation": lerp_angle(before.rotation, after.rotation, t),
+				"rotation": lerp_angle(before.rotation as float, after.rotation as float, t),
 				"velocity": (before.velocity as Vector3).lerp(after.velocity, t)
 			}
 
 	# 最新のスナップショットより未来の場合は外挿
 	var latest: Dictionary = _snapshot_buffer.back()
-	var time_since_latest := target_time - latest.time
+	var latest_time: float = latest.time
+	var time_since_latest: float = target_time - latest_time
 
 	if time_since_latest > 0.0 and time_since_latest < NetworkConstants.MAX_EXTRAPOLATION_TIME:
 		_is_extrapolating = true
