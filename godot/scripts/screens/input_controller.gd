@@ -1,7 +1,8 @@
 class_name InputController
 extends Node
 ## ゲーム画面の入力処理をまとめたコントローラー
-## 左クリック：ドラッグでカメラ移動 / クリックでキャラクター選択等
+## PC: 左クリックドラッグでカメラ移動 / クリックでキャラクター選択等
+## モバイル: 2本指でカメラパン+ズーム、1本指はパス描画/タップ操作用
 ## パスモード時は優先順位に応じてPathDrawerまたはカメラ移動に委譲
 
 var game_manager: GameManager = null
@@ -18,13 +19,25 @@ func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 	camera_pan_controller = pan_controller
 
 
+## タッチ入力があるかどうか（マウスエミュレーション判定用）
+func _is_touch_active() -> bool:
+	return camera_pan_controller and camera_pan_controller.get_touch_count() > 0
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not game_manager:
 		return
 
-	# ピンチ中はマウスイベント（タッチエミュレーション）を無視
+	# ピンチ中はマウスイベントを完全に無視
 	if camera_pan_controller and camera_pan_controller.is_pinching():
 		if event is InputEventMouseButton or event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
+			return
+
+	# 1本指タッチ中のマウスドラッグは、パスモード以外では無視（カメラパン防止）
+	# パスモード中はPathDrawerがマウスイベントで描画するため許可
+	if camera_pan_controller and camera_pan_controller.get_touch_count() == 1:
+		if event is InputEventMouseMotion and not game_manager.is_path_mode():
 			get_viewport().set_input_as_handled()
 			return
 
@@ -34,20 +47,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			# タッチポイントを常に追跡（ピンチ検出のため）
 			camera_pan_controller.track_touch(event)
 
-			# 2本指以上、またはピンチ中はカメラズームを最優先（パスモード中でも）
+			# 2本指以上、またはピンチ中はカメラズーム+パンを最優先（パスモード中でも）
 			if camera_pan_controller.get_touch_count() >= 2 or camera_pan_controller.is_pinching():
 				if camera_pan_controller.handle_pinch(event):
 					get_viewport().set_input_as_handled()
 					return
 
-			# 1本指タッチ - パスモード中はPathDrawerに委譲
-			if game_manager.is_path_mode():
-				return
-
-			# パスモードOFFなら1本指タッチでカメラパン
-			if camera_pan_controller.handle_touch_pan(event):
-				get_viewport().set_input_as_handled()
-				return
+			# 1本指タッチ - パス描画などに使用（PathDrawerに委譲）
+			# カメラパンはしない
+			return
 
 	# カメラズーム（マウスホイール）は常に処理
 	if camera_pan_controller:
@@ -62,7 +70,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			game_manager.handle_rotation_input(event.position)
 		return
 
-	# 左クリック処理（PC向け）
+	# 左クリック処理（PC向け - タッチエミュレーションではない場合のみ）
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_handle_left_click(event)
 		return
@@ -86,9 +94,12 @@ func _handle_left_click(event: InputEventMouseButton) -> void:
 
 ## 左クリック押下時の処理
 func _on_left_press(pos: Vector2) -> void:
-	# パスモードOFF → カメラドラッグ候補開始
+	# タッチ中はカメラドラッグを開始しない（タップ操作のみ許可）
+	var is_touch = _is_touch_active()
+
+	# パスモードOFF → カメラドラッグ候補開始（PCのみ）
 	if not game_manager.is_path_mode():
-		if camera_pan_controller:
+		if camera_pan_controller and not is_touch:
 			camera_pan_controller.start_potential_drag(pos)
 		return
 
@@ -107,8 +118,8 @@ func _on_left_press(pos: Vector2) -> void:
 		# パス上 → PathDrawerに委譲（何もしない）
 		return
 	else:
-		# パス外 → カメラドラッグ候補開始
-		if camera_pan_controller:
+		# パス外 → カメラドラッグ候補開始（PCのみ）
+		if camera_pan_controller and not is_touch:
 			camera_pan_controller.start_potential_drag(pos)
 
 
@@ -143,7 +154,8 @@ func _on_left_release(pos: Vector2) -> void:
 		_handle_click(pos)
 		return
 
-	# パスモードON → PathDrawerが処理済み
+	# タッチからのタップ、またはパスモードON → クリックとして処理
+	_handle_click(pos)
 
 
 ## クリックとして処理（ドラッグ不成立時）

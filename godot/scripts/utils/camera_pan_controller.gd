@@ -1,14 +1,15 @@
 class_name CameraPanController
 extends RefCounted
-## 左ドラッグ/タッチでカメラを平行移動、スクロール/ピンチでズームする簡易コントローラー
-## ドラッグ判定: 閾値以上移動したらドラッグ成立
-## モバイル対応: 1本指ドラッグでパン、2本指ピンチでズーム
+## カメラを平行移動、ズームする簡易コントローラー
+## PC: 左ドラッグでパン、マウスホイールでズーム
+## モバイル: 2本指ドラッグでパン+ズーム（1本指はパス描画用）
+## 参考: https://github.com/DionHo/GodotTouchCamera
 
 var camera: Camera3D = null
 var pan_speed: float = 0.05
 
-## モバイル向けパン速度（PCより低感度に設定）
-var mobile_pan_speed: float = 0.00005
+## モバイル向けパン速度
+var mobile_pan_speed: float = 0.02
 
 ## ズーム設定
 var zoom_speed: float = 1.0
@@ -18,15 +19,11 @@ var zoom_smoothing: float = 10.0
 
 ## ドラッグ判定の閾値（ピクセル）
 const DRAG_THRESHOLD: float = 5.0
-## モバイル向けドラッグ閾値（タッチの誤検出防止のため大きめ）
-const MOBILE_DRAG_THRESHOLD: float = 15.0
 
-## 内部状態（パン）
+## 内部状態（PCマウスドラッグ用）
 var _drag_active: bool = false
 var _drag_start: Vector2 = Vector2.ZERO
 var _camera_start_pos: Vector3 = Vector3.ZERO
-
-## ドラッグ候補状態（閾値判定前）
 var _pending_drag: bool = false
 var _pending_start: Vector2 = Vector2.ZERO
 
@@ -34,20 +31,13 @@ var _pending_start: Vector2 = Vector2.ZERO
 var _target_zoom: float = 0.0
 var _current_zoom: float = 0.0
 
-## 内部状態（ピンチズーム）
+## 内部状態（マルチタッチ）
 var _touch_points: Dictionary = {}  # touch_index -> position
-var _pinch_start_distance: float = 0.0
-var _pinch_start_zoom: float = 0.0
-## ピンチ中かどうか（2本指検出中）
 var _is_pinching: bool = false
 
-## タッチパン用の状態
-var _touch_drag_active: bool = false
-var _touch_drag_start: Vector2 = Vector2.ZERO
-var _touch_camera_start_pos: Vector3 = Vector3.ZERO
-## タッチパンのピンチ中央追従用
-var _pinch_center_start: Vector2 = Vector2.ZERO
-var _pinch_camera_start_pos: Vector3 = Vector3.ZERO
+## 前フレームの重心と標準偏差（相対移動計算用）
+var _prev_centroid: Vector2 = Vector2.ZERO
+var _prev_std_deviation: float = 0.0
 
 
 func setup(target_camera: Camera3D, speed: float = 0.05) -> void:
@@ -68,80 +58,45 @@ func get_touch_count() -> int:
 	return _touch_points.size()
 
 
-## タッチポイントを追跡（ピンチ検出用）
+## タッチポイントを追跡（2本指検出用）
 func track_touch(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touch_points[event.index] = event.position
-			# 2本指になったらピンチ開始
 			if _touch_points.size() == 2:
 				_start_pinch()
 		else:
 			_touch_points.erase(event.index)
-			# ピンチ終了
 			if _touch_points.size() < 2:
 				_is_pinching = false
-				_pinch_start_distance = 0.0
-			# すべてのタッチが終了
-			if _touch_points.size() == 0:
-				_end_touch_drag()
 	elif event is InputEventScreenDrag:
 		if _touch_points.has(event.index):
 			_touch_points[event.index] = event.position
 
 
-## ピンチズーム処理（パスモード中でも動作）
+## 2本指ズーム+パン処理
 func handle_pinch(event: InputEvent) -> bool:
 	if not camera:
 		return false
 
 	if event is InputEventScreenDrag:
 		if _touch_points.size() == 2 and _is_pinching:
-			_update_pinch()
+			_update_pinch_with_pan()
 			return true
 
 	return _is_pinching
 
 
-## タッチパン処理（パスモードOFF時のみ）
-func handle_touch_pan(event: InputEvent) -> bool:
-	if not camera:
-		return false
-
-	if _is_pinching:
-		return false
-
-	if event is InputEventScreenTouch:
-		if event.pressed:
-			if _touch_points.size() == 1:
-				_start_touch_drag(event.position)
-				return true
-		else:
-			if _touch_points.size() == 0:
-				_end_touch_drag()
-		return _touch_drag_active
-
-	if event is InputEventScreenDrag:
-		if _touch_points.size() == 1 and _touch_drag_active:
-			_update_touch_drag(event.position, event.relative)
-			return true
-
-	return false
-
-
-## ズームレベルに応じたパン速度を取得（ズームイン時は遅く、ズームアウト時は速く）
+## ズームレベルに応じたパン速度を取得
 func _get_adjusted_pan_speed(base_speed: float) -> float:
 	if not camera:
 		return base_speed
-	# ズームレベルに応じてパン速度を調整
-	# zoom_max（最もズームアウト）で1.0倍、zoom_min（最もズームイン）で0.5倍
 	var zoom_ratio = (_current_zoom - zoom_min) / (zoom_max - zoom_min)
 	var speed_multiplier = 0.5 + (zoom_ratio * 0.5)
 	return base_speed * speed_multiplier
 
 
-## 入力処理。処理した場合はtrueを返す
-## 注: 左クリックドラッグはInputControllerから呼び出されるAPIを使用
+## PC向け入力処理（マウスホイール、マウスドラッグ）
 func handle_input(event: InputEvent) -> bool:
 	if not camera:
 		return false
@@ -150,7 +105,7 @@ func handle_input(event: InputEvent) -> bool:
 	if _is_pinching and event is InputEventMouseMotion:
 		return true
 
-	# ドラッグ中のマウス移動処理（PC向け）
+	# ドラッグ中のマウス移動処理
 	if event is InputEventMouseMotion and _drag_active and not _is_pinching:
 		var delta = event.position - _drag_start
 		var adjusted_speed = _get_adjusted_pan_speed(pan_speed)
@@ -159,7 +114,7 @@ func handle_input(event: InputEvent) -> bool:
 		camera.global_position = _camera_start_pos + Vector3(move_x, 0, move_z)
 		return true
 
-	# マウスホイールでズーム（PC）
+	# マウスホイールでズーム
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_by(-zoom_speed)
@@ -167,13 +122,6 @@ func handle_input(event: InputEvent) -> bool:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_zoom_by(zoom_speed)
 			return true
-
-	# タッチ入力（ピンチズーム + タッチパン）
-	if event is InputEventScreenTouch:
-		return _handle_touch(event)
-
-	if event is InputEventScreenDrag:
-		return _handle_touch_drag(event)
 
 	return false
 
@@ -186,16 +134,13 @@ func start_potential_drag(pos: Vector2) -> void:
 	_pending_start = pos
 
 
-## ドラッグが成立したかチェックし、成立したらドラッグモードに移行
-## @param current_pos: 現在のマウス位置
-## @return: ドラッグが成立した場合true
+## ドラッグが成立したかチェック
 func check_and_start_drag(current_pos: Vector2) -> bool:
 	if not _pending_drag:
 		return false
 
 	var distance = _pending_start.distance_to(current_pos)
 	if distance >= DRAG_THRESHOLD:
-		# ドラッグ成立
 		_drag_active = true
 		_drag_start = _pending_start
 		_camera_start_pos = camera.global_position
@@ -210,7 +155,7 @@ func is_dragging() -> bool:
 	return _drag_active
 
 
-## ドラッグ候補中かどうか（閾値判定前）
+## ドラッグ候補中かどうか
 func is_pending_drag() -> bool:
 	return _pending_drag
 
@@ -221,7 +166,7 @@ func end_drag() -> void:
 	_pending_drag = false
 
 
-## ドラッグ候補をキャンセル（閾値未達でクリックとして処理する場合）
+## ドラッグ候補をキャンセル
 func cancel_potential_drag() -> void:
 	_pending_drag = false
 
@@ -231,114 +176,60 @@ func _zoom_by(amount: float) -> void:
 	_target_zoom = clampf(_target_zoom + amount, zoom_min, zoom_max)
 
 
-## タッチ開始/終了を処理
-func _handle_touch(event: InputEventScreenTouch) -> bool:
-	if event.pressed:
-		_touch_points[event.index] = event.position
-
-		# 1本目のタッチ開始
-		if _touch_points.size() == 1:
-			_start_touch_drag(event.position)
-			return true
-
-		# 2本指になったらピンチ開始
-		if _touch_points.size() == 2:
-			_start_pinch()
-			return true
-	else:
-		_touch_points.erase(event.index)
-
-		# ピンチ終了
-		if _touch_points.size() < 2:
-			_is_pinching = false
-			_pinch_start_distance = 0.0
-
-		# すべてのタッチが終了
-		if _touch_points.size() == 0:
-			_end_touch_drag()
-		elif _touch_points.size() == 1:
-			# ピンチからシングルタッチに戻った場合、残った指でドラッグを再開始
-			var remaining_pos: Vector2 = _touch_points.values()[0]
-			_start_touch_drag(remaining_pos)
-
-	return _touch_points.size() >= 1
-
-
-## タッチドラッグを処理
-func _handle_touch_drag(event: InputEventScreenDrag) -> bool:
-	if not _touch_points.has(event.index):
-		return false
-
-	_touch_points[event.index] = event.position
-
-	# 2本指ならピンチズーム処理のみ（パンなし）
-	if _touch_points.size() == 2 and _is_pinching:
-		_update_pinch()
-		return true
-
-	# 1本指ならタッチパン処理
-	if _touch_points.size() == 1 and _touch_drag_active and not _is_pinching:
-		_update_touch_drag(event.position, event.relative)
-		return true
-
-	return false
-
-
-## 1本指タッチドラッグ開始
-func _start_touch_drag(pos: Vector2) -> void:
-	if not camera:
-		return
-	_touch_drag_active = true
-	_touch_drag_start = pos
-	_touch_camera_start_pos = camera.global_position
-
-
-## 1本指タッチドラッグ更新
-func _update_touch_drag(_pos: Vector2, relative: Vector2) -> void:
-	if not camera or not _touch_drag_active:
-		return
-
-	# ズームレベルに応じた感度調整
-	var adjusted_speed = _get_adjusted_pan_speed(mobile_pan_speed)
-	var move_x = -relative.x * adjusted_speed
-	var move_z = -relative.y * adjusted_speed
-	camera.global_position += Vector3(move_x, 0, move_z)
-
-
-## タッチドラッグ終了
-func _end_touch_drag() -> void:
-	_touch_drag_active = false
-
-
 ## ピンチ開始時の処理
 func _start_pinch() -> void:
-	var points = _touch_points.values()
-	_pinch_start_distance = points[0].distance_to(points[1])
-	_pinch_start_zoom = _target_zoom
 	_is_pinching = true
-
-	# タッチドラッグを停止（ピンチ中はパンしない）
-	_touch_drag_active = false
-
-	# マウスエミュレーションによるドラッグ候補もキャンセル
 	_pending_drag = false
 	_drag_active = false
-
-	# ピンチ中央を記録
-	_pinch_center_start = (points[0] + points[1]) / 2.0
-	_pinch_camera_start_pos = camera.global_position
+	_prev_centroid = _calc_centroid()
+	_prev_std_deviation = _calc_std_deviation(_prev_centroid)
 
 
-## ピンチ中の処理
-func _update_pinch() -> void:
-	var points = _touch_points.values()
-	var current_distance = points[0].distance_to(points[1])
+## 重心を計算
+func _calc_centroid() -> Vector2:
+	var c = Vector2.ZERO
+	for p in _touch_points:
+		c += _touch_points[p]
+	return c / _touch_points.size()
 
-	if _pinch_start_distance > 0.0:
-		# ピンチアウト（指を広げる）→ズームイン（カメラが近づく）
-		# ピンチイン（指を狭める）→ズームアウト（カメラが離れる）
-		var scale_factor = _pinch_start_distance / current_distance
-		_target_zoom = clampf(_pinch_start_zoom * scale_factor, zoom_min, zoom_max)
+
+## 標準偏差を計算（指の広がり具合）
+func _calc_std_deviation(centroid: Vector2) -> float:
+	var d = 0.0
+	for p in _touch_points:
+		d += centroid.distance_squared_to(_touch_points[p])
+	return sqrt(d / _touch_points.size())
+
+
+## 2本指ドラッグでズーム+パン処理
+func _update_pinch_with_pan() -> void:
+	if not camera or _touch_points.size() < 2:
+		return
+
+	var current_centroid = _calc_centroid()
+	var current_std_deviation = _calc_std_deviation(current_centroid)
+
+	var relative_drag = current_centroid - _prev_centroid
+	var relative_pinch = current_std_deviation - _prev_std_deviation
+	var scale_pinch = current_std_deviation / _prev_std_deviation if _prev_std_deviation > 0 else 1.0
+
+	_prev_centroid = current_centroid
+	_prev_std_deviation = current_std_deviation
+
+	var drag_magnitude = relative_drag.length()
+	var pinch_magnitude = abs(relative_pinch)
+
+	# パン処理
+	if drag_magnitude > pinch_magnitude * 0.5:
+		var adjusted_speed = _get_adjusted_pan_speed(mobile_pan_speed)
+		var move_x = -relative_drag.x * adjusted_speed
+		var move_z = -relative_drag.y * adjusted_speed
+		camera.global_position += Vector3(move_x, 0, move_z)
+
+	# ズーム処理
+	if pinch_magnitude > drag_magnitude * 0.3:
+		var zoom_delta = (1.0 - scale_pinch) * _current_zoom * 0.5
+		_target_zoom = clampf(_target_zoom + zoom_delta, zoom_min, zoom_max)
 
 
 ## 毎フレーム呼び出してズームを滑らかに適用
@@ -346,13 +237,10 @@ func process(delta: float) -> void:
 	if not camera:
 		return
 
-	# 目標値に向かってスムーズに補間
 	if not is_equal_approx(_current_zoom, _target_zoom):
 		_current_zoom = lerpf(_current_zoom, _target_zoom, zoom_smoothing * delta)
 
-		# 十分近づいたらスナップ
 		if absf(_current_zoom - _target_zoom) < 0.01:
 			_current_zoom = _target_zoom
 
-		# カメラのY座標を更新
 		camera.global_position.y = _current_zoom
