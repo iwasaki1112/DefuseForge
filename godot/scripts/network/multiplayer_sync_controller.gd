@@ -481,6 +481,8 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			_apply_smoke_deploy_event(event)
 		NetworkConstants.GameEventType.ANIMATION_EVENT:
 			_apply_animation_event(event)
+		NetworkConstants.GameEventType.DOOR_KICK:
+			_apply_door_kick_event(event)
 
 
 func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
@@ -624,6 +626,17 @@ func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
 		NetworkConstants.AnimationEventType.CROUCH_END:
 			if character.has_method("set_crouching"):
 				character.set_crouching(false)
+
+
+func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
+	var door_id: int = event.data.get("door_id", 0)
+	var character_id: int = event.data.get("character_id", 0)
+
+	if door_id == 0:
+		push_warning("[SyncController] DOOR_KICK event missing door_id")
+		return
+
+	game_manager.apply_door_kick_from_network(door_id, character_id)
 
 
 ## アニメーションを指定秒数分進める（レイテンシ補正用）

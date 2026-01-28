@@ -36,6 +36,8 @@ signal context_action_requested(action_id: String, character: Node)
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
+## ドアキックネットワークイベント（マルチプレイヤー同期用）
+signal door_kick_network_event(door_id: int, character_network_id: int)
 ## ラウンド管理シグナル
 signal round_started()
 signal round_ended(winner: int, reason: int)
@@ -695,6 +697,8 @@ func _setup_map_manager() -> void:
 		map_manager.name = GameConstants.NODE_MAP_MANAGER
 		add_child(map_manager)
 		map_manager.setup(_map_container, self)
+		map_manager.map_loaded.connect(_on_map_loaded)
+		map_manager.map_will_unload.connect(_on_map_will_unload)
 
 
 func _setup_context_menu() -> void:
@@ -957,10 +961,31 @@ var _door_kick_directions: Dictionary = {}
 var _active_grenades: Dictionary = {}  ## grenade_id -> Grenade/SmokeGrenade
 var _next_grenade_id: int = 1
 
+## ドアID管理（マルチプレイヤー同期用）
+var _next_door_id: int = 1
+var _door_id_map: Dictionary = {}  ## door_node -> door_id
+var _id_to_door: Dictionary = {}   ## door_id -> door_node
+
 
 ## ドアキックインパクト時（フレーム36/66）
 ## character: ドアをキックしたキャラクター（位置から回転方向を計算）
 func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# ローカルキャラクターのキックのみネットワークイベントを送信
+	var game_char := character as GameCharacter
+	if game_char and game_char.is_local() and _is_multiplayer_mode:
+		var door_id := get_door_id(door)
+		if door_id > 0:
+			door_kick_network_event.emit(door_id, game_char.network_id)
+
+	# ドアを開く処理を実行
+	_open_door(door, character)
+
+
+## ドアを開く処理（ローカル・リモート共通）
+func _open_door(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
 		return
 
@@ -1333,6 +1358,94 @@ func _resume_path_after_door(character: Node) -> void:
 			var controller = path_execution_manager._path_controllers[char_id]
 			if controller.has_method("resume_after_door"):
 				controller.resume_after_door()
+
+
+## ========================================
+## ドアID管理（マルチプレイヤー同期用）
+## ========================================
+
+## ドアを登録し、一意のIDを割り当て
+## Returns: 割り当てられたドアID
+func register_door(door: Node3D) -> int:
+	if _door_id_map.has(door):
+		return _door_id_map[door]
+
+	var door_id := _next_door_id
+	_next_door_id += 1
+
+	_door_id_map[door] = door_id
+	_id_to_door[door_id] = door
+
+	return door_id
+
+
+## ドアIDからドアノードを取得
+func get_door_by_id(door_id: int) -> Node3D:
+	if _id_to_door.has(door_id):
+		var door: Node3D = _id_to_door[door_id]
+		if is_instance_valid(door):
+			return door
+		else:
+			_id_to_door.erase(door_id)
+	return null
+
+
+## ドアノードからドアIDを取得
+func get_door_id(door: Node3D) -> int:
+	if _door_id_map.has(door):
+		return _door_id_map[door]
+	return 0
+
+
+## 全ドアを登録解除（マップアンロード時に呼ぶ）
+func clear_door_registry() -> void:
+	_door_id_map.clear()
+	_id_to_door.clear()
+	_next_door_id = 1
+
+
+## マップ内の全ドアを登録（"doors"グループから取得）
+func register_all_doors_in_map() -> void:
+	var doors := get_tree().get_nodes_in_group("doors")
+	for door in doors:
+		if door is Node3D:
+			register_door(door)
+
+
+## マップロード完了時
+func _on_map_loaded(_map_id: String, _map_instance: Node3D) -> void:
+	# ドアを登録
+	register_all_doors_in_map()
+
+
+## マップアンロード前
+func _on_map_will_unload(_map_id: String) -> void:
+	# ドア登録をクリア
+	clear_door_registry()
+
+
+## ネットワークからのドアキックイベントを適用（リモート側用）
+func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void:
+	var door := get_door_by_id(door_id)
+	if not door:
+		push_warning("[GameManager] Door not found for network kick: ", door_id)
+		return
+
+	# 既に開いているドアは無視
+	if door.is_in_group("open_doors"):
+		return
+
+	var character := find_character_by_network_id(character_network_id)
+	if not character:
+		push_warning("[GameManager] Character not found for door kick: ", character_network_id)
+		return
+
+	# ローカルキャラクターのイベントは無視（二重処理防止）
+	if character.is_local():
+		return
+
+	# ドアを開く処理を実行
+	_open_door(door, character)
 
 
 # ============================================
