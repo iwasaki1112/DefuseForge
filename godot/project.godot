@@ -64,9 +64,9 @@ common/physics_interpolation=true
 
 renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
-lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/size=1024
 lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1
-scaling_3d/scale=0.75
+scaling_3d/scale=0.5
 "#ã¢ãã¤ã«æé©å:å½±åè³ªãä½ã«è¨­å®lights_and_shadows/directional_shadow/soft_shadow_filter_quality"=1
 "#ã¢ãã¤ã«æé©å:MSAAç¡å¹åãFXAAãæå¹åï¼è»½éï¼anti_aliasing/quality/msaa_3d"=0
 "#ã¢ãã¤ã«æé©å:åé¨è§£ååº¦75%ï¼FSR1.0ã§ã¢ããã¹ã±ã¼ã«ï¼scaling_3d/mode"=1
