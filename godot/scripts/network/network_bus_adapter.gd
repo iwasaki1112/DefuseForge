@@ -24,7 +24,7 @@ func setup(network_manager: NetworkManager) -> void:
 
 
 ## メッセージを送信
-func send_message(from_peer: int, to_peer: int, msg_type: int, data: Dictionary) -> void:
+func send_message(_from_peer: int, to_peer: int, msg_type: int, data: Dictionary) -> void:
 	if not _network_manager:
 		return
 

@@ -3,12 +3,9 @@ class_name LobbyScreen
 ## ロビー画面
 ## ルーム作成・参加・プレイヤー一覧・準備状態を管理
 
-const MULTIPLAYER_GAME_SCENE := "res://scenes/screens/multiplayer_game.tscn"
+const GAME_SCENE := "res://scenes/screens/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 
-## シグナル
-signal game_started()
-signal back_requested()
 
 ## 状態
 enum LobbyState {
@@ -102,12 +99,16 @@ func _setup_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
+	# 中央配置用コンテナ
+	var center_container := CenterContainer.new()
+	center_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center_container)
+
 	# メインコンテナ
 	var main_container := VBoxContainer.new()
-	main_container.set_anchors_preset(Control.PRESET_CENTER)
 	main_container.custom_minimum_size = Vector2(400, 500)
 	main_container.add_theme_constant_override("separation", 20)
-	add_child(main_container)
+	center_container.add_child(main_container)
 
 	# タイトル
 	var title := Label.new()
@@ -470,13 +471,13 @@ func _start_game(map_id: String) -> void:
 	# NetworkManagerを親から切り離して保持
 	remove_child(_network_manager)
 
-	# ゲームシーンをロード
-	var game_scene := load(MULTIPLAYER_GAME_SCENE).instantiate() as MultiplayerGameScreen
+	# ゲームシーンをロード（統合されたGameScreenを使用）
+	var game_scene := load(GAME_SCENE).instantiate() as GameScreen
 	get_tree().root.add_child(game_scene)
 
 	# NetworkManagerをゲームシーンにセットアップ
 	game_scene.add_child(_network_manager)
-	game_scene.setup_with_network(_network_manager, map_id)
+	game_scene.setup_multiplayer(_network_manager, map_id)
 
 	# このシーンを削除
 	queue_free()

@@ -2,14 +2,13 @@ extends Node3D
 class_name GameScreen
 ## ゲーム画面
 ##
-## MapSelectionScreenで選択されたマップをロードし、
-## キャラクターをスポーン、プレイヤーをCT/Tにランダム割り当てする。
+## TrainingモードとMultiplayerモードを統合。
+## GameModeProviderでモード固有の処理を分離。
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
 const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
-const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_service.gd")
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -21,42 +20,87 @@ const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_serv
 var game_manager: GameManager = null
 var environment_setup: EnvironmentSetup = null
 
+## モードプロバイダー
+var _mode_provider: GameModeProvider = null
+
 ## UI要素
 var _hud: GameHUD = null
 var _round_hud: RoundHUD = null
+var _status_label: Label = null
 
 ## カメラ移動
 var _camera_pan_controller: CameraPanController = null
 var _input_controller: InputController = null
-var _match_setup_service: MatchSetupService = null
+
+## 設定
+var _map_id: String = ""
+
+## ネットワーク専用（Multiplayerモード時のみ使用）
+var _network_manager: NetworkManager = null
+var _sync_controller: MultiplayerSyncController = null
+
+## キャラクター管理
+var _network_id_counter: int = 1
 
 ## デバッグ
 var _vision_debug_enabled: bool = false
 
 
-
 func _ready() -> void:
 	add_to_group("game_screen")
+
+	# Multiplayerモードでない場合、Trainingモードとして初期化
+	if _mode_provider == null:
+		_mode_provider = TrainingModeProvider.new()
+		_map_id = SettingsManager.get_selected_map()
+		_initialize_game()
+
+
+## Multiplayerモードでセットアップ（LobbyScreenから呼ばれる）
+func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
+	_network_manager = net_manager
+	_map_id = map_id
+
+	# SyncControllerをセットアップ
+	_setup_sync_controller()
+
+	# MultiplayerModeProviderをセットアップ
+	var mp_provider := MultiplayerModeProvider.new()
+	mp_provider.setup(_network_manager, _sync_controller)
+	_mode_provider = mp_provider
+
+	_initialize_game()
+
+
+## ゲームの初期化（共通処理）
+func _initialize_game() -> void:
 	_setup_environment()
 	_setup_game_manager()
+	_mode_provider.determine_player_team()
+	_load_map()
+	_spawn_characters()
 	_setup_hud()
 	_setup_round_hud()
-	_setup_match_service()
-	_match_setup_service.determine_player_team()
-	_load_map()
-	_match_setup_service.spawn_characters()
 	_register_character_markers()
+	_setup_status_ui()
 	_update_team_display()
-	_match_setup_service.setup_camera_for_player()
 	_setup_money()
 	_setup_camera_pan()
 	_setup_input_controller()
+	_setup_camera_for_player()
+
+	# Multiplayer用のネットワークイベント接続
+	if _network_manager:
+		_network_manager.peer_disconnected.connect(_on_peer_disconnected)
+		_network_manager.message_received.connect(_on_network_message)
+		game_manager.grenade_network_event.connect(_on_grenade_network_event)
+		game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 
 	# 視界システムを初期化（FoW OFF）
 	game_manager.set_vision_enabled(false)
 
-	# ラウンド開始（タイマー開始）
-	if game_manager.round_manager:
+	# ラウンド開始
+	if _mode_provider.can_start_round() and game_manager.round_manager:
 		game_manager.round_manager.start_round()
 
 
@@ -64,7 +108,6 @@ func _ready() -> void:
 ## 初期化処理
 ## ========================================
 
-## 環境をセットアップ
 func _setup_environment() -> void:
 	if environment_setup == null:
 		environment_setup = EnvironmentSetup.new()
@@ -75,14 +118,11 @@ func _setup_environment() -> void:
 		add_child(environment_setup)
 
 
-## GameManagerのセットアップ
 func _setup_game_manager() -> void:
 	if game_manager == null:
 		game_manager = GameManager.new()
 		game_manager.name = "GameManager"
 		add_child(game_manager)
-
-		# マップサイズはマップロード後に更新されるため、初期値で設定
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
 		# シグナル接続
@@ -94,15 +134,94 @@ func _setup_game_manager() -> void:
 		game_manager.path_ready.connect(_on_path_ready)
 		game_manager.path_mode_ended.connect(_on_path_mode_ended)
 		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
+		game_manager.round_timer_updated.connect(_on_round_timer_updated)
+		game_manager.round_ended.connect(_on_round_ended)
 
 
-func _setup_match_service() -> void:
-	if _match_setup_service == null:
-		_match_setup_service = MatchSetupServiceScript.new()
-		_match_setup_service.setup(game_manager, camera)
+func _setup_sync_controller() -> void:
+	if not _network_manager:
+		return
+
+	# ネットワークバスをラップするアダプタを作成
+	var network_adapter := NetworkBusAdapter.new()
+	network_adapter.setup(_network_manager)
+	add_child(network_adapter)
+
+	_sync_controller = MultiplayerSyncController.new()
+	_sync_controller.name = "SyncController"
+	add_child(_sync_controller)
+
+	var local_peer_id := _network_manager.get_local_peer_id()
+	var is_host := _network_manager.is_host()
+	_sync_controller.setup(network_adapter, game_manager, local_peer_id, is_host)
 
 
-## コントロールUIのセットアップ
+func _load_map() -> void:
+	if _map_id.is_empty():
+		push_error("[GameScreen] No map selected")
+		return
+
+	var map_instance := game_manager.load_map(_map_id, false)
+	if not map_instance:
+		push_error("[GameScreen] Failed to load map: %s" % _map_id)
+
+
+func _spawn_characters() -> void:
+	if not game_manager.has_map():
+		push_error("[GameScreen] Cannot spawn characters - no map loaded")
+		return
+
+	var preset = game_manager.get_current_map_preset()
+	if not preset:
+		push_error("[GameScreen] Cannot spawn characters - no map preset")
+		return
+
+	# CT側キャラクターをスポーン（alpha, bravo）
+	var alpha_preset = CharacterRegistry.get_preset("alpha")
+	var ct_spawns = preset.spawn_points_ct
+	var ct_rotations = preset.spawn_rotations_ct
+	var ct_marker_names := ["alpha", "bravo"]
+	if alpha_preset:
+		_spawn_team_characters([alpha_preset, alpha_preset], ct_spawns, ct_rotations, ct_marker_names, GameCharacter.Team.COUNTER_TERRORIST)
+
+	# T側キャラクターをスポーン（ares, brim）
+	var ares_preset = CharacterRegistry.get_preset("ares")
+	var t_spawns = preset.spawn_points_t
+	var t_rotations = preset.spawn_rotations_t
+	var t_marker_names := ["ares", "brim"]
+	if ares_preset:
+		_spawn_team_characters([ares_preset, ares_preset], t_spawns, t_rotations, t_marker_names, GameCharacter.Team.TERRORIST)
+
+	# IdleManagerにキャラクターリストを更新
+	if game_manager.idle_manager:
+		game_manager.idle_manager.set_characters(game_manager.characters)
+
+
+func _spawn_team_characters(presets: Array, spawn_points: Array, spawn_rotations: Array, marker_names: Array, team: int) -> void:
+	var count := mini(presets.size(), spawn_points.size())
+	for i in range(count):
+		var char_preset = presets[i]
+		var spawn_pos: Vector3 = spawn_points[i]
+		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
+		if character:
+			character.team = team
+			# マーカー名を設定
+			if i < marker_names.size():
+				character.marker_name = marker_names[i]
+			# add_child()前に向きを設定
+			if i < spawn_rotations.size():
+				var spawn_rot: float = spawn_rotations[i]
+				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
+				character._facing_direction = direction
+			var character_parent = game_manager.get_character_parent()
+			character_parent.add_child(character)
+
+			# モードプロバイダー経由でキャラクター登録
+			var network_id := _network_id_counter
+			_network_id_counter += 1
+			_mode_provider.register_character(game_manager, character, network_id)
+
+
 func _setup_hud() -> void:
 	if _hud == null:
 		_hud = GameHUDScene.instantiate()
@@ -117,28 +236,36 @@ func _setup_hud() -> void:
 		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
 
 
-## ラウンドHUDのセットアップ
 func _setup_round_hud() -> void:
 	if _round_hud == null:
 		_round_hud = RoundHUD.new()
 		_round_hud.name = GameConstants.NODE_ROUND_HUD
 		ui_layer.add_child(_round_hud)
 
-		# シグナル接続
-		game_manager.round_timer_updated.connect(_hud.update_timer)
 		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
 		game_manager.round_ended.connect(_round_hud.show_result)
-		game_manager.round_ended.connect(_on_round_ended)
 
 
-## カメラのパン操作をセットアップ
+func _setup_status_ui() -> void:
+	# Multiplayerモードのみステータス表示
+	if _mode_provider.get_mode_name() != "multiplayer":
+		return
+
+	_status_label = Label.new()
+	_status_label.name = "NetworkStatus"
+	_status_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_status_label.position = Vector2(10, 10)
+	_status_label.add_theme_font_size_override("font_size", 14)
+	ui_layer.add_child(_status_label)
+	_update_status()
+
+
 func _setup_camera_pan() -> void:
 	if _camera_pan_controller == null:
 		_camera_pan_controller = CameraPanControllerScript.new()
 		_camera_pan_controller.setup(camera, 0.05)
 
 
-## 入力コントローラーをセットアップ
 func _setup_input_controller() -> void:
 	if _input_controller == null:
 		_input_controller = InputController.new()
@@ -147,29 +274,16 @@ func _setup_input_controller() -> void:
 		_input_controller.setup(game_manager, _camera_pan_controller)
 
 
-## マップをロード
-func _load_map() -> void:
-	var map_id := SettingsManager.get_selected_map()
-	if not _match_setup_service.load_selected_map(map_id):
-		return
-
-
-## 所持金をセットアップ
 func _setup_money() -> void:
-	# 初期資金にリセット
 	PlayerState.reset_money()
-	# シグナル接続
 	PlayerState.money_changed.connect(_on_money_changed)
-	# 初期表示更新
 	_update_money_display()
 
 
-## キャラクターマーカーを登録
 func _register_character_markers() -> void:
 	if not _hud or not game_manager:
 		return
 
-	# プレイヤーチームのキャラクターをマーカーに登録
 	var player_team: GameCharacter.Team = PlayerState.get_player_team()
 	for character in game_manager.characters:
 		if not is_instance_valid(character):
@@ -178,7 +292,28 @@ func _register_character_markers() -> void:
 			_hud.register_character_marker(character)
 
 
-## チーム表示を更新
+func _setup_camera_for_player() -> void:
+	if not camera:
+		return
+
+	var player_team := PlayerState.get_player_team()
+	var player_character: Node3D = null
+
+	for character in game_manager.characters:
+		if character is GameCharacter and character.team == player_team:
+			player_character = character
+			break
+
+	if player_character:
+		var target_pos := player_character.global_position
+		var camera_offset := Vector3(0, 15, 5.5)
+		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
+
+
+## ========================================
+## UI更新
+## ========================================
+
 func _update_team_display() -> void:
 	if team_display_label:
 		var team_name := PlayerState.get_team_name()
@@ -186,16 +321,43 @@ func _update_team_display() -> void:
 		team_display_label.text = "You are: %s (%s)" % [full_name, team_name]
 
 
-## 所持金表示を更新
 func _update_money_display() -> void:
 	if _hud:
 		_hud.update_money(PlayerState.get_money())
 
 
-## 保留パス数ラベルを更新
 func _update_pending_paths_label() -> void:
 	if _hud:
 		_hud.set_pending_paths(game_manager.get_pending_path_count())
+
+
+func _update_status() -> void:
+	if not _status_label:
+		return
+
+	if _mode_provider is MultiplayerModeProvider:
+		var mp := _mode_provider as MultiplayerModeProvider
+		var role := "Host" if mp.is_host() else "Client"
+		var player_count := mp.get_player_count()
+		var team_name := PlayerState.get_team_name()
+		_status_label.text = "[%s] Players: %d | Team: %s" % [role, player_count, team_name]
+
+
+## ========================================
+## 毎フレーム処理
+## ========================================
+
+func _physics_process(delta: float) -> void:
+	if game_manager:
+		game_manager.process_frame(delta)
+	if _camera_pan_controller:
+		_camera_pan_controller.process(delta)
+
+
+func _process(_delta: float) -> void:
+	# Multiplayerモードのステータス更新（30フレームごと）
+	if _status_label and Engine.get_process_frames() % 30 == 0:
+		_update_status()
 
 
 ## ========================================
@@ -203,14 +365,14 @@ func _update_pending_paths_label() -> void:
 ## ========================================
 
 func _on_execute_button_pressed() -> void:
-	game_manager.execute_all_paths(false)
+	var count := game_manager.execute_all_paths(false)
+	_mode_provider.on_execute_paths(count)
 
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
 
 
-## マーカーエディットボタン押下時のコールバック
 func _on_marker_edit_requested(action: String) -> void:
 	if not game_manager or not game_manager.path_service:
 		return
@@ -236,50 +398,54 @@ func _on_marker_edit_requested(action: String) -> void:
 			path_service.start_wait_mode()
 
 
-## Undoボタン押下時のコールバック
 func _on_marker_undo_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.undo_last_marker()
 
 
-## Confirmボタン押下時のコールバック
 func _on_marker_confirm_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.confirm_path()
 
 
-## Cancelボタン押下時のコールバック
 func _on_marker_cancel_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.cancel_path()
 
 
-## パス描画完了時のコールバック（マーカー追加モードへ移行）
 func _on_path_ready() -> void:
 	if _hud:
 		_hud.show_marker_edit_panel()
 
 
-## パスモード終了時のコールバック
 func _on_path_mode_ended() -> void:
 	if _hud:
 		_hud.hide_marker_edit_panel()
 
 
-## パスモードキャンセル時のコールバック
 func _on_path_mode_cancelled() -> void:
 	if _hud:
 		_hud.hide_marker_edit_panel()
 
 
-## ========================================
-## 毎フレーム処理
-## ========================================
+func _on_character_marker_pressed(character: Node) -> void:
+	if not is_instance_valid(character) or not camera:
+		return
 
-func _physics_process(delta: float) -> void:
-	game_manager.process_frame(delta)
-	if _camera_pan_controller:
-		_camera_pan_controller.process(delta)
+	var target_pos: Vector3 = character.global_position
+	_pan_camera_to_position(target_pos)
+
+
+func _pan_camera_to_position(target_pos: Vector3) -> void:
+	if not camera:
+		return
+
+	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 5.0)
+
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
 
 
 ## ========================================
@@ -292,6 +458,7 @@ func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
 
 func _on_path_confirmed(_count: int) -> void:
 	_update_pending_paths_label()
+	_mode_provider.on_path_confirmed()
 
 
 func _on_paths_execution_started(_count: int) -> void:
@@ -310,45 +477,54 @@ func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
 
 
-func _on_round_ended(_winner: int, _reason: int) -> void:
-	# すべてのキャラクターの移動を停止
+func _on_round_timer_updated(time: float) -> void:
+	if _hud:
+		_hud.update_timer(time)
+
+
+func _on_round_ended(winner: int, reason: int) -> void:
 	if game_manager:
 		game_manager.cancel_all_path_following()
+
+	_mode_provider.on_round_ended(winner, reason)
 
 	# 3秒後にマップ選択画面に遷移
 	await get_tree().create_timer(3.0).timeout
 	get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
 
 
-## キャラクターマーカー押下時のコールバック
-func _on_character_marker_pressed(character: Node) -> void:
-	if not is_instance_valid(character) or not camera:
-		return
+## ========================================
+## ネットワークイベント（Multiplayerモード専用）
+## ========================================
 
-	# キャラクターの位置にカメラをパン
-	var target_pos: Vector3 = character.global_position
-	_pan_camera_to_position(target_pos)
+func _on_peer_disconnected(peer_id: int) -> void:
+	print("[GameScreen] Peer %d disconnected" % peer_id)
 
 
-## カメラを指定位置にパン（アニメーション付き）
-func _pan_camera_to_position(target_pos: Vector3) -> void:
-	if not camera:
-		return
-
-	# カメラの高さを維持しながらXZ平面で移動
-	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 5.0)
-
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
+func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void:
+	pass
 
 
-## SmokeAreaManagerを取得（VisionComponentから呼び出される）
+func _on_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int) -> void:
+	_mode_provider.on_grenade_thrown(start_pos, velocity, is_smoke, grenade_id)
+
+
+func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: bool) -> void:
+	_mode_provider.on_grenade_exploded(grenade_id, pos, is_smoke)
+
+
+## ========================================
+## 外部API
+## ========================================
+
 func get_smoke_area_manager() -> SmokeAreaManager:
 	if game_manager:
 		return game_manager.smoke_area_manager
 	return null
+
+
+func cleanup() -> void:
+	_mode_provider.cleanup()
 
 
 ## ========================================
@@ -356,7 +532,6 @@ func get_smoke_area_manager() -> SmokeAreaManager:
 ## ========================================
 
 func _unhandled_input(event: InputEvent) -> void:
-	# F3: 視界デバッグ表示の切り替え
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F3:
 			_vision_debug_enabled = not _vision_debug_enabled

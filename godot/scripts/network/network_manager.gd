@@ -129,15 +129,15 @@ func disconnect_from_game() -> void:
 ## ========================================
 
 ## ローカルプレイヤーを準備完了に設定
-func set_ready(ready: bool) -> void:
+func set_ready(is_ready: bool) -> void:
 	if _local_peer_id == 0:
 		return
 
 	if _players.has(_local_peer_id):
-		_players[_local_peer_id]["ready"] = ready
+		_players[_local_peer_id]["ready"] = is_ready
 
 	# 全プレイヤーに通知
-	rpc("_sync_player_ready", _local_peer_id, ready)
+	rpc("_sync_player_ready", _local_peer_id, is_ready)
 
 	# ホストは全員準備完了チェック
 	if is_host() and _check_all_ready():
@@ -215,9 +215,9 @@ func _receive_message(from_peer: int, msg_type: int, data: Dictionary) -> void:
 ## ========================================
 
 @rpc("any_peer", "reliable", "call_local")
-func _sync_player_ready(peer_id: int, ready: bool) -> void:
+func _sync_player_ready(peer_id: int, is_ready: bool) -> void:
 	if _players.has(peer_id):
-		_players[peer_id]["ready"] = ready
+		_players[peer_id]["ready"] = is_ready
 
 	# ホストは全員準備完了チェック
 	if is_host() and _check_all_ready():
