@@ -2,7 +2,7 @@ class_name InputController
 extends Node
 ## ゲーム画面の入力処理をまとめたコントローラー
 ## PC: 左クリックドラッグでカメラ移動 / クリックでキャラクター選択等
-## モバイル: 2本指でカメラパン+ズーム、1本指はパス描画/タップ操作用
+## モバイル: 1本指でパン、2本指でズーム（パスモード時は1本指でパス描画/延長）
 ## パスモード時は優先順位に応じてPathDrawerまたはカメラ移動に委譲
 
 var game_manager: GameManager = null
@@ -34,27 +34,105 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
-	# 1本指タッチ中のマウスドラッグは、パスモード以外では無視（カメラパン防止）
-	# パスモード中はPathDrawerがマウスイベントで描画するため許可
+	# 1本指タッチ中のマウスイベント処理
 	if camera_pan_controller and camera_pan_controller.get_touch_count() == 1:
-		if event is InputEventMouseMotion and not game_manager.is_path_mode():
+		if event is InputEventMouseButton or event is InputEventMouseMotion:
+			# パスモード中はPathDrawerにマウスイベントを委譲（パス描画用）
+			if game_manager.is_path_mode():
+				return
+			# 非パスモードではマウスイベントを無視（タッチで処理）
 			get_viewport().set_input_as_handled()
 			return
 
 	# タッチ入力の処理
 	if camera_pan_controller:
 		if event is InputEventScreenTouch or event is InputEventScreenDrag:
+			# track_touch前のタッチ数を保存（release時の判定用）
+			var touch_count_before = camera_pan_controller.get_touch_count()
 			# タッチポイントを常に追跡（ピンチ検出のため）
 			camera_pan_controller.track_touch(event)
 
-			# 2本指以上、またはピンチ中はカメラズーム+パンを最優先（パスモード中でも）
+			# 2本指以上、またはピンチ中はカメラズームを最優先（パスモード中でも）
 			if camera_pan_controller.get_touch_count() >= 2 or camera_pan_controller.is_pinching():
 				if camera_pan_controller.handle_pinch(event):
 					get_viewport().set_input_as_handled()
 					return
 
-			# 1本指タッチ - パス描画などに使用（PathDrawerに委譲）
-			# カメラパンはしない
+			# 1本指タッチの処理（releaseはtrack_touch前の状態で判定）
+			var is_one_finger = camera_pan_controller.get_touch_count() == 1
+			var is_one_finger_release = event is InputEventScreenTouch and not event.pressed and touch_count_before == 1
+			if is_one_finger or is_one_finger_release:
+				# パスモード中の処理
+				if game_manager.is_path_mode():
+					var path_drawer = _get_path_drawer()
+
+					# パス描画中はPathDrawerに委譲
+					if path_drawer and path_drawer.is_drawing():
+						return
+
+					# パスがまだない場合はPathDrawerに委譲（新規パス描画）
+					if not path_drawer or not path_drawer.has_pending_path():
+						return
+
+					# パス描画中でない場合、タップ位置で分岐
+					if event is InputEventScreenTouch:
+						if event.pressed:
+							var ground_pos = _get_ground_position(event.position)
+							# パス上またはパス終点付近ならPathDrawerに委譲（パス延長）
+							if ground_pos != null:
+								if path_drawer.is_point_on_path(ground_pos) or path_drawer.is_near_path_endpoint(ground_pos):
+									return
+							# パス外ならカメラパン候補開始
+							camera_pan_controller.start_potential_touch_pan(event.position)
+							get_viewport().set_input_as_handled()
+						else:
+							# パンが開始されていなければタップ（何もしない）
+							if not camera_pan_controller.is_touch_panning():
+								camera_pan_controller.cancel_potential_touch_pan()
+							else:
+								camera_pan_controller.end_touch_pan()
+							get_viewport().set_input_as_handled()
+						return
+
+					if event is InputEventScreenDrag:
+						# カメラパン中なら継続
+						if camera_pan_controller.is_touch_panning():
+							camera_pan_controller.update_touch_pan(event.position)
+						# パン候補中なら閾値チェック
+						elif camera_pan_controller.is_pending_touch_pan():
+							if camera_pan_controller.check_and_start_touch_pan(event.position):
+								camera_pan_controller.update_touch_pan(event.position)
+						get_viewport().set_input_as_handled()
+						return
+					return
+
+				# 非パスモード: 1本指でカメラパン（タップはキャラクター選択）
+				if event is InputEventScreenTouch:
+					if event.pressed:
+						# パン候補開始（タップとドラッグを区別するため）
+						camera_pan_controller.start_potential_touch_pan(event.position)
+					else:
+						# パンが開始されていなければタップとして処理
+						if not camera_pan_controller.is_touch_panning():
+							camera_pan_controller.cancel_potential_touch_pan()
+							# 直接クリック処理を呼び出す
+							_handle_touch_tap(event.position)
+						else:
+							camera_pan_controller.end_touch_pan()
+					get_viewport().set_input_as_handled()
+					return
+
+				if event is InputEventScreenDrag:
+					# パン中なら継続
+					if camera_pan_controller.is_touch_panning():
+						camera_pan_controller.update_touch_pan(event.position)
+					# パン候補中なら閾値チェック
+					elif camera_pan_controller.is_pending_touch_pan():
+						if camera_pan_controller.check_and_start_touch_pan(event.position):
+							# パン開始直後も移動を適用
+							camera_pan_controller.update_touch_pan(event.position)
+					get_viewport().set_input_as_handled()
+					return
 			return
 
 	# カメラズーム（マウスホイール）は常に処理
@@ -175,6 +253,14 @@ func _handle_click(pos: Vector2) -> void:
 	# 通常クリック処理
 	if not game_manager.is_rotation_active() and not game_manager.is_path_mode():
 		game_manager.handle_click(pos, MOUSE_BUTTON_LEFT)
+
+
+## タッチタップ処理（非パスモード用）
+func _handle_touch_tap(pos: Vector2) -> void:
+	if game_manager.is_rotation_active():
+		game_manager.handle_rotation_input(pos)
+		return
+	game_manager.handle_click(pos, MOUSE_BUTTON_LEFT)
 
 
 ## PathDrawerを取得

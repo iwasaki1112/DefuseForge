@@ -879,6 +879,10 @@ func is_point_on_path(ground_pos: Vector3) -> bool:
 	return result.distance <= path_click_threshold
 
 
+func is_near_path_endpoint(ground_pos: Vector3) -> bool:
+	return _is_near_path_endpoint(ground_pos)
+
+
 func is_marker_mode() -> bool:
 	return _drawing_mode != DrawingMode.MOVEMENT
 
