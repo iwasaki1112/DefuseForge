@@ -110,7 +110,8 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("map_min", Vector2(-map_size.x / 2, -map_size.y / 2))
 	_fog_material.set_shader_parameter("map_max", Vector2(map_size.x / 2, map_size.y / 2))
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
-	_fog_material.set_shader_parameter("blur_radius", 1.5)
+	# モバイル最適化: blurを無効化
+	_fog_material.set_shader_parameter("blur_radius", 0.0)
 	_fog_material.set_shader_parameter("edge_softness", 0.1)
 
 	_fog_mesh.material_override = _fog_material
