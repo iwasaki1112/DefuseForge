@@ -451,7 +451,10 @@ func process_frame(delta: float) -> void:
 
 	# プライマリキャラクターのアイドル処理（パス追従中でない場合）
 	var primary = get_primary_character()
-	if primary and idle_manager and not is_character_following_path(primary):
+	var primary_char := primary as GameCharacter
+
+	# リモートキャラクターはネットワークから状態を受信するためスキップ
+	if primary_char and primary_char.is_local() and idle_manager and not is_character_following_path(primary):
 		# 回転モード中でない場合のみ
 		if not is_rotation_active():
 			idle_manager.process_primary_idle(primary, delta)

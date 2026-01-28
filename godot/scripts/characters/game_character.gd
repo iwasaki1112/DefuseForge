@@ -76,6 +76,7 @@ var _last_velocity: Vector3 = Vector3.ZERO
 var _remote_target_position: Vector3 = Vector3.ZERO
 var _remote_target_rotation: float = 0.0
 var _remote_target_velocity: Vector3 = Vector3.ZERO
+var _remote_target_animation_state: String = ""
 
 # ============================================
 # Facing Direction (一元管理)
@@ -989,7 +990,9 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 	_remote_target_position = state.position
 	_remote_target_rotation = state.rotation
 	_remote_target_velocity = state.velocity
+	_remote_target_animation_state = state.animation_state
 	_last_velocity = state.velocity
+
 
 	# 初回受信時は即座に位置を設定（テレポート防止）
 	if _snapshot_buffer.size() <= 1 or global_position.distance_to(state.position) > 5.0:
@@ -1030,7 +1033,8 @@ func _add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) ->
 		"position": state.position,
 		"rotation": state.rotation,
 		"velocity": state.velocity,
-		"is_crouching": state.is_crouching
+		"is_crouching": state.is_crouching,
+		"animation_state": state.animation_state
 	}
 	_snapshot_buffer.append(snapshot)
 	_last_snapshot_time = time
@@ -1066,12 +1070,17 @@ func update_remote_interpolation(delta: float) -> void:
 		global_position = interpolated.position
 		set_facing_direction(interpolated.rotation)
 
-		# アニメーション更新
+		# アニメーション更新（明示的な状態を使用）
 		if anim_ctrl:
-			var vel: Vector3 = interpolated.get("velocity", Vector3.ZERO)
-			var move_dir := vel.normalized() if vel.length_squared() > 0.01 else Vector3.ZERO
-			var is_running := vel.length() > 3.0
-			anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
+			var anim_state: String = interpolated.get("animation_state", "")
+			if not anim_state.is_empty() and anim_ctrl.has_method("apply_animation_state"):
+				anim_ctrl.apply_animation_state(anim_state, delta)
+			else:
+				# フォールバック: velocity から推論
+				var vel: Vector3 = interpolated.get("velocity", Vector3.ZERO)
+				var move_dir := vel.normalized() if vel.length_squared() > 0.01 else Vector3.ZERO
+				var is_running := vel.length() > 3.0
+				anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
 
 
 ## バッファから補間された状態を取得
@@ -1092,10 +1101,13 @@ func _get_interpolated_state() -> Dictionary:
 			var t: float = (target_time - before_time) / (after_time - before_time)
 			t = clampf(t, 0.0, 1.0)
 			_is_extrapolating = false
+			# アニメーション状態は補間せず、近い方を使用
+			var anim_state: String = after.get("animation_state", "") if t > 0.5 else before.get("animation_state", "")
 			return {
 				"position": (before.position as Vector3).lerp(after.position, t),
 				"rotation": lerp_angle(before.rotation as float, after.rotation as float, t),
-				"velocity": (before.velocity as Vector3).lerp(after.velocity, t)
+				"velocity": (before.velocity as Vector3).lerp(after.velocity, t),
+				"animation_state": anim_state
 			}
 
 	# 最新のスナップショットより未来の場合は外挿
@@ -1109,7 +1121,8 @@ func _get_interpolated_state() -> Dictionary:
 		return {
 			"position": extrapolated_pos,
 			"rotation": latest.rotation,
-			"velocity": latest.velocity
+			"velocity": latest.velocity,
+			"animation_state": latest.get("animation_state", "")
 		}
 
 	# 外挿限界を超えた場合は最新値を返す
@@ -1118,7 +1131,8 @@ func _get_interpolated_state() -> Dictionary:
 		return {
 			"position": latest.position,
 			"rotation": latest.rotation,
-			"velocity": Vector3.ZERO
+			"velocity": Vector3.ZERO,
+			"animation_state": latest.get("animation_state", "")
 		}
 
 	return {}
@@ -1138,11 +1152,15 @@ func _apply_fallback_interpolation(delta: float) -> void:
 	var new_rot := current_rot + rot_diff * FALLBACK_SPEED * delta
 	set_facing_direction(new_rot)
 
-	# アニメーション更新
+	# アニメーション更新（明示的な状態を使用）
 	if anim_ctrl:
-		var move_dir := _remote_target_velocity.normalized() if _remote_target_velocity.length_squared() > 0.01 else Vector3.ZERO
-		var is_running := _remote_target_velocity.length() > 3.0
-		anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
+		if not _remote_target_animation_state.is_empty() and anim_ctrl.has_method("apply_animation_state"):
+			anim_ctrl.apply_animation_state(_remote_target_animation_state, delta)
+		else:
+			# フォールバック: velocity から推論
+			var move_dir := _remote_target_velocity.normalized() if _remote_target_velocity.length_squared() > 0.01 else Vector3.ZERO
+			var is_running := _remote_target_velocity.length() > 3.0
+			anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
 
 
 ## 現在の状態をCharacterStateMessageに変換
@@ -1158,8 +1176,11 @@ func to_character_state() -> NetworkMessages.CharacterStateMessage:
 	state.timestamp = Time.get_ticks_msec()
 
 	# アニメーション状態を取得
-	if anim_ctrl and anim_ctrl.has_method("get_current_animation"):
-		state.animation_state = anim_ctrl.get_current_animation()
+	# リモートキャラクターの場合は受信した状態を使用
+	if not is_local() and not _remote_target_animation_state.is_empty():
+		state.animation_state = _remote_target_animation_state
+	elif anim_ctrl and anim_ctrl.has_method("get_animation_state"):
+		state.animation_state = anim_ctrl.get_animation_state()
 
 	return state
 
@@ -1185,8 +1206,11 @@ func to_character_snapshot() -> SyncState.CharacterSnapshot:
 		snapshot.weapon_id = current_weapon.id
 
 	# アニメーション状態
-	if anim_ctrl and anim_ctrl.has_method("get_current_animation"):
-		snapshot.animation_state = anim_ctrl.get_current_animation()
+	# リモートキャラクターの場合は受信した状態を使用
+	if not is_local() and not _remote_target_animation_state.is_empty():
+		snapshot.animation_state = _remote_target_animation_state
+	elif anim_ctrl and anim_ctrl.has_method("get_animation_state"):
+		snapshot.animation_state = anim_ctrl.get_animation_state()
 
 	return snapshot
 

@@ -45,15 +45,24 @@ func process_idle_characters(delta: float) -> void:
 	var primary = get_primary_callback.call() if get_primary_callback.is_valid() else null
 
 	for character in characters:
+		var game_char := character as GameCharacter
+		if not game_char:
+			continue
+
+		# リモートキャラクターはスキップ（ネットワークから状態を受信するため）
+		if not game_char.is_local():
+			continue
+
+		var is_following: bool = is_following_path_callback.is_valid() and is_following_path_callback.call(character)
+
 		# パス追従中はスキップ
-		if is_following_path_callback.is_valid() and is_following_path_callback.call(character):
+		if is_following:
 			continue
 		# プライマリキャラクターはスキップ（別処理）
 		if character == primary:
 			continue
-		# 死亡中はスキップ（GameCharacterのみ）
-		var game_char := character as GameCharacter
-		if game_char and not game_char.is_alive:
+		# 死亡中はスキップ
+		if not game_char.is_alive:
 			continue
 
 		_update_idle_character(character, delta)
@@ -86,6 +95,11 @@ func _update_idle_character(character: Node, delta: float) -> void:
 ## プライマリキャラクターのアイドル処理（手動操作無効時）
 func process_primary_idle(character: Node, delta: float) -> void:
 	if not character or not character.is_alive:
+		return
+
+	# リモートキャラクターはスキップ（ネットワークから状態を受信するため）
+	var game_char := character as GameCharacter
+	if game_char and not game_char.is_local():
 		return
 
 	# Combat awarenessを処理

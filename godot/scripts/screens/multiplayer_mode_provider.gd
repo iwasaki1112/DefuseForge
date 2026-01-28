@@ -62,6 +62,10 @@ func _connect_network_events() -> void:
 	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
 
+	# リモートプレイヤーからのパス確定を処理
+	if sync_controller:
+		sync_controller.path_confirmed_remote.connect(_on_path_confirmed_remote)
+
 
 func determine_player_team() -> void:
 	var players := network_manager.get_players()
@@ -131,6 +135,9 @@ func cleanup() -> void:
 	if _game_manager and _game_manager.door_kick_network_event.is_connected(_on_door_kick_network_event):
 		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
 
+	if sync_controller and sync_controller.path_confirmed_remote.is_connected(_on_path_confirmed_remote):
+		sync_controller.path_confirmed_remote.disconnect(_on_path_confirmed_remote)
+
 
 ## ========================================
 ## ネットワークイベントハンドラ
@@ -195,3 +202,24 @@ func _on_door_kick_network_event(door_id: int, character_network_id: int) -> voi
 		"character_id": character_network_id,
 	}
 	sync_controller.send_game_event(event)
+
+
+## リモートプレイヤーからのパス確定を処理
+func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage) -> void:
+	if not _game_manager or not _game_manager.path_execution_manager:
+		return
+
+	# 自分のパスはすでにローカルで登録済みなのでスキップ
+	if player_id == _local_peer_id:
+		return
+
+	# キャラクターを検索
+	var character := _game_manager.find_character_by_network_id(path_msg.character_id)
+	if not character:
+		print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
+		return
+
+	# リモートプレイヤーのパスを登録
+	_game_manager.path_execution_manager.confirm_path_for_player(
+		player_id, path_msg, character
+	)

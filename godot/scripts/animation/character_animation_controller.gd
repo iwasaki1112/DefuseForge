@@ -386,6 +386,54 @@ func is_door_kicking() -> bool:
 	return _is_door_kicking
 
 
+## Get current animation state for network synchronization
+## Returns encoded state: "is_moving,is_running,blend_x,blend_y"
+## Example: "1,0,-50,100" = moving, not running, blend(-0.5, 1.0)
+func get_animation_state() -> String:
+	var is_moving := 1 if _movement_blend > 0.1 else 0
+	var is_running_now := 1 if _is_running else 0
+	var blend_x := int(_input_dir.x * 100)
+	var blend_y := int(_input_dir.y * 100)
+	return "%d,%d,%d,%d" % [is_moving, is_running_now, blend_x, blend_y]
+
+
+## Apply animation state from network (for remote characters)
+## state: encoded state string from get_animation_state()
+func apply_animation_state(state: String, delta: float) -> void:
+	if _is_dead or _is_door_kicking:
+		return
+
+	var parts := state.split(",")
+	if parts.size() < 4:
+		return
+
+	var is_moving := parts[0].to_int() == 1
+	var is_running_state := parts[1].to_int() == 1
+	var blend_x := parts[2].to_int() / 100.0
+	var blend_y := parts[3].to_int() / 100.0
+
+	# Apply state directly
+	_is_running = is_running_state and _stance != Stance.CROUCH
+
+	# Smooth interpolation for blend values
+	var target_movement := 1.0 if is_moving else 0.0
+	_movement_blend = lerpf(_movement_blend, target_movement, 1.0 - exp(-10.0 * delta))
+
+	# Run blend も直接更新（_update_animation_tree のlerpより速い反応）
+	var target_run := 1.0 if _is_running else 0.0
+	_run_blend = lerpf(_run_blend, target_run, 1.0 - exp(-8.0 * delta))
+
+	if is_moving:
+		var target_blend := Vector2(blend_x, blend_y)
+		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-12.0 * delta))
+	else:
+		if _movement_blend < 0.01:
+			_input_dir = Vector2.ZERO
+
+	# Update animation tree (run_blend は上で更新済みなので再計算されない)
+	_update_animation_tree()
+
+
 #endregion
 
 #region Internal Implementation
@@ -710,7 +758,8 @@ func _update_animation_tree() -> void:
 	var target_crouch := 1.0 if _stance == Stance.CROUCH else 0.0
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
 
-	_run_blend = lerp(_run_blend, target_run, 0.15)
+	# 走行ブレンドは速めに反応（0.15 -> 0.3）
+	_run_blend = lerp(_run_blend, target_run, 0.3)
 	_crouch_blend = lerp(_crouch_blend, target_crouch, 0.15)
 	_weapon_blend = lerp(_weapon_blend, target_weapon, 0.2)
 
