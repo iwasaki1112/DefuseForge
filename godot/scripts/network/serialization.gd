@@ -158,6 +158,133 @@ static func deserialize_game_state(data: PackedByteArray) -> SyncState.GameState
 
 
 # ============================================
+# キャラクター状態のバイナリシリアライズ（高効率版）
+# ============================================
+
+## CharacterStateMessageをバイナリ形式でシリアライズ
+## フォーマット: 21 bytes（JSONの約1/10）
+## [char_id:u32][pos_x:i16][pos_y:i16][pos_z:i16][rot:i16]
+## [vel_x:i16][vel_y:i16][vel_z:i16][hp:u8][flags:u8]
+static func serialize_character_state_binary(state: NetworkMessages.CharacterStateMessage) -> PackedByteArray:
+	var buf := StreamPeerBuffer.new()
+	buf.big_endian = false
+
+	# キャラクターID (4 bytes)
+	buf.put_u32(state.character_id)
+
+	# 位置 (6 bytes) - cm単位で量子化
+	buf.put_16(int(clampf(state.position.x * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+	buf.put_16(int(clampf(state.position.y * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+	buf.put_16(int(clampf(state.position.z * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+
+	# 回転 (2 bytes) - mrad単位で量子化
+	buf.put_16(int(clampf(state.rotation * NetworkConstants.ROTATION_PRECISION, -32768, 32767)))
+
+	# 速度 (6 bytes) - cm/s単位で量子化
+	buf.put_16(int(clampf(state.velocity.x * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+	buf.put_16(int(clampf(state.velocity.y * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+	buf.put_16(int(clampf(state.velocity.z * NetworkConstants.POSITION_PRECISION, -32768, 32767)))
+
+	# HP (1 byte) - 0-255
+	buf.put_u8(clampi(state.current_health, 0, 255))
+
+	# フラグ (1 byte) - ビットパック
+	var flags: int = 0
+	if state.is_alive:
+		flags |= 0x01
+	if state.is_crouching:
+		flags |= 0x02
+	buf.put_u8(flags)
+
+	return buf.data_array
+
+
+## バイナリ形式のCharacterStateMessageをデシリアライズ
+static func deserialize_character_state_binary(data: PackedByteArray) -> NetworkMessages.CharacterStateMessage:
+	var state := NetworkMessages.CharacterStateMessage.new()
+
+	if data.size() < 21:
+		return state
+
+	var buf := StreamPeerBuffer.new()
+	buf.big_endian = false
+	buf.data_array = data
+
+	var inv_pos_precision := 1.0 / NetworkConstants.POSITION_PRECISION
+	var inv_rot_precision := 1.0 / NetworkConstants.ROTATION_PRECISION
+
+	# キャラクターID
+	state.character_id = buf.get_u32()
+
+	# 位置
+	state.position = Vector3(
+		buf.get_16() * inv_pos_precision,
+		buf.get_16() * inv_pos_precision,
+		buf.get_16() * inv_pos_precision
+	)
+
+	# 回転
+	state.rotation = buf.get_16() * inv_rot_precision
+
+	# 速度
+	state.velocity = Vector3(
+		buf.get_16() * inv_pos_precision,
+		buf.get_16() * inv_pos_precision,
+		buf.get_16() * inv_pos_precision
+	)
+
+	# HP
+	state.current_health = buf.get_u8()
+
+	# フラグ
+	var flags := buf.get_u8()
+	state.is_alive = (flags & 0x01) != 0
+	state.is_crouching = (flags & 0x02) != 0
+
+	return state
+
+
+## 複数キャラクター状態をバイナリでシリアライズ
+## フォーマット: [count:u8][char_states...]
+static func serialize_character_states_binary(states: Array[NetworkMessages.CharacterStateMessage]) -> PackedByteArray:
+	var buf := StreamPeerBuffer.new()
+	buf.big_endian = false
+
+	# キャラクター数 (最大255)
+	buf.put_u8(mini(states.size(), 255))
+
+	# 各キャラクター状態
+	for state in states:
+		var state_data := serialize_character_state_binary(state)
+		buf.put_data(state_data)
+
+	return buf.data_array
+
+
+## バイナリ形式の複数キャラクター状態をデシリアライズ
+static func deserialize_character_states_binary(data: PackedByteArray) -> Array[NetworkMessages.CharacterStateMessage]:
+	var result: Array[NetworkMessages.CharacterStateMessage] = []
+
+	if data.size() < 1:
+		return result
+
+	var buf := StreamPeerBuffer.new()
+	buf.big_endian = false
+	buf.data_array = data
+
+	var count := buf.get_u8()
+	const CHAR_STATE_SIZE := 21
+
+	for i in count:
+		if buf.get_position() + CHAR_STATE_SIZE > data.size():
+			break
+		var state_data := buf.get_data(CHAR_STATE_SIZE)[1] as PackedByteArray
+		result.append(deserialize_character_state_binary(state_data))
+
+	return result
+
+
+# ============================================
 # 汎用シリアライズ
 # ============================================
 
