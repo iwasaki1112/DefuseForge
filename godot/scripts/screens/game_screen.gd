@@ -459,9 +459,17 @@ func _on_round_ended(winner: int, reason: int) -> void:
 
 	_mode_provider.on_round_ended(winner, reason)
 
-	# 3秒後にマップ選択画面に遷移
+	# 3秒後に遷移
 	await get_tree().create_timer(3.0).timeout
-	get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
+
+	# クリーンアップ
+	_cleanup_before_transition()
+
+	# モードによって遷移先を変える
+	if _mode_provider.get_mode_name() == "multiplayer":
+		get_tree().change_scene_to_file("res://scenes/screens/main_menu.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
 
 
 ## ========================================
@@ -475,7 +483,33 @@ func get_smoke_area_manager() -> SmokeAreaManager:
 
 
 func cleanup() -> void:
+	_cleanup_before_transition()
+
+
+func _cleanup_before_transition() -> void:
+	# PlayerStateのシグナル切断
+	if PlayerState.money_changed.is_connected(_on_money_changed):
+		PlayerState.money_changed.disconnect(_on_money_changed)
+
+	# HUDを明示的に削除
+	if _hud and is_instance_valid(_hud):
+		_hud.queue_free()
+		_hud = null
+
+	if _round_hud and is_instance_valid(_round_hud):
+		_round_hud.queue_free()
+		_round_hud = null
+
+	if _status_label and is_instance_valid(_status_label):
+		_status_label.queue_free()
+		_status_label = null
+
+	# Providerのクリーンアップ
 	_mode_provider.cleanup()
+
+
+func _exit_tree() -> void:
+	_cleanup_before_transition()
 
 
 ## ========================================
