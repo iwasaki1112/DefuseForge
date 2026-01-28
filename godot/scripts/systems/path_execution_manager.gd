@@ -448,6 +448,13 @@ func _get_or_create_path_controller(character: Node) -> Node:
 
 
 func _on_path_completed(character: Node) -> void:
+	# 到着したキャラクターのパスメッシュを即座に削除
+	if character:
+		var char_id = character.get_instance_id()
+		if pending_paths.has(char_id):
+			_free_pending_path_data(pending_paths[char_id])
+			pending_paths.erase(char_id)
+
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
 
