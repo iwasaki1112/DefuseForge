@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://dv8q5r2wxjk3p"]
+[gd_scene load_steps=17 format=3 uid="uid://dv8q5r2wxjk3p"]
 
 [ext_resource type="Script" uid="uid://d2sjfae0vmiq0" path="res://scripts/screens/game_hud.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://dsh3jkd6vqg47" path="res://assets/ui/game/go-button.png" id="2_go_button"]
@@ -15,6 +15,17 @@
 [ext_resource type="Texture2D" uid="uid://cy0e6dkaxktoa" path="res://assets/ui/game/controller-somoke-granade-button.png" id="13_smoke"]
 [ext_resource type="Texture2D" uid="uid://tume5xbjh5ts" path="res://assets/ui/game/controller-door-button.png" id="14_door"]
 [ext_resource type="Texture2D" uid="uid://bp2ptj2kd3hbf" path="res://assets/ui/game/controller-wait-button.png" id="15_wait"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_money"]
+bg_color = Color(0.957, 0.918, 0.192, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
 
 [node name="GameHUD" type="Control"]
 layout_mode = 3
@@ -69,6 +80,25 @@ grow_vertical = 0
 texture_normal = ExtResource("2_go_button")
 ignore_texture_size = true
 stretch_mode = 6
+
+[node name="MoneyLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -140.0
+offset_top = 20.0
+offset_right = -40.0
+offset_bottom = 60.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("4_poppins_bold")
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_money")
+text = "$800"
+horizontal_alignment = 2
+vertical_alignment = 1
 
 [node name="GameTimer" type="TextureRect" parent="."]
 layout_mode = 1

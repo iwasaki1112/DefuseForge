@@ -19,6 +19,7 @@ const MARKER_DEAD_ALPHA := 0.3
 
 @onready var _pending_paths_label: Label = $ControlPanel/PendingPathsLabel
 @onready var _timer_label: Label = %TimerLabel
+@onready var _money_label: Label = %MoneyLabel
 @onready var _execute_button: TextureButton = %ExecuteButton
 @warning_ignore("unused_private_class_variable")
 @onready var _character_markers: HBoxContainer = %CharacterMarkers
@@ -43,6 +44,25 @@ func setup() -> void:
 func set_pending_paths(count: int) -> void:
 	if _pending_paths_label:
 		_pending_paths_label.text = "Pending: %d paths" % count
+
+
+## 所持金表示を更新
+func update_money(amount: int) -> void:
+	if _money_label:
+		_money_label.text = "$%s" % _format_with_commas(amount)
+
+
+## 数値をカンマ区切りでフォーマット
+func _format_with_commas(value: int) -> String:
+	var str_value := str(absi(value))
+	var result := ""
+	var count := 0
+	for i in range(str_value.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			result = "," + result
+		result = str_value[i] + result
+		count += 1
+	return "-" + result if value < 0 else result
 
 
 ## タイマーを更新

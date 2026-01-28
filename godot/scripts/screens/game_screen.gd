@@ -16,7 +16,6 @@ const MatchSetupServiceScript := preload("res://scripts/screens/match_setup_serv
 @onready var map_container: Node3D = $MapContainer
 @onready var ui_layer: CanvasLayer = $UILayer
 @onready var team_display_label: Label = $UILayer/TeamDisplayLabel
-@onready var money_label: Label = $UILayer/MoneyLabel
 
 ## コアシステム
 var game_manager: GameManager = null
@@ -189,8 +188,8 @@ func _update_team_display() -> void:
 
 ## 所持金表示を更新
 func _update_money_display() -> void:
-	if money_label:
-		money_label.text = "$%d" % PlayerState.get_money()
+	if _hud:
+		_hud.update_money(PlayerState.get_money())
 
 
 ## 保留パス数ラベルを更新

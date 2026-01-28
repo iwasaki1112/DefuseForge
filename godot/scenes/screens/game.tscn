@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://b2qvxwcnt8hkp"]
+[gd_scene load_steps=2 format=3 uid="uid://b2qvxwcnt8hkp"]
 
 [ext_resource type="Script" uid="uid://c0e7icq8087wq" path="res://scripts/screens/game_screen.gd" id="1_script"]
-[ext_resource type="FontFile" path="res://assets/fonts/Poppins-Bold.ttf" id="2_poppins_bold"]
 
 [node name="GameScreen" type="Node3D"]
 script = ExtResource("1_script")
@@ -29,17 +28,3 @@ theme_override_font_sizes/font_size = 24
 text = "You are: Counter-Terrorist (CT)"
 horizontal_alignment = 1
 
-[node name="MoneyLabel" type="Label" parent="UILayer"]
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -120.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = 60.0
-grow_horizontal = 0
-theme_override_colors/font_color = Color(0.2, 0.9, 0.3, 1)
-theme_override_fonts/font = ExtResource("2_poppins_bold")
-theme_override_font_sizes/font_size = 28
-text = "$800"
-horizontal_alignment = 2
