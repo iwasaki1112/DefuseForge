@@ -18,10 +18,12 @@
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
 | `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
 | `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` | グレネードマーカー追加時 |
+| `smoke_grenade_marker_added` | `path_ratio: float, target_pos: Vector3` | スモークグレネードマーカー追加時 |
 | `door_marker_added` | `path_ratio: float, door: Node3D` | ドアマーカー追加時 |
 | `wait_marker_added` | `path_ratio: float, wait_duration: float` | Waitマーカー追加時 |
 | `path_undone` | なし | パス描画がUndoされた時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR, 6=WAIT） |
+| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR, 6=WAIT, 7=SMOKE_GRENADE） |
+| `off_path_tapped` | なし | マーカーモード中にパス外をタップした時（パス確定処理に使用） |
 
 ## Enums
 
@@ -37,6 +39,7 @@
 | `GRENADE_MARKER` | グレネードマーカー設定モード |
 | `DOOR_MARKER` | ドアマーカー設定モード |
 | `WAIT_MARKER` | 待機マーカー設定モード |
+| `SMOKE_GRENADE_MARKER` | スモークグレネードマーカー設定モード |
 
 ### MarkerType
 マーカー種別（Undo履歴用）。
@@ -49,8 +52,9 @@
 | `PATH` | パス描画自体 |
 | `GRENADE` | グレネードマーカー |
 | `DOOR` | ドアマーカー |
-| `WAIT` | 待機マーカー |
 | `PATH_EXTENSION` | パス拡張（Undoで拡張前に戻る） |
+| `WAIT` | 待機マーカー |
+| `SMOKE_GRENADE` | スモークグレネードマーカー |
 
 ## Export Properties
 
@@ -329,6 +333,37 @@ PATHがUndoされると、パスとすべてのマーカーがクリアされ、
 #### take_grenade_markers() -> Array[MeshInstance3D]
 グレネードマーカーの所有権を移譲する。
 
+### Smoke Grenade Marker API
+
+#### start_smoke_grenade_mode() -> bool
+スモークグレネードマーカー設定モードに切り替える。パス上をクリック→ドラッグでスモークグレネード投擲位置と目標を設定。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_smoke_grenade_markers() -> bool
+スモークグレネードマーカーがあるか確認する。
+
+#### get_smoke_grenade_markers() -> Array[Dictionary]
+スモークグレネードマーカーを取得する。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_pos": Vector3 }` の配列
+
+#### get_smoke_grenade_marker_count() -> int
+スモークグレネードマーカー数を取得する。
+
+#### take_smoke_grenade_markers() -> Array[MeshInstance3D]
+スモークグレネードマーカーの所有権を移譲する。
+
+#### get_all_smoke_grenade_markers() -> Dictionary
+全キャラクターのスモークグレネードマーカーを取得する。
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたスモークグレネードマーカーの辞書
+
+#### take_all_smoke_grenade_markers() -> Dictionary
+全キャラクターのスモークグレネードマーカーの所有権を移譲する。
+
+**戻り値:** `{ char_id: Array[MeshInstance3D] }`
+
 ### Door Marker API
 
 #### start_door_mode() -> bool
@@ -597,11 +632,15 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 |---------|------|
 | `drawing_finished` | `points: PackedVector3Array` |
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` |
-| `mode_changed` | `mode: int` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
+| `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` |
+| `smoke_grenade_marker_added` | `path_ratio: float, target_pos: Vector3` |
+| `door_marker_added` | `path_ratio: float, door: Node3D` |
 | `wait_marker_added` | `path_ratio: float, wait_duration: float` |
 | `path_undone` | なし |
+| `mode_changed` | `mode: int` |
+| `off_path_tapped` | なし |
 
 ### メソッド
 - `setup(camera: Camera3D, character: Node3D = null) -> void`
@@ -653,6 +692,13 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `has_grenade_markers() -> bool`
 - `get_grenade_markers() -> Array[Dictionary]`
 - `take_grenade_markers() -> Array[MeshInstance3D]`
+- `start_smoke_grenade_mode() -> bool`
+- `has_smoke_grenade_markers() -> bool`
+- `get_smoke_grenade_markers() -> Array[Dictionary]`
+- `get_smoke_grenade_marker_count() -> int`
+- `take_smoke_grenade_markers() -> Array[MeshInstance3D]`
+- `get_all_smoke_grenade_markers() -> Dictionary`
+- `take_all_smoke_grenade_markers() -> Dictionary`
 - `start_door_mode() -> bool`
 - `has_door_markers() -> bool`
 - `get_door_markers() -> Array[Dictionary]`
@@ -680,20 +726,20 @@ PathDrawerは単一責任原則に従って責務分離された複数のヘル�
 
 ```
 godot/scripts/effects/
-├── path_drawer.gd                    # ファサード（Public API提供）
-├── path_state.gd                     # パス状態管理
-├── path_calculator.gd                # パス計算ユーティリティ（静的メソッド）
-├── path_raycast_helper.gd            # レイキャスト・壁検出（静的メソッド）
-├── path_input_handler.gd             # 入力処理統括
-├── marker_handler_base.gd            # マーカーハンドラ基底クラス
-└── marker_handlers/                  # マーカーハンドラ実装
-    ├── vision_marker_handler.gd      # 視線マーカー
-    ├── run_marker_handler.gd         # Runマーカー
-    ├── clear_marker_handler.gd       # Clearマーカー
-    ├── grenade_marker_handler.gd     # グレネードマーカー
+├── path_drawer.gd                      # ファサード（Public API提供）
+├── path_state.gd                       # パス状態管理
+├── path_calculator.gd                  # パス計算ユーティリティ（静的メソッド）
+├── path_raycast_helper.gd              # レイキャスト・壁検出（静的メソッド）
+├── path_input_handler.gd               # 入力処理統括
+├── marker_handler_base.gd              # マーカーハンドラ基底クラス
+└── marker_handlers/                    # マーカーハンドラ実装
+    ├── vision_marker_handler.gd        # 視線マーカー
+    ├── run_marker_handler.gd           # Runマーカー
+    ├── clear_marker_handler.gd         # Clearマーカー
+    ├── grenade_marker_handler.gd       # グレネードマーカー
     ├── smoke_grenade_marker_handler.gd # スモークグレネードマーカー
-    ├── door_marker_handler.gd        # ドアマーカー
-    └── wait_marker_handler.gd        # Waitマーカー
+    ├── door_marker_handler.gd          # ドアマーカー
+    └── wait_marker_handler.gd          # Waitマーカー
 ```
 
 ### PathCalculator

@@ -36,21 +36,44 @@
 ## シグナル
 
 ```gdscript
+# 選択関連
 signal selection_changed(selected: Array[Node], primary: Node)
 signal primary_changed(character: Node)
+
+# パスモード関連
 signal path_mode_started(character: Node)
 signal path_mode_ended()
 signal path_mode_cancelled()
 signal path_ready()
 signal path_confirmed(count: int)
+signal paths_execution_started(count: int)
 signal all_paths_completed()
 signal paths_cleared()
-signal rotation_confirmed(direction: Vector3)
-signal rotation_cancelled()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
+
+# 回転モード関連
+signal rotation_confirmed(direction: Vector3)
+signal rotation_cancelled()
+
+# コンテキストメニュー
 signal context_action_requested(action_id: String, character: Node)
+
+# グレネード関連
+signal grenade_thrown(grenade: Node3D, character: Node)
+signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
+
+# ネットワーク同期用シグナル
+signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
+signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
+signal door_kick_network_event(door_id: int, character_network_id: int)
+
+# ラウンド関連
+signal round_started()
+signal round_ended(winner: int, reason: int)
+signal round_timer_updated(remaining: float)
+signal survivor_count_changed(ct_count: int, t_count: int)
 ```
 
 ## プロパティ
@@ -365,23 +388,33 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 ## APIリファレンス
 
 ### シグナル
-| シグナル | 引数 |
-|---------|------|
-| `selection_changed` | `selected: Array[Node], primary: Node` |
-| `primary_changed` | `character: Node` |
-| `path_mode_started` | `character: Node` |
-| `path_mode_ended` | なし |
-| `path_mode_cancelled` | なし |
-| `path_ready` | なし |
-| `path_confirmed` | `count: int` |
-| `all_paths_completed` | なし |
-| `paths_cleared` | なし |
-| `rotation_confirmed` | `direction: Vector3` |
-| `rotation_cancelled` | なし |
-| `path_mode_changed` | `mode: int` |
-| `vision_point_added` | `anchor: Vector3, direction: Vector3` |
-| `run_segment_added` | `start_ratio: float, end_ratio: float` |
-| `context_action_requested` | `action_id: String, character: Node` |
+| シグナル | 引数 | 説明 |
+|---------|------|------|
+| `selection_changed` | `selected: Array[Node], primary: Node` | 選択状態変更時 |
+| `primary_changed` | `character: Node` | プライマリキャラクター変更時 |
+| `path_mode_started` | `character: Node` | パスモード開始時 |
+| `path_mode_ended` | なし | パスモード正常終了時 |
+| `path_mode_cancelled` | なし | パスモードキャンセル時 |
+| `path_ready` | なし | パス描画完了時（確定可能状態） |
+| `path_confirmed` | `count: int` | パス確定時（確定したパス数） |
+| `paths_execution_started` | `count: int` | パス実行開始時（実行するパス数） |
+| `all_paths_completed` | なし | 全パス実行完了時 |
+| `paths_cleared` | なし | 全パスクリア時 |
+| `rotation_confirmed` | `direction: Vector3` | 回転確定時 |
+| `rotation_cancelled` | なし | 回転キャンセル時 |
+| `path_mode_changed` | `mode: int` | パス描画モード変更時 |
+| `vision_point_added` | `anchor: Vector3, direction: Vector3` | 視線ポイント追加時 |
+| `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
+| `context_action_requested` | `action_id: String, character: Node` | コンテキストアクション要求時 |
+| `grenade_thrown` | `grenade: Node3D, character: Node` | グレネード投擲時 |
+| `smoke_grenade_thrown` | `smoke_grenade: Node3D, character: Node` | スモークグレネード投擲時 |
+| `grenade_network_event` | `start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int` | グレネード投擲のネットワーク同期用 |
+| `grenade_explode_network_event` | `grenade_id: int, position: Vector3, is_smoke: bool` | グレネード爆発のネットワーク同期用 |
+| `door_kick_network_event` | `door_id: int, character_network_id: int` | ドアキックのネットワーク同期用 |
+| `round_started` | なし | ラウンド開始時 |
+| `round_ended` | `winner: int, reason: int` | ラウンド終了時 |
+| `round_timer_updated` | `remaining: float` | ラウンドタイマー更新時 |
+| `survivor_count_changed` | `ct_count: int, t_count: int` | 生存者数変更時 |
 
 ### メソッド
 - `setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: Vector2 = Vector2(50, 50), map_container: Node3D = null) -> void`
