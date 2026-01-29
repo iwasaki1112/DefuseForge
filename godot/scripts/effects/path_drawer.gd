@@ -373,11 +373,8 @@ func _handle_drawing_press(screen_pos: Vector2) -> void:
 func _handle_drawing_release() -> void:
 	if _is_drawing:
 		_finish_drawing()
-	else:
-		# パス描画が開始されなかった場合（壁がある等）
-		# パスがなければdrawing_finishedを発火してキャンセルさせる
-		if not has_pending_path():
-			drawing_finished.emit(PackedVector3Array())
+	# Note: 描画が開始されていない場合（パスモード開始直後のリリース等）は何もしない
+	# キャンセルはユーザーが明示的にESCキーなどで行う
 #endregion
 
 

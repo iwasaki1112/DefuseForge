@@ -182,6 +182,28 @@ func _zoom_by(amount: float) -> void:
 	_target_zoom = clampf(_target_zoom + amount, zoom_min, zoom_max)
 
 
+## ========================================
+## Macトラックパッドジェスチャー処理
+## ========================================
+
+## トラックパッドのピンチ（Magnify）ジェスチャー処理
+## factor: 1.0 = 変化なし, >1.0 = ズームイン, <1.0 = ズームアウト
+func handle_magnify_gesture(factor: float) -> void:
+	# factorを反転してズームに変換（ピンチイン = ズームアウト = カメラが遠ざかる）
+	var zoom_delta = (1.0 - factor) * _current_zoom * 0.5
+	_target_zoom = clampf(_target_zoom + zoom_delta, zoom_min, zoom_max)
+
+
+## トラックパッドの2本指パン（Pan）ジェスチャー処理
+## 参考: https://github.com/williambcosta/godot-touch-camera-2d
+func handle_pan_gesture(delta: Vector2) -> void:
+	if not camera:
+		return
+	# deltaを直接使用（3Dカメラ用にX→X, Y→Zにマッピング）
+	var trackpad_speed: float = 0.25  # トラックパッド専用の速度係数
+	camera.global_position += Vector3(delta.x * trackpad_speed, 0, delta.y * trackpad_speed)
+
+
 ## ピンチ開始時の処理
 func _start_pinch() -> void:
 	_is_pinching = true

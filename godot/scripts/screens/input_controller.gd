@@ -44,6 +44,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	# ========================================
+	# Macトラックパッドジェスチャー（ピンチズーム、2本指パン）
+	# 微小なジェスチャーは無視（クリック時のノイズ対策）
+	# ========================================
+	if event is InputEventMagnifyGesture:
+		# factor が 1.0 から十分離れている場合のみ処理
+		if absf(event.factor - 1.0) > 0.01 and camera_pan_controller:
+			camera_pan_controller.handle_magnify_gesture(event.factor)
+			get_viewport().set_input_as_handled()
+			return
+		# 微小な場合は無視して次の処理へ（returnしない）
+
+	if event is InputEventPanGesture:
+		# すべてのパンジェスチャーをそのまま処理
+		if camera_pan_controller:
+			camera_pan_controller.handle_pan_gesture(event.delta)
+			get_viewport().set_input_as_handled()
+		return
+
+	# ========================================
 	# マウスホイール（カメラズーム）
 	# ========================================
 	if event is InputEventMouseButton:
@@ -86,14 +105,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# ========================================
 	# 左クリック処理（PC向け・非パスモード）
+	# 1本指はタップのみ、カメラパンは2本指ジェスチャーで行う
 	# ========================================
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_handle_mouse_click(event)
+		if event.pressed:
+			_left_button_pressed = true
+			_left_click_start_pos = event.position
+		else:
+			_left_button_pressed = false
+			# タップ判定（ドラッグ距離が閾値以下ならタップ）
+			var distance = _left_click_start_pos.distance_to(event.position)
+			if distance < 50.0:  # トラックパッドのクリックブレを考慮して閾値を大きめに
+				_handle_tap(event.position)
 		return
 
-	# 左クリック中のマウス移動（PC向け）
+	# 1本指マウスドラッグは無視（PathDrawerに委譲させる or 2本指ジェスチャーでカメラ操作）
+	# パスモード以外での1本指ドラッグは何もしない
 	if event is InputEventMouseMotion and _left_button_pressed:
-		_handle_mouse_drag(event)
+		# 非パスモードでは1本指ドラッグを無視（カメラパンしない）
 		return
 
 
