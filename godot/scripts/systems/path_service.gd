@@ -50,6 +50,7 @@ func setup(
 		path_drawer.door_marker_added.connect(_on_door_marker_added)
 		path_drawer.wait_marker_added.connect(_on_wait_marker_added)
 		path_drawer.path_undone.connect(_on_path_undone)
+		path_drawer.off_path_tapped.connect(_on_off_path_tapped)
 
 	if path_mode_controller:
 		path_mode_controller.mode_started.connect(_on_path_mode_started)
@@ -169,10 +170,10 @@ func is_character_following_path(character: Node) -> bool:
 	return path_execution_manager and path_execution_manager.is_character_following_path(character)
 
 
-func handle_click_to_cancel(clicked_character: Node) -> bool:
+func handle_click_to_confirm(clicked_character: Node) -> bool:
 	if not path_mode_controller:
 		return false
-	return path_mode_controller.handle_click_to_cancel(clicked_character)
+	return path_mode_controller.handle_click_to_confirm(clicked_character)
 
 
 func is_marker_mode() -> bool:
@@ -351,3 +352,8 @@ func _on_path_undone() -> void:
 		var primary = selection_manager.primary_character
 		if primary:
 			path_drawer.enable(primary)
+
+
+func _on_off_path_tapped() -> void:
+	# パス外タップでパスを確定
+	confirm_path()

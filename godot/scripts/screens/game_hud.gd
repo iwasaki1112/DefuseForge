@@ -9,7 +9,6 @@ signal clear_paths_requested()
 signal character_marker_pressed(character: Node)
 signal marker_edit_requested(action: String)
 signal marker_undo_requested()
-signal marker_confirm_requested()
 signal marker_cancel_requested()
 
 const TIMER_WARNING_THRESHOLD := 10.0
@@ -280,11 +279,6 @@ func _reset_marker_edit_buttons() -> void:
 ## Undoボタン押下時のコールバック
 func _on_marker_undo_pressed() -> void:
 	marker_undo_requested.emit()
-
-
-## Confirmボタン押下時のコールバック
-func _on_marker_confirm_pressed() -> void:
-	marker_confirm_requested.emit()
 
 
 ## Cancelボタン押下時のコールバック

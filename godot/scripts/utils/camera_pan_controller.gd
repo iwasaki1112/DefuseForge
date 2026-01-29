@@ -207,7 +207,7 @@ func _calc_std_deviation(centroid: Vector2) -> float:
 	return sqrt(d / _touch_points.size())
 
 
-## 2本指ピンチでズーム処理（パンは1本指で行う）
+## 2本指ピンチでズーム＋パン処理
 func _update_pinch_zoom() -> void:
 	if not camera or _touch_points.size() < 2:
 		return
@@ -217,10 +217,17 @@ func _update_pinch_zoom() -> void:
 
 	var scale_pinch = current_std_deviation / _prev_std_deviation if _prev_std_deviation > 0 else 1.0
 
+	# パン処理（重心の移動に基づく）
+	var centroid_delta = current_centroid - _prev_centroid
+	var adjusted_speed = _get_adjusted_pan_speed(mobile_pan_speed)
+	var move_x = -centroid_delta.x * adjusted_speed
+	var move_z = -centroid_delta.y * adjusted_speed
+	camera.global_position += Vector3(move_x, 0, move_z)
+
 	_prev_centroid = current_centroid
 	_prev_std_deviation = current_std_deviation
 
-	# ズーム処理のみ
+	# ズーム処理
 	var zoom_delta = (1.0 - scale_pinch) * _current_zoom * 0.5
 	_target_zoom = clampf(_target_zoom + zoom_delta, zoom_min, zoom_max)
 

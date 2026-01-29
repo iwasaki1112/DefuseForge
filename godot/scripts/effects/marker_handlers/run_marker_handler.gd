@@ -20,10 +20,15 @@ var _current_run_start: Dictionary = {}
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			return _handle_click(mouse_event.position)
+
+	# タッチ入力
+	if event is InputEventScreenTouch and event.pressed:
+		return _handle_click(event.position)
 
 	return false
 
@@ -47,6 +52,11 @@ func _handle_click(screen_pos: Vector2) -> bool:
 		# 終点を設定してセグメントを完成
 		var start_ratio = _current_run_start.ratio
 		var end_ratio = result.ratio
+
+		# 開始点と終点が近すぎる場合は無視（ダブルタップ防止）
+		const MIN_SEGMENT_RATIO: float = 0.02  # パス全長の2%以上必要
+		if absf(end_ratio - start_ratio) < MIN_SEGMENT_RATIO:
+			return true  # イベントは処理済みとして返すが、セグメントは作成しない
 
 		# 開始点が終点より後ろなら入れ替え
 		if start_ratio > end_ratio:
@@ -140,3 +150,13 @@ func reset_state() -> void:
 ## 未完成のRun開始点があるか
 func has_incomplete_run_start() -> bool:
 	return not _current_run_start.is_empty()
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_run_segments.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_run_meshes.append(m)

@@ -37,6 +37,7 @@ var _pending_ratio: float = 0.0
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -48,6 +49,20 @@ func handle_input(event: InputEvent) -> bool:
 					return true
 
 	if event is InputEventMouseMotion:
+		if _is_pressing:
+			update_preview()
+			return true
+
+	# タッチ入力
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			return _start_press(event.position)
+		else:
+			if _is_pressing:
+				_finish_press()
+				return true
+
+	if event is InputEventScreenDrag:
 		if _is_pressing:
 			update_preview()
 			return true
@@ -216,3 +231,13 @@ func reset_state() -> void:
 	_remove_preview_marker()
 	_is_pressing = false
 	_press_start_time = 0.0
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_wait_markers.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_wait_meshes.append(m)

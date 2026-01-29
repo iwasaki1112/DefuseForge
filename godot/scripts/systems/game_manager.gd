@@ -192,23 +192,46 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				# 敵キャラクターは無視
 				if PlayerState.is_enemy(clicked_character):
 					return false
-				# 移動中キャラクターを選択したら、移動を停止してメニュー表示
+				# 移動中キャラクターを選択したら、移動を停止してパスモード開始
 				if path_service and path_service.is_character_following_path(clicked_character):
 					path_service.cancel_path_following(clicked_character, true)
 					if selection_manager and not selection_manager.selected_characters.has(clicked_character):
 						selection_manager.add_to_selection(clicked_character)
-					_show_context_menu(screen_pos, clicked_character)
+					start_move_mode()
 					return true
-				# 味方キャラクタークリック: トグル選択 + コンテキストメニュー表示
-				selection_manager.toggle_selection(clicked_character)
-				# 選択中の場合のみコンテキストメニュー表示
-				if selection_manager.selected_characters.has(clicked_character):
-					_show_context_menu(screen_pos, clicked_character)
+				# パスモード中に別のキャラクターをクリック: 現在のパスを確定して新キャラクターへ
+				if path_service and path_service.is_path_mode():
+					var editing_char = path_mode_controller.get_editing_character() if path_mode_controller else null
+					if clicked_character != editing_char:
+						# 現在のパスを確定（パスがあれば）
+						if path_service.has_pending_path():
+							path_service.confirm_path()
+						else:
+							path_service.cancel_path()
+						# 新しいキャラクターを選択してパスモード開始
+						selection_manager.deselect_all()
+						selection_manager.add_to_selection(clicked_character)
+						start_move_mode()
+						return true
+					# 同じキャラクターをクリック: 何もしない（パスモード継続）
+					return true
+				# 味方キャラクタークリック: 選択してパスモード開始
+				selection_manager.deselect_all()
+				selection_manager.add_to_selection(clicked_character)
+				start_move_mode()
 				return true
 			else:
-				# キャラクター以外をクリック: メニューを閉じて全選択解除
-				if context_menu and context_menu.is_open():
-					context_menu.close()
+				# キャラクター以外をクリック
+				# パスモード中の場合
+				if path_service and path_service.is_path_mode():
+					if path_service.has_pending_path():
+						# パスがあれば確定
+						path_service.confirm_path()
+					else:
+						# パスがなければキャンセル
+						path_service.cancel_path()
+					return true
+				# 通常時: 選択解除
 				selection_manager.deselect_all()
 				return true
 	return false

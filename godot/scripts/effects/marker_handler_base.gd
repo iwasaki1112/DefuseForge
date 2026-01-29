@@ -86,6 +86,13 @@ func reset_state() -> void:
 	pass
 
 
+## マーカーを復元（子クラスでオーバーライド）
+## @param data: マーカーデータの配列
+## @param meshes: マーカーメッシュノードの配列
+func restore_markers(_data: Array, _meshes: Array) -> void:
+	pass
+
+
 #region ヘルパーメソッド
 
 ## 地面位置を取得
