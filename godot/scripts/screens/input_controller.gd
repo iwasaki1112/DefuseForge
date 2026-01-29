@@ -234,15 +234,3 @@ func _handle_tap(pos: Vector2) -> void:
 
 func _get_path_drawer() -> PathDrawer:
 	return game_manager.path_drawer as PathDrawer
-
-
-func _input(event: InputEvent) -> void:
-	if not game_manager:
-		return
-
-	# ESCキー処理
-	if event.is_action_pressed("ui_cancel"):
-		if game_manager.is_any_path_following_active():
-			game_manager.cancel_all_path_following()
-		elif game_manager.is_path_mode():
-			game_manager.cancel_path()

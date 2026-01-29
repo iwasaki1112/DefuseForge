@@ -58,11 +58,6 @@
 #### `_unhandled_input(event: InputEvent) -> void`
 メインの入力処理。タッチイベント、マウスイベントを受け取り、優先順位に従って処理を振り分ける。
 
-#### `_input(event: InputEvent) -> void`
-ESCキーなどのグローバルショートカット処理。
-- パスフォロー中のキャンセル
-- パスモードのキャンセル
-
 ## 内部ヘルパーメソッド
 
 - `_is_touch_active() -> bool`: タッチ操作中かどうか判定。
