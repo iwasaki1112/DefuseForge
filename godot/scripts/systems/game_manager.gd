@@ -272,6 +272,60 @@ func execute_all_paths(run: bool) -> int:
 	return path_service.execute_all_paths(run) if path_service else 0
 
 
+## 指定位置近くにある確定済みパスの先端を検索し、パス延長モードを開始
+## @param screen_pos: 画面座標
+## @return: パス延長モードを開始した場合true
+func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
+	if not path_execution_manager or not camera:
+		return false
+
+	# パスモード中は通常のパス延長処理に任せる
+	if is_path_mode():
+		return false
+
+	# 地面位置を取得
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := camera.project_ray_origin(screen_pos)
+	var ray_dir := camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	if not intersect:
+		return false
+
+	var ground_pos: Vector3 = intersect as Vector3
+
+	# 確定済みパスの先端を検索
+	var result := path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
+	if result.is_empty():
+		return false
+
+	var character: Node = result.get("character")
+	if not is_instance_valid(character):
+		return false
+
+	# 移動中のキャラクターは対象外
+	if path_service and path_service.is_character_following_path(character):
+		return false
+
+	# パスデータを取り出して編集モードに入る
+	var path_data := path_execution_manager.take_pending_path_for_editing(character)
+	if path_data.is_empty():
+		return false
+
+	# キャラクターを選択
+	selection_manager.deselect_all()
+	selection_manager.add_to_selection(character)
+
+	# 既存パスでパスモード開始
+	var char_color := CharacterColorManager.get_character_color(character)
+	if path_service:
+		path_service.start_path_mode_with_existing_path(character, path_data, char_color)
+
+	# 即座にパス延長モードを開始
+	if path_drawer and path_drawer.has_method("start_extending_path"):
+		path_drawer.start_extending_path()
+	return true
+
+
 ## 全保留パスをクリア
 func clear_all_pending_paths() -> void:
 	if path_service:

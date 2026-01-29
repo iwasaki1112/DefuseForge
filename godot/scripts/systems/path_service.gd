@@ -108,6 +108,28 @@ func start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool:
 	return path_mode_controller.start(primary, char_color)
 
 
+## 既存パスでパスモード開始（パス先端ドラッグ時）
+func start_path_mode_with_existing_path(primary: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+	if not path_mode_controller or not path_drawer or not selection_manager:
+		return false
+
+	if path_data.is_empty():
+		return false
+
+	# 選択状態を更新
+	selection_manager.capture_path_targets()
+
+	# 既存パスでパスモード開始
+	var started := path_mode_controller.start_with_existing_path(path_data, char_color)
+	if not started:
+		return false
+
+	# アクティブ編集キャラクターを設定
+	path_drawer.set_active_edit_character(primary)
+
+	return true
+
+
 func confirm_path() -> void:
 	if path_mode_controller:
 		path_mode_controller.confirm()

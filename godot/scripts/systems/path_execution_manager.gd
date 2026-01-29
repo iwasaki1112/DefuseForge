@@ -315,6 +315,50 @@ func take_pending_path_for_editing(character: Node) -> Dictionary:
 	return data
 
 
+## 指定位置近くにある確定済みパスの先端を検索
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, path_data: Dictionary} を返す。見つからない場合は空のDictionary
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	for char_id in pending_paths:
+		var data: Dictionary = pending_paths[char_id]
+		if not data.has("path") or not data.has("character"):
+			continue
+
+		var path: Array = data["path"]
+		if path.size() < 2:
+			continue
+
+		var character: Node = data["character"]
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# パスの先端（終点）を取得
+		var endpoint: Vector3 = path[path.size() - 1]
+		endpoint.y = 0.0
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var distance := endpoint.distance_to(check_pos)
+		if distance < closest_distance:
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"endpoint": endpoint,
+				"distance": distance
+			}
+
+	return result
+
+
 ## パス追従中のコントローラーがあるかチェック
 func is_any_path_following_active() -> bool:
 	for controller in _path_controllers.values():

@@ -20,6 +20,10 @@ var _touch_active: bool = false
 var _immediate_path_mode_started: bool = false
 ## 即座パスモードでドラッグによりパス描画を開始したかどうか
 var _immediate_path_drawing_started: bool = false
+## パス先端をつかんでパス延長モードを開始する準備ができているか
+var _path_endpoint_extension_pending: bool = false
+## パス先端延長モードが開始されたかどうか
+var _path_endpoint_extension_started: bool = false
 
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
@@ -53,6 +57,12 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	game_manager.selection_manager.add_to_selection(clicked)
 	game_manager.start_move_mode()
 	return true
+
+
+## パス先端をドラッグしてパス延長モードを開始
+## @return: パス延長モードが開始された場合true
+func _try_start_path_extension_from_endpoint(screen_pos: Vector2) -> bool:
+	return game_manager.try_start_path_extension_at_position(screen_pos)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -169,6 +179,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_immediate_path_drawing_started = false
 				get_viewport().set_input_as_handled()
 				return
+
+			# パス先端近くをタップした場合、ドラッグ開始待機状態にする
+			_path_endpoint_extension_pending = true
+			_path_endpoint_extension_started = false
 		else:
 			_left_button_pressed = false
 			# 即座にパスモードを開始した場合はタップ処理をスキップ
@@ -177,15 +191,32 @@ func _unhandled_input(event: InputEvent) -> void:
 				_immediate_path_mode_started = false
 				_immediate_path_drawing_started = false
 				return
+			# パス先端延長モードが開始された場合はタップ処理をスキップ
+			if _path_endpoint_extension_started:
+				_path_endpoint_extension_pending = false
+				_path_endpoint_extension_started = false
+				return
+			# パス先端延長の待機状態をクリア
+			_path_endpoint_extension_pending = false
+			_path_endpoint_extension_started = false
 			# タップ判定（ドラッグ距離が閾値以下ならタップ）
 			var distance = _left_click_start_pos.distance_to(event.position)
 			if distance < 50.0:  # トラックパッドのクリックブレを考慮して閾値を大きめに
 				_handle_tap(event.position)
 		return
 
-	# 1本指マウスドラッグは無視（PathDrawerに委譲させる or 2本指ジェスチャーでカメラ操作）
-	# パスモード以外での1本指ドラッグは何もしない
+	# 1本指マウスドラッグ処理
 	if event is InputEventMouseMotion and _left_button_pressed:
+		# パス先端延長の待機中にドラッグが開始された場合
+		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
+			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+				_path_endpoint_extension_started = true
+				_path_endpoint_extension_pending = false
+				# パスモードに入ったのでPathDrawerに委譲
+				return
+			else:
+				# パス先端でなければ待機状態をクリア
+				_path_endpoint_extension_pending = false
 		# 非パスモードでは1本指ドラッグを無視（カメラパンしない）
 		return
 
@@ -279,6 +310,10 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_immediate_path_drawing_started = false
 				get_viewport().set_input_as_handled()
 				return
+
+			# パス先端近くをタップした場合、ドラッグ開始待機状態にする
+			_path_endpoint_extension_pending = true
+			_path_endpoint_extension_started = false
 		else:
 			# 即座にパスモードを開始した場合はタップ処理をスキップ
 			# （パスモードに入った状態で、その後のドラッグでパスを描ける）
@@ -287,6 +322,15 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_immediate_path_drawing_started = false
 				get_viewport().set_input_as_handled()
 				return
+			# パス先端延長モードが開始された場合はタップ処理をスキップ
+			if _path_endpoint_extension_started:
+				_path_endpoint_extension_pending = false
+				_path_endpoint_extension_started = false
+				get_viewport().set_input_as_handled()
+				return
+			# パス先端延長の待機状態をクリア
+			_path_endpoint_extension_pending = false
+			_path_endpoint_extension_started = false
 			# タッチ終了：タップ判定
 			var distance = _left_click_start_pos.distance_to(event.position)
 			if distance < 20.0:  # タップ判定閾値
@@ -294,8 +338,18 @@ func _handle_touch_event(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
-	# 1本指ドラッグは非パスモードでは無視（2本指パンのみ許可）
+	# 1本指ドラッグ処理
 	if event is InputEventScreenDrag:
+		# パス先端延長の待機中にドラッグが開始された場合
+		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
+			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+				_path_endpoint_extension_started = true
+				_path_endpoint_extension_pending = false
+				# パスモードに入ったのでPathDrawerに委譲
+				return
+			else:
+				# パス先端でなければ待機状態をクリア
+				_path_endpoint_extension_pending = false
 		get_viewport().set_input_as_handled()
 
 

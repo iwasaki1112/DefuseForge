@@ -444,6 +444,14 @@ func is_extending_path() -> bool:
 	return _is_extending_path
 
 
+## パス延長を開始（外部から呼び出し可能）
+func start_extending_path() -> bool:
+	if not can_extend_path():
+		return false
+	_start_extending_path()
+	return true
+
+
 func _start_extending_path() -> void:
 	if not has_pending_path():
 		return
