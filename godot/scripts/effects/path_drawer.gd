@@ -375,6 +375,11 @@ func _handle_drawing_release() -> void:
 		_finish_drawing()
 	# Note: 描画が開始されていない場合（パスモード開始直後のリリース等）は何もしない
 	# キャンセルはユーザーが明示的にESCキーなどで行う
+
+
+## 描画開始処理（外部から呼び出し可能）
+func handle_drawing_press(screen_pos: Vector2) -> void:
+	_handle_drawing_press(screen_pos)
 #endregion
 
 

@@ -16,11 +16,43 @@ var _left_click_start_pos: Vector2 = Vector2.ZERO
 var _left_button_pressed: bool = false
 ## タッチ入力中かどうか（エミュレートされたマウスイベントを無視するため）
 var _touch_active: bool = false
+## タップダウン時にパスモードを即座に開始したかどうか
+var _immediate_path_mode_started: bool = false
+## 即座パスモードでドラッグによりパス描画を開始したかどうか
+var _immediate_path_drawing_started: bool = false
 
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 	game_manager = manager
 	camera_pan_controller = pan_controller
+
+
+## パス未設定キャラクターかどうかを判定
+func _is_character_without_path(character: Node) -> bool:
+	if not character:
+		return false
+	if not game_manager.path_execution_manager:
+		return true
+	return not game_manager.path_execution_manager.has_pending_path_for_character(character)
+
+
+## タップダウン時にパス未設定キャラクターを即座に選択してパスモード開始
+## @return: パスモードが開始された場合true
+func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
+	var clicked = game_manager.raycast_character(screen_pos)
+	if not clicked:
+		return false
+	if PlayerState.is_enemy(clicked):
+		return false
+	if game_manager.path_service and game_manager.path_service.is_character_following_path(clicked):
+		return false
+	if not _is_character_without_path(clicked):
+		return false
+
+	game_manager.selection_manager.deselect_all()
+	game_manager.selection_manager.add_to_selection(clicked)
+	game_manager.start_move_mode()
+	return true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -75,9 +107,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	# パスモード中の処理
 	# ========================================
 	if game_manager.is_path_mode():
+		# 即座パスモードでまだ描画開始していない場合のドラッグ検出
+		if event is InputEventMouseMotion and _immediate_path_mode_started and not _immediate_path_drawing_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer.handle_drawing_press(_left_click_start_pos)
+				_immediate_path_drawing_started = true
+			# PathDrawerにドラッグイベントを伝播させる
+			return
+
 		# マウスボタンリリース時：カメラドラッグ状態をクリア
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_left_button_pressed = false
+			# 即座パスモードのフラグをリセット
+			_immediate_path_mode_started = false
+			_immediate_path_drawing_started = false
 			if camera_pan_controller:
 				if camera_pan_controller.is_dragging():
 					camera_pan_controller.end_drag()
@@ -85,10 +129,25 @@ func _unhandled_input(event: InputEvent) -> void:
 					camera_pan_controller.cancel_potential_drag()
 			# PathDrawerにも伝播させる
 			return
-		# マウスクリック時：キャラクタータップはGameManagerに委譲
+		# マウスクリック時：キャラクタータップ
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_left_button_pressed = true
+			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
+				# パス未設定キャラクターなら即座パスモード開始（キャラクター切り替え）
+				if _is_character_without_path(clicked) and not PlayerState.is_enemy(clicked):
+					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
+						# 現在のパスを確定してから切り替え
+						game_manager.confirm_path()
+						game_manager.selection_manager.deselect_all()
+						game_manager.selection_manager.add_to_selection(clicked)
+						game_manager.start_move_mode()
+						_immediate_path_mode_started = true
+						_immediate_path_drawing_started = false
+						get_viewport().set_input_as_handled()
+						return
+				# それ以外はGameManagerに委譲
 				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
 				return
@@ -103,8 +162,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			_left_button_pressed = true
 			_left_click_start_pos = event.position
+
+			# パス未設定キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
+			if _try_start_immediate_path_mode(event.position):
+				_immediate_path_mode_started = true
+				_immediate_path_drawing_started = false
+				get_viewport().set_input_as_handled()
+				return
 		else:
 			_left_button_pressed = false
+			# 即座にパスモードを開始した場合はタップ処理をスキップ
+			# （パスモードに入った状態で、その後のドラッグでパスを描ける）
+			if _immediate_path_mode_started:
+				_immediate_path_mode_started = false
+				_immediate_path_drawing_started = false
+				return
 			# タップ判定（ドラッグ距離が閾値以下ならタップ）
 			var distance = _left_click_start_pos.distance_to(event.position)
 			if distance < 50.0:  # トラックパッドのクリックブレを考慮して閾値を大きめに
@@ -145,18 +217,44 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 	# パスモード中の処理
 	if game_manager.is_path_mode():
+		# 即座パスモードでまだ描画開始していない場合のドラッグ検出
+		if event is InputEventScreenDrag and _immediate_path_mode_started and not _immediate_path_drawing_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer.handle_drawing_press(_left_click_start_pos)
+				_immediate_path_drawing_started = true
+			# PathDrawerにドラッグイベントを伝播させる
+			return
+
 		# タッチ終了時：カメラパン状態をクリア
 		if event is InputEventScreenTouch and not event.pressed:
+			# 即座パスモードのフラグをリセット
+			_immediate_path_mode_started = false
+			_immediate_path_drawing_started = false
 			if camera_pan_controller.is_touch_panning():
 				camera_pan_controller.end_touch_pan()
 			elif camera_pan_controller.is_pending_touch_pan():
 				camera_pan_controller.cancel_potential_touch_pan()
 			# PathDrawerにも伝播させる
 			return
-		# タッチ開始時：キャラクタータップはGameManagerに委譲
+		# タッチ開始時：キャラクタータップ
 		if event is InputEventScreenTouch and event.pressed:
+			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
+				# パス未設定キャラクターなら即座パスモード開始（キャラクター切り替え）
+				if _is_character_without_path(clicked) and not PlayerState.is_enemy(clicked):
+					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
+						# 現在のパスを確定してから切り替え
+						game_manager.confirm_path()
+						game_manager.selection_manager.deselect_all()
+						game_manager.selection_manager.add_to_selection(clicked)
+						game_manager.start_move_mode()
+						_immediate_path_mode_started = true
+						_immediate_path_drawing_started = false
+						get_viewport().set_input_as_handled()
+						return
+				# それ以外はGameManagerに委譲
 				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
 				return
@@ -174,7 +272,21 @@ func _handle_touch_event(event: InputEvent) -> void:
 		if event.pressed:
 			# タッチ開始：タップ候補として記録
 			_left_click_start_pos = event.position
+
+			# パス未設定キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
+			if _try_start_immediate_path_mode(event.position):
+				_immediate_path_mode_started = true
+				_immediate_path_drawing_started = false
+				get_viewport().set_input_as_handled()
+				return
 		else:
+			# 即座にパスモードを開始した場合はタップ処理をスキップ
+			# （パスモードに入った状態で、その後のドラッグでパスを描ける）
+			if _immediate_path_mode_started:
+				_immediate_path_mode_started = false
+				_immediate_path_drawing_started = false
+				get_viewport().set_input_as_handled()
+				return
 			# タッチ終了：タップ判定
 			var distance = _left_click_start_pos.distance_to(event.position)
 			if distance < 20.0:  # タップ判定閾値
