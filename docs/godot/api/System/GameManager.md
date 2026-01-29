@@ -7,9 +7,9 @@
 `scripts/systems/game_manager.gd`
 
 ## 責務
-- 14個のシステムの初期化を正しい順序で実行
+- システムの初期化を正しい順序で実行
 - 入力処理（レイキャスト、クリック）
-- UI管理（コンテキストメニュー、マーカーパネル、ラベル）
+- UI管理（ラベル）
 - キャラクター登録時の自動セットアップ（視界、武器、色、ラベル）はCharacterSetupServiceに委譲
 - シグナルの中継（サブシステム→外部）
 - 毎フレーム処理の統合
@@ -23,15 +23,12 @@
 | 3 | IdleCharacterManager | アイドル状態更新 |
 | 4 | PathDrawer | パス描画入力 |
 | 5 | PathModeController | パスモード制御 |
-| 6 | CharacterRotationController | 回転入力 |
-| 7 | FogOfWarSystem | 戦場の霧 |
-| 8 | EnemyVisibilitySystem | 敵可視性 |
-| 9 | ContextMenuComponent | コンテキストメニューUI |
-| 10 | MarkerEditPanel | マーカー編集UI |
-| 11 | CharacterLabelManager | キャラクターラベル |
-| 12 | CharacterSetupService | キャラクター初期セットアップ |
-| 13 | PathService | パス描画/編集/実行の統合制御 |
-| 14 | VisionService | 視界/FoW/敵可視性の統合制御 |
+| 6 | FogOfWarSystem | 戦場の霧 |
+| 7 | EnemyVisibilitySystem | 敵可視性 |
+| 8 | CharacterLabelManager | キャラクターラベル |
+| 9 | CharacterSetupService | キャラクター初期セットアップ |
+| 10 | PathService | パス描画/編集/実行の統合制御 |
+| 11 | VisionService | 視界/FoW/敵可視性の統合制御 |
 
 ## シグナル
 
@@ -52,13 +49,6 @@ signal paths_cleared()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
-
-# 回転モード関連
-signal rotation_confirmed(direction: Vector3)
-signal rotation_cancelled()
-
-# コンテキストメニュー
-signal context_action_requested(action_id: String, character: Node)
 
 # グレネード関連
 signal grenade_thrown(grenade: Node3D, character: Node)
@@ -87,14 +77,11 @@ var path_mode_controller: PathModeController
 var fog_of_war_system: Node3D
 var enemy_visibility_system: Node
 var path_drawer: Node3D
-var rotation_controller: Node
 var character_setup_service: CharacterSetupService
 var path_service: PathService
 var vision_service: VisionService
 
 # UIコンポーネント
-var context_menu: Control
-var marker_edit_panel: VBoxContainer
 var label_manager: CharacterLabelManager
 
 # 外部参照
@@ -124,12 +111,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 - `ui_layer`: UIを追加するCanvasLayer
 - `map_size`: FoWマップサイズ（デフォルト50x50）
 
-### コンテキストメニュー設定
-
-`_setup_context_menu()` 内で `res://scenes/ui/context_menu_component.tscn` をインスタンス化する。
-
-設定値はシーン側で管理している。
-
 ### キャラクター管理
 
 ```gdscript
@@ -157,7 +138,7 @@ func get_character_parent() -> Node3D
 ```gdscript
 func handle_click(screen_pos: Vector2, button_index: int) -> bool
 ```
-マウス/タッチクリック処理。選択・コンテキストメニュー表示を行う。
+マウス/タッチクリック処理。選択を行う。
 キャラクター選択中にドアをクリックするとドアキックを開始する。
 
 ```gdscript
@@ -182,15 +163,6 @@ func confirm_path() -> void
 func cancel_path() -> void
 func execute_all_paths(run: bool) -> int
 func clear_all_pending_paths() -> void
-```
-
-### 回転モード操作
-
-```gdscript
-func start_rotation_mode(character: Node) -> void
-func handle_rotation_input(screen_pos: Vector2) -> void
-func confirm_rotation() -> void
-func cancel_rotation() -> void
 ```
 
 ### 視界/FoW制御
@@ -247,18 +219,15 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 func process_frame(delta: float) -> void
 ```
 
-- コンテキストメニューの追従更新を含む
 - ドアキック用パス追従コントローラーの処理を含む
 
 ### 状態取得
 
 ```gdscript
-func is_rotation_active() -> bool
 func is_path_mode() -> bool
 func is_any_path_following_active() -> bool
 func is_character_following_path(character: Node) -> bool
 func get_pending_path_count() -> int
-func get_rotating_character() -> Node
 func get_path_target_count() -> int
 func get_primary_character() -> Node
 func get_selection_count() -> int
@@ -376,11 +345,8 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - [IdleCharacterManager](IdleCharacterManager.md)
 - [PathModeController](PathModeController.md)
 - [PathDrawer](PathDrawer.md)
-- [CharacterRotationController](CharacterRotationController.md)
 - [FogOfWarSystem](FogOfWarSystem.md)
 - [EnemyVisibilitySystem](EnemyVisibilitySystem.md)
-- [ContextMenuComponent](ContextMenuComponent.md)
-- [MarkerEditPanel](MarkerEditPanel.md)
 - [CharacterLabelManager](CharacterLabelManager.md)
 - [NetworkMessages](NetworkMessages.md)
 - [SyncState](SyncState.md)
@@ -400,12 +366,9 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 | `paths_execution_started` | `count: int` | パス実行開始時（実行するパス数） |
 | `all_paths_completed` | なし | 全パス実行完了時 |
 | `paths_cleared` | なし | 全パスクリア時 |
-| `rotation_confirmed` | `direction: Vector3` | 回転確定時 |
-| `rotation_cancelled` | なし | 回転キャンセル時 |
 | `path_mode_changed` | `mode: int` | パス描画モード変更時 |
 | `vision_point_added` | `anchor: Vector3, direction: Vector3` | 視線ポイント追加時 |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
-| `context_action_requested` | `action_id: String, character: Node` | コンテキストアクション要求時 |
 | `grenade_thrown` | `grenade: Node3D, character: Node` | グレネード投擲時 |
 | `smoke_grenade_thrown` | `smoke_grenade: Node3D, character: Node` | スモークグレネード投擲時 |
 | `grenade_network_event` | `start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int` | グレネード投擲のネットワーク同期用 |
@@ -430,10 +393,6 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `execute_all_paths(run: bool) -> int`
 - `clear_all_pending_paths() -> void`
 - `cancel_all_path_following() -> void`
-- `start_rotation_mode(character: Node) -> void`
-- `handle_rotation_input(screen_pos: Vector2) -> void`
-- `confirm_rotation() -> void`
-- `cancel_rotation() -> void`
 - `set_vision_enabled(enabled: bool) -> void`
 - `load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D`
 - `unload_map(cleanup_characters: bool = true) -> void`
@@ -446,12 +405,10 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]`
 - `get_character_parent() -> Node3D`
 - `process_frame(delta: float) -> void`
-- `is_rotation_active() -> bool`
 - `is_path_mode() -> bool`
 - `is_any_path_following_active() -> bool`
 - `is_character_following_path(character: Node) -> bool`
 - `get_pending_path_count() -> int`
-- `get_rotating_character() -> Node`
 - `get_path_target_count() -> int`
 - `get_primary_character() -> Node`
 - `get_selection_count() -> int`
@@ -467,5 +424,4 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `start_multi_character_mode(selected_chars: Array[Node]) -> void`
 - `set_active_edit_character(character: Node) -> void`
 - `set_path_drawer_color(color: Color) -> void`
-- `is_context_menu_open() -> bool`
 - `refresh_character_colors() -> void`

@@ -37,9 +37,6 @@
 - **1本指タップ**: キャラクター選択 (`game_manager.handle_click`)。
 - **1本指ドラッグ**: カメラパン (`CameraPanController`)。
 
-### 4. 回転モード (Rotation Mode)
-- `game_manager.handle_rotation_input` に委譲。
-
 ## PC vs モバイルの挙動
 
 ### モバイル (Touch)
@@ -64,7 +61,6 @@
 #### `_input(event: InputEvent) -> void`
 ESCキーなどのグローバルショートカット処理。
 - パスフォロー中のキャンセル
-- 回転モードのキャンセル
 - パスモードのキャンセル
 
 ## 内部ヘルパーメソッド

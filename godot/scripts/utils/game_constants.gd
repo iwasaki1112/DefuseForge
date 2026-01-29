@@ -20,13 +20,10 @@ const NODE_PATH_EXECUTION_MANAGER := "PathExecutionManager"
 const NODE_IDLE_MANAGER := "IdleCharacterManager"
 const NODE_PATH_DRAWER := "PathDrawer"
 const NODE_PATH_MODE_CONTROLLER := "PathModeController"
-const NODE_ROTATION_CONTROLLER := "RotationController"
 const NODE_VISION_SERVICE := "VisionService"
 const NODE_MAP_MANAGER := "MapManager"
-const NODE_CONTEXT_MENU := "ContextMenu"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
 const NODE_PATH_SERVICE := "PathService"
-const NODE_WEAPON_SHOP_MODAL := "WeaponShopModal"
 
 # ========================================================
 # Group Names

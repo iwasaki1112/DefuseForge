@@ -72,14 +72,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 	# ========================================
-	# 回転モード中
-	# ========================================
-	if game_manager.is_rotation_active():
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			game_manager.handle_rotation_input(event.position)
-		return
-
-	# ========================================
 	# パスモード中の処理
 	# ========================================
 	if game_manager.is_path_mode():
@@ -252,7 +244,5 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if game_manager.is_any_path_following_active():
 			game_manager.cancel_all_path_following()
-		elif game_manager.is_rotation_active():
-			game_manager.cancel_rotation()
 		elif game_manager.is_path_mode():
 			game_manager.cancel_path()
