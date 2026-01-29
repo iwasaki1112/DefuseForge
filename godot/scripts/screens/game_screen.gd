@@ -203,7 +203,6 @@ func _setup_hud() -> void:
 		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
 		_hud.marker_edit_requested.connect(_on_marker_edit_requested)
 		_hud.marker_undo_requested.connect(_on_marker_undo_requested)
-		_hud.marker_confirm_requested.connect(_on_marker_confirm_requested)
 		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
 
 
@@ -337,6 +336,10 @@ func _process(_delta: float) -> void:
 ## ========================================
 
 func _on_execute_button_pressed() -> void:
+	# パスモード中で未確定のパスがあれば先に確定する
+	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_pending_path():
+		game_manager.path_service.confirm_path()
+
 	var count := game_manager.execute_all_paths(false)
 	_mode_provider.on_execute_paths(count)
 
@@ -373,11 +376,6 @@ func _on_marker_edit_requested(action: String) -> void:
 func _on_marker_undo_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.undo_last_marker()
-
-
-func _on_marker_confirm_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.confirm_path()
 
 
 func _on_marker_cancel_requested() -> void:

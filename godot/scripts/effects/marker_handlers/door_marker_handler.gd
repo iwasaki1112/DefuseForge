@@ -22,10 +22,15 @@ var _door_meshes: Array[MeshInstance3D] = []
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			return _process_door_click(mouse_event.position)
+
+	# タッチ入力
+	if event is InputEventScreenTouch and event.pressed:
+		return _process_door_click(event.position)
 
 	return false
 
@@ -113,3 +118,13 @@ func clear_all() -> void:
 		if is_instance_valid(mesh):
 			mesh.queue_free()
 	_door_meshes.clear()
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_door_markers.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_door_meshes.append(m)

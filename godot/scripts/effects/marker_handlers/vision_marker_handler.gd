@@ -26,6 +26,7 @@ var _is_drawing: bool = false
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -35,6 +36,18 @@ func handle_input(event: InputEvent) -> bool:
 				return _handle_release(mouse_event.position)
 
 	if event is InputEventMouseMotion:
+		if _is_drawing:
+			_handle_motion(event.position)
+			return true
+
+	# タッチ入力
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			return _handle_press(event.position)
+		else:
+			return _handle_release(event.position)
+
+	if event is InputEventScreenDrag:
 		if _is_drawing:
 			_handle_motion(event.position)
 			return true
@@ -190,3 +203,13 @@ func reset_state() -> void:
 	_current_anchor = Vector3.ZERO
 	_current_ratio = 0.0
 	_remove_temp_marker()
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_vision_points.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_vision_meshes.append(m)

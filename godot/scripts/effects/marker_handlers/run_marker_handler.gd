@@ -20,10 +20,15 @@ var _current_run_start: Dictionary = {}
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			return _handle_click(mouse_event.position)
+
+	# タッチ入力
+	if event is InputEventScreenTouch and event.pressed:
+		return _handle_click(event.position)
 
 	return false
 
@@ -140,3 +145,13 @@ func reset_state() -> void:
 ## 未完成のRun開始点があるか
 func has_incomplete_run_start() -> bool:
 	return not _current_run_start.is_empty()
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_run_segments.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_run_meshes.append(m)

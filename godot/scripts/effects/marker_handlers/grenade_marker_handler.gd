@@ -30,12 +30,20 @@ var _trajectory_mesh: MeshInstance3D = null
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			return _process_click(mouse_event.position)
 
 	elif event is InputEventMouseMotion:
+		_update_trajectory_preview(event.position)
+
+	# タッチ入力
+	if event is InputEventScreenTouch and event.pressed:
+		return _process_click(event.position)
+
+	elif event is InputEventScreenDrag:
 		_update_trajectory_preview(event.position)
 
 	return false
@@ -201,3 +209,13 @@ func clear_all() -> void:
 
 func reset_state() -> void:
 	_reset_pending_state()
+
+
+## マーカーを復元
+func restore_markers(data: Array, meshes: Array) -> void:
+	for d in data:
+		_grenade_markers.append(d)
+	for m in meshes:
+		if is_instance_valid(m):
+			_add_child_to_drawer(m)
+			_grenade_meshes.append(m)

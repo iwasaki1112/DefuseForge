@@ -22,6 +22,8 @@ signal door_marker_added(path_ratio: float, door: Node3D)
 signal wait_marker_added(path_ratio: float, wait_duration: float)
 signal path_undone()
 signal mode_changed(mode: int)
+## パス外タップ時のシグナル（確定処理用）
+signal off_path_tapped()
 #endregion
 
 #region エクスポート設定
@@ -248,23 +250,57 @@ func _unhandled_input(event: InputEvent) -> void:
 			var handler = _get_handler_for_mode(_drawing_mode)
 			if handler and handler.handle_input(event):
 				get_viewport().set_input_as_handled()
+			else:
+				# ハンドラがイベントを処理しなかった場合、パス外タップをチェック
+				_check_off_path_tap(event)
+
+
+## パス外タップのチェック（マーカーモード用）
+func _check_off_path_tap(event: InputEvent) -> void:
+	var screen_pos: Vector2
+	var is_press: bool = false
+
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			screen_pos = mouse_event.position
+			is_press = true
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			screen_pos = event.position
+			is_press = true
+
+	if is_press:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos != null and has_pending_path():
+			if not is_point_on_path(ground_pos) and not _is_near_path_endpoint(ground_pos):
+				off_path_tapped.emit()
+				get_viewport().set_input_as_handled()
 
 
 func _handle_path_extension_input(event: InputEvent) -> bool:
 	if _is_extending_path:
-		if event is InputEventMouseMotion:
+		# ドラッグ中（マウスまたはタッチ）
+		if event is InputEventMouseMotion or event is InputEventScreenDrag:
 			var ground_pos = _get_ground_position(event.position)
 			if ground_pos != null:
 				_add_extend_point(ground_pos)
 			get_viewport().set_input_as_handled()
 			return true
+		# リリース（マウス）
 		elif event is InputEventMouseButton:
 			var mouse_event = event as InputEventMouseButton
 			if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 				_finish_extending_path()
 				get_viewport().set_input_as_handled()
 				return true
+		# リリース（タッチ）
+		elif event is InputEventScreenTouch and not event.pressed:
+			_finish_extending_path()
+			get_viewport().set_input_as_handled()
+			return true
 
+	# 延長開始判定（マウス）
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
@@ -275,34 +311,73 @@ func _handle_path_extension_input(event: InputEvent) -> bool:
 					get_viewport().set_input_as_handled()
 					return true
 
+	# 延長開始判定（タッチ）
+	if event is InputEventScreenTouch and event.pressed:
+		if has_pending_path() and not _is_drawing:
+			var ground_pos = _get_ground_position(event.position)
+			if ground_pos != null and _is_near_path_endpoint(ground_pos):
+				_start_extending_path()
+				get_viewport().set_input_as_handled()
+				return true
+
 	return false
 
 
 func _handle_movement_input(event: InputEvent) -> void:
+	# マウス入力
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				var start_pos: Vector3
-				if _character:
-					start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
-				else:
-					var ground_pos = _get_ground_position(mouse_event.position)
-					if ground_pos == null:
-						return
-					start_pos = ground_pos
-				_start_drawing(start_pos)
-				get_viewport().set_input_as_handled()
+				_handle_drawing_press(mouse_event.position)
 			else:
-				if _is_drawing:
-					_finish_drawing()
-					get_viewport().set_input_as_handled()
+				_handle_drawing_release()
+			get_viewport().set_input_as_handled()
 
 	if event is InputEventMouseMotion:
 		if _is_drawing:
 			var ground_pos = _get_ground_position(event.position)
 			if ground_pos != null:
 				_add_point(ground_pos)
+
+	# タッチ入力
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_handle_drawing_press(event.position)
+		else:
+			_handle_drawing_release()
+		get_viewport().set_input_as_handled()
+
+	if event is InputEventScreenDrag:
+		if _is_drawing:
+			var ground_pos = _get_ground_position(event.position)
+			if ground_pos != null:
+				_add_point(ground_pos)
+			get_viewport().set_input_as_handled()
+
+
+## 描画開始処理（マウス/タッチ共通）
+func _handle_drawing_press(screen_pos: Vector2) -> void:
+	var start_pos: Vector3
+	if _character:
+		start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
+	else:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+		start_pos = ground_pos
+	_start_drawing(start_pos)
+
+
+## 描画終了処理（マウス/タッチ共通）
+func _handle_drawing_release() -> void:
+	if _is_drawing:
+		_finish_drawing()
+	else:
+		# パス描画が開始されなかった場合（壁がある等）
+		# パスがなければdrawing_finishedを発火してキャンセルさせる
+		if not has_pending_path():
+			drawing_finished.emit(PackedVector3Array())
 #endregion
 
 
@@ -1084,14 +1159,70 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 
 	_marker_history.append(MarkerType.PATH)
 
-	# マーカーの復元はハンドラには移行しない（既存メッシュの所有権移動のため）
-	# 簡易復元として履歴のみ追加
-	var vision_count = path_data.get("vision_points", []).size()
-	for _i in range(vision_count):
-		_marker_history.append(MarkerType.VISION)
+	# マーカーをハンドラに復元
+	_restore_all_markers(path_data)
 
 	call_deferred("_emit_drawing_finished_after_restore")
 	return true
+
+
+## 全マーカーをハンドラに復元
+func _restore_all_markers(path_data: Dictionary) -> void:
+	# Vision markers
+	var vision_data = path_data.get("vision_points", [])
+	var vision_meshes = path_data.get("vision_markers", [])
+	if vision_data.size() > 0:
+		_vision_handler.restore_markers(vision_data, vision_meshes)
+		for _i in range(vision_data.size()):
+			_marker_history.append(MarkerType.VISION)
+
+	# Run markers
+	var run_data = path_data.get("run_segments", [])
+	var run_meshes = path_data.get("run_markers", [])
+	if run_data.size() > 0:
+		_run_handler.restore_markers(run_data, run_meshes)
+		for _i in range(run_data.size()):
+			_marker_history.append(MarkerType.RUN)
+
+	# Clear markers
+	var clear_data = path_data.get("clear_points", [])
+	var clear_meshes = path_data.get("clear_markers", [])
+	if clear_data.size() > 0:
+		_clear_handler.restore_markers(clear_data, clear_meshes)
+		for _i in range(clear_data.size()):
+			_marker_history.append(MarkerType.CLEAR)
+
+	# Grenade markers
+	var grenade_data = path_data.get("grenade_markers_data", [])
+	var grenade_meshes = path_data.get("grenade_markers", [])
+	if grenade_data.size() > 0:
+		_grenade_handler.restore_markers(grenade_data, grenade_meshes)
+		for _i in range(grenade_data.size()):
+			_marker_history.append(MarkerType.GRENADE)
+
+	# Smoke grenade markers
+	var smoke_data = path_data.get("smoke_grenade_markers_data", [])
+	var smoke_meshes = path_data.get("smoke_grenade_markers", [])
+	if smoke_data.size() > 0:
+		_smoke_grenade_handler.restore_markers(smoke_data, smoke_meshes)
+		for _i in range(smoke_data.size()):
+			_marker_history.append(MarkerType.SMOKE_GRENADE)
+
+	# Door markers
+	var door_data = path_data.get("door_markers_data", [])
+	var door_meshes = path_data.get("door_markers", [])
+	if door_data.size() > 0:
+		_door_handler.restore_markers(door_data, door_meshes)
+		for _i in range(door_data.size()):
+			_marker_history.append(MarkerType.DOOR)
+
+	# Wait markers
+	var wait_data = path_data.get("wait_markers_data", [])
+	var wait_meshes = path_data.get("wait_markers", [])
+	if wait_data.size() > 0:
+		_wait_handler.restore_markers(wait_data, wait_meshes)
+		for _i in range(wait_data.size()):
+			_marker_history.append(MarkerType.WAIT)
 
 
 func _emit_drawing_finished_after_restore() -> void:

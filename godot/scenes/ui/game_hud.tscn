@@ -266,27 +266,18 @@ stretch_mode = 5
 [node name="UndoButton" type="Button" parent="MarkerEditPanel"]
 unique_name_in_owner = true
 layout_mode = 0
-offset_left = -44.0
+offset_left = -14.0
 offset_top = 239.0
-offset_right = 26.0
+offset_right = 56.0
 offset_bottom = 279.0
 text = "Undo"
-
-[node name="ConfirmButton" type="Button" parent="MarkerEditPanel"]
-unique_name_in_owner = true
-layout_mode = 0
-offset_left = 36.0
-offset_top = 239.0
-offset_right = 136.0
-offset_bottom = 279.0
-text = "Confirm"
 
 [node name="CancelButton" type="Button" parent="MarkerEditPanel"]
 unique_name_in_owner = true
 layout_mode = 0
-offset_left = 146.0
+offset_left = 66.0
 offset_top = 239.0
-offset_right = 226.0
+offset_right = 146.0
 offset_bottom = 279.0
 text = "Cancel"
 
@@ -304,5 +295,4 @@ text = "Cancel"
 [connection signal="pressed" from="MarkerEditPanel/DoorButton" to="." method="_on_marker_edit_pressed" binds= ["door"]]
 [connection signal="pressed" from="MarkerEditPanel/WaitButton" to="." method="_on_marker_edit_pressed" binds= ["wait"]]
 [connection signal="pressed" from="MarkerEditPanel/UndoButton" to="." method="_on_marker_undo_pressed"]
-[connection signal="pressed" from="MarkerEditPanel/ConfirmButton" to="." method="_on_marker_confirm_pressed"]
 [connection signal="pressed" from="MarkerEditPanel/CancelButton" to="." method="_on_marker_cancel_pressed"]

@@ -127,6 +127,9 @@ func cancel() -> void:
 	_cleanup()
 	mode_cancelled.emit()
 
+	# キャンセル時も選択を解除
+	selection_manager.deselect_all()
+
 
 ## パスモード中かどうか
 func is_path_mode() -> bool:
@@ -150,15 +153,16 @@ func get_target_count() -> int:
 	return selection_manager.get_path_targets().size()
 
 
-## クリック・トゥ・キャンセル処理（キャラクター以外クリック時）
-func handle_click_to_cancel(clicked_character: Node) -> bool:
+## クリック・トゥ・コンファーム処理（パス外クリック時に確定）
+func handle_click_to_confirm(clicked_character: Node) -> bool:
 	if not is_active:
 		return false
 
-	# パス描画後のみキャンセル判定
+	# パス描画後のみ確定判定
 	if path_drawer.has_pending_path():
 		if not clicked_character:
-			cancel()
+			# パス外タップで確定
+			confirm()
 			return true
 
 	return false
