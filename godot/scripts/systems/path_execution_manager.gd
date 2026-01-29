@@ -561,7 +561,14 @@ func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: b
 	return controller.start_path(path, empty_vision, empty_run, run, empty_clear, empty_grenade, empty_door)
 
 
-## 特定キャラクターの保留パスをクリア
+## 特定キャラクターの保留パスをクリア（公開API）
+func clear_pending_path_for_character(character: Node) -> void:
+	if not character:
+		return
+	_clear_pending_path_for_character(character.get_instance_id())
+
+
+## 特定キャラクターの保留パスをクリア（内部）
 func _clear_pending_path_for_character(char_id: int) -> void:
 	if not pending_paths.has(char_id):
 		return

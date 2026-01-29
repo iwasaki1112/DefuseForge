@@ -22,6 +22,8 @@ var path_drawer: Node3D = null
 var selection_manager: CharacterSelectionManager = null
 ## PathExecutionManagerへの参照
 var path_execution_manager: PathExecutionManager = null
+## 延長モード用のキャラクター（選択マネージャーをバイパス）
+var _extension_mode_character: Node = null
 
 
 ## セットアップ
@@ -94,25 +96,73 @@ func start_with_existing_path(path_data: Dictionary, char_color: Color = Color.W
 	return true
 
 
+## 延長モード開始（選択マネージャーをバイパス、一時的な選択リングを表示）
+func start_extension_mode(character: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+	if not character or not path_drawer:
+		return false
+	if path_data.is_empty():
+		return false
+
+	_extension_mode_character = character
+
+	# 一時的な選択リングを表示
+	_show_temporary_outline(character)
+
+	# パスモード開始
+	is_active = true
+	editing_character = character
+	if not path_drawer.restore_pending_path(character, path_data):
+		# 復元に失敗した場合は通常のenableにフォールバック
+		path_drawer.enable(character)
+	path_drawer.set_character_color(char_color)
+
+	mode_started.emit(character)
+	return true
+
+
+## 一時的なアウトライン表示
+func _show_temporary_outline(character: Node) -> void:
+	if character.has_method("show_outline"):
+		character.show_outline(true)
+
+
+## 一時的なアウトラインを非表示
+func _hide_temporary_outline() -> void:
+	if _extension_mode_character and is_instance_valid(_extension_mode_character):
+		if _extension_mode_character.has_method("show_outline"):
+			_extension_mode_character.show_outline(false)
+
+
 ## パスモードを確定して終了
 func confirm() -> bool:
 	if not is_active or not path_drawer.has_pending_path():
 		cancel()
 		return false
 
-	var targets = selection_manager.get_path_targets()
+	# 延長モードの場合は _extension_mode_character を使用
+	var targets: Array[Node] = []
+	var primary: Node = null
+	if _extension_mode_character:
+		targets = [_extension_mode_character]
+		primary = _extension_mode_character
+	else:
+		targets = selection_manager.get_path_targets()
+		primary = selection_manager.primary_character
+
 	if targets.is_empty():
 		cancel()
 		return false
 
 	# PathExecutionManagerに委譲
-	var primary = selection_manager.primary_character
 	if path_execution_manager.confirm_path(targets, path_drawer, primary):
+		# 延長モードでなければ選択を解除
+		var should_deselect := _extension_mode_character == null
 		_cleanup()
 		mode_ended.emit()
 
 		# パス確定後は選択を解除
-		selection_manager.deselect_all()
+		if should_deselect and selection_manager:
+			selection_manager.deselect_all()
 		return true
 	else:
 		cancel()
@@ -124,11 +174,14 @@ func cancel() -> void:
 	if not is_active:
 		return
 
+	# 延長モードでなければ選択を解除
+	var should_deselect := _extension_mode_character == null
 	_cleanup()
 	mode_cancelled.emit()
 
 	# キャンセル時も選択を解除
-	selection_manager.deselect_all()
+	if should_deselect and selection_manager:
+		selection_manager.deselect_all()
 
 
 ## パスモード中かどうか
@@ -181,7 +234,10 @@ func _on_drawing_finished(points: PackedVector3Array) -> void:
 func _cleanup() -> void:
 	is_active = false
 	editing_character = null
-	selection_manager.clear_path_targets()
+	_hide_temporary_outline()
+	_extension_mode_character = null
+	if selection_manager:
+		selection_manager.clear_path_targets()
 	if path_drawer:
 		path_drawer.clear()
 		path_drawer.disable()

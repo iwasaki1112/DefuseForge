@@ -40,7 +40,7 @@ func _is_character_without_path(character: Node) -> bool:
 	return not game_manager.path_execution_manager.has_pending_path_for_character(character)
 
 
-## タップダウン時にパス未設定キャラクターを即座に選択してパスモード開始
+## タップダウン時にキャラクターを即座に選択してパスモード開始
 ## @return: パスモードが開始された場合true
 func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	var clicked = game_manager.raycast_character(screen_pos)
@@ -49,8 +49,6 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	if PlayerState.is_enemy(clicked):
 		return false
 	if game_manager.path_service and game_manager.path_service.is_character_following_path(clicked):
-		return false
-	if not _is_character_without_path(clicked):
 		return false
 
 	game_manager.selection_manager.deselect_all()
@@ -126,12 +124,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			# PathDrawerにドラッグイベントを伝播させる
 			return
 
+		# パス先端延長の待機中にドラッグが開始された場合
+		if event is InputEventMouseMotion and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
+			# 現在のパスを確定してからパス延長を試みる
+			game_manager.confirm_path()
+			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+				_path_endpoint_extension_started = true
+				_path_endpoint_extension_pending = false
+				return
+			else:
+				_path_endpoint_extension_pending = false
+
 		# マウスボタンリリース時：カメラドラッグ状態をクリア
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_left_button_pressed = false
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
+			# パス先端延長フラグもリセット
+			_path_endpoint_extension_pending = false
+			_path_endpoint_extension_started = false
 			if camera_pan_controller:
 				if camera_pan_controller.is_dragging():
 					camera_pan_controller.end_drag()
@@ -145,8 +157,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
-				# パス未設定キャラクターなら即座パスモード開始（キャラクター切り替え）
-				if _is_character_without_path(clicked) and not PlayerState.is_enemy(clicked):
+				# 味方キャラクターなら即座パスモード開始（キャラクター切り替え）
+				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
@@ -158,6 +170,10 @@ func _unhandled_input(event: InputEvent) -> void:
 						get_viewport().set_input_as_handled()
 						return
 				# それ以外はGameManagerに委譲
+			else:
+				# キャラクターがクリックされなかった場合、パス先端延長を試みる
+				_path_endpoint_extension_pending = true
+				_path_endpoint_extension_started = false
 				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
 				return
@@ -173,7 +189,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_left_button_pressed = true
 			_left_click_start_pos = event.position
 
-			# パス未設定キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
+			# キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
 			if _try_start_immediate_path_mode(event.position):
 				_immediate_path_mode_started = true
 				_immediate_path_drawing_started = false
@@ -186,7 +202,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_left_button_pressed = false
 			# 即座にパスモードを開始した場合はタップ処理をスキップ
-			# （パスモードに入った状態で、その後のドラッグでパスを描ける）
 			if _immediate_path_mode_started:
 				_immediate_path_mode_started = false
 				_immediate_path_drawing_started = false
@@ -196,8 +211,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				_path_endpoint_extension_pending = false
 				_path_endpoint_extension_started = false
 				return
-			# パス先端延長の待機状態をクリア
-			_path_endpoint_extension_pending = false
+			# パス先端延長の待機中だった場合、先端近くならタップ処理をスキップ
+			if _path_endpoint_extension_pending:
+				_path_endpoint_extension_pending = false
+				if _is_near_path_endpoint(_left_click_start_pos):
+					return  # タップ処理をスキップ（選択解除を防ぐ）
 			_path_endpoint_extension_started = false
 			# タップ判定（ドラッグ距離が閾値以下ならタップ）
 			var distance = _left_click_start_pos.distance_to(event.position)
@@ -257,11 +275,25 @@ func _handle_touch_event(event: InputEvent) -> void:
 			# PathDrawerにドラッグイベントを伝播させる
 			return
 
+		# パス先端延長の待機中にドラッグが開始された場合
+		if event is InputEventScreenDrag and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
+			# 現在のパスを確定してからパス延長を試みる
+			game_manager.confirm_path()
+			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+				_path_endpoint_extension_started = true
+				_path_endpoint_extension_pending = false
+				return
+			else:
+				_path_endpoint_extension_pending = false
+
 		# タッチ終了時：カメラパン状態をクリア
 		if event is InputEventScreenTouch and not event.pressed:
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
+			# パス先端延長フラグもリセット
+			_path_endpoint_extension_pending = false
+			_path_endpoint_extension_started = false
 			if camera_pan_controller.is_touch_panning():
 				camera_pan_controller.end_touch_pan()
 			elif camera_pan_controller.is_pending_touch_pan():
@@ -273,8 +305,8 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
-				# パス未設定キャラクターなら即座パスモード開始（キャラクター切り替え）
-				if _is_character_without_path(clicked) and not PlayerState.is_enemy(clicked):
+				# 味方キャラクターなら即座パスモード開始（キャラクター切り替え）
+				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
@@ -289,6 +321,10 @@ func _handle_touch_event(event: InputEvent) -> void:
 				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
 				return
+			else:
+				# キャラクターがクリックされなかった場合、パス先端延長を試みる
+				_path_endpoint_extension_pending = true
+				_path_endpoint_extension_started = false
 		# それ以外はPathDrawerに委譲
 		return
 
@@ -328,8 +364,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_path_endpoint_extension_started = false
 				get_viewport().set_input_as_handled()
 				return
-			# パス先端延長の待機状態をクリア
-			_path_endpoint_extension_pending = false
+			# パス先端延長の待機中だった場合、先端近くならタップ処理をスキップ
+			if _path_endpoint_extension_pending:
+				_path_endpoint_extension_pending = false
+				if _is_near_path_endpoint(_left_click_start_pos):
+					get_viewport().set_input_as_handled()
+					return  # タップ処理をスキップ（選択解除を防ぐ）
 			_path_endpoint_extension_started = false
 			# タッチ終了：タップ判定
 			var distance = _left_click_start_pos.distance_to(event.position)
@@ -400,3 +440,21 @@ func _handle_tap(pos: Vector2) -> void:
 
 func _get_path_drawer() -> PathDrawer:
 	return game_manager.path_drawer as PathDrawer
+
+
+## パス先端が近くにあるかチェック
+func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
+	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
+		return false
+
+	# 地面位置を取得
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := game_manager.camera.project_ray_origin(screen_pos)
+	var ray_dir := game_manager.camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	if not intersect:
+		return false
+
+	var ground_pos: Vector3 = intersect as Vector3
+	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
+	return not result.is_empty()

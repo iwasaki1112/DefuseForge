@@ -71,28 +71,16 @@ func start_move_mode() -> bool:
 		push_warning("[PathService] PathDrawer or PathModeController not set")
 		return false
 
-	# 選択中のキャラクター配列を取得
-	var selected_chars: Array[Node] = []
-	for c in selection_manager.selected_characters:
-		selected_chars.append(c)
-
 	# プライマリキャラクターの色を取得
 	var primary = selection_manager.primary_character
 	var char_color = CharacterColorManager.get_character_color(primary)
 
-	# 既存の確定済みパスがあるかチェック
-	var existing_path_data: Dictionary = {}
+	# 既存の確定済みパスがある場合、削除して新規パスとして開始
 	if path_execution_manager and path_execution_manager.has_pending_path_for_character(primary):
-		# 既存パスを編集用に取り出す（pending_pathsから削除される）
-		existing_path_data = path_execution_manager.take_pending_path_for_editing(primary)
+		path_execution_manager.clear_pending_path_for_character(primary)
 
-	# パスモード開始（既存パスがあれば復元、なければ新規）
-	var started: bool
-	if not existing_path_data.is_empty():
-		started = path_mode_controller.start_with_existing_path(existing_path_data, char_color)
-	else:
-		started = path_mode_controller.start(primary, char_color)
-
+	# パスモード開始（常に新規）
+	var started := path_mode_controller.start(primary, char_color)
 	if not started:
 		return false
 
@@ -127,6 +115,21 @@ func start_path_mode_with_existing_path(primary: Node, path_data: Dictionary, ch
 	# アクティブ編集キャラクターを設定
 	path_drawer.set_active_edit_character(primary)
 
+	return true
+
+
+## パス延長モード開始（キャラクター選択なし、一時的な選択リングを表示）
+func start_path_extension_mode(primary: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+	if not path_mode_controller or not path_drawer:
+		return false
+	if path_data.is_empty():
+		return false
+
+	var started := path_mode_controller.start_extension_mode(primary, path_data, char_color)
+	if not started:
+		return false
+
+	path_drawer.set_active_edit_character(primary)
 	return true
 
 

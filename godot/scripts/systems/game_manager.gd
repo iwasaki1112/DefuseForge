@@ -311,14 +311,10 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 	if path_data.is_empty():
 		return false
 
-	# キャラクターを選択
-	selection_manager.deselect_all()
-	selection_manager.add_to_selection(character)
-
-	# 既存パスでパスモード開始
+	# キャラクター選択をスキップ（延長モードで一時的な選択リングを表示）
 	var char_color := CharacterColorManager.get_character_color(character)
 	if path_service:
-		path_service.start_path_mode_with_existing_path(character, path_data, char_color)
+		path_service.start_path_extension_mode(character, path_data, char_color)
 
 	# 即座にパス延長モードを開始
 	if path_drawer and path_drawer.has_method("start_extending_path"):
