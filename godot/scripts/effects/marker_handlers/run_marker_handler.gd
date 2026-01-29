@@ -53,6 +53,11 @@ func _handle_click(screen_pos: Vector2) -> bool:
 		var start_ratio = _current_run_start.ratio
 		var end_ratio = result.ratio
 
+		# 開始点と終点が近すぎる場合は無視（ダブルタップ防止）
+		const MIN_SEGMENT_RATIO: float = 0.02  # パス全長の2%以上必要
+		if absf(end_ratio - start_ratio) < MIN_SEGMENT_RATIO:
+			return true  # イベントは処理済みとして返すが、セグメントは作成しない
+
 		# 開始点が終点より後ろなら入れ替え
 		if start_ratio > end_ratio:
 			var tmp = start_ratio
