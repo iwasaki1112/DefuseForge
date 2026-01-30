@@ -78,9 +78,9 @@ var is_vision_enabled: bool = false
 var _moving_path_vision_preview: MeshInstance3D = null
 ## 現在プレビュー中のpath_ratio
 var _moving_path_preview_ratio: float = 0.0
-## 移動中パスに追加されたVisionマーカー（キャラクターIDをキーとした配列）
-## { char_id: Array[{ "marker": MeshInstance3D, "path_ratio": float }] }
-var _moving_path_vision_markers: Dictionary = {}
+## 移動中パスに追加されたVisionポイント（キャラクターIDをキーとした配列）
+## { char_id: Array[{ "point": MeshInstance3D, "path_ratio": float }] }
+var _moving_path_vision_points: Dictionary = {}
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
@@ -349,11 +349,11 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 	return false
 
 
-## 指定位置近くにある確定済みパス上でVisionマーカー配置モードを開始
+## 指定位置近くにある確定済みパス上でVisionポイント配置モードを開始
 ## @param screen_pos: 画面座標
 ## @param ground_pos: 地面座標（既に計算済みの場合）
-## @return: Visionマーカー配置モードを開始した場合true
-func try_start_vision_marker_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool:
+## @return: Visionポイント配置モードを開始した場合true
+func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool:
 	if not path_execution_manager or not camera:
 		return false
 
@@ -403,11 +403,11 @@ func try_start_vision_marker_on_confirmed_path(screen_pos: Vector2, ground_pos: 
 	return true
 
 
-## 指定位置近くにある移動中パス上でVisionマーカー配置モードを開始
+## 指定位置近くにある移動中パス上でVisionポイント配置モードを開始
 ## @param screen_pos: 画面座標
 ## @param ground_pos: 地面座標（既に計算済みの場合）
-## @return: Visionマーカー配置モードを開始した場合の情報Dictionary、失敗時は空
-func try_start_vision_marker_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary:
+## @return: Visionポイント配置モードを開始した場合の情報Dictionary、失敗時は空
+func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary:
 	if not path_execution_manager or not camera:
 		return {}
 
@@ -430,23 +430,23 @@ func try_start_vision_marker_on_moving_path(screen_pos: Vector2, ground_pos: Vec
 	return path_result
 
 
-## 移動中パスにVisionマーカーを追加
+## 移動中パスにVisionポイントを追加
 ## @param character: 対象キャラクター
 ## @param path_ratio: パス上の比率
 ## @param anchor: アンカー位置
 ## @param target_point: 視線方向の目標点
 ## @return: 成功した場合true
-func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
+func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
 	if not path_execution_manager:
 		return false
-	var result = path_execution_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
+	var result = path_execution_manager.add_vision_point_to_moving_path(character, path_ratio, anchor, target_point)
 	if result and _moving_path_vision_preview:
-		# プレビューを永続マーカーとして保持（path_ratio, anchor, target_pointも保存）
+		# プレビューを永続ポイントとして保持（path_ratio, anchor, target_pointも保存）
 		var char_id = character.get_instance_id()
-		if not _moving_path_vision_markers.has(char_id):
-			_moving_path_vision_markers[char_id] = []
-		_moving_path_vision_markers[char_id].append({
-			"marker": _moving_path_vision_preview,
+		if not _moving_path_vision_points.has(char_id):
+			_moving_path_vision_points[char_id] = []
+		_moving_path_vision_points[char_id].append({
+			"point": _moving_path_vision_preview,
 			"path_ratio": path_ratio,  # 渡されたpath_ratioを使用
 			"anchor": anchor,  # 元のワールド位置を保存
 			"target_point": target_point  # ターゲット位置も保存
@@ -457,19 +457,19 @@ func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor
 	return result
 
 
-## 移動中パスVisionマーカーのプレビューを更新
+## 移動中パスVisionポイントのプレビューを更新
 ## @param character: 対象キャラクター（色取得用）
 ## @param anchor: アンカー位置
 ## @param target_point: 視線方向の目標点
-## @param path_ratio: パス上の比率（マーカー非表示判定用）
+## @param path_ratio: パス上の比率（ポイント非表示判定用）
 func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float = 0.0) -> void:
 	var char_color := CharacterColorManager.get_character_color(character) if character else Color.WHITE
 
 	if not _moving_path_vision_preview:
-		# プレビューマーカーを作成
-		var VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
+		# プレビューポイントを作成
+		var VisionPointScript = preload("res://scripts/effects/vision_point.gd")
 		_moving_path_vision_preview = MeshInstance3D.new()
-		_moving_path_vision_preview.set_script(VisionMarkerScript)
+		_moving_path_vision_preview.set_script(VisionPointScript)
 		_mesh_parent.add_child(_moving_path_vision_preview)
 
 	_moving_path_vision_preview.set_position_and_target(anchor, target_point)
@@ -478,71 +478,71 @@ func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_
 	_moving_path_preview_ratio = path_ratio
 
 
-## 移動中パスVisionマーカーのプレビューをクリア
+## 移動中パスVisionポイントのプレビューをクリア
 func clear_moving_path_vision_preview() -> void:
 	if _moving_path_vision_preview and is_instance_valid(_moving_path_vision_preview):
 		_moving_path_vision_preview.queue_free()
 		_moving_path_vision_preview = null
 
 
-## 移動中パスVisionマーカーをクリア（キャラクター指定）
+## 移動中パスVisionポイントをクリア（キャラクター指定）
 ## @param character: 対象キャラクター
-func clear_moving_path_vision_markers_for_character(character: Node) -> void:
+func clear_moving_path_vision_points_for_character(character: Node) -> void:
 	if not character:
 		return
 	var char_id = character.get_instance_id()
-	if _moving_path_vision_markers.has(char_id):
-		for marker_data in _moving_path_vision_markers[char_id]:
-			var marker = marker_data.get("marker")
-			if is_instance_valid(marker):
-				marker.queue_free()
-		_moving_path_vision_markers.erase(char_id)
+	if _moving_path_vision_points.has(char_id):
+		for point_data in _moving_path_vision_points[char_id]:
+			var point = point_data.get("point")
+			if is_instance_valid(point):
+				point.queue_free()
+		_moving_path_vision_points.erase(char_id)
 
 
-## 全ての移動中パスVisionマーカーをクリア
-func clear_all_moving_path_vision_markers() -> void:
-	for char_id in _moving_path_vision_markers:
-		for marker_data in _moving_path_vision_markers[char_id]:
-			var marker = marker_data.get("marker")
-			if is_instance_valid(marker):
-				marker.queue_free()
-	_moving_path_vision_markers.clear()
+## 全ての移動中パスVisionポイントをクリア
+func clear_all_moving_path_vision_points() -> void:
+	for char_id in _moving_path_vision_points:
+		for point_data in _moving_path_vision_points[char_id]:
+			var point = point_data.get("point")
+			if is_instance_valid(point):
+				point.queue_free()
+	_moving_path_vision_points.clear()
 
 
-## 移動中パスVisionマーカーを進行状況に応じて非表示
+## 移動中パスVisionポイントを進行状況に応じて非表示
 ## @param character: 対象キャラクター
 ## @param current_ratio: 現在のパス進行率
-func hide_passed_moving_path_vision_markers(character: Node, _current_ratio: float) -> void:
+func hide_passed_moving_path_vision_points(character: Node, _current_ratio: float) -> void:
 	if not character:
 		return
 	var char_id = character.get_instance_id()
-	if not _moving_path_vision_markers.has(char_id):
+	if not _moving_path_vision_points.has(char_id):
 		return
 
 	# キャラクターの現在位置を取得（Y座標は無視）
 	var char_pos = character.global_position
 	char_pos.y = 0.0
 
-	for marker_data in _moving_path_vision_markers[char_id]:
-		var marker = marker_data.get("marker")
-		if not is_instance_valid(marker):
+	for point_data in _moving_path_vision_points[char_id]:
+		var point = point_data.get("point")
+		if not is_instance_valid(point):
 			continue
 
 		# 既に非表示なら処理しない
-		if not marker.visible:
+		if not point.visible:
 			continue
 
-		var anchor = marker_data.get("anchor", Vector3.ZERO)
+		var anchor = point_data.get("anchor", Vector3.ZERO)
 		if anchor == Vector3.ZERO:
 			continue
 
-		# マーカー位置との距離で判定（Y座標は無視）
+		# ポイント位置との距離で判定（Y座標は無視）
 		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
 		var distance = char_pos.distance_to(anchor_flat)
 
-		# キャラクターがマーカー位置に十分近い（1.0ユニット以内）なら非表示
+		# キャラクターがポイント位置に十分近い（1.0ユニット以内）なら非表示
 		if distance < 1.0:
-			marker.visible = false
+			point.visible = false
 
 
 ## 移動中パス延長モードを開始
@@ -853,14 +853,14 @@ func _add_sync_wait_point(path_data: Dictionary) -> void:
 	var anchor: Vector3 = path_data.get("point", Vector3.ZERO)
 	var character = path_data.get("character", null)
 
-	# パスモード中（pending path）の場合、PathDrawerにマーカーを追加
+	# パスモード中（pending path）の場合、PathDrawerにポイントを追加
 	if is_path_mode() and path_drawer:
-		path_drawer.add_sync_wait_marker(path_ratio, anchor)
+		path_drawer.add_sync_wait_point(path_ratio, anchor)
 		return
 
-	# 確認済みパスの場合、PathExecutionManagerにマーカーを追加
+	# 確認済みパスの場合、PathExecutionManagerにポイントを追加
 	if character and path_execution_manager:
-		path_execution_manager.add_sync_wait_marker_to_path(character, path_ratio, anchor)
+		path_execution_manager.add_sync_wait_point_to_path(character, path_ratio, anchor)
 
 
 ## 全キャラクターの同期待機を解除
@@ -888,19 +888,19 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
 		add_child(path_execution_manager)
 		path_execution_manager.setup(mesh_parent)
-		# グレネード/スモークグレネード/ドアマーカー到達シグナルを接続
-		path_execution_manager.grenade_marker_reached.connect(_on_grenade_marker_reached)
-		path_execution_manager.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached)
-		path_execution_manager.door_marker_reached.connect(_on_door_marker_reached)
+		# グレネード/スモークグレネード/ドアポイント到達シグナルを接続
+		path_execution_manager.grenade_point_reached.connect(_on_grenade_point_reached)
+		path_execution_manager.smoke_grenade_point_reached.connect(_on_smoke_grenade_point_reached)
+		path_execution_manager.door_point_reached.connect(_on_door_point_reached)
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
-		# パス完了時に移動中パスVisionマーカーをクリア
+		# パス完了時に移動中パスVisionポイントをクリア
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
-		# Visionマーカー到達時に移動中パスマーカーを非表示
+		# Visionポイント到達時に移動中パスポイントを非表示
 		path_execution_manager.vision_point_reached.connect(_on_vision_point_reached)
-		# パス進行更新時に移動中パスマーカーを非表示チェック
+		# パス進行更新時に移動中パスポイントを非表示チェック
 		path_execution_manager.path_progress_updated.connect(_on_path_progress_updated)
-		# 延長マーカーの比率がスケールされた時に移動中パスマーカーの比率を更新
-		path_execution_manager.extension_markers_scaled.connect(_on_extension_markers_scaled)
+		# 延長ポイントの比率がスケールされた時に移動中パスポイントの比率を更新
+		path_execution_manager.extension_points_scaled.connect(_on_extension_points_scaled)
 
 
 func _setup_idle_manager() -> void:
@@ -1077,26 +1077,26 @@ func _on_all_paths_completed() -> void:
 
 
 func _on_character_path_completed(character: Node) -> void:
-	# 移動中パスVisionマーカーをクリア
-	clear_moving_path_vision_markers_for_character(character)
+	# 移動中パスVisionポイントをクリア
+	clear_moving_path_vision_points_for_character(character)
 
 
 func _on_vision_point_reached(character: Node, path_ratio: float) -> void:
-	# 移動中パスVisionマーカーを進行状況に応じて非表示
-	hide_passed_moving_path_vision_markers(character, path_ratio)
+	# 移動中パスVisionポイントを進行状況に応じて非表示
+	hide_passed_moving_path_vision_points(character, path_ratio)
 
 
 func _on_path_progress_updated(character: Node) -> void:
-	# パス進行時にも移動中パスVisionマーカーを非表示チェック
-	hide_passed_moving_path_vision_markers(character, 0.0)
+	# パス進行時にも移動中パスVisionポイントを非表示チェック
+	hide_passed_moving_path_vision_points(character, 0.0)
 
 
-func _on_extension_markers_scaled(character: Node, _scale: float) -> void:
-	# 移動中パスVisionマーカーの比率をアンカー位置から再計算
+func _on_extension_points_scaled(character: Node, _scale: float) -> void:
+	# 移動中パスVisionポイントの比率をアンカー位置から再計算
 	if not character or not path_execution_manager:
 		return
 	var char_id = character.get_instance_id()
-	if not _moving_path_vision_markers.has(char_id):
+	if not _moving_path_vision_points.has(char_id):
 		return
 
 	# 現在の完全な残りパスを取得
@@ -1104,18 +1104,18 @@ func _on_extension_markers_scaled(character: Node, _scale: float) -> void:
 	if full_path.size() < 2:
 		return
 
-	for marker_data in _moving_path_vision_markers[char_id]:
-		var anchor = marker_data.get("anchor", Vector3.ZERO)
+	for point_data in _moving_path_vision_points[char_id]:
+		var anchor = point_data.get("anchor", Vector3.ZERO)
 		if anchor != Vector3.ZERO:
 			# アンカー位置からパス上の比率を再計算
 			var new_ratio = _calculate_ratio_from_position_on_path(full_path, anchor)
-			marker_data["path_ratio"] = new_ratio
+			point_data["path_ratio"] = new_ratio
 
-		# 視覚的なマーカー位置を維持
-		var marker = marker_data.get("marker")
-		var target_point = marker_data.get("target_point", Vector3.ZERO)
-		if is_instance_valid(marker) and anchor != Vector3.ZERO:
-			marker.set_position_and_target(anchor, target_point)
+		# 視覚的なポイント位置を維持
+		var point = point_data.get("point")
+		var target_point = point_data.get("target_point", Vector3.ZERO)
+		if is_instance_valid(point) and anchor != Vector3.ZERO:
+			point.set_position_and_target(anchor, target_point)
 
 
 ## ワールド座標からパス上の比率を計算（最近点を使用）
@@ -1210,7 +1210,7 @@ func _on_survivor_count_changed(ct_count: int, t_count: int) -> void:
 
 ## キャラクター死亡時の処理
 func _on_character_died(character: GameCharacter) -> void:
-	# パス追従をキャンセルしてパスメッシュ・マーカーをクリア
+	# パス追従をキャンセルしてパスメッシュ・ポイントをクリア
 	if path_service:
 		path_service.cancel_path_following(character, true)
 
@@ -1220,7 +1220,7 @@ func _on_character_died(character: GameCharacter) -> void:
 
 
 ## ========================================
-## ドアキック処理（マーカーからの実行用）
+## ドアキック処理（ポイントからの実行用）
 ## ========================================
 
 ## ドアキック時のドア方向（キャラクターID -> Vector3）
@@ -1292,11 +1292,11 @@ func _open_door(door: Node3D, character: CharacterBody3D) -> void:
 
 
 ## ========================================
-## パスマーカー到達時の処理
+## パスポイント到達時の処理
 ## ========================================
 
-## グレネードマーカー到達時（移動を継続しながら投擲）
-func _on_grenade_marker_reached(character: Node, marker_data: Dictionary) -> void:
+## グレネードポイント到達時（移動を継続しながら投擲）
+func _on_grenade_point_reached(character: Node, marker_data: Dictionary) -> void:
 	if not is_instance_valid(character):
 		return
 
@@ -1309,7 +1309,7 @@ func _on_grenade_marker_reached(character: Node, marker_data: Dictionary) -> voi
 	if game_char and not game_char.is_local():
 		return  # リモートキャラクターの投擲はネットワークイベントで処理
 
-	# マーカーデータからターゲット位置を取得
+	# ポイントデータからターゲット位置を取得
 	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
 	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
 
@@ -1336,8 +1336,8 @@ func _on_grenade_marker_reached(character: Node, marker_data: Dictionary) -> voi
 	_emit_grenade_network_event(start_pos, velocity, false, grenade_id)
 
 
-## スモークグレネードマーカー到達時（移動を継続しながら投擲）
-func _on_smoke_grenade_marker_reached(character: Node, marker_data: Dictionary) -> void:
+## スモークグレネードポイント到達時（移動を継続しながら投擲）
+func _on_smoke_grenade_point_reached(character: Node, marker_data: Dictionary) -> void:
 	if not is_instance_valid(character):
 		return
 
@@ -1350,7 +1350,7 @@ func _on_smoke_grenade_marker_reached(character: Node, marker_data: Dictionary) 
 	if game_char and not game_char.is_local():
 		return  # リモートキャラクターの投擲はネットワークイベントで処理
 
-	# マーカーデータからターゲット位置を取得
+	# ポイントデータからターゲット位置を取得
 	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
 	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
 
@@ -1502,8 +1502,8 @@ func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, _is
 		grenade.explode_at_position(position)
 
 
-## ドアマーカー到達時（移動を一時停止してドアキック）
-func _on_door_marker_reached(character: Node, door: Node3D) -> void:
+## ドアポイント到達時（移動を一時停止してドアキック）
+func _on_door_point_reached(character: Node, door: Node3D) -> void:
 	if not is_instance_valid(character) or not is_instance_valid(door):
 		# ドアが無効な場合はパス追従を再開
 		_resume_path_after_door(character)
@@ -1515,11 +1515,11 @@ func _on_door_marker_reached(character: Node, door: Node3D) -> void:
 		return
 
 	# ドアキック実行（完了後にパス追従を再開）
-	_execute_door_kick_from_marker(char_body, door)
+	_execute_door_kick_from_point(char_body, door)
 
 
-## マーカーからのドアキック実行（完了後にパス追従を再開）
-func _execute_door_kick_from_marker(character: CharacterBody3D, door: Node3D) -> void:
+## ポイントからのドアキック実行（完了後にパス追従を再開）
+func _execute_door_kick_from_point(character: CharacterBody3D, door: Node3D) -> void:
 	if not is_instance_valid(character) or not is_instance_valid(door):
 		_resume_path_after_door(character)
 		return
@@ -1539,7 +1539,7 @@ func _execute_door_kick_from_marker(character: CharacterBody3D, door: Node3D) ->
 		# フォールバック: 即座に向きを変えてキック
 		if character.has_method("face_towards"):
 			character.face_towards(door_pos)
-		_play_door_kick_animation_from_marker(character, door)
+		_play_door_kick_animation_from_point(character, door)
 		return
 
 	# 目標方向を計算（Mixamoモデルは+Zが前方）
@@ -1564,11 +1564,11 @@ func _execute_door_kick_from_marker(character: CharacterBody3D, door: Node3D) ->
 	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 
 	# 回転完了後にキックアニメーション再生
-	tween.tween_callback(_play_door_kick_animation_from_marker.bind(character, door))
+	tween.tween_callback(_play_door_kick_animation_from_point.bind(character, door))
 
 
-## ドアキックアニメーション再生（マーカーから）
-func _play_door_kick_animation_from_marker(character: CharacterBody3D, door: Node3D) -> void:
+## ドアキックアニメーション再生（ポイントから）
+func _play_door_kick_animation_from_point(character: CharacterBody3D, door: Node3D) -> void:
 	if not is_instance_valid(character) or not is_instance_valid(door):
 		_resume_path_after_door(character)
 		return
@@ -1591,14 +1591,14 @@ func _play_door_kick_animation_from_marker(character: CharacterBody3D, door: Nod
 
 	# door_kick_finishedシグナルに接続（アニメーション完了後にパス追従を再開）
 	if anim_ctrl.has_signal("door_kick_finished"):
-		if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_animation_finished_from_marker.bind(character)):
-			anim_ctrl.door_kick_finished.connect(_on_door_kick_animation_finished_from_marker.bind(character), CONNECT_ONE_SHOT)
+		if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_animation_finished_from_point.bind(character)):
+			anim_ctrl.door_kick_finished.connect(_on_door_kick_animation_finished_from_point.bind(character), CONNECT_ONE_SHOT)
 
 	anim_ctrl.play_door_kick()
 
 
-## ドアキックアニメーション完了時（マーカーから）
-func _on_door_kick_animation_finished_from_marker(character: CharacterBody3D) -> void:
+## ドアキックアニメーション完了時（ポイントから）
+func _on_door_kick_animation_finished_from_point(character: CharacterBody3D) -> void:
 	if not is_instance_valid(character):
 		return
 

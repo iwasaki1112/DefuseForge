@@ -3,7 +3,7 @@ extends RefCounted
 ## シリアライズ/デシリアライズユーティリティ
 ##
 ## ネットワーク転送用のデータ圧縮・展開を行う
-## パス座標の圧縮、マーカーデータのシリアライズなど
+## パス座標の圧縮、ポイントデータのシリアライズなど
 
 # ============================================
 # Vector3配列の圧縮
@@ -74,20 +74,20 @@ static func serialize_path_message(msg: NetworkMessages.PathConfirmMessage) -> P
 	buffer.put_u16(path_data.size())
 	buffer.put_data(path_data)
 
-	# マーカーデータ（JSON形式で簡易シリアライズ）
-	var markers_dict := {
-		"vision": msg.vision_markers,
+	# ポイントデータ（JSON形式で簡易シリアライズ）
+	var points_dict := {
+		"vision": msg.vision_points,
 		"run": msg.run_segments,
-		"clear": msg.clear_markers,
-		"grenade": msg.grenade_markers,
-		"door": msg.door_markers,
-		"wait": msg.wait_markers,
-		"smoke": msg.smoke_grenade_markers,
+		"clear": msg.clear_points,
+		"grenade": msg.grenade_points,
+		"door": msg.door_points,
+		"wait": msg.wait_points,
+		"smoke": msg.smoke_grenade_points,
 	}
-	var markers_json := JSON.stringify(markers_dict)
-	var markers_bytes := markers_json.to_utf8_buffer()
-	buffer.put_u32(markers_bytes.size())
-	buffer.put_data(markers_bytes)
+	var points_json := JSON.stringify(points_dict)
+	var points_bytes := points_json.to_utf8_buffer()
+	buffer.put_u32(points_bytes.size())
+	buffer.put_data(points_bytes)
 
 	return buffer.data_array
 
@@ -114,22 +114,22 @@ static func deserialize_path_message(data: PackedByteArray) -> NetworkMessages.P
 		var path_data := buffer.get_data(path_size)[1] as PackedByteArray
 		msg.path = decompress_vector3_array(path_data)
 
-	# マーカーデータを復元
+	# ポイントデータを復元
 	if buffer.get_position() + 4 <= data.size():
-		var markers_size := buffer.get_u32()
-		if markers_size > 0 and buffer.get_position() + markers_size <= data.size():
-			var markers_bytes := buffer.get_data(markers_size)[1] as PackedByteArray
-			var markers_json := markers_bytes.get_string_from_utf8()
+		var points_size := buffer.get_u32()
+		if points_size > 0 and buffer.get_position() + points_size <= data.size():
+			var points_bytes := buffer.get_data(points_size)[1] as PackedByteArray
+			var points_json := points_bytes.get_string_from_utf8()
 			var json := JSON.new()
-			if json.parse(markers_json) == OK:
-				var markers_dict: Dictionary = json.data
-				msg.vision_markers.assign(markers_dict.get("vision", []))
-				msg.run_segments.assign(markers_dict.get("run", []))
-				msg.clear_markers.assign(markers_dict.get("clear", []))
-				msg.grenade_markers.assign(markers_dict.get("grenade", []))
-				msg.door_markers.assign(markers_dict.get("door", []))
-				msg.wait_markers.assign(markers_dict.get("wait", []))
-				msg.smoke_grenade_markers.assign(markers_dict.get("smoke", []))
+			if json.parse(points_json) == OK:
+				var points_dict: Dictionary = json.data
+				msg.vision_points.assign(points_dict.get("vision", []))
+				msg.run_segments.assign(points_dict.get("run", []))
+				msg.clear_points.assign(points_dict.get("clear", []))
+				msg.grenade_points.assign(points_dict.get("grenade", []))
+				msg.door_points.assign(points_dict.get("door", []))
+				msg.wait_points.assign(points_dict.get("wait", []))
+				msg.smoke_grenade_points.assign(points_dict.get("smoke", []))
 
 	return msg
 
@@ -410,16 +410,16 @@ static func validate_path_message(msg: NetworkMessages.PathConfirmMessage) -> bo
 	if msg.path.size() > NetworkConstants.MAX_PATH_POINTS:
 		return false
 
-	# マーカー数が上限以内
-	if msg.vision_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+	# ポイント数が上限以内
+	if msg.vision_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
-	if msg.run_segments.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+	if msg.run_segments.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
-	if msg.clear_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+	if msg.clear_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
-	if msg.grenade_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+	if msg.grenade_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
-	if msg.door_markers.size() > NetworkConstants.MAX_MARKERS_PER_TYPE:
+	if msg.door_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
 
 	return true

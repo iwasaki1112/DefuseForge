@@ -232,19 +232,19 @@ func _confirm_moving_extension() -> bool:
 		cancel()
 		return false
 
-	# マーカーデータを取得
-	var markers := {
+	# ポイントデータを取得
+	var points := {
 		"vision_points": path_drawer.get_vision_points().duplicate(),
 		"run_segments": path_drawer.get_run_segments().duplicate(),
 		"clear_points": path_drawer.get_clear_points().duplicate(),
-		"grenade_markers_data": path_drawer.get_grenade_markers().duplicate(),
-		"smoke_grenade_markers_data": path_drawer.get_smoke_grenade_markers().duplicate(),
-		"door_markers_data": path_drawer.get_door_markers().duplicate(),
-		"wait_markers_data": path_drawer.get_wait_markers().duplicate()
+		"grenade_points_data": path_drawer.get_grenade_points().duplicate(),
+		"smoke_grenade_points_data": path_drawer.get_smoke_grenade_points().duplicate(),
+		"door_points_data": path_drawer.get_door_points().duplicate(),
+		"wait_points_data": path_drawer.get_wait_points().duplicate()
 	}
 
 	# PathExecutionManagerに延長パスを設定（延長の延長の場合はappend_to_existingをtrue）
-	if path_execution_manager.set_extension_path_for_character(character, extension_path, markers, _is_extending_extension_path):
+	if path_execution_manager.set_extension_path_for_character(character, extension_path, points, _is_extending_extension_path):
 		_cleanup()
 		mode_ended.emit()
 		return true

@@ -32,7 +32,7 @@ var _is_rotation_mode: bool = false  ## 回転モード中かどうか
 var _rotation_target_character: Node = null  ## 回転対象のキャラクター
 var _rotation_center_screen_pos: Vector2 = Vector2.ZERO  ## 回転中心のスクリーン座標
 
-## 確認済みパス上長押しでVisionマーカー配置用
+## 確認済みパス上長押しでVisionポイント配置用
 var _confirmed_path_longpress_pending: bool = false  ## 長押し待機中か
 var _confirmed_path_longpress_timer: float = 0.0     ## 長押しタイマー
 var _confirmed_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
@@ -40,7 +40,7 @@ var _confirmed_path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し�
 var _confirmed_path_longpress_ground_pos: Vector3 = Vector3.ZERO  ## 長押し開始地面位置
 var _confirmed_path_tap_path_data: Dictionary = {}  ## タップしたパスの情報（コンテキストメニュー用）
 
-## 移動中パス上長押しでVisionマーカー配置用
+## 移動中パス上長押しでVisionポイント配置用
 var _moving_path_longpress_pending: bool = false  ## 長押し待機中か
 var _moving_path_longpress_timer: float = 0.0     ## 長押しタイマー
 var _moving_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
@@ -259,9 +259,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			# PathDrawerにリリースイベントを渡す
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
-				# マーカーモード中（Visionマーカー等）の場合はマーカー用リリース処理
-				if path_drawer.is_marker_mode():
-					path_drawer.handle_marker_release(event.position)
+				# ポイントモード中（Visionポイント等）の場合はポイント用リリース処理
+				if path_drawer.is_point_mode():
+					path_drawer.handle_point_release(event.position)
 				else:
 					path_drawer.handle_movement_release(event.position)
 			if camera_pan_controller:
@@ -297,7 +297,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				# キャラクターがクリックされなかった場合、パス先端延長を試みる
 				_path_endpoint_extension_pending = true
 				_path_endpoint_extension_started = false
-				# PathDrawerにプレスイベントを渡す（長押しVisionマーカー用）
+				# PathDrawerにプレスイベントを渡す（長押しVisionポイント用）
 				var path_drawer = _get_path_drawer()
 				var longpress_started = false
 				if path_drawer:
@@ -351,9 +351,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_rotation_mode:
 				_end_rotation_mode()
 				return
-			# 移動中パスVision描画中だった場合、マーカーを確定
+			# 移動中パスVision描画中だった場合、ポイントを確定
 			if _moving_path_vision_drawing:
-				_finish_moving_path_vision_marker(event.position)
+				_finish_moving_path_vision_point(event.position)
 				return
 			# 確認済みパス長押し待機中だった場合（タップ判定）
 			if _confirmed_path_longpress_pending:
@@ -565,9 +565,9 @@ func _handle_touch_event(event: InputEvent) -> void:
 			# PathDrawerにリリースイベントを渡す
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
-				# マーカーモード中（Visionマーカー等）の場合はマーカー用リリース処理
-				if path_drawer.is_marker_mode():
-					path_drawer.handle_marker_release(event.position)
+				# ポイントモード中（Visionポイント等）の場合はポイント用リリース処理
+				if path_drawer.is_point_mode():
+					path_drawer.handle_point_release(event.position)
 			if camera_pan_controller.is_touch_panning():
 				camera_pan_controller.end_touch_pan()
 			elif camera_pan_controller.is_pending_touch_pan():
@@ -649,9 +649,9 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_end_rotation_mode()
 				get_viewport().set_input_as_handled()
 				return
-			# 移動中パスVision描画中だった場合、マーカーを確定
+			# 移動中パスVision描画中だった場合、ポイントを確定
 			if _moving_path_vision_drawing:
-				_finish_moving_path_vision_marker(event.position)
+				_finish_moving_path_vision_point(event.position)
 				get_viewport().set_input_as_handled()
 				return
 			# 確認済みパス長押し待機中だった場合（タップ判定）
@@ -873,7 +873,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 		return true
 
 	# 移動中パス上かチェック（先端は除外）
-	var moving_result := game_manager.try_start_vision_marker_on_moving_path(screen_pos, ground_pos)
+	var moving_result := game_manager.try_start_vision_point_on_moving_path(screen_pos, ground_pos)
 	if not moving_result.is_empty():
 		# 長押し待機を開始（移動中パス）
 		_moving_path_longpress_pending = true
@@ -891,7 +891,7 @@ func _start_vision_mode_on_confirmed_path() -> void:
 	_confirmed_path_longpress_pending = false
 	_confirmed_path_longpress_timer = 0.0
 
-	if game_manager.try_start_vision_marker_on_confirmed_path(
+	if game_manager.try_start_vision_point_on_confirmed_path(
 		_confirmed_path_longpress_screen_pos,
 		_confirmed_path_longpress_ground_pos
 	):
@@ -934,8 +934,8 @@ func _start_vision_mode_on_moving_path() -> void:
 	_moving_path_vision_drawing = true
 
 
-## 移動中パスへのVisionマーカー配置を完了
-func _finish_moving_path_vision_marker(screen_pos: Vector2) -> void:
+## 移動中パスへのVisionポイント配置を完了
+func _finish_moving_path_vision_point(screen_pos: Vector2) -> void:
 	if not _moving_path_vision_drawing or _moving_path_longpress_data.is_empty():
 		_reset_moving_path_longpress()
 		return
@@ -963,13 +963,13 @@ func _finish_moving_path_vision_marker(screen_pos: Vector2) -> void:
 		_reset_moving_path_longpress()
 		return
 
-	# 移動中パスにVisionマーカーを追加
-	game_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
+	# 移動中パスにVisionポイントを追加
+	game_manager.add_vision_point_to_moving_path(character, path_ratio, anchor, target_point)
 
 	_reset_moving_path_longpress()
 
 
-## 移動中パスVisionマーカーのプレビューを更新
+## 移動中パスVisionポイントのプレビューを更新
 func _update_moving_path_vision_preview(screen_pos: Vector2) -> void:
 	if _moving_path_longpress_data.is_empty():
 		return

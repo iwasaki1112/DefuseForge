@@ -204,9 +204,9 @@ func _setup_hud() -> void:
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
 		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
 		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
-		_hud.marker_edit_requested.connect(_on_marker_edit_requested)
-		_hud.marker_undo_requested.connect(_on_marker_undo_requested)
-		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
+		_hud.point_edit_requested.connect(_on_point_edit_requested)
+		_hud.point_undo_requested.connect(_on_point_undo_requested)
+		_hud.point_cancel_requested.connect(_on_point_cancel_requested)
 		_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
 
 
@@ -364,7 +364,7 @@ func _on_sync_wait_state_changed(has_waiting: bool) -> void:
 		_hud.update_sync_go_button_visibility(has_waiting)
 
 
-func _on_marker_edit_requested(action: String) -> void:
+func _on_point_edit_requested(action: String) -> void:
 	if not game_manager or not game_manager.path_service:
 		return
 
@@ -389,29 +389,29 @@ func _on_marker_edit_requested(action: String) -> void:
 			path_service.start_wait_mode()
 
 
-func _on_marker_undo_requested() -> void:
+func _on_point_undo_requested() -> void:
 	if game_manager and game_manager.path_service:
-		game_manager.path_service.undo_last_marker()
+		game_manager.path_service.undo_last_point()
 
 
-func _on_marker_cancel_requested() -> void:
+func _on_point_cancel_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.cancel_path()
 
 
 func _on_path_ready() -> void:
 	if _hud:
-		_hud.show_marker_edit_panel()
+		_hud.show_point_edit_panel()
 
 
 func _on_path_mode_ended() -> void:
 	if _hud:
-		_hud.hide_marker_edit_panel()
+		_hud.hide_point_edit_panel()
 
 
 func _on_path_mode_cancelled() -> void:
 	if _hud:
-		_hud.hide_marker_edit_panel()
+		_hud.hide_point_edit_panel()
 
 
 func _on_character_marker_pressed(character: Node) -> void:

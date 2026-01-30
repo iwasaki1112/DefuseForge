@@ -9,13 +9,13 @@ signal path_started()
 signal path_completed()
 signal path_cancelled()
 signal vision_point_reached(index: int, direction: Vector3)
-signal grenade_marker_reached(index: int, marker_data: Dictionary)
-signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
-signal door_marker_reached(index: int, door: Node3D)
-signal wait_marker_reached(index: int, marker_data: Dictionary)
+signal grenade_point_reached(index: int, point_data: Dictionary)
+signal smoke_grenade_point_reached(index: int, point_data: Dictionary)
+signal door_point_reached(index: int, door: Node3D)
+signal wait_point_reached(index: int, point_data: Dictionary)
 signal extension_path_activated()  ## 延長パスに切り替わった時
 signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
-signal extension_markers_scaled(scale: float)  ## 延長マーカーの比率がスケールされた時
+signal extension_points_scaled(scale: float)  ## 延長ポイントの比率がスケールされた時
 signal sync_wait_started()  ## 同期待機開始時
 signal sync_wait_released()  ## 同期待機解放時
 
@@ -45,16 +45,16 @@ var _vision_index: int = 0
 var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _clear_points: Array[Dictionary] = []  # { path_ratio }
 var _clear_index: int = 0
-var _grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _grenade_points: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
 var _grenade_index: int = 0
-var _smoke_grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _smoke_grenade_points: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
 var _smoke_grenade_index: int = 0
-var _door_markers: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
+var _door_points: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
 var _door_index: int = 0
 var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
 var _is_waiting_for_closed_door: bool = false  # 閉じたドアが開くのを待っている状態
 var _waiting_door: Node3D = null  # 待機中のドアノード
-var _wait_markers: Array[Dictionary] = []  # { path_ratio, anchor, wait_duration }
+var _wait_points: Array[Dictionary] = []  # { path_ratio, anchor, wait_duration }
 var _wait_index: int = 0
 var _is_waiting_for_wait: bool = false  # Wait待機中状態
 var _is_sync_waiting: bool = false  # 同期待機中状態（Wボタンで解放）
@@ -70,10 +70,10 @@ var _extension_path: Array[Vector3] = []
 var _extension_vision_points: Array[Dictionary] = []
 var _extension_run_segments: Array[Dictionary] = []
 var _extension_clear_points: Array[Dictionary] = []
-var _extension_grenade_markers: Array[Dictionary] = []
-var _extension_smoke_grenade_markers: Array[Dictionary] = []
-var _extension_door_markers: Array[Dictionary] = []
-var _extension_wait_markers: Array[Dictionary] = []
+var _extension_grenade_points: Array[Dictionary] = []
+var _extension_smoke_grenade_points: Array[Dictionary] = []
+var _extension_door_points: Array[Dictionary] = []
+var _extension_wait_points: Array[Dictionary] = []
 var _has_extension: bool = false
 
 ## スタック検出用
@@ -123,16 +123,16 @@ func set_combat_awareness(component: Node) -> void:
 ## @param run_segments: Run区間配列（start_ratio, end_ratioを含むDictionary）
 ## @param run: 走行モードか（全体を走る場合）
 ## @param clear_points: Clearポイント配列（path_ratioを含むDictionary）
-## @param grenade_markers: グレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
-## @param door_markers: ドアマーカー配列（path_ratio, door_nodeを含むDictionary）
-## @param wait_markers: Waitマーカー配列（path_ratio, wait_durationを含むDictionary）
-## @param smoke_grenade_markers: スモークグレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
+## @param grenade_points: グレネードポイント配列（path_ratio, target_pos等を含むDictionary）
+## @param door_points: ドアポイント配列（path_ratio, door_nodeを含むDictionary）
+## @param wait_points: Waitポイント配列（path_ratio, wait_durationを含むDictionary）
+## @param smoke_grenade_points: スモークグレネードポイント配列（path_ratio, target_pos等を含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		run_segments: Array[Dictionary] = [], run: bool = false,
-		clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [],
-		door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = [],
-		smoke_grenade_markers: Array[Dictionary] = []) -> bool:
+		clear_points: Array[Dictionary] = [], grenade_points: Array[Dictionary] = [],
+		door_points: Array[Dictionary] = [], wait_points: Array[Dictionary] = [],
+		smoke_grenade_points: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -145,10 +145,10 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_vision_points = vision_points.duplicate()
 	_run_segments = run_segments.duplicate()
 	_clear_points = clear_points.duplicate()
-	_grenade_markers = grenade_markers.duplicate()
-	_smoke_grenade_markers = smoke_grenade_markers.duplicate()
-	_door_markers = door_markers.duplicate()
-	_wait_markers = wait_markers.duplicate()
+	_grenade_points = grenade_points.duplicate()
+	_smoke_grenade_points = smoke_grenade_points.duplicate()
+	_door_points = door_points.duplicate()
+	_wait_points = wait_points.duplicate()
 	_vision_index = 0
 	_clear_index = 0
 	_grenade_index = 0
@@ -212,9 +212,9 @@ func cancel() -> void:
 	_vision_points.clear()
 	_run_segments.clear()
 	_clear_points.clear()
-	_grenade_markers.clear()
-	_door_markers.clear()
-	_wait_markers.clear()
+	_grenade_points.clear()
+	_door_points.clear()
+	_wait_points.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
@@ -349,11 +349,11 @@ func process(delta: float) -> void:
 	to_final.y = 0
 	var distance_to_final = to_final.length()
 
-	# ドアマーカーのチェック（最終目的地到達前に優先チェック）
-	# ドアマーカーがある場合、パス完了より先に停止してドアキックを実行
+	# ドアポイントのチェック（最終目的地到達前に優先チェック）
+	# ドアポイントがある場合、パス完了より先に停止してドアキックを実行
 	var early_progress = _calculate_path_progress()
-	if _check_door_markers(early_progress):
-		return  # ドアマーカーに到達、処理を中断
+	if _check_door_points(early_progress):
+		return  # ドアポイントに到達、処理を中断
 
 	# 最終目的地に十分近ければ完了
 	if distance_to_final < final_destination_radius:
@@ -426,17 +426,17 @@ func process(delta: float) -> void:
 	# Clearポイントのチェック（視線・Runをリセット）
 	_check_clear_points(progress)
 
-	# グレネードマーカーのチェック（投擲実行、移動は継続）
-	_check_grenade_markers(progress)
+	# グレネードポイントのチェック（投擲実行、移動は継続）
+	_check_grenade_points(progress)
 
-	# スモークグレネードマーカーのチェック（投擲実行、移動は継続）
-	_check_smoke_grenade_markers(progress)
+	# スモークグレネードポイントのチェック（投擲実行、移動は継続）
+	_check_smoke_grenade_points(progress)
 
-	# Waitマーカーのチェック（待機開始）
-	if _check_wait_markers(progress):
-		return  # Waitマーカーに到達、処理を中断
+	# Waitポイントのチェック（待機開始）
+	if _check_wait_points(progress):
+		return  # Waitポイントに到達、処理を中断
 
-	# ドアマーカーは早期チェック済み（最終目的地到達前に処理）
+	# ドアポイントは早期チェック済み（最終目的地到達前に処理）
 
 	# 視線方向を更新（Run区間外のみ）
 	if not in_run_segment:
@@ -472,9 +472,9 @@ func process(delta: float) -> void:
 			_character._facing_direction = look_dir.normalized()
 
 	# 閉じたドアチェック（移動方向に閉じたドアがあれば停止）
-	# ただし、Doorマーカーが設定されているドアは除外（Doorマーカーで処理される）
+	# ただし、Doorポイントが設定されているドアは除外（Doorポイントで処理される）
 	var closed_door = _check_closed_door_ahead(move_dir)
-	if closed_door and not _is_door_in_markers(closed_door):
+	if closed_door and not _is_door_in_points(closed_door):
 		_is_waiting_for_closed_door = true
 		_waiting_door = closed_door
 		_character.velocity = Vector3.ZERO
@@ -650,6 +650,7 @@ func _is_in_run_segment(progress: float) -> bool:
 
 ## Clearポイントのチェックと処理
 ## Clearポイント到達時に視線・Runをリセットして進行方向を向く
+## @param progress: 現在のパス進行率
 func _check_clear_points(progress: float) -> void:
 	while _clear_index < _clear_points.size():
 		var cp = _clear_points[_clear_index]
@@ -662,73 +663,73 @@ func _check_clear_points(progress: float) -> void:
 			break
 
 
-## グレネードマーカーのチェックと処理
-## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
-func _check_grenade_markers(progress: float) -> void:
-	while _grenade_index < _grenade_markers.size():
-		var gm = _grenade_markers[_grenade_index]
-		if progress >= gm.path_ratio:
-			# グレネードマーカーに到達: 投擲シグナルを発火
-			grenade_marker_reached.emit(_grenade_index, gm)
+## グレネードポイントのチェックと処理
+## ポイント到達時に即座に投擲シグナルを発火（移動は継続）
+func _check_grenade_points(progress: float) -> void:
+	while _grenade_index < _grenade_points.size():
+		var gp = _grenade_points[_grenade_index]
+		if progress >= gp.path_ratio:
+			# グレネードポイントに到達: 投擲シグナルを発火
+			grenade_point_reached.emit(_grenade_index, gp)
 			_grenade_index += 1
 		else:
 			break
 
 
-## スモークグレネードマーカーのチェックと処理
-## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
-func _check_smoke_grenade_markers(progress: float) -> void:
-	while _smoke_grenade_index < _smoke_grenade_markers.size():
-		var sgm = _smoke_grenade_markers[_smoke_grenade_index]
-		if progress >= sgm.path_ratio:
-			# スモークグレネードマーカーに到達: 投擲シグナルを発火
-			smoke_grenade_marker_reached.emit(_smoke_grenade_index, sgm)
+## スモークグレネードポイントのチェックと処理
+## ポイント到達時に即座に投擲シグナルを発火（移動は継続）
+func _check_smoke_grenade_points(progress: float) -> void:
+	while _smoke_grenade_index < _smoke_grenade_points.size():
+		var sgp = _smoke_grenade_points[_smoke_grenade_index]
+		if progress >= sgp.path_ratio:
+			# スモークグレネードポイントに到達: 投擲シグナルを発火
+			smoke_grenade_point_reached.emit(_smoke_grenade_index, sgp)
 			_smoke_grenade_index += 1
 		else:
 			break
 
 
-## ドアマーカーのチェックと処理
-## マーカー到達時にパスを一時停止してドアキックシグナルを発火
-## @return: ドアマーカーに到達してパスを停止した場合はtrue
-func _check_door_markers(progress: float) -> bool:
-	# パス終端付近のマーカーに対する許容範囲（進行率が完全に1.0に到達しないため）
+## ドアポイントのチェックと処理
+## ポイント到達時にパスを一時停止してドアキックシグナルを発火
+## @return: ドアポイントに到達してパスを停止した場合はtrue
+func _check_door_points(progress: float) -> bool:
+	# パス終端付近のポイントに対する許容範囲（進行率が完全に1.0に到達しないため）
 	const END_TOLERANCE: float = 0.03
-	# マーカー位置への到達判定距離
-	const MARKER_REACH_DISTANCE: float = 0.8
+	# ポイント位置への到達判定距離
+	const POINT_REACH_DISTANCE: float = 0.8
 
-	while _door_index < _door_markers.size():
-		var dm = _door_markers[_door_index]
-		var target_ratio = dm.path_ratio
+	while _door_index < _door_points.size():
+		var dp = _door_points[_door_index]
+		var target_ratio = dp.path_ratio
 
-		# 終端付近（ratio > 0.97）のマーカーは許容範囲を持たせる
+		# 終端付近（ratio > 0.97）のポイントは許容範囲を持たせる
 		var ratio_reached = false
 		if target_ratio > 0.97:
-			# 終端マーカー: progress が target_ratio - END_TOLERANCE 以上で到達とみなす
+			# 終端ポイント: progress が target_ratio - END_TOLERANCE 以上で到達とみなす
 			ratio_reached = progress >= (target_ratio - END_TOLERANCE)
 		else:
 			ratio_reached = progress >= target_ratio
 
 		if ratio_reached:
 			# 進行率だけでなく、実際の距離もチェック
-			# キャラクターがマーカーのanchor位置に十分近いか確認
+			# キャラクターがポイントのanchor位置に十分近いか確認
 			var actually_reached = true
-			if dm.has("anchor") and _character:
+			if dp.has("anchor") and _character:
 				var char_pos = _character.global_position
 				char_pos.y = 0
-				var anchor = dm.anchor
+				var anchor = dp.anchor
 				anchor.y = 0
 				var distance = char_pos.distance_to(anchor)
-				actually_reached = distance < MARKER_REACH_DISTANCE
+				actually_reached = distance < POINT_REACH_DISTANCE
 
 			if actually_reached:
-				# ドアマーカーに到達: パスを一時停止
+				# ドアポイントに到達: パスを一時停止
 				_is_waiting_for_door = true
 				_door_index += 1
 
 				# ドアノードを取得してシグナル発火
-				var door = dm.door_node if dm.has("door_node") else null
-				door_marker_reached.emit(_door_index - 1, door)
+				var door = dp.door_node if dp.has("door_node") else null
+				door_point_reached.emit(_door_index - 1, door)
 				return true
 			else:
 				# 進行率は超えているが、実際の位置はまだ遠い
@@ -744,19 +745,19 @@ func resume_after_door() -> void:
 	_is_waiting_for_door = false
 
 
-## Waitマーカーのチェックと処理
-## マーカー到達時にパスを一時停止して待機開始
-## @return: Waitマーカーに到達してパスを停止した場合はtrue
-func _check_wait_markers(progress: float) -> bool:
-	while _wait_index < _wait_markers.size():
-		var wm = _wait_markers[_wait_index]
-		if progress >= wm.path_ratio:
-			var duration: float = wm.wait_duration if wm.has("wait_duration") else 1.0
+## Waitポイントのチェックと処理
+## ポイント到達時にパスを一時停止して待機開始
+## @return: Waitポイントに到達してパスを停止した場合はtrue
+func _check_wait_points(progress: float) -> bool:
+	while _wait_index < _wait_points.size():
+		var wp = _wait_points[_wait_index]
+		if progress >= wp.path_ratio:
+			var duration: float = wp.wait_duration if wp.has("wait_duration") else 1.0
 			var reached_index = _wait_index
 			_wait_index += 1
 
-			# マーカー到達シグナルを発火（視覚マーカー非表示用）
-			wait_marker_reached.emit(reached_index, wm)
+			# ポイント到達シグナルを発火（視覚ポイント非表示用）
+			wait_point_reached.emit(reached_index, wp)
 
 			# キャラクターを停止
 			if _character:
@@ -833,13 +834,13 @@ func _check_waiting_door_opened() -> bool:
 	return _waiting_door.is_in_group("open_doors")
 
 
-## 指定されたドアがDoorマーカーに設定されているかチェック
-func _is_door_in_markers(door: Node3D) -> bool:
+## 指定されたドアがDoorポイントに設定されているかチェック
+func _is_door_in_points(door: Node3D) -> bool:
 	if not door:
 		return false
 
-	for dm in _door_markers:
-		if dm.has("door_node") and dm.door_node == door:
+	for dp in _door_points:
+		if dp.has("door_node") and dp.door_node == door:
 			return true
 	return false
 
@@ -919,9 +920,9 @@ func _finish() -> void:
 	_vision_points.clear()
 	_run_segments.clear()
 	_clear_points.clear()
-	_grenade_markers.clear()
-	_door_markers.clear()
-	_wait_markers.clear()
+	_grenade_points.clear()
+	_door_points.clear()
+	_wait_points.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
@@ -1457,7 +1458,7 @@ func get_path_endpoint() -> Vector3:
 	return _current_path[_current_path.size() - 1]
 
 
-## 残りパスと延長パスを結合して取得（Visionマーカー配置用）
+## 残りパスと延長パスを結合して取得（Visionポイント配置用）
 ## @return: PackedVector3Array（現在位置から先のパス全体）
 func get_full_remaining_path() -> PackedVector3Array:
 	var result := PackedVector3Array()
@@ -1475,7 +1476,7 @@ func get_full_remaining_path() -> PackedVector3Array:
 	return result
 
 
-## 移動中パスにVisionマーカーを追加
+## 移動中パスにVisionポイントを追加
 ## 延長パスが未開始の場合は_extension_vision_pointsに、
 ## 既に延長パスに切り替わっている場合は_vision_pointsに追加
 ## @param path_ratio: パス全体での比率（残りパス + 延長パス全体に対する比率）
@@ -1498,20 +1499,20 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 		_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 
 
-## Waitマーカーを追加（実行中のパスに）
-## @param marker_data: { path_ratio, anchor, wait_duration }
-func add_wait_marker(marker_data: Dictionary) -> void:
+## Waitポイントを追加（実行中のパスに）
+## @param point_data: { path_ratio, anchor, wait_duration }
+func add_wait_point(point_data: Dictionary) -> void:
 	if not _is_following:
 		return
 
 	if _has_extension:
 		# 延長パスがまだ開始されていない場合は延長用配列に追加
-		_extension_wait_markers.append(marker_data)
-		_extension_wait_markers.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		_extension_wait_points.append(point_data)
+		_extension_wait_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 	else:
 		# 延長パスに切り替わっている（または延長がない）場合は直接追加
-		_wait_markers.append(marker_data)
-		_wait_markers.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		_wait_points.append(point_data)
+		_wait_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 
 
 ## 残りのパスデータを取得（延長用）
@@ -1526,19 +1527,19 @@ func get_remaining_path_data() -> Dictionary:
 	return {
 		"path": [endpoint],  # 延長開始点のみ
 		"endpoint": endpoint,
-		"vision_points": [],  # 延長パスでは新規マーカーのみ
+		"vision_points": [],  # 延長パスでは新規ポイントのみ
 		"run_segments": [],
 		"clear_points": [],
-		"grenade_markers_data": [],
-		"smoke_grenade_markers_data": [],
-		"door_markers_data": [],
-		"wait_markers_data": []
+		"grenade_points_data": [],
+		"smoke_grenade_points_data": [],
+		"door_points_data": [],
+		"wait_points_data": []
 	}
 
 
 ## 延長パスを設定
 ## @param extension_path: 延長パス（Vector3の配列）
-## @param markers: マーカーデータの辞書
+## @param markers: ポイントデータの辞書
 ## @param append_to_existing: 既存の延長パスに追加するか（デフォルトはfalse=置き換え）
 func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> void:
 	if extension_path.size() < 2:
@@ -1552,26 +1553,26 @@ func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, app
 			new_path.append(extension_path[i])
 		_extension_path = new_path
 
-		# マーカーデータも追加（比率の調整が必要）
+		# ポイントデータも追加（比率の調整が必要）
 		var old_length := _calculate_extension_path_length_without_new()
 		var new_length := _calculate_path_length_array(extension_path)
 		var total_length := old_length + new_length
 		if total_length > 0.001:
-			# 既存マーカーの比率を新しい全長に合わせて再スケール
+			# 既存ポイントの比率を新しい全長に合わせて再スケール
 			if old_length > 0.001:
-				_scale_existing_extension_markers(old_length, total_length)
-			# 新しいマーカーの比率を調整して追加
-			_append_extension_markers(markers, old_length, new_length, total_length)
+				_scale_existing_extension_points(old_length, total_length)
+			# 新しいポイントの比率を調整して追加
+			_append_extension_points(markers, old_length, new_length, total_length)
 	else:
 		# 置き換え
 		_extension_path = extension_path.duplicate()
 		_extension_vision_points = markers.get("vision_points", []).duplicate()
 		_extension_run_segments = markers.get("run_segments", []).duplicate()
 		_extension_clear_points = markers.get("clear_points", []).duplicate()
-		_extension_grenade_markers = markers.get("grenade_markers_data", []).duplicate()
-		_extension_smoke_grenade_markers = markers.get("smoke_grenade_markers_data", []).duplicate()
-		_extension_door_markers = markers.get("door_markers_data", []).duplicate()
-		_extension_wait_markers = markers.get("wait_markers_data", []).duplicate()
+		_extension_grenade_points = markers.get("grenade_points_data", []).duplicate()
+		_extension_smoke_grenade_points = markers.get("smoke_grenade_points_data", []).duplicate()
+		_extension_door_points = markers.get("door_points_data", []).duplicate()
+		_extension_wait_points = markers.get("wait_points_data", []).duplicate()
 
 	_has_extension = true
 
@@ -1592,9 +1593,9 @@ func _calculate_path_length_array(path: Array[Vector3]) -> float:
 	return length
 
 
-## 延長マーカーを追加（比率調整付き）
-func _append_extension_markers(markers: Dictionary, old_length: float, new_length: float, total_length: float) -> void:
-	# 新しいマーカーの比率を調整: new_ratio = (old_length + original_ratio * new_length) / total_length
+## 延長ポイントを追加（比率調整付き）
+func _append_extension_points(markers: Dictionary, old_length: float, new_length: float, total_length: float) -> void:
+	# 新しいポイントの比率を調整: new_ratio = (old_length + original_ratio * new_length) / total_length
 	var vision_points: Array = markers.get("vision_points", [])
 	for vp in vision_points:
 		var adjusted_ratio: float = (old_length + vp.path_ratio * new_length) / total_length
@@ -1616,43 +1617,43 @@ func _append_extension_markers(markers: Dictionary, old_length: float, new_lengt
 		var adjusted_ratio: float = (old_length + cp.path_ratio * new_length) / total_length
 		_extension_clear_points.append({ "path_ratio": adjusted_ratio })
 
-	var grenade_markers: Array = markers.get("grenade_markers_data", [])
-	for gm in grenade_markers:
-		var adjusted_ratio: float = (old_length + gm.path_ratio * new_length) / total_length
-		var new_gm: Dictionary = gm.duplicate()
-		new_gm["path_ratio"] = adjusted_ratio
-		_extension_grenade_markers.append(new_gm)
+	var grenade_points: Array = markers.get("grenade_points_data", [])
+	for gp in grenade_points:
+		var adjusted_ratio: float = (old_length + gp.path_ratio * new_length) / total_length
+		var new_gp: Dictionary = gp.duplicate()
+		new_gp["path_ratio"] = adjusted_ratio
+		_extension_grenade_points.append(new_gp)
 
-	var smoke_grenade_markers: Array = markers.get("smoke_grenade_markers_data", [])
-	for sgm in smoke_grenade_markers:
-		var adjusted_ratio: float = (old_length + sgm.path_ratio * new_length) / total_length
-		var new_sgm: Dictionary = sgm.duplicate()
-		new_sgm["path_ratio"] = adjusted_ratio
-		_extension_smoke_grenade_markers.append(new_sgm)
+	var smoke_grenade_points: Array = markers.get("smoke_grenade_points_data", [])
+	for sgp in smoke_grenade_points:
+		var adjusted_ratio: float = (old_length + sgp.path_ratio * new_length) / total_length
+		var new_sgp: Dictionary = sgp.duplicate()
+		new_sgp["path_ratio"] = adjusted_ratio
+		_extension_smoke_grenade_points.append(new_sgp)
 
-	var door_markers: Array = markers.get("door_markers_data", [])
-	for dm in door_markers:
-		var adjusted_ratio: float = (old_length + dm.path_ratio * new_length) / total_length
-		var new_dm: Dictionary = dm.duplicate()
-		new_dm["path_ratio"] = adjusted_ratio
-		_extension_door_markers.append(new_dm)
+	var door_points: Array = markers.get("door_points_data", [])
+	for dp in door_points:
+		var adjusted_ratio: float = (old_length + dp.path_ratio * new_length) / total_length
+		var new_dp: Dictionary = dp.duplicate()
+		new_dp["path_ratio"] = adjusted_ratio
+		_extension_door_points.append(new_dp)
 
-	var wait_markers: Array = markers.get("wait_markers_data", [])
-	for wm in wait_markers:
-		var adjusted_ratio: float = (old_length + wm.path_ratio * new_length) / total_length
-		var new_wm: Dictionary = wm.duplicate()
-		new_wm["path_ratio"] = adjusted_ratio
-		_extension_wait_markers.append(new_wm)
+	var wait_points: Array = markers.get("wait_points_data", [])
+	for wp in wait_points:
+		var adjusted_ratio: float = (old_length + wp.path_ratio * new_length) / total_length
+		var new_wp: Dictionary = wp.duplicate()
+		new_wp["path_ratio"] = adjusted_ratio
+		_extension_wait_points.append(new_wp)
 
 
-## 既存延長マーカーの比率を新しい全長に合わせて再スケール
-func _scale_existing_extension_markers(old_length: float, total_length: float) -> void:
+## 既存延長ポイントの比率を新しい全長に合わせて再スケール
+func _scale_existing_extension_points(old_length: float, total_length: float) -> void:
 	var scale := old_length / total_length
 
-	# Visionマーカーはアンカー位置から比率を再計算（スケールではなく）
+	# Visionポイントはアンカー位置から比率を再計算（スケールではなく）
 	_recalculate_extension_vision_ratios_from_anchors()
 
-	# 他のマーカーは従来通りスケール
+	# 他のポイントは従来通りスケール
 	#for i in range(_extension_vision_points.size()):
 	#	_extension_vision_points[i]["path_ratio"] = _extension_vision_points[i].path_ratio * scale
 
@@ -1663,23 +1664,23 @@ func _scale_existing_extension_markers(old_length: float, total_length: float) -
 	for i in range(_extension_clear_points.size()):
 		_extension_clear_points[i]["path_ratio"] = _extension_clear_points[i].path_ratio * scale
 
-	for i in range(_extension_grenade_markers.size()):
-		_extension_grenade_markers[i]["path_ratio"] = _extension_grenade_markers[i].path_ratio * scale
+	for i in range(_extension_grenade_points.size()):
+		_extension_grenade_points[i]["path_ratio"] = _extension_grenade_points[i].path_ratio * scale
 
-	for i in range(_extension_smoke_grenade_markers.size()):
-		_extension_smoke_grenade_markers[i]["path_ratio"] = _extension_smoke_grenade_markers[i].path_ratio * scale
+	for i in range(_extension_smoke_grenade_points.size()):
+		_extension_smoke_grenade_points[i]["path_ratio"] = _extension_smoke_grenade_points[i].path_ratio * scale
 
-	for i in range(_extension_door_markers.size()):
-		_extension_door_markers[i]["path_ratio"] = _extension_door_markers[i].path_ratio * scale
+	for i in range(_extension_door_points.size()):
+		_extension_door_points[i]["path_ratio"] = _extension_door_points[i].path_ratio * scale
 
-	for i in range(_extension_wait_markers.size()):
-		_extension_wait_markers[i]["path_ratio"] = _extension_wait_markers[i].path_ratio * scale
+	for i in range(_extension_wait_points.size()):
+		_extension_wait_points[i]["path_ratio"] = _extension_wait_points[i].path_ratio * scale
 
-	# マーカースケールシグナルを発火（game_managerのマーカー同期用）
-	extension_markers_scaled.emit(scale)
+	# ポイントスケールシグナルを発火（game_managerのポイント同期用）
+	extension_points_scaled.emit(scale)
 
 
-## 延長パスのVisionマーカーの比率をアンカー位置から再計算
+## 延長パスのVisionポイントの比率をアンカー位置から再計算
 func _recalculate_extension_vision_ratios_from_anchors() -> void:
 	if _extension_path.size() < 2:
 		return
@@ -1691,7 +1692,7 @@ func _recalculate_extension_vision_ratios_from_anchors() -> void:
 			_extension_vision_points[i]["path_ratio"] = new_ratio
 
 
-## 現在のパスのVisionマーカーの比率をアンカー位置から再計算
+## 現在のパスのVisionポイントの比率をアンカー位置から再計算
 func _recalculate_vision_ratios_from_anchors() -> void:
 	if _current_path.size() < 2:
 		return
@@ -1752,10 +1753,10 @@ func cancel_extension() -> void:
 	_extension_vision_points.clear()
 	_extension_run_segments.clear()
 	_extension_clear_points.clear()
-	_extension_grenade_markers.clear()
-	_extension_smoke_grenade_markers.clear()
-	_extension_door_markers.clear()
-	_extension_wait_markers.clear()
+	_extension_grenade_points.clear()
+	_extension_smoke_grenade_points.clear()
+	_extension_door_points.clear()
+	_extension_wait_points.clear()
 	_has_extension = false
 
 
@@ -1785,10 +1786,10 @@ func get_extension_path_data() -> Dictionary:
 		"vision_points": [],
 		"run_segments": [],
 		"clear_points": [],
-		"grenade_markers_data": [],
-		"smoke_grenade_markers_data": [],
-		"door_markers_data": [],
-		"wait_markers_data": []
+		"grenade_points_data": [],
+		"smoke_grenade_points_data": [],
+		"door_points_data": [],
+		"wait_points_data": []
 	}
 
 
@@ -1803,10 +1804,10 @@ func _switch_to_extension_path() -> void:
 	_vision_points = _extension_vision_points.duplicate()
 	_run_segments = _extension_run_segments.duplicate()
 	_clear_points = _extension_clear_points.duplicate()
-	_grenade_markers = _extension_grenade_markers.duplicate()
-	_smoke_grenade_markers = _extension_smoke_grenade_markers.duplicate()
-	_door_markers = _extension_door_markers.duplicate()
-	_wait_markers = _extension_wait_markers.duplicate()
+	_grenade_points = _extension_grenade_points.duplicate()
+	_smoke_grenade_points = _extension_smoke_grenade_points.duplicate()
+	_door_points = _extension_door_points.duplicate()
+	_wait_points = _extension_wait_points.duplicate()
 
 	# インデックスをリセット
 	_path_index = 1
@@ -1820,7 +1821,7 @@ func _switch_to_extension_path() -> void:
 	# パス長キャッシュを再構築
 	_build_path_length_cache()
 
-	# Visionマーカーの比率をアンカー位置から再計算
+	# Visionポイントの比率をアンカー位置から再計算
 	_recalculate_vision_ratios_from_anchors()
 
 	# 延長データをクリア

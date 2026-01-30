@@ -10,7 +10,7 @@ extends RefCounted
 # ============================================
 
 ## パス確定時に送信するメッセージ
-## キャラクターの移動パスと全マーカー情報を含む
+## キャラクターの移動パスと全ポイント情報を含む
 class PathConfirmMessage extends RefCounted:
 	## 送信元プレイヤーID（peer_id）
 	var player_id: int = 0
@@ -21,33 +21,33 @@ class PathConfirmMessage extends RefCounted:
 	## パス座標配列
 	var path: Array[Vector3] = []
 
-	## 視線マーカーデータ配列
+	## 視線ポイントデータ配列
 	## 各要素: { path_ratio, target_point/direction, has_target }
-	var vision_markers: Array[Dictionary] = []
+	var vision_points: Array[Dictionary] = []
 
 	## Run区間データ配列
 	## 各要素: { start_ratio, end_ratio }
 	var run_segments: Array[Dictionary] = []
 
-	## Clearマーカーデータ配列
+	## Clearポイントデータ配列
 	## 各要素: { path_ratio, anchor }
-	var clear_markers: Array[Dictionary] = []
+	var clear_points: Array[Dictionary] = []
 
-	## グレネードマーカーデータ配列
+	## グレネードポイントデータ配列
 	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var grenade_markers: Array[Dictionary] = []
+	var grenade_points: Array[Dictionary] = []
 
-	## ドアマーカーデータ配列
+	## ドアポイントデータ配列
 	## 各要素: { path_ratio, anchor, door_id }
-	var door_markers: Array[Dictionary] = []
+	var door_points: Array[Dictionary] = []
 
-	## Waitマーカーデータ配列
+	## Waitポイントデータ配列
 	## 各要素: { path_ratio, anchor, wait_duration }
-	var wait_markers: Array[Dictionary] = []
+	var wait_points: Array[Dictionary] = []
 
-	## スモークグレネードマーカーデータ配列
+	## スモークグレネードポイントデータ配列
 	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var smoke_grenade_markers: Array[Dictionary] = []
+	var smoke_grenade_points: Array[Dictionary] = []
 
 	## メッセージ生成タイムスタンプ（msec）
 	var timestamp: int = 0
@@ -59,13 +59,13 @@ class PathConfirmMessage extends RefCounted:
 			"player_id": player_id,
 			"character_id": character_id,
 			"path": _path_to_array(),
-			"vision_markers": vision_markers,
+			"vision_points": vision_points,
 			"run_segments": run_segments,
-			"clear_markers": clear_markers,
-			"grenade_markers": grenade_markers,
-			"door_markers": door_markers,
-			"wait_markers": wait_markers,
-			"smoke_grenade_markers": smoke_grenade_markers,
+			"clear_points": clear_points,
+			"grenade_points": grenade_points,
+			"door_points": door_points,
+			"wait_points": wait_points,
+			"smoke_grenade_points": smoke_grenade_points,
 			"timestamp": timestamp,
 		}
 
@@ -75,13 +75,13 @@ class PathConfirmMessage extends RefCounted:
 		player_id = data.get("player_id", 0)
 		character_id = data.get("character_id", 0)
 		_array_to_path(data.get("path", []))
-		vision_markers.assign(data.get("vision_markers", []))
+		vision_points.assign(data.get("vision_points", []))
 		run_segments.assign(data.get("run_segments", []))
-		clear_markers.assign(data.get("clear_markers", []))
-		grenade_markers.assign(data.get("grenade_markers", []))
-		door_markers.assign(data.get("door_markers", []))
-		wait_markers.assign(data.get("wait_markers", []))
-		smoke_grenade_markers.assign(data.get("smoke_grenade_markers", []))
+		clear_points.assign(data.get("clear_points", []))
+		grenade_points.assign(data.get("grenade_points", []))
+		door_points.assign(data.get("door_points", []))
+		wait_points.assign(data.get("wait_points", []))
+		smoke_grenade_points.assign(data.get("smoke_grenade_points", []))
 		timestamp = data.get("timestamp", 0)
 
 

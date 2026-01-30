@@ -13,10 +13,10 @@ signal mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
 signal clear_point_added(path_ratio: float)
-signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal door_marker_added(path_ratio: float, door: Node3D)
-signal wait_marker_added(path_ratio: float, wait_duration: float)
+signal grenade_point_added(path_ratio: float, target_pos: Vector3)
+signal smoke_grenade_point_added(path_ratio: float, target_pos: Vector3)
+signal door_point_added(path_ratio: float, door: Node3D)
+signal wait_point_added(path_ratio: float, wait_duration: float)
 
 var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
@@ -45,10 +45,10 @@ func setup(
 		path_drawer.vision_point_added.connect(_on_vision_point_added)
 		path_drawer.run_segment_added.connect(_on_run_segment_added)
 		path_drawer.clear_point_added.connect(_on_clear_point_added)
-		path_drawer.grenade_marker_added.connect(_on_grenade_marker_added)
-		path_drawer.smoke_grenade_marker_added.connect(_on_smoke_grenade_marker_added)
-		path_drawer.door_marker_added.connect(_on_door_marker_added)
-		path_drawer.wait_marker_added.connect(_on_wait_marker_added)
+		path_drawer.grenade_point_added.connect(_on_grenade_point_added)
+		path_drawer.smoke_grenade_point_added.connect(_on_smoke_grenade_point_added)
+		path_drawer.door_point_added.connect(_on_door_point_added)
+		path_drawer.wait_point_added.connect(_on_wait_point_added)
 		path_drawer.path_undone.connect(_on_path_undone)
 		path_drawer.off_path_tapped.connect(_on_off_path_tapped)
 
@@ -228,7 +228,7 @@ func handle_click_to_confirm(clicked_character: Node) -> bool:
 	return path_mode_controller.handle_click_to_confirm(clicked_character)
 
 
-func is_marker_mode() -> bool:
+func is_point_mode() -> bool:
 	if not path_drawer:
 		return false
 	return path_drawer.get_drawing_mode() != PathDrawer.DrawingMode.MOVEMENT
@@ -287,22 +287,22 @@ func start_wait_mode() -> void:
 		path_drawer.start_wait_mode()
 
 
-func get_grenade_marker_count() -> int:
-	return path_drawer.get_grenade_marker_count() if path_drawer else 0
+func get_grenade_point_count() -> int:
+	return path_drawer.get_grenade_point_count() if path_drawer else 0
 
 
-func get_door_marker_count() -> int:
-	return path_drawer.get_door_marker_count() if path_drawer else 0
+func get_door_point_count() -> int:
+	return path_drawer.get_door_point_count() if path_drawer else 0
 
 
-func get_wait_marker_count() -> int:
-	return path_drawer.get_wait_marker_count() if path_drawer else 0
+func get_wait_point_count() -> int:
+	return path_drawer.get_wait_point_count() if path_drawer else 0
 
 
-## 最後に追加したマーカーを削除（統一Undo）
-func undo_last_marker() -> void:
+## 最後に追加したポイントを削除（統一Undo）
+func undo_last_point() -> void:
 	if path_drawer:
-		path_drawer.undo_last_marker()
+		path_drawer.undo_last_point()
 
 
 func get_vision_point_count() -> int:
@@ -349,7 +349,7 @@ func _on_path_mode_cancelled() -> void:
 
 func _on_path_ready() -> void:
 	# 視線ポイントモードへ移行
-	# パス終点付近にVisionマーカーを追加すると、その方向で最終向きが固定される
+	# パス終点付近にVisionポイントを追加すると、その方向で最終向きが固定される
 	start_vision_mode()
 	path_ready.emit()
 
@@ -382,20 +382,20 @@ func _on_clear_point_added(path_ratio: float) -> void:
 	clear_point_added.emit(path_ratio)
 
 
-func _on_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
-	grenade_marker_added.emit(path_ratio, target_pos)
+func _on_grenade_point_added(path_ratio: float, target_pos: Vector3) -> void:
+	grenade_point_added.emit(path_ratio, target_pos)
 
 
-func _on_smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3) -> void:
-	smoke_grenade_marker_added.emit(path_ratio, target_pos)
+func _on_smoke_grenade_point_added(path_ratio: float, target_pos: Vector3) -> void:
+	smoke_grenade_point_added.emit(path_ratio, target_pos)
 
 
-func _on_door_marker_added(path_ratio: float, door: Node3D) -> void:
-	door_marker_added.emit(path_ratio, door)
+func _on_door_point_added(path_ratio: float, door: Node3D) -> void:
+	door_point_added.emit(path_ratio, door)
 
 
-func _on_wait_marker_added(path_ratio: float, wait_duration: float) -> void:
-	wait_marker_added.emit(path_ratio, wait_duration)
+func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
+	wait_point_added.emit(path_ratio, wait_duration)
 
 
 func _on_path_undone() -> void:

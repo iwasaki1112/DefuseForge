@@ -3,28 +3,28 @@ extends Node3D
 
 ## 地面にパスを描画するコンポーネント
 ## マウスドラッグでパスを描き、キャラクター移動に使用
-## マーカー処理は各ハンドラに委譲
+## ポイント処理は各ハンドラに委譲
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER, WAIT_MARKER, SMOKE_GRENADE_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, RUN_POINT, CLEAR_POINT, GRENADE_POINT, DOOR_POINT, WAIT_POINT, SMOKE_GRENADE_POINT }
 
-## マーカー履歴用の種別
-enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT, SMOKE_GRENADE }
+## ポイント履歴用の種別
+enum PointType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT, SMOKE_GRENADE }
 
 #region シグナル
 signal drawing_finished(points: PackedVector3Array)
 signal vision_point_added(anchor: Vector3, target_point: Vector3)
 signal run_segment_added(start_ratio: float, end_ratio: float)
 signal clear_point_added(path_ratio: float)
-signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal door_marker_added(path_ratio: float, door: Node3D)
-signal wait_marker_added(path_ratio: float, wait_duration: float)
+signal grenade_point_added(path_ratio: float, target_pos: Vector3)
+signal smoke_grenade_point_added(path_ratio: float, target_pos: Vector3)
+signal door_point_added(path_ratio: float, door: Node3D)
+signal wait_point_added(path_ratio: float, wait_duration: float)
 signal path_undone()
 signal mode_changed(mode: int)
 ## パス外タップ時のシグナル（確定処理用）
 signal off_path_tapped()
-## 自動確定リクエスト（確認済みパスへのVisionマーカー配置後など）
+## 自動確定リクエスト（確認済みパスへのVisionポイント配置後など）
 signal auto_confirm_requested()
 ## パス上タップ時のシグナル（コンテキストメニュー表示用）
 signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
@@ -50,7 +50,7 @@ signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
 
 #region 定数
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
+const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
 #endregion
 
 #region 内部変数
@@ -71,7 +71,7 @@ var _executing_character: CharacterBody3D = null
 var _path_extension_snapshots: Array[PackedVector3Array] = []
 var _character_color: Color = Color(1.0, 1.0, 1.0)
 
-var _marker_history: Array[int] = []
+var _point_history: Array[int] = []
 var _active_edit_character: Node = null
 
 ## 壁沿いモード状態
@@ -79,23 +79,23 @@ var _is_wall_sliding: bool = false           ## 壁沿いモード中か
 var _wall_slide_normal: Vector3 = Vector3.ZERO  ## 壁の法線
 var _wall_slide_direction: Vector3 = Vector3.ZERO  ## スライド方向
 
-## パス上長押しでVisionマーカー配置用
+## パス上長押しでVisionポイント配置用
 var _path_longpress_pending: bool = false  ## 長押し待機中か
 var _path_longpress_timer: float = 0.0     ## 長押しタイマー
 var _path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
 var _path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始位置
 var _path_longpress_ground_pos: Vector3 = Vector3.ZERO  ## 長押し開始のグラウンド位置
 var _longpress_vision_mode: bool = false  ## 長押しからVisionモードに入ったか
-var _auto_confirm_after_vision: bool = false  ## Visionマーカー配置後に自動確定するか
+var _auto_confirm_after_vision: bool = false  ## Visionポイント配置後に自動確定するか
 
-## マーカーハンドラ
-var _vision_handler: VisionMarkerHandler
-var _run_handler: RunMarkerHandler
-var _clear_handler: ClearMarkerHandler
-var _grenade_handler: GrenadeMarkerHandler
-var _smoke_grenade_handler: SmokeGrenadeMarkerHandler
-var _door_handler: DoorMarkerHandler
-var _wait_handler: WaitMarkerHandler
+## ポイントハンドラ
+var _vision_handler: VisionPointHandler
+var _run_handler: RunPointHandler
+var _clear_handler: ClearPointHandler
+var _grenade_handler: GrenadePointHandler
+var _smoke_grenade_handler: SmokeGrenadePointHandler
+var _door_handler: DoorPointHandler
+var _wait_handler: WaitPointHandler
 #endregion
 
 
@@ -126,22 +126,22 @@ func _setup_mesh() -> void:
 
 
 func _setup_handlers() -> void:
-	_vision_handler = VisionMarkerHandler.new()
-	_run_handler = RunMarkerHandler.new()
-	_clear_handler = ClearMarkerHandler.new()
-	_grenade_handler = GrenadeMarkerHandler.new()
-	_smoke_grenade_handler = SmokeGrenadeMarkerHandler.new()
-	_door_handler = DoorMarkerHandler.new()
-	_wait_handler = WaitMarkerHandler.new()
+	_vision_handler = VisionPointHandler.new()
+	_run_handler = RunPointHandler.new()
+	_clear_handler = ClearPointHandler.new()
+	_grenade_handler = GrenadePointHandler.new()
+	_smoke_grenade_handler = SmokeGrenadePointHandler.new()
+	_door_handler = DoorPointHandler.new()
+	_wait_handler = WaitPointHandler.new()
 
 	# ハンドラのシグナル接続
-	_vision_handler.marker_added.connect(_on_vision_marker_added)
-	_run_handler.marker_added.connect(_on_run_marker_added)
-	_clear_handler.marker_added.connect(_on_clear_marker_added)
-	_grenade_handler.marker_added.connect(_on_grenade_marker_added)
-	_smoke_grenade_handler.marker_added.connect(_on_smoke_grenade_marker_added)
-	_door_handler.marker_added.connect(_on_door_marker_added)
-	_wait_handler.marker_added.connect(_on_wait_marker_added)
+	_vision_handler.point_added.connect(_on_vision_point_added)
+	_run_handler.point_added.connect(_on_run_point_added)
+	_clear_handler.point_added.connect(_on_clear_point_added)
+	_grenade_handler.point_added.connect(_on_grenade_point_added)
+	_smoke_grenade_handler.point_added.connect(_on_smoke_grenade_point_added)
+	_door_handler.point_added.connect(_on_door_point_added)
+	_wait_handler.point_added.connect(_on_wait_point_added)
 
 
 func _setup_handlers_with_camera() -> void:
@@ -159,28 +159,28 @@ func _get_handler_for_mode(mode: DrawingMode):
 	match mode:
 		DrawingMode.VISION_POINT:
 			return _vision_handler
-		DrawingMode.RUN_MARKER:
+		DrawingMode.RUN_POINT:
 			return _run_handler
-		DrawingMode.CLEAR_MARKER:
+		DrawingMode.CLEAR_POINT:
 			return _clear_handler
-		DrawingMode.GRENADE_MARKER:
+		DrawingMode.GRENADE_POINT:
 			return _grenade_handler
-		DrawingMode.SMOKE_GRENADE_MARKER:
+		DrawingMode.SMOKE_GRENADE_POINT:
 			return _smoke_grenade_handler
-		DrawingMode.DOOR_MARKER:
+		DrawingMode.DOOR_POINT:
 			return _door_handler
-		DrawingMode.WAIT_MARKER:
+		DrawingMode.WAIT_POINT:
 			return _wait_handler
 		_:
 			return null
 
 
 #region シグナルハンドラ
-func _on_vision_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.VISION)
+func _on_vision_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.VISION)
 	vision_point_added.emit(data.get("anchor", Vector3.ZERO), data.get("target_point", Vector3.ZERO))
 
-	# 長押しからVisionモードに入った場合、マーカー配置後にMOVEMENTモードに戻る
+	# 長押しからVisionモードに入った場合、ポイント配置後にMOVEMENTモードに戻る
 	if _longpress_vision_mode:
 		_longpress_vision_mode = false
 		_drawing_mode = DrawingMode.MOVEMENT
@@ -195,34 +195,34 @@ func _on_vision_marker_added(data: Dictionary) -> void:
 		auto_confirm_requested.emit()
 
 
-func _on_run_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.RUN)
+func _on_run_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.RUN)
 	run_segment_added.emit(data.get("start_ratio", 0.0), data.get("end_ratio", 0.0))
 
 
-func _on_clear_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.CLEAR)
+func _on_clear_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.CLEAR)
 	clear_point_added.emit(data.get("path_ratio", 0.0))
 
 
-func _on_grenade_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.GRENADE)
-	grenade_marker_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
+func _on_grenade_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.GRENADE)
+	grenade_point_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
 
 
-func _on_smoke_grenade_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.SMOKE_GRENADE)
-	smoke_grenade_marker_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
+func _on_smoke_grenade_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.SMOKE_GRENADE)
+	smoke_grenade_point_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
 
 
-func _on_door_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.DOOR)
-	door_marker_added.emit(data.get("path_ratio", 0.0), data.get("door_node", null))
+func _on_door_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.DOOR)
+	door_point_added.emit(data.get("path_ratio", 0.0), data.get("door_node", null))
 
 
-func _on_wait_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.WAIT)
-	wait_marker_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
+func _on_wait_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.WAIT)
+	wait_point_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
 #endregion
 
 
@@ -311,7 +311,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		DrawingMode.MOVEMENT:
 			_handle_movement_input(event)
 		_:
-			# マーカーモードはハンドラに委譲
+			# ポイントモードはハンドラに委譲
 			var handler = _get_handler_for_mode(_drawing_mode)
 			if handler and handler.handle_input(event):
 				get_viewport().set_input_as_handled()
@@ -326,7 +326,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_check_off_path_tap(event)
 
 
-## パス外タップのチェック（マーカーモード用）
+## パス外タップのチェック（ポイントモード用）
 func _check_off_path_tap(event: InputEvent) -> void:
 	var screen_pos: Vector2
 	var is_press: bool = false
@@ -466,9 +466,9 @@ func handle_movement_release(_screen_pos: Vector2) -> void:
 	_handle_drawing_release()
 
 
-## マーカーモードでのリリース処理（外部から呼び出し可能）
-## Visionマーカー等のドラッグリリース時に呼ばれる
-func handle_marker_release(screen_pos: Vector2) -> bool:
+## ポイントモードでのリリース処理（外部から呼び出し可能）
+## Visionポイント等のドラッグリリース時に呼ばれる
+func handle_point_release(screen_pos: Vector2) -> bool:
 	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
 	if _path_longpress_pending:
 		var tap_screen_pos := _path_longpress_screen_pos
@@ -490,7 +490,7 @@ func handle_marker_release(screen_pos: Vector2) -> bool:
 
 	var handler = _get_handler_for_mode(_drawing_mode)
 	if handler:
-		# VisionMarkerHandler等のリリース処理を呼ぶ
+		# VisionPointHandler等のリリース処理を呼ぶ
 		var fake_event = InputEventMouseButton.new()
 		fake_event.button_index = MOUSE_BUTTON_LEFT
 		fake_event.pressed = false
@@ -528,7 +528,7 @@ func _handle_drawing_press(screen_pos: Vector2) -> void:
 	# _path_pointsは既にセットされているので、描画開始のみ行う
 	if _is_extending_path:
 		_is_drawing = true
-		_marker_history.append(MarkerType.PATH_EXTENSION)
+		_point_history.append(PointType.PATH_EXTENSION)
 		return
 
 	var start_pos: Vector3
@@ -672,7 +672,7 @@ func _finish_drawing() -> void:
 		else:
 			_pending_path = _path_points.duplicate()
 		_pending_character = _character as CharacterBody3D
-		_marker_history.append(MarkerType.PATH)
+		_point_history.append(PointType.PATH)
 
 	drawing_finished.emit(_path_points)
 #endregion
@@ -830,7 +830,7 @@ func _finish_extending_path() -> void:
 			else:
 				_pending_path = _path_points.duplicate()
 
-		_marker_history.append(MarkerType.PATH_EXTENSION)
+		_point_history.append(PointType.PATH_EXTENSION)
 
 	drawing_finished.emit(_path_points)
 #endregion
@@ -1158,184 +1158,184 @@ func start_vision_mode() -> bool:
 func start_run_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.RUN_MARKER
+	_drawing_mode = DrawingMode.RUN_POINT
 	_is_enabled = true
 	_run_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.RUN_MARKER))
+	mode_changed.emit(int(DrawingMode.RUN_POINT))
 	return true
 
 
 func start_clear_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.CLEAR_MARKER
+	_drawing_mode = DrawingMode.CLEAR_POINT
 	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.CLEAR_MARKER))
+	mode_changed.emit(int(DrawingMode.CLEAR_POINT))
 	return true
 
 
 func start_grenade_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.GRENADE_MARKER
+	_drawing_mode = DrawingMode.GRENADE_POINT
 	_is_enabled = true
 	_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.GRENADE_MARKER))
+	mode_changed.emit(int(DrawingMode.GRENADE_POINT))
 	return true
 
 
 func start_smoke_grenade_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.SMOKE_GRENADE_MARKER
+	_drawing_mode = DrawingMode.SMOKE_GRENADE_POINT
 	_is_enabled = true
 	_smoke_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.SMOKE_GRENADE_MARKER))
+	mode_changed.emit(int(DrawingMode.SMOKE_GRENADE_POINT))
 	return true
 
 
 func start_door_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.DOOR_MARKER
+	_drawing_mode = DrawingMode.DOOR_POINT
 	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.DOOR_MARKER))
+	mode_changed.emit(int(DrawingMode.DOOR_POINT))
 	return true
 
 
 func start_wait_mode() -> bool:
 	if _pending_path.size() < 2:
 		return false
-	_drawing_mode = DrawingMode.WAIT_MARKER
+	_drawing_mode = DrawingMode.WAIT_POINT
 	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.WAIT_MARKER))
+	mode_changed.emit(int(DrawingMode.WAIT_POINT))
 	return true
 #endregion
 
 
-#region マーカー取得 API（ファサード）
+#region ポイント取得 API（ファサード）
 func has_vision_points() -> bool:
-	return _vision_handler.has_markers()
+	return _vision_handler.has_points()
 
 
 func get_vision_points() -> Array[Dictionary]:
-	return _vision_handler.get_markers()
+	return _vision_handler.get_points()
 
 
 func get_vision_point_count() -> int:
-	return _vision_handler.get_marker_count()
+	return _vision_handler.get_point_count()
 
 
-func take_vision_markers() -> Array[MeshInstance3D]:
-	return _vision_handler.take_markers()
+func take_vision_points() -> Array[MeshInstance3D]:
+	return _vision_handler.take_points()
 
 
 func has_run_segments() -> bool:
-	return _run_handler.has_markers()
+	return _run_handler.has_points()
 
 
 func get_run_segments() -> Array[Dictionary]:
-	return _run_handler.get_markers()
+	return _run_handler.get_points()
 
 
 func get_run_segment_count() -> int:
-	return _run_handler.get_marker_count()
+	return _run_handler.get_point_count()
 
 
 func has_incomplete_run_start() -> bool:
 	return _run_handler.has_incomplete_run_start()
 
 
-func take_run_markers() -> Array[MeshInstance3D]:
-	return _run_handler.take_markers()
+func take_run_points() -> Array[MeshInstance3D]:
+	return _run_handler.take_points()
 
 
 func has_clear_points() -> bool:
-	return _clear_handler.has_markers()
+	return _clear_handler.has_points()
 
 
 func get_clear_points() -> Array[Dictionary]:
-	return _clear_handler.get_markers()
+	return _clear_handler.get_points()
 
 
 func get_clear_point_count() -> int:
-	return _clear_handler.get_marker_count()
+	return _clear_handler.get_point_count()
 
 
-func take_clear_markers() -> Array[MeshInstance3D]:
-	return _clear_handler.take_markers()
+func take_clear_points() -> Array[MeshInstance3D]:
+	return _clear_handler.take_points()
 
 
-func has_grenade_markers() -> bool:
-	return _grenade_handler.has_markers()
+func has_grenade_points() -> bool:
+	return _grenade_handler.has_points()
 
 
-func get_grenade_markers() -> Array[Dictionary]:
-	return _grenade_handler.get_markers()
+func get_grenade_points() -> Array[Dictionary]:
+	return _grenade_handler.get_points()
 
 
-func get_grenade_marker_count() -> int:
-	return _grenade_handler.get_marker_count()
+func get_grenade_point_count() -> int:
+	return _grenade_handler.get_point_count()
 
 
-func take_grenade_markers() -> Array[MeshInstance3D]:
-	return _grenade_handler.take_markers()
+func take_grenade_points() -> Array[MeshInstance3D]:
+	return _grenade_handler.take_points()
 
 
-func has_smoke_grenade_markers() -> bool:
-	return _smoke_grenade_handler.has_markers()
+func has_smoke_grenade_points() -> bool:
+	return _smoke_grenade_handler.has_points()
 
 
-func get_smoke_grenade_markers() -> Array[Dictionary]:
-	return _smoke_grenade_handler.get_markers()
+func get_smoke_grenade_points() -> Array[Dictionary]:
+	return _smoke_grenade_handler.get_points()
 
 
-func get_smoke_grenade_marker_count() -> int:
-	return _smoke_grenade_handler.get_marker_count()
+func get_smoke_grenade_point_count() -> int:
+	return _smoke_grenade_handler.get_point_count()
 
 
-func take_smoke_grenade_markers() -> Array[MeshInstance3D]:
-	return _smoke_grenade_handler.take_markers()
+func take_smoke_grenade_points() -> Array[MeshInstance3D]:
+	return _smoke_grenade_handler.take_points()
 
 
-func has_door_markers() -> bool:
-	return _door_handler.has_markers()
+func has_door_points() -> bool:
+	return _door_handler.has_points()
 
 
-func get_door_markers() -> Array[Dictionary]:
-	return _door_handler.get_markers()
+func get_door_points() -> Array[Dictionary]:
+	return _door_handler.get_points()
 
 
-func get_door_marker_count() -> int:
-	return _door_handler.get_marker_count()
+func get_door_point_count() -> int:
+	return _door_handler.get_point_count()
 
 
-func take_door_markers() -> Array[MeshInstance3D]:
-	return _door_handler.take_markers()
+func take_door_points() -> Array[MeshInstance3D]:
+	return _door_handler.take_points()
 
 
-func has_wait_markers() -> bool:
-	return _wait_handler.has_markers()
+func has_wait_points() -> bool:
+	return _wait_handler.has_points()
 
 
-func get_wait_markers() -> Array[Dictionary]:
-	return _wait_handler.get_markers()
+func get_wait_points() -> Array[Dictionary]:
+	return _wait_handler.get_points()
 
 
-func get_wait_marker_count() -> int:
-	return _wait_handler.get_marker_count()
+func get_wait_point_count() -> int:
+	return _wait_handler.get_point_count()
 
 
-func take_wait_markers() -> Array[MeshInstance3D]:
-	return _wait_handler.take_markers()
+func take_wait_points() -> Array[MeshInstance3D]:
+	return _wait_handler.take_points()
 
 
-## 同期Waitマーカーを追加（コンテキストメニューから呼ばれる）
+## 同期Waitポイントを追加（コンテキストメニューから呼ばれる）
 ## @param path_ratio: パス上の位置（0.0〜1.0）
-## @param anchor: マーカーの3D位置
-func add_sync_wait_marker(path_ratio: float, anchor: Vector3) -> void:
-	_wait_handler.add_sync_marker(path_ratio, anchor)
-	_marker_history.append(int(MarkerType.WAIT))
+## @param anchor: ポイントの3D位置
+func add_sync_wait_point(path_ratio: float, anchor: Vector3) -> void:
+	_wait_handler.add_sync_point(path_ratio, anchor)
+	_point_history.append(int(PointType.WAIT))
 #endregion
 
 
@@ -1358,98 +1358,98 @@ func get_all_clear_points() -> Dictionary:
 	return {}
 
 
-func get_all_grenade_markers() -> Dictionary:
+func get_all_grenade_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_grenade_markers() }
+		return { _active_edit_character.get_instance_id(): get_grenade_points() }
 	return {}
 
 
-func get_all_smoke_grenade_markers() -> Dictionary:
+func get_all_smoke_grenade_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_smoke_grenade_markers() }
+		return { _active_edit_character.get_instance_id(): get_smoke_grenade_points() }
 	return {}
 
 
-func get_all_door_markers() -> Dictionary:
+func get_all_door_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_door_markers() }
+		return { _active_edit_character.get_instance_id(): get_door_points() }
 	return {}
 
 
-func get_all_wait_markers() -> Dictionary:
+func get_all_wait_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_wait_markers() }
+		return { _active_edit_character.get_instance_id(): get_wait_points() }
 	return {}
 
 
-func take_all_vision_markers() -> Dictionary:
+func take_all_vision_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_vision_markers() }
+		return { _active_edit_character.get_instance_id(): take_vision_points() }
 	return {}
 
 
-func take_all_run_markers() -> Dictionary:
+func take_all_run_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_run_markers() }
+		return { _active_edit_character.get_instance_id(): take_run_points() }
 	return {}
 
 
-func take_all_clear_markers() -> Dictionary:
+func take_all_clear_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_clear_markers() }
+		return { _active_edit_character.get_instance_id(): take_clear_points() }
 	return {}
 
 
-func take_all_grenade_markers() -> Dictionary:
+func take_all_grenade_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_grenade_markers() }
+		return { _active_edit_character.get_instance_id(): take_grenade_points() }
 	return {}
 
 
-func take_all_smoke_grenade_markers() -> Dictionary:
+func take_all_smoke_grenade_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_smoke_grenade_markers() }
+		return { _active_edit_character.get_instance_id(): take_smoke_grenade_points() }
 	return {}
 
 
-func take_all_door_markers() -> Dictionary:
+func take_all_door_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_door_markers() }
+		return { _active_edit_character.get_instance_id(): take_door_points() }
 	return {}
 
 
-func take_all_wait_markers() -> Dictionary:
+func take_all_wait_points() -> Dictionary:
 	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_wait_markers() }
+		return { _active_edit_character.get_instance_id(): take_wait_points() }
 	return {}
 #endregion
 
 
 #region Undo API
-func undo_last_marker() -> int:
-	if _marker_history.is_empty():
+func undo_last_point() -> int:
+	if _point_history.is_empty():
 		return -1
 
-	var last_type = _marker_history.pop_back()
+	var last_type = _point_history.pop_back()
 
 	match last_type:
-		MarkerType.VISION:
+		PointType.VISION:
 			_vision_handler.undo_last()
-		MarkerType.RUN:
+		PointType.RUN:
 			_run_handler.undo_last()
-		MarkerType.CLEAR:
+		PointType.CLEAR:
 			_clear_handler.undo_last()
-		MarkerType.GRENADE:
+		PointType.GRENADE:
 			_grenade_handler.undo_last()
-		MarkerType.SMOKE_GRENADE:
+		PointType.SMOKE_GRENADE:
 			_smoke_grenade_handler.undo_last()
-		MarkerType.DOOR:
+		PointType.DOOR:
 			_door_handler.undo_last()
-		MarkerType.WAIT:
+		PointType.WAIT:
 			_wait_handler.undo_last()
-		MarkerType.PATH:
+		PointType.PATH:
 			_undo_path()
-		MarkerType.PATH_EXTENSION:
+		PointType.PATH_EXTENSION:
 			_undo_path_extension()
 
 	return last_type
@@ -1468,7 +1468,7 @@ func _undo_path() -> void:
 	for handler in _get_all_handlers():
 		handler.clear_all()
 
-	_marker_history.clear()
+	_point_history.clear()
 
 	path_undone.emit()
 
@@ -1510,7 +1510,7 @@ func clear() -> void:
 	_pending_path.clear()
 	_pending_character = null
 	_path_extension_snapshots.clear()
-	_marker_history.clear()
+	_point_history.clear()
 	_active_edit_character = null
 
 	for handler in _get_all_handlers():
@@ -1573,7 +1573,7 @@ func is_near_path_endpoint(ground_pos: Vector3) -> bool:
 	return _is_near_path_endpoint(ground_pos)
 
 
-func is_marker_mode() -> bool:
+func is_point_mode() -> bool:
 	return _drawing_mode != DrawingMode.MOVEMENT
 
 
@@ -1650,98 +1650,98 @@ func _on_path_completed() -> void:
 #endregion
 
 
-#region 統一マーカー API
-func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
+#region 統一ポイント API
+func get_points_by_type(point_type: ActionPointDataScript.Type) -> Array[Dictionary]:
+	match point_type:
+		ActionPointDataScript.Type.VISION:
 			return get_vision_points()
-		ActionMarkerDataScript.Type.RUN:
+		ActionPointDataScript.Type.RUN:
 			return get_run_segments()
-		ActionMarkerDataScript.Type.CLEAR:
+		ActionPointDataScript.Type.CLEAR:
 			return get_clear_points()
-		ActionMarkerDataScript.Type.GRENADE:
-			return get_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return get_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return get_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return get_smoke_grenade_markers()
+		ActionPointDataScript.Type.GRENADE:
+			return get_grenade_points()
+		ActionPointDataScript.Type.DOOR:
+			return get_door_points()
+		ActionPointDataScript.Type.WAIT:
+			return get_wait_points()
+		ActionPointDataScript.Type.SMOKE_GRENADE:
+			return get_smoke_grenade_points()
 		_:
 			return []
 
 
-func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[MeshInstance3D]:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return take_vision_markers()
-		ActionMarkerDataScript.Type.RUN:
-			return take_run_markers()
-		ActionMarkerDataScript.Type.CLEAR:
-			return take_clear_markers()
-		ActionMarkerDataScript.Type.GRENADE:
-			return take_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return take_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return take_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return take_smoke_grenade_markers()
+func take_points_by_type(point_type: ActionPointDataScript.Type) -> Array[MeshInstance3D]:
+	match point_type:
+		ActionPointDataScript.Type.VISION:
+			return take_vision_points()
+		ActionPointDataScript.Type.RUN:
+			return take_run_points()
+		ActionPointDataScript.Type.CLEAR:
+			return take_clear_points()
+		ActionPointDataScript.Type.GRENADE:
+			return take_grenade_points()
+		ActionPointDataScript.Type.DOOR:
+			return take_door_points()
+		ActionPointDataScript.Type.WAIT:
+			return take_wait_points()
+		ActionPointDataScript.Type.SMOKE_GRENADE:
+			return take_smoke_grenade_points()
 		_:
 			return []
 
 
-func get_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
+func get_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
+	match point_type:
+		ActionPointDataScript.Type.VISION:
 			return get_all_vision_points()
-		ActionMarkerDataScript.Type.RUN:
+		ActionPointDataScript.Type.RUN:
 			return get_all_run_segments()
-		ActionMarkerDataScript.Type.CLEAR:
+		ActionPointDataScript.Type.CLEAR:
 			return get_all_clear_points()
-		ActionMarkerDataScript.Type.GRENADE:
-			return get_all_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return get_all_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return get_all_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return get_all_smoke_grenade_markers()
+		ActionPointDataScript.Type.GRENADE:
+			return get_all_grenade_points()
+		ActionPointDataScript.Type.DOOR:
+			return get_all_door_points()
+		ActionPointDataScript.Type.WAIT:
+			return get_all_wait_points()
+		ActionPointDataScript.Type.SMOKE_GRENADE:
+			return get_all_smoke_grenade_points()
 		_:
 			return {}
 
 
-func take_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return take_all_vision_markers()
-		ActionMarkerDataScript.Type.RUN:
-			return take_all_run_markers()
-		ActionMarkerDataScript.Type.CLEAR:
-			return take_all_clear_markers()
-		ActionMarkerDataScript.Type.GRENADE:
-			return take_all_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return take_all_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return take_all_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return take_all_smoke_grenade_markers()
+func take_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
+	match point_type:
+		ActionPointDataScript.Type.VISION:
+			return take_all_vision_points()
+		ActionPointDataScript.Type.RUN:
+			return take_all_run_points()
+		ActionPointDataScript.Type.CLEAR:
+			return take_all_clear_points()
+		ActionPointDataScript.Type.GRENADE:
+			return take_all_grenade_points()
+		ActionPointDataScript.Type.DOOR:
+			return take_all_door_points()
+		ActionPointDataScript.Type.WAIT:
+			return take_all_wait_points()
+		ActionPointDataScript.Type.SMOKE_GRENADE:
+			return take_all_smoke_grenade_points()
 		_:
 			return {}
 
 
-func get_all_marker_types_data() -> Dictionary:
+func get_all_point_types_data() -> Dictionary:
 	var result: Dictionary = {}
-	for type_value in ActionMarkerDataScript.Type.values():
-		result[type_value] = get_markers_by_type(type_value)
+	for type_value in ActionPointDataScript.Type.values():
+		result[type_value] = get_points_by_type(type_value)
 	return result
 
 
-func take_all_marker_types_meshes() -> Dictionary:
+func take_all_point_types_meshes() -> Dictionary:
 	var result: Dictionary = {}
-	for type_value in ActionMarkerDataScript.Type.values():
-		result[type_value] = take_markers_by_type(type_value)
+	for type_value in ActionPointDataScript.Type.values():
+		result[type_value] = take_points_by_type(type_value)
 	return result
 #endregion
 
@@ -1772,72 +1772,72 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 	if path_data.has("path_mesh") and is_instance_valid(path_data["path_mesh"]):
 		path_data["path_mesh"].queue_free()
 
-	_marker_history.append(MarkerType.PATH)
+	_point_history.append(PointType.PATH)
 
-	# マーカーをハンドラに復元
-	_restore_all_markers(path_data)
+	# ポイントをハンドラに復元
+	_restore_all_points(path_data)
 
 	call_deferred("_emit_drawing_finished_after_restore")
 	return true
 
 
-## 全マーカーをハンドラに復元
-func _restore_all_markers(path_data: Dictionary) -> void:
-	# Vision markers
-	var vision_data = path_data.get("vision_points", [])
-	var vision_meshes = path_data.get("vision_markers", [])
+## 全ポイントをハンドラに復元
+func _restore_all_points(path_data: Dictionary) -> void:
+	# Vision points
+	var vision_data = path_data.get("vision_points_data", [])
+	var vision_meshes = path_data.get("vision_points", [])
 	if vision_data.size() > 0:
-		_vision_handler.restore_markers(vision_data, vision_meshes)
+		_vision_handler.restore_points(vision_data, vision_meshes)
 		for _i in range(vision_data.size()):
-			_marker_history.append(MarkerType.VISION)
+			_point_history.append(PointType.VISION)
 
-	# Run markers
+	# Run points
 	var run_data = path_data.get("run_segments", [])
-	var run_meshes = path_data.get("run_markers", [])
+	var run_meshes = path_data.get("run_points", [])
 	if run_data.size() > 0:
-		_run_handler.restore_markers(run_data, run_meshes)
+		_run_handler.restore_points(run_data, run_meshes)
 		for _i in range(run_data.size()):
-			_marker_history.append(MarkerType.RUN)
+			_point_history.append(PointType.RUN)
 
-	# Clear markers
-	var clear_data = path_data.get("clear_points", [])
-	var clear_meshes = path_data.get("clear_markers", [])
+	# Clear points
+	var clear_data = path_data.get("clear_points_data", [])
+	var clear_meshes = path_data.get("clear_points", [])
 	if clear_data.size() > 0:
-		_clear_handler.restore_markers(clear_data, clear_meshes)
+		_clear_handler.restore_points(clear_data, clear_meshes)
 		for _i in range(clear_data.size()):
-			_marker_history.append(MarkerType.CLEAR)
+			_point_history.append(PointType.CLEAR)
 
-	# Grenade markers
-	var grenade_data = path_data.get("grenade_markers_data", [])
-	var grenade_meshes = path_data.get("grenade_markers", [])
+	# Grenade points
+	var grenade_data = path_data.get("grenade_points_data", [])
+	var grenade_meshes = path_data.get("grenade_points", [])
 	if grenade_data.size() > 0:
-		_grenade_handler.restore_markers(grenade_data, grenade_meshes)
+		_grenade_handler.restore_points(grenade_data, grenade_meshes)
 		for _i in range(grenade_data.size()):
-			_marker_history.append(MarkerType.GRENADE)
+			_point_history.append(PointType.GRENADE)
 
-	# Smoke grenade markers
-	var smoke_data = path_data.get("smoke_grenade_markers_data", [])
-	var smoke_meshes = path_data.get("smoke_grenade_markers", [])
+	# Smoke grenade points
+	var smoke_data = path_data.get("smoke_grenade_points_data", [])
+	var smoke_meshes = path_data.get("smoke_grenade_points", [])
 	if smoke_data.size() > 0:
-		_smoke_grenade_handler.restore_markers(smoke_data, smoke_meshes)
+		_smoke_grenade_handler.restore_points(smoke_data, smoke_meshes)
 		for _i in range(smoke_data.size()):
-			_marker_history.append(MarkerType.SMOKE_GRENADE)
+			_point_history.append(PointType.SMOKE_GRENADE)
 
-	# Door markers
-	var door_data = path_data.get("door_markers_data", [])
-	var door_meshes = path_data.get("door_markers", [])
+	# Door points
+	var door_data = path_data.get("door_points_data", [])
+	var door_meshes = path_data.get("door_points", [])
 	if door_data.size() > 0:
-		_door_handler.restore_markers(door_data, door_meshes)
+		_door_handler.restore_points(door_data, door_meshes)
 		for _i in range(door_data.size()):
-			_marker_history.append(MarkerType.DOOR)
+			_point_history.append(PointType.DOOR)
 
-	# Wait markers
-	var wait_data = path_data.get("wait_markers_data", [])
-	var wait_meshes = path_data.get("wait_markers", [])
+	# Wait points
+	var wait_data = path_data.get("wait_points_data", [])
+	var wait_meshes = path_data.get("wait_points", [])
 	if wait_data.size() > 0:
-		_wait_handler.restore_markers(wait_data, wait_meshes)
+		_wait_handler.restore_points(wait_data, wait_meshes)
 		for _i in range(wait_data.size()):
-			_marker_history.append(MarkerType.WAIT)
+			_point_history.append(PointType.WAIT)
 
 
 func _emit_drawing_finished_after_restore() -> void:

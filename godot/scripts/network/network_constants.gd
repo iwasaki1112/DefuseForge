@@ -81,8 +81,8 @@ const ROTATION_PRECISION: int = 1000
 ## パス座標の最大数
 const MAX_PATH_POINTS: int = 256
 
-## マーカーの最大数（各種類ごと）
-const MAX_MARKERS_PER_TYPE: int = 32
+## ポイントの最大数（各種類ごと）
+const MAX_POINTS_PER_TYPE: int = 32
 
 # ============================================
 # リレーサーバー設定
