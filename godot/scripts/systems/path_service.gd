@@ -134,13 +134,14 @@ func start_path_extension_mode(primary: Node, path_data: Dictionary, char_color:
 
 
 ## 移動中パス延長モード開始（キャラクターは移動を継続しながら延長パスを描画）
-func start_moving_path_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+## @param is_extending_extension: 既存の延長パスをさらに延長するかどうか
+func start_moving_path_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool:
 	if not path_mode_controller or not path_drawer:
 		return false
 	if remaining_data.is_empty():
 		return false
 
-	var started := path_mode_controller.start_moving_extension_mode(character, remaining_data, char_color)
+	var started := path_mode_controller.start_moving_extension_mode(character, remaining_data, char_color, is_extending_extension)
 	if not started:
 		return false
 

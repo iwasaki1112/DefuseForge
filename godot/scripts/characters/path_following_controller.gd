@@ -12,6 +12,7 @@ signal vision_point_reached(index: int, direction: Vector3)
 signal grenade_marker_reached(index: int, marker_data: Dictionary)
 signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
 signal door_marker_reached(index: int, door: Node3D)
+signal extension_path_activated()  ## 延長パスに切り替わった時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -1421,19 +1422,107 @@ func get_remaining_path_data() -> Dictionary:
 ## 延長パスを設定
 ## @param extension_path: 延長パス（Vector3の配列）
 ## @param markers: マーカーデータの辞書
-func set_extension_path(extension_path: Array[Vector3], markers: Dictionary) -> void:
+## @param append_to_existing: 既存の延長パスに追加するか（デフォルトはfalse=置き換え）
+func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> void:
 	if extension_path.size() < 2:
 		return
 
-	_extension_path = extension_path.duplicate()
-	_extension_vision_points = markers.get("vision_points", []).duplicate()
-	_extension_run_segments = markers.get("run_segments", []).duplicate()
-	_extension_clear_points = markers.get("clear_points", []).duplicate()
-	_extension_grenade_markers = markers.get("grenade_markers_data", []).duplicate()
-	_extension_smoke_grenade_markers = markers.get("smoke_grenade_markers_data", []).duplicate()
-	_extension_door_markers = markers.get("door_markers_data", []).duplicate()
-	_extension_wait_markers = markers.get("wait_markers_data", []).duplicate()
+	if append_to_existing and _has_extension and _extension_path.size() > 0:
+		# 既存の延長パスに新しいパスを追加
+		# 最初のポイントは重複するのでスキップ
+		var new_path: Array[Vector3] = _extension_path.duplicate()
+		for i in range(1, extension_path.size()):
+			new_path.append(extension_path[i])
+		_extension_path = new_path
+
+		# マーカーデータも追加（比率の調整が必要）
+		var old_length := _calculate_extension_path_length_without_new()
+		var new_length := _calculate_path_length_array(extension_path)
+		var total_length := old_length + new_length
+		if total_length > 0.001:
+			# 新しいマーカーの比率を調整して追加
+			_append_extension_markers(markers, old_length, new_length, total_length)
+	else:
+		# 置き換え
+		_extension_path = extension_path.duplicate()
+		_extension_vision_points = markers.get("vision_points", []).duplicate()
+		_extension_run_segments = markers.get("run_segments", []).duplicate()
+		_extension_clear_points = markers.get("clear_points", []).duplicate()
+		_extension_grenade_markers = markers.get("grenade_markers_data", []).duplicate()
+		_extension_smoke_grenade_markers = markers.get("smoke_grenade_markers_data", []).duplicate()
+		_extension_door_markers = markers.get("door_markers_data", []).duplicate()
+		_extension_wait_markers = markers.get("wait_markers_data", []).duplicate()
+
 	_has_extension = true
+
+
+## 延長パスの長さを計算（新しいパス追加前）
+func _calculate_extension_path_length_without_new() -> float:
+	var length: float = 0.0
+	for i in range(1, _extension_path.size()):
+		length += _extension_path[i - 1].distance_to(_extension_path[i])
+	return length
+
+
+## パス配列の長さを計算
+func _calculate_path_length_array(path: Array[Vector3]) -> float:
+	var length: float = 0.0
+	for i in range(1, path.size()):
+		length += path[i - 1].distance_to(path[i])
+	return length
+
+
+## 延長マーカーを追加（比率調整付き）
+func _append_extension_markers(markers: Dictionary, old_length: float, new_length: float, total_length: float) -> void:
+	# 新しいマーカーの比率を調整: new_ratio = (old_length + original_ratio * new_length) / total_length
+	var vision_points: Array = markers.get("vision_points", [])
+	for vp in vision_points:
+		var adjusted_ratio: float = (old_length + vp.path_ratio * new_length) / total_length
+		var new_vp: Dictionary = vp.duplicate()
+		new_vp["path_ratio"] = adjusted_ratio
+		_extension_vision_points.append(new_vp)
+
+	var run_segments: Array = markers.get("run_segments", [])
+	for seg in run_segments:
+		var adjusted_start: float = (old_length + seg.start_ratio * new_length) / total_length
+		var adjusted_end: float = (old_length + seg.end_ratio * new_length) / total_length
+		_extension_run_segments.append({
+			"start_ratio": adjusted_start,
+			"end_ratio": adjusted_end
+		})
+
+	var clear_points: Array = markers.get("clear_points", [])
+	for cp in clear_points:
+		var adjusted_ratio: float = (old_length + cp.path_ratio * new_length) / total_length
+		_extension_clear_points.append({ "path_ratio": adjusted_ratio })
+
+	var grenade_markers: Array = markers.get("grenade_markers_data", [])
+	for gm in grenade_markers:
+		var adjusted_ratio: float = (old_length + gm.path_ratio * new_length) / total_length
+		var new_gm: Dictionary = gm.duplicate()
+		new_gm["path_ratio"] = adjusted_ratio
+		_extension_grenade_markers.append(new_gm)
+
+	var smoke_grenade_markers: Array = markers.get("smoke_grenade_markers_data", [])
+	for sgm in smoke_grenade_markers:
+		var adjusted_ratio: float = (old_length + sgm.path_ratio * new_length) / total_length
+		var new_sgm: Dictionary = sgm.duplicate()
+		new_sgm["path_ratio"] = adjusted_ratio
+		_extension_smoke_grenade_markers.append(new_sgm)
+
+	var door_markers: Array = markers.get("door_markers_data", [])
+	for dm in door_markers:
+		var adjusted_ratio: float = (old_length + dm.path_ratio * new_length) / total_length
+		var new_dm: Dictionary = dm.duplicate()
+		new_dm["path_ratio"] = adjusted_ratio
+		_extension_door_markers.append(new_dm)
+
+	var wait_markers: Array = markers.get("wait_markers_data", [])
+	for wm in wait_markers:
+		var adjusted_ratio: float = (old_length + wm.path_ratio * new_length) / total_length
+		var new_wm: Dictionary = wm.duplicate()
+		new_wm["path_ratio"] = adjusted_ratio
+		_extension_wait_markers.append(new_wm)
 
 
 ## 延長パスをキャンセル
@@ -1452,6 +1541,34 @@ func cancel_extension() -> void:
 ## 延長パスがあるか
 func has_extension_path() -> bool:
 	return _has_extension
+
+
+## 延長パスの終点を取得
+func get_extension_path_endpoint() -> Vector3:
+	if not _has_extension or _extension_path.size() == 0:
+		return Vector3.ZERO
+	return _extension_path[_extension_path.size() - 1]
+
+
+## 延長パスのデータを取得（さらなる延長用）
+## @return: { path: Array[Vector3], endpoint: Vector3, ... }
+func get_extension_path_data() -> Dictionary:
+	if not _has_extension or _extension_path.size() == 0:
+		return {}
+
+	var endpoint := get_extension_path_endpoint()
+
+	return {
+		"path": [endpoint],  # 延長開始点のみ
+		"endpoint": endpoint,
+		"vision_points": [],
+		"run_segments": [],
+		"clear_points": [],
+		"grenade_markers_data": [],
+		"smoke_grenade_markers_data": [],
+		"door_markers_data": [],
+		"wait_markers_data": []
+	}
 
 
 ## 延長パスに切り替え（内部メソッド）
@@ -1484,3 +1601,6 @@ func _switch_to_extension_path() -> void:
 
 	# 延長データをクリア
 	cancel_extension()
+
+	# 延長パスに切り替わったことを通知（メッシュ管理用）
+	extension_path_activated.emit()

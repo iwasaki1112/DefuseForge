@@ -28,6 +28,8 @@ var _extension_mode_character: Node = null
 var _is_moving_extension_mode: bool = false
 ## 移動中延長対象キャラクター
 var _moving_extension_character: Node = null
+## 延長の延長フラグ（既存の延長パスをさらに延長する場合）
+var _is_extending_extension_path: bool = false
 
 
 ## セットアップ
@@ -125,7 +127,8 @@ func start_extension_mode(character: Node, path_data: Dictionary, char_color: Co
 
 
 ## 移動中パス延長モード開始（キャラクターは移動を継続しながら延長パスを描画）
-func start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+## @param is_extending_extension: 既存の延長パスをさらに延長するかどうか
+func start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool:
 	if not character or not path_drawer:
 		return false
 	if remaining_data.is_empty():
@@ -133,6 +136,7 @@ func start_moving_extension_mode(character: Node, remaining_data: Dictionary, ch
 
 	_is_moving_extension_mode = true
 	_moving_extension_character = character
+	_is_extending_extension_path = is_extending_extension
 
 	# 一時的な選択リングを表示
 	_show_temporary_outline(character)
@@ -239,8 +243,8 @@ func _confirm_moving_extension() -> bool:
 		"wait_markers_data": path_drawer.get_wait_markers().duplicate()
 	}
 
-	# PathExecutionManagerに延長パスを設定
-	if path_execution_manager.set_extension_path_for_character(character, extension_path, markers):
+	# PathExecutionManagerに延長パスを設定（延長の延長の場合はappend_to_existingをtrue）
+	if path_execution_manager.set_extension_path_for_character(character, extension_path, markers, _is_extending_extension_path):
 		_cleanup()
 		mode_ended.emit()
 		return true
@@ -322,6 +326,7 @@ func _cleanup() -> void:
 			_moving_extension_character.show_outline(false)
 	_is_moving_extension_mode = false
 	_moving_extension_character = null
+	_is_extending_extension_path = false
 	if selection_manager:
 		selection_manager.clear_path_targets()
 	if path_drawer:

@@ -312,7 +312,8 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 
 	# 移動中パスの延長
 	if use_moving:
-		return _start_moving_path_extension(moving_result.get("character"), ground_pos)
+		var is_extending_extension: bool = moving_result.get("is_extending_extension", false)
+		return _start_moving_path_extension(moving_result.get("character"), ground_pos, is_extending_extension)
 
 	# 確定済みパスの延長（既存の処理）
 	if use_pending:
@@ -341,22 +342,23 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 ## 移動中パス延長モードを開始
 ## @param character: 対象キャラクター
 ## @param _ground_pos: タップ位置（未使用、将来の拡張用）
+## @param is_extending_extension: 既存の延長パスをさらに延長するかどうか
 ## @return: 成功したらtrue
-func _start_moving_path_extension(character: Node, _ground_pos: Vector3) -> bool:
+func _start_moving_path_extension(character: Node, _ground_pos: Vector3, is_extending_extension: bool = false) -> bool:
 	if not is_instance_valid(character):
 		return false
 
-	# 残りパスデータを取得
-	var remaining_data := path_execution_manager.get_remaining_path_for_character(character)
+	# 残りパスデータを取得（延長の延長の場合は延長パスのデータを取得）
+	var remaining_data := path_execution_manager.get_remaining_path_for_character(character, is_extending_extension)
 	if remaining_data.is_empty():
 		return false
 
 	# キャラクター色を取得
 	var char_color := CharacterColorManager.get_character_color(character)
 
-	# 移動中延長モードを開始
+	# 移動中延長モードを開始（延長の延長フラグを渡す）
 	if path_service:
-		if not path_service.start_moving_path_extension_mode(character, remaining_data, char_color):
+		if not path_service.start_moving_path_extension_mode(character, remaining_data, char_color, is_extending_extension):
 			return false
 
 	return true

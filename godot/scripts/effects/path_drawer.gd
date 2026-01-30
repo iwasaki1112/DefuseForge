@@ -362,7 +362,10 @@ func _handle_movement_input(event: InputEvent) -> void:
 		if _is_drawing:
 			var ground_pos = _get_ground_position(event.position)
 			if ground_pos != null:
-				_add_point(ground_pos)
+				if _is_extending_path:
+					_add_extend_point(ground_pos)
+				else:
+					_add_point(ground_pos)
 
 	# タッチ入力
 	if event is InputEventScreenTouch:
@@ -376,12 +379,22 @@ func _handle_movement_input(event: InputEvent) -> void:
 		if _is_drawing:
 			var ground_pos = _get_ground_position(event.position)
 			if ground_pos != null:
-				_add_point(ground_pos)
+				if _is_extending_path:
+					_add_extend_point(ground_pos)
+				else:
+					_add_point(ground_pos)
 			get_viewport().set_input_as_handled()
 
 
 ## 描画開始処理（マウス/タッチ共通）
 func _handle_drawing_press(screen_pos: Vector2) -> void:
+	# 既に延長モードが開始されている場合（外部からstart_extending_path()が呼ばれた場合）
+	# _path_pointsは既にセットされているので、描画開始のみ行う
+	if _is_extending_path:
+		_is_drawing = true
+		_marker_history.append(MarkerType.PATH_EXTENSION)
+		return
+
 	var start_pos: Vector3
 	if _character:
 		start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
@@ -396,7 +409,11 @@ func _handle_drawing_press(screen_pos: Vector2) -> void:
 ## 描画終了処理（マウス/タッチ共通）
 func _handle_drawing_release() -> void:
 	if _is_drawing:
-		_finish_drawing()
+		if _is_extending_path:
+			_finish_extending_path()
+			_is_drawing = false
+		else:
+			_finish_drawing()
 	# Note: 描画が開始されていない場合（パスモード開始直後のリリース等）は何もしない
 	# キャンセルはユーザーが明示的にESCキーなどで行う
 

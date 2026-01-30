@@ -40,8 +40,8 @@ func _is_character_without_path(character: Node) -> bool:
 	return not game_manager.path_execution_manager.has_pending_path_for_character(character)
 
 
-## タップダウン時にキャラクターを即座に選択してパスモード開始
-## @return: パスモードが開始された場合true
+## タップダウン時にキャラクターを即座に選択（パスモードはドラッグ時に開始）
+## @return: キャラクターが選択された場合true
 func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	var clicked = game_manager.raycast_character(screen_pos)
 	if not clicked:
@@ -53,7 +53,7 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 
 	game_manager.selection_manager.deselect_all()
 	game_manager.selection_manager.add_to_selection(clicked)
-	game_manager.start_move_mode()
+	# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
 	return true
 
 
@@ -169,14 +169,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
-				# 味方キャラクターなら即座パスモード開始（キャラクター切り替え）
+				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
 						game_manager.selection_manager.deselect_all()
 						game_manager.selection_manager.add_to_selection(clicked)
-						game_manager.start_move_mode()
+						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
 						_immediate_path_mode_started = true
 						_immediate_path_drawing_started = false
 						get_viewport().set_input_as_handled()
@@ -250,6 +250,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# 1本指マウスドラッグ処理
 	if event is InputEventMouseMotion and _left_button_pressed:
+		# 即座パスモードでドラッグが検出された場合、パスモード開始
+		if _immediate_path_mode_started and not _immediate_path_drawing_started:
+			game_manager.start_move_mode()
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer.handle_drawing_press(_left_click_start_pos)
+			_immediate_path_drawing_started = true
+			return
 		# パス先端延長の待機中にドラッグが開始された場合
 		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
@@ -367,14 +375,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
-				# 味方キャラクターなら即座パスモード開始（キャラクター切り替え）
+				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
 						game_manager.selection_manager.deselect_all()
 						game_manager.selection_manager.add_to_selection(clicked)
-						game_manager.start_move_mode()
+						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
 						_immediate_path_mode_started = true
 						_immediate_path_drawing_started = false
 						get_viewport().set_input_as_handled()
@@ -455,6 +463,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 	# 1本指ドラッグ処理
 	if event is InputEventScreenDrag:
+		# 即座パスモードでドラッグが検出された場合、パスモード開始
+		if _immediate_path_mode_started and not _immediate_path_drawing_started:
+			game_manager.start_move_mode()
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer.handle_drawing_press(_left_click_start_pos)
+			_immediate_path_drawing_started = true
+			return
 		# パス先端延長の待機中にドラッグが開始された場合
 		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):

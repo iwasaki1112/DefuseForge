@@ -48,6 +48,10 @@ var _path_controllers: Dictionary = {}
 ## 延長パスのメッシュ { character_id -> MeshInstance3D }
 var _extension_path_meshes: Dictionary = {}
 
+## アクティブパスメッシュ（延長後に切り替わったパス） { character_id -> Array[MeshInstance3D] }
+## 複数回延長した場合に全てのセグメントを保持
+var _active_path_meshes: Dictionary = {}
+
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
 
@@ -377,7 +381,7 @@ func is_any_path_following_active() -> bool:
 ## 移動中パスの終点を検索
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
-## @return: {character: Node, endpoint: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+## @return: {character: Node, endpoint: Vector3, distance: float, is_extending_extension: bool} を返す。見つからない場合は空のDictionary
 func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
@@ -386,10 +390,6 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 		var controller = _path_controllers[char_id]
 
 		if not controller.is_following_path():
-			continue
-
-		# 既に延長パスがある場合はスキップ
-		if controller.has_extension_path():
 			continue
 
 		# キャラクターを取得
@@ -403,8 +403,15 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 		if PlayerState.is_enemy(character):
 			continue
 
-		# パス終点を取得
-		var endpoint: Vector3 = controller.get_path_endpoint()
+		# 延長パスがある場合はその終点を使用、なければ元のパス終点を使用
+		var endpoint: Vector3 = Vector3.ZERO
+		var is_extending_extension: bool = false
+		if controller.has_extension_path():
+			endpoint = controller.get_extension_path_endpoint()
+			is_extending_extension = true
+		else:
+			endpoint = controller.get_path_endpoint()
+
 		if endpoint == Vector3.ZERO:
 			continue
 
@@ -420,7 +427,8 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 				"character": character,
 				"char_id": char_id,
 				"endpoint": endpoint,
-				"distance": distance
+				"distance": distance,
+				"is_extending_extension": is_extending_extension
 			}
 
 	return result
@@ -428,8 +436,9 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 
 ## 移動中キャラクターの残りパスデータを取得
 ## @param character: 対象キャラクター
+## @param get_extension: 延長パスのデータを取得するかどうか（延長の延長用）
 ## @return: 残りパスデータのDictionary
-func get_remaining_path_for_character(character: Node) -> Dictionary:
+func get_remaining_path_for_character(character: Node, get_extension: bool = false) -> Dictionary:
 	if not character:
 		return {}
 
@@ -440,6 +449,10 @@ func get_remaining_path_for_character(character: Node) -> Dictionary:
 	var controller = _path_controllers[char_id]
 	if not controller.is_following_path():
 		return {}
+
+	# 延長パスのデータを取得する場合
+	if get_extension and controller.has_extension_path():
+		return controller.get_extension_path_data()
 
 	return controller.get_remaining_path_data()
 
@@ -448,8 +461,9 @@ func get_remaining_path_for_character(character: Node) -> Dictionary:
 ## @param character: 対象キャラクター
 ## @param extension_path: 延長パス
 ## @param markers: マーカーデータ
+## @param append_to_existing: 既存の延長パスに追加するか（延長の延長用）
 ## @return: 設定成功したらtrue
-func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary) -> bool:
+func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> bool:
 	if not character:
 		return false
 
@@ -461,10 +475,19 @@ func set_extension_path_for_character(character: Node, extension_path: Array[Vec
 	if not controller.is_following_path():
 		return false
 
-	controller.set_extension_path(extension_path, markers)
+	# 既存の延長パスに追加する場合、現在のメッシュをアクティブメッシュに移動
+	if append_to_existing and controller.has_extension_path():
+		if _extension_path_meshes.has(char_id):
+			var old_mesh = _extension_path_meshes[char_id]
+			if is_instance_valid(old_mesh):
+				if not _active_path_meshes.has(char_id):
+					_active_path_meshes[char_id] = []
+				_active_path_meshes[char_id].append(old_mesh)
+			_extension_path_meshes.erase(char_id)
 
-	# 延長パスのメッシュを作成
-	_free_extension_mesh(char_id)
+	controller.set_extension_path(extension_path, markers, append_to_existing)
+
+	# 新しい延長パスのメッシュを作成
 	var mesh = _create_path_mesh(extension_path, character)
 	if mesh:
 		_extension_path_meshes[char_id] = mesh
@@ -479,6 +502,16 @@ func _free_extension_mesh(char_id: int) -> void:
 		if is_instance_valid(mesh):
 			mesh.queue_free()
 		_extension_path_meshes.erase(char_id)
+
+
+## アクティブパスメッシュを解放（複数回延長した場合の全セグメント）
+func _free_active_path_meshes(char_id: int) -> void:
+	if _active_path_meshes.has(char_id):
+		var meshes: Array = _active_path_meshes[char_id]
+		for mesh in meshes:
+			if is_instance_valid(mesh):
+				mesh.queue_free()
+		_active_path_meshes.erase(char_id)
 
 
 ## 移動中キャラクターの延長パスをキャンセル
@@ -570,6 +603,9 @@ func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
 			controller.cancel()
 	if clear_pending:
 		_clear_pending_path_for_character(char_id)
+		# 延長パスとアクティブパスのメッシュも削除
+		_free_extension_mesh(char_id)
+		_free_active_path_meshes(char_id)
 
 
 ## 全パス追従コントローラーを処理（毎フレーム呼ぶ）
@@ -613,6 +649,7 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	controller.grenade_marker_reached.connect(_on_grenade_marker_reached.bind(character))
 	controller.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached.bind(character))
 	controller.door_marker_reached.connect(_on_door_marker_reached.bind(character))
+	controller.extension_path_activated.connect(_on_extension_path_activated.bind(character))
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -631,6 +668,8 @@ func _on_path_completed(character: Node) -> void:
 			pending_paths.erase(char_id)
 		# 延長パスのメッシュも削除
 		_free_extension_mesh(char_id)
+		# アクティブパスメッシュも削除（複数回延長した場合の全セグメント）
+		_free_active_path_meshes(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -638,6 +677,25 @@ func _on_path_completed(character: Node) -> void:
 
 func _on_path_cancelled(_character: Node) -> void:
 	pass
+
+
+## 延長パスに切り替わった時のコールバック
+## 延長パスメッシュをアクティブパスメッシュに移動（次の延長で削除されないように）
+func _on_extension_path_activated(character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# 延長パスメッシュをアクティブパスメッシュに移動
+	if _extension_path_meshes.has(char_id):
+		var mesh = _extension_path_meshes[char_id]
+		if is_instance_valid(mesh):
+			# アクティブパスメッシュ配列に追加
+			if not _active_path_meshes.has(char_id):
+				_active_path_meshes[char_id] = []
+			_active_path_meshes[char_id].append(mesh)
+		_extension_path_meshes.erase(char_id)
 
 
 func _on_grenade_marker_reached(_index: int, marker_data: Dictionary, character: Node) -> void:
@@ -717,6 +775,9 @@ func _clear_all_path_meshes() -> void:
 	# 延長パスのメッシュも削除
 	for char_id in _extension_path_meshes.keys():
 		_free_extension_mesh(char_id)
+	# アクティブパスメッシュも削除
+	for char_id in _active_path_meshes.keys():
+		_free_active_path_meshes(char_id)
 
 
 ## pending_pathsのデータからメッシュとマーカーを解放
