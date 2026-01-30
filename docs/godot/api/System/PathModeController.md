@@ -53,22 +53,40 @@ func setup(
 
 ### start()
 
-パスモードを開始する。
+パスモードを開始する（通常のパス描画）。
 
 ```gdscript
 func start(character: Node, char_color: Color = Color.WHITE) -> bool
 ```
 
+### start_with_existing_path()
+
+既存パスを読み込んで編集モードを開始する。
+
+```gdscript
+func start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool
+```
+
+### start_extension_mode()
+
+パス延長モードを開始する（一時的な選択状態で既存パスを編集）。
+
+```gdscript
+func start_extension_mode(character: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool
+```
+
+### start_moving_extension_mode()
+
+移動中のパス延長モードを開始する。キャラクターが移動を続けながら、終点から新しいパスを描画できる。
+
+```gdscript
+func start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool
+```
+
 **引数:**
-- `character`: パス描画の基準キャラクター
-- `char_color`: パス描画色
-
-**戻り値:** 成功した場合 `true`
-
-**処理:**
-1. 選択マネージャーでパス適用対象をスナップショット
-2. PathDrawerを有効化
-3. `mode_started`シグナルを発火
+- `character`: 対象キャラクター
+- `remaining_data`: 残りのパスデータ（endpoint含む）
+- `is_extending_extension`: 既存の延長パスをさらに延長する場合 `true`
 
 ### confirm()
 
@@ -81,9 +99,9 @@ func confirm() -> bool
 **戻り値:** 成功した場合 `true`
 
 **処理:**
-1. PathExecutionManagerにパスを委譲
-2. クリーンアップ処理
-3. 選択を解除
+1. モード（通常/延長/移動中延長）に応じて適切な確定処理を実行
+2. PathExecutionManagerにパスを委譲
+3. クリーンアップ処理
 4. `mode_ended`シグナルを発火
 
 ### cancel()
@@ -239,6 +257,8 @@ func _edit_existing_path(path_data: Dictionary) -> void:
 - `setup(drawer: Node3D, sel_manager: CharacterSelectionManager, exec_manager: PathExecutionManager) -> void`
 - `start(_character: Node, char_color: Color = Color.WHITE) -> bool`
 - `start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool`
+- `start_extension_mode(character: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool`
+- `start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool`
 - `confirm() -> bool`
 - `cancel() -> void`
 - `is_path_mode() -> bool`

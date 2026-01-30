@@ -71,7 +71,7 @@
 | `path_endpoint_threshold` | `float` | `0.3` | パス終点タップ検出距離（継続描画用） |
 | `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
 | `enable_wall_sliding` | `bool` | `true` | 壁沿いの自動スライド機能を有効化 |
-| `wall_slide_offset` | `float` | `0.15` | 壁スライド時の壁からのオフセット距離 |
+| `wall_slide_offset` | `float` | `0.5` | 壁スライド時の壁からのオフセット距離 |
 | `enable_smoothing` | `bool` | `true` | パススムージングを有効化 |
 | `smoothing_epsilon` | `float` | `0.15` | RDP間引き許容誤差（大きいほど間引き強） |
 | `smoothing_segments` | `int` | `4` | Catmull-Rom曲線の分割数（大きいほど滑らか） |
