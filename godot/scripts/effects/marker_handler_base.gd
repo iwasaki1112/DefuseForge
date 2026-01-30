@@ -132,8 +132,12 @@ func _has_pending_path() -> bool:
 
 ## PathDrawerに子ノードを追加
 func _add_child_to_drawer(node: Node) -> void:
-	if _path_drawer:
-		_path_drawer.add_child(node)
+	if _path_drawer and node:
+		# 既に親がある場合は再ペアレント
+		if node.get_parent():
+			node.reparent(_path_drawer)
+		else:
+			_path_drawer.add_child(node)
 
 
 ## 壁または床へのレイキャスト

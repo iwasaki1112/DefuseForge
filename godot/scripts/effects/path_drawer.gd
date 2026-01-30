@@ -36,7 +36,7 @@ signal auto_confirm_requested()
 @export var line_width: float = 0.04
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
-@export var path_click_threshold: float = 0.5
+@export var path_click_threshold: float = 0.7
 @export var path_endpoint_threshold: float = 0.3
 @export_flags_3d_physics var wall_collision_mask: int = 2
 @export var enable_wall_sliding: bool = true
@@ -765,7 +765,6 @@ func _finish_extending_path() -> void:
 
 		if original_path.size() > 0:
 			# 延長部分のみを抽出（元のパスの終点から新しいポイントまで）
-			var extension_start_idx := original_path.size() - 1
 			var extension_points := PackedVector3Array()
 
 			# 元のパスの終点を延長部分の開始点として追加（スムージングの接続用）

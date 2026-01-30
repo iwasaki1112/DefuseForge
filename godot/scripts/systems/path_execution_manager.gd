@@ -32,6 +32,8 @@ signal smoke_grenade_marker_reached(character: Node, marker_data: Dictionary)
 signal door_marker_reached(character: Node, door: Node3D)
 ## Visionマーカー到達時のシグナル（移動中パスマーカー非表示用）
 signal vision_point_reached(character: Node, path_ratio: float)
+## パス進行更新シグナル（移動中パスマーカー非表示用）
+signal path_progress_updated(character: Node)
 ## 延長マーカーの比率がスケールされた時のシグナル
 signal extension_markers_scaled(character: Node, scale: float)
 
@@ -482,6 +484,26 @@ func get_remaining_path_for_character(character: Node, get_extension: bool = fal
 	return controller.get_remaining_path_data()
 
 
+## 移動中キャラクターの残りパス（延長含む）を配列で取得
+func get_full_remaining_path_array(character: Node) -> Array[Vector3]:
+	if not character:
+		return []
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return []
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return []
+
+	var packed_path = controller.get_full_remaining_path()
+	var result: Array[Vector3] = []
+	for p in packed_path:
+		result.append(p)
+	return result
+
+
 ## 移動中キャラクターに延長パスを設定
 ## @param character: 対象キャラクター
 ## @param extension_path: 延長パス
@@ -712,6 +734,9 @@ func _on_path_cancelled(_character: Node) -> void:
 func _on_path_progress_updated(path_index: int, character: Node) -> void:
 	if not character:
 		return
+
+	# 移動中パスマーカー非表示用シグナルを発火
+	path_progress_updated.emit(character)
 
 	var char_id = character.get_instance_id()
 

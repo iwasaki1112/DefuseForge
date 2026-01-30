@@ -510,17 +510,36 @@ func clear_all_moving_path_vision_markers() -> void:
 ## 移動中パスVisionマーカーを進行状況に応じて非表示
 ## @param character: 対象キャラクター
 ## @param current_ratio: 現在のパス進行率
-func hide_passed_moving_path_vision_markers(character: Node, current_ratio: float) -> void:
+func hide_passed_moving_path_vision_markers(character: Node, _current_ratio: float) -> void:
 	if not character:
 		return
 	var char_id = character.get_instance_id()
 	if not _moving_path_vision_markers.has(char_id):
 		return
 
+	# キャラクターの現在位置を取得（Y座標は無視）
+	var char_pos = character.global_position
+	char_pos.y = 0.0
+
 	for marker_data in _moving_path_vision_markers[char_id]:
 		var marker = marker_data.get("marker")
-		var marker_ratio = marker_data.get("path_ratio", 0.0)
-		if is_instance_valid(marker) and current_ratio >= marker_ratio:
+		if not is_instance_valid(marker):
+			continue
+
+		# 既に非表示なら処理しない
+		if not marker.visible:
+			continue
+
+		var anchor = marker_data.get("anchor", Vector3.ZERO)
+		if anchor == Vector3.ZERO:
+			continue
+
+		# マーカー位置との距離で判定（Y座標は無視）
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		var distance = char_pos.distance_to(anchor_flat)
+
+		# キャラクターがマーカー位置に十分近い（1.0ユニット以内）なら非表示
+		if distance < 1.0:
 			marker.visible = false
 
 
@@ -828,6 +847,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
 		# Visionマーカー到達時に移動中パスマーカーを非表示
 		path_execution_manager.vision_point_reached.connect(_on_vision_point_reached)
+		# パス進行更新時に移動中パスマーカーを非表示チェック
+		path_execution_manager.path_progress_updated.connect(_on_path_progress_updated)
 		# 延長マーカーの比率がスケールされた時に移動中パスマーカーの比率を更新
 		path_execution_manager.extension_markers_scaled.connect(_on_extension_markers_scaled)
 
@@ -1000,6 +1021,11 @@ func _on_character_path_completed(character: Node) -> void:
 func _on_vision_point_reached(character: Node, path_ratio: float) -> void:
 	# 移動中パスVisionマーカーを進行状況に応じて非表示
 	hide_passed_moving_path_vision_markers(character, path_ratio)
+
+
+func _on_path_progress_updated(character: Node) -> void:
+	# パス進行時にも移動中パスVisionマーカーを非表示チェック
+	hide_passed_moving_path_vision_markers(character, 0.0)
 
 
 func _on_extension_markers_scaled(character: Node, scale: float) -> void:
