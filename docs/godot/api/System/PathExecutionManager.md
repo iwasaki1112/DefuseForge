@@ -68,6 +68,26 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
 #### `process_controllers(delta: float) -> void`
 毎フレーム呼び出し、各コントローラーの更新処理を行う。
 
+### Moving Path Operations
+
+#### `find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
+移動中のパス上で、指定座標に近い点を検索する（Visionマーカー追加用）。
+
+#### `find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
+移動中のパスの終点を検索する（パス延長用）。
+
+#### `add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool`
+移動中のパスにVisionマーカーを動的に追加する。
+
+#### `get_remaining_path_for_character(character: Node, get_extension: bool = false) -> Dictionary`
+移動中のキャラクターの残りパスデータを取得する。
+
+#### `set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> bool`
+移動中のキャラクターに延長パスを設定する。
+
+#### `cancel_extension_for_character(character: Node) -> void`
+設定された延長パスをキャンセルする。
+
 ### Query
 
 #### `get_pending_path_count() -> int`

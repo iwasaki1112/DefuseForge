@@ -43,6 +43,8 @@ Door Kickers 2スタイルの協調的衝突回避（Sidestep）ロジックを�
 | `grenade_marker_reached` | `index: int, marker_data: Dictionary` | グレネードマーカー到達時 |
 | `smoke_grenade_marker_reached` | `index: int, marker_data: Dictionary` | スモークグレネードマーカー到達時 |
 | `door_marker_reached` | `index: int, door: Node3D` | ドアマーカー到達時（パス一時停止） |
+| `path_progress_updated` | `index: int, character: Node` | パス進行状況更新時（通過したポイントのインデックス） |
+| `extension_path_activated` | `character: Node` | 延長パスへの切り替え発生時 |
 
 ## Public API
 
@@ -59,16 +61,17 @@ CombatAwarenessComponentを設定する（敵自動追跡用）。
 #### `start_path(...) -> bool`
 パス追従を開始する。
 
-**引数:**
-- `path`: `Array[Vector3]`
-- `vision_points`: `Array[Dictionary]`
-- `run_segments`: `Array[Dictionary]`
-- `run`: `bool` (全体走行フラグ)
-- `clear_points`: `Array[Dictionary]`
-- `grenade_markers`: `Array[Dictionary]`
-- `door_markers`: `Array[Dictionary]`
-- `wait_markers`: `Array[Dictionary]`
-- `smoke_grenade_markers`: `Array[Dictionary]`
+#### `set_extension_path(path: Array, markers: Dictionary, append: bool) -> void`
+移動中に延長パスを設定する。現在のパス完了後にシームレスに移行する。
+
+#### `cancel_extension() -> void`
+設定された延長パスをキャンセルする。
+
+#### `add_vision_point_to_extension(...) -> void`
+移動中のパス（または延長パス）にVisionポイントを追加する。
+
+#### `get_remaining_path_data() -> Dictionary`
+現在の位置からゴールまでの残りパスデータを取得する。
 
 #### `cancel() -> void`
 パス追従をキャンセルする。
