@@ -102,6 +102,9 @@ const AVOIDANCE_COOLDOWN: float = 0.5  ## 回避後のクールダウン時間�
 var _cached_total_length: float = 0.0
 var _cached_segment_lengths: Array[float] = []  # 各セグメントの累積距離
 
+## 距離ベースのポイント検出用
+var _distance_traveled: float = 0.0  # キャラクターが移動した累積距離
+
 ## キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
@@ -520,7 +523,7 @@ func process(delta: float) -> void:
 	_character.move_and_slide()
 
 
-## 視線方向を更新（ターゲットポイントモード対応）
+## 視線方向を更新（距離ベースの検出）
 func _update_vision_direction() -> void:
 	if _vision_points.size() == 0:
 		# ターゲットポイントが設定されている場合、動的に方向を計算
@@ -530,19 +533,29 @@ func _update_vision_direction() -> void:
 			_forced_look_direction = Vector3.ZERO
 		return
 
-	var progress = _calculate_path_progress()
+	# キャラクターの移動距離を計算
+	var char_distance := _calculate_distance_traveled()
 
 	while _vision_index < _vision_points.size():
 		var vp = _vision_points[_vision_index]
-		if progress >= vp.path_ratio:
+		# anchorからポイントの距離を計算（キャッシュがあれば使用）
+		var point_distance: float
+		if vp.has("path_distance"):
+			point_distance = vp.path_distance
+		elif vp.has("anchor"):
+			point_distance = _calculate_anchor_distance(vp.anchor)
+			vp["path_distance"] = point_distance  # キャッシュ
+		else:
+			# anchorがない場合はratioから計算（後方互換）
+			point_distance = vp.get("path_ratio", 0.0) * _cached_total_length
+
+		if char_distance >= point_distance:
 			# ターゲットポイントモードかどうかをチェック
 			if vp.has("target_point"):
-				# ターゲットポイントを保存（毎フレーム方向を再計算）
 				_active_target_point = vp.target_point
 				_calculate_direction_to_target()
 				vision_point_reached.emit(_vision_index, _forced_look_direction)
 			elif vp.has("direction"):
-				# 後方互換: 固定方向モード
 				_forced_look_direction = vp.direction
 				_active_target_point = Vector3.ZERO
 				vision_point_reached.emit(_vision_index, vp.direction)
@@ -598,6 +611,22 @@ func _build_path_length_cache() -> void:
 		_cached_segment_lengths.append(_cached_total_length)
 
 
+## パスの先頭から最初の有効セグメント方向を取得
+## 重複点やゼロ長セグメントをスキップして最初の有効な方向を返す
+func _get_first_segment_direction(path: Array[Vector3], start_index: int = 0) -> Vector3:
+	if path.size() < 2:
+		return Vector3.ZERO
+
+	var start := clampi(start_index, 0, path.size() - 2)
+	for i in range(start + 1, path.size()):
+		var segment = path[i] - path[i - 1]
+		segment.y = 0
+		if segment.length_squared() > 0.001:
+			return segment.normalized()
+
+	return Vector3.ZERO
+
+
 ## パスの進行率を計算
 ## キャラクターの実際の位置に基づいて、パス上の最も近い点を見つけて進行率を計算
 func _calculate_path_progress() -> float:
@@ -640,11 +669,81 @@ func _calculate_path_progress() -> float:
 	return best_accumulated_length / _cached_total_length
 
 
+## キャラクターの移動距離を計算（パス開始点からの累積距離）
+func _calculate_distance_traveled() -> float:
+	if _current_path.size() < 2 or not _character:
+		return 0.0
+
+	var char_pos = _character.global_position
+	char_pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+	var start_segment := maxi(1, _path_index)
+
+	for i in range(start_segment, _current_path.size()):
+		var p1 = _current_path[i - 1]
+		var p2 = _current_path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var t = clampf((char_pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = char_pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			var segment_length = sqrt(segment_length_sq)
+			best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
+
+	return best_accumulated_length
+
+
+## anchor位置のパス上での距離を計算（パス開始点からの累積距離）
+func _calculate_anchor_distance(anchor: Vector3) -> float:
+	if _current_path.size() < 2:
+		return 0.0
+
+	var pos = anchor
+	pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+
+	for i in range(1, _current_path.size()):
+		var p1 = _current_path[i - 1]
+		var p2 = _current_path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var t = clampf((pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			var segment_length = sqrt(segment_length_sq)
+			best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
+
+	return best_accumulated_length
+
+
 ## Run区間内かどうかを判定
 func _is_in_run_segment(progress: float) -> bool:
 	for seg in _run_segments:
-		if progress >= seg.start_ratio and progress < seg.end_ratio:
-			return true
+		if seg.has("start_ratio") and seg.has("end_ratio"):
+			if progress >= seg.start_ratio and progress < seg.end_ratio:
+				return true
 	return false
 
 
@@ -745,13 +844,30 @@ func resume_after_door() -> void:
 	_is_waiting_for_door = false
 
 
-## Waitポイントのチェックと処理
+## Waitポイントのチェックと処理（距離ベースの検出）
 ## ポイント到達時にパスを一時停止して待機開始
 ## @return: Waitポイントに到達してパスを停止した場合はtrue
-func _check_wait_points(progress: float) -> bool:
+func _check_wait_points(_progress: float) -> bool:
+	# キャラクターの移動距離を計算
+	var char_distance := _calculate_distance_traveled()
+
 	while _wait_index < _wait_points.size():
 		var wp = _wait_points[_wait_index]
-		if progress >= wp.path_ratio:
+		# anchorからポイントの距離を計算（キャッシュがあれば使用）
+		var point_distance: float
+		if wp.has("path_distance"):
+			point_distance = wp.path_distance
+		elif wp.has("anchor"):
+			point_distance = _calculate_anchor_distance(wp.anchor)
+			wp["path_distance"] = point_distance  # キャッシュ
+		elif wp.has("path_ratio"):
+			# anchorがない場合はratioから計算（後方互換）
+			point_distance = wp.path_ratio * _cached_total_length
+		else:
+			_wait_index += 1
+			continue
+
+		if char_distance >= point_distance:
 			var duration: float = wp.wait_duration if wp.has("wait_duration") else 1.0
 			var reached_index = _wait_index
 			_wait_index += 1
@@ -1458,6 +1574,24 @@ func get_path_endpoint() -> Vector3:
 	return _current_path[_current_path.size() - 1]
 
 
+## パスにポイントを追加（移動中の延長用）
+func append_path_point(point: Vector3) -> void:
+	_current_path.append(point)
+	# 新しいセグメントの長さをキャッシュに追加（全体再計算を避ける）
+	if _current_path.size() >= 2:
+		var new_segment_length = _current_path[_current_path.size() - 2].distance_to(point)
+		_cached_total_length += new_segment_length
+		_cached_segment_lengths.append(_cached_total_length)
+
+
+## 現在の全パスをPackedVector3Arrayとして取得（メッシュ更新用）
+func get_current_path_packed() -> PackedVector3Array:
+	var result := PackedVector3Array()
+	for p in _current_path:
+		result.append(p)
+	return result
+
+
 ## 残りパスと延長パスを結合して取得（Visionポイント配置用）
 ## @return: PackedVector3Array（現在位置から先のパス全体）
 func get_full_remaining_path() -> PackedVector3Array:
@@ -1494,9 +1628,12 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 		_extension_vision_points.append(new_vp)
 		_extension_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 	else:
-		# 延長パスに切り替わっている（または延長がない）場合は直接追加
+		# 延長パスに切り替わっている場合は、anchorから現在のパス上のratioを再計算
+		var recalculated_ratio := _calculate_ratio_from_position_on_path(_current_path, anchor)
+		new_vp["path_ratio"] = recalculated_ratio
 		_vision_points.append(new_vp)
 		_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		print("[VP] added: orig_ratio=%.3f recalc_ratio=%.3f" % [path_ratio, recalculated_ratio])
 
 
 ## Waitポイントを追加（実行中のパスに）
@@ -1566,13 +1703,27 @@ func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, app
 	else:
 		# 置き換え
 		_extension_path = extension_path.duplicate()
-		_extension_vision_points = markers.get("vision_points", []).duplicate()
-		_extension_run_segments = markers.get("run_segments", []).duplicate()
-		_extension_clear_points = markers.get("clear_points", []).duplicate()
-		_extension_grenade_points = markers.get("grenade_points_data", []).duplicate()
-		_extension_smoke_grenade_points = markers.get("smoke_grenade_points_data", []).duplicate()
-		_extension_door_points = markers.get("door_points_data", []).duplicate()
-		_extension_wait_points = markers.get("wait_points_data", []).duplicate()
+		_extension_vision_points.clear()
+		_extension_run_segments.clear()
+		_extension_clear_points.clear()
+		_extension_grenade_points.clear()
+		_extension_smoke_grenade_points.clear()
+		_extension_door_points.clear()
+		_extension_wait_points.clear()
+		for item in markers.get("vision_points", []):
+			_extension_vision_points.append(item)
+		for item in markers.get("run_segments", []):
+			_extension_run_segments.append(item)
+		for item in markers.get("clear_points", []):
+			_extension_clear_points.append(item)
+		for item in markers.get("grenade_points_data", []):
+			_extension_grenade_points.append(item)
+		for item in markers.get("smoke_grenade_points_data", []):
+			_extension_smoke_grenade_points.append(item)
+		for item in markers.get("door_points_data", []):
+			_extension_door_points.append(item)
+		for item in markers.get("wait_points_data", []):
+			_extension_wait_points.append(item)
 
 	_has_extension = true
 
@@ -1605,12 +1756,13 @@ func _append_extension_points(markers: Dictionary, old_length: float, new_length
 
 	var run_segments: Array = markers.get("run_segments", [])
 	for seg in run_segments:
-		var adjusted_start: float = (old_length + seg.start_ratio * new_length) / total_length
-		var adjusted_end: float = (old_length + seg.end_ratio * new_length) / total_length
-		_extension_run_segments.append({
-			"start_ratio": adjusted_start,
-			"end_ratio": adjusted_end
-		})
+		if seg.has("start_ratio") and seg.has("end_ratio"):
+			var adjusted_start: float = (old_length + seg.start_ratio * new_length) / total_length
+			var adjusted_end: float = (old_length + seg.end_ratio * new_length) / total_length
+			_extension_run_segments.append({
+				"start_ratio": adjusted_start,
+				"end_ratio": adjusted_end
+			})
 
 	var clear_points: Array = markers.get("clear_points", [])
 	for cp in clear_points:
@@ -1658,8 +1810,10 @@ func _scale_existing_extension_points(old_length: float, total_length: float) ->
 	#	_extension_vision_points[i]["path_ratio"] = _extension_vision_points[i].path_ratio * scale
 
 	for i in range(_extension_run_segments.size()):
-		_extension_run_segments[i]["start_ratio"] = _extension_run_segments[i].start_ratio * scale
-		_extension_run_segments[i]["end_ratio"] = _extension_run_segments[i].end_ratio * scale
+		var seg = _extension_run_segments[i]
+		if seg.has("start_ratio") and seg.has("end_ratio"):
+			_extension_run_segments[i]["start_ratio"] = seg.start_ratio * scale
+			_extension_run_segments[i]["end_ratio"] = seg.end_ratio * scale
 
 	for i in range(_extension_clear_points.size()):
 		_extension_clear_points[i]["path_ratio"] = _extension_clear_points[i].path_ratio * scale
@@ -1702,6 +1856,16 @@ func _recalculate_vision_ratios_from_anchors() -> void:
 		if vp.has("anchor") and vp.anchor != Vector3.ZERO:
 			var new_ratio = _calculate_ratio_from_position_on_path(_current_path, vp.anchor)
 			_vision_points[i]["path_ratio"] = new_ratio
+
+
+## path_distanceキャッシュをクリア（パス切り替え後に再計算させる）
+func _clear_point_distance_cache() -> void:
+	for vp in _vision_points:
+		if vp.has("path_distance"):
+			vp.erase("path_distance")
+	for wp in _wait_points:
+		if wp.has("path_distance"):
+			wp.erase("path_distance")
 
 
 ## ワールド座標からパス上の比率を計算（最近点を使用）
@@ -1809,8 +1973,8 @@ func _switch_to_extension_path() -> void:
 	_door_points = _extension_door_points.duplicate()
 	_wait_points = _extension_wait_points.duplicate()
 
-	# インデックスをリセット
-	_path_index = 1
+	# インデックスをリセット（start_path()と同様に0から開始）
+	_path_index = 0
 	_vision_index = 0
 	_clear_index = 0
 	_grenade_index = 0
@@ -1818,14 +1982,43 @@ func _switch_to_extension_path() -> void:
 	_door_index = 0
 	_wait_index = 0
 
+	# 延長パスの最初の有効セグメント方向を使用して向きを初期化
+	# WaitPointが先頭にある場合や重複点がある場合の180度反転を防ぐ
+	var first_dir := _get_first_segment_direction(_current_path, 0)
+	if first_dir.length_squared() > 0.001:
+		_last_move_direction = first_dir
+
+	# 視線方向をリセット（新しいVisionPointが適用されるまで）
+	# これにより、元パスの視線方向が延長パスに引き継がれない
+	_forced_look_direction = Vector3.ZERO
+	_active_target_point = Vector3.ZERO
+
 	# パス長キャッシュを再構築
 	_build_path_length_cache()
 
-	# Visionポイントの比率をアンカー位置から再計算
+	# path_distanceキャッシュをクリア（新しいパスで再計算されるように）
+	_clear_point_distance_cache()
+
+	# Visionポイントの比率をアンカー位置から再計算（後方互換用）
 	_recalculate_vision_ratios_from_anchors()
+	# ソートして順序を保証
+	_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 
 	# 延長データをクリア
 	cancel_extension()
+
+	# キャラクターの現在位置に最も近いパスポイントから開始（start_path()と同様）
+	if _character and _current_path.size() > 0:
+		var char_pos = _character.global_position
+		char_pos.y = 0
+		var first_point = _current_path[0]
+		first_point.y = 0
+		if char_pos.distance_to(first_point) < 0.3:
+			# キャラクターがパスの最初のポイントにいる場合、次のポイントを目指す
+			_path_index = 1
+
+	# デバッグ: 延長パス切り替え時の状態
+	print("[EXT] switched: vp_count=%d path_idx=%d" % [_vision_points.size(), _path_index])
 
 	# 延長パスに切り替わったことを通知（メッシュ管理用）
 	extension_path_activated.emit()

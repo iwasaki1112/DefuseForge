@@ -25,29 +25,9 @@ class PathConfirmMessage extends RefCounted:
 	## 各要素: { path_ratio, target_point/direction, has_target }
 	var vision_points: Array[Dictionary] = []
 
-	## Run区間データ配列
-	## 各要素: { start_ratio, end_ratio }
-	var run_segments: Array[Dictionary] = []
-
-	## Clearポイントデータ配列
-	## 各要素: { path_ratio, anchor }
-	var clear_points: Array[Dictionary] = []
-
-	## グレネードポイントデータ配列
-	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var grenade_points: Array[Dictionary] = []
-
-	## ドアポイントデータ配列
-	## 各要素: { path_ratio, anchor, door_id }
-	var door_points: Array[Dictionary] = []
-
 	## Waitポイントデータ配列
 	## 各要素: { path_ratio, anchor, wait_duration }
 	var wait_points: Array[Dictionary] = []
-
-	## スモークグレネードポイントデータ配列
-	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var smoke_grenade_points: Array[Dictionary] = []
 
 	## メッセージ生成タイムスタンプ（msec）
 	var timestamp: int = 0
@@ -60,12 +40,7 @@ class PathConfirmMessage extends RefCounted:
 			"character_id": character_id,
 			"path": _path_to_array(),
 			"vision_points": vision_points,
-			"run_segments": run_segments,
-			"clear_points": clear_points,
-			"grenade_points": grenade_points,
-			"door_points": door_points,
 			"wait_points": wait_points,
-			"smoke_grenade_points": smoke_grenade_points,
 			"timestamp": timestamp,
 		}
 
@@ -76,12 +51,7 @@ class PathConfirmMessage extends RefCounted:
 		character_id = data.get("character_id", 0)
 		_array_to_path(data.get("path", []))
 		vision_points.assign(data.get("vision_points", []))
-		run_segments.assign(data.get("run_segments", []))
-		clear_points.assign(data.get("clear_points", []))
-		grenade_points.assign(data.get("grenade_points", []))
-		door_points.assign(data.get("door_points", []))
 		wait_points.assign(data.get("wait_points", []))
-		smoke_grenade_points.assign(data.get("smoke_grenade_points", []))
 		timestamp = data.get("timestamp", 0)
 
 

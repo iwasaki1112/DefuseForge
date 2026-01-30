@@ -23,15 +23,25 @@ var _current_ratio: float = 0.0
 ## 視線描画中フラグ
 var _is_drawing: bool = false
 
-## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
-var _touch_active: bool = false
+## ドラッグ開始位置（スクリーン座標）
+var _drag_start_pos: Vector2 = Vector2.ZERO
+
+## 最小ドラッグ距離（これ以上動かさないとドラッグとみなさない）
+## モバイルでの誤検出を防ぐため大きめの値を設定
+const MIN_DRAG_DISTANCE: float = 40.0
+
+## 最後のタッチ時刻（エミュレートマウスイベント対策）
+var _last_touch_time: int = 0
+
+## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
+const TOUCH_MOUSE_INTERVAL_MS: int = 100
 
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
-	# タッチ入力（優先処理）
+	# タッチ入力
 	if event is InputEventScreenTouch:
-		_touch_active = event.pressed
+		_last_touch_time = Time.get_ticks_msec()
 		if event.pressed:
 			return _handle_press(event.position)
 		else:
@@ -43,8 +53,8 @@ func handle_input(event: InputEvent) -> bool:
 			return true
 		return false
 
-	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
-	if _touch_active:
+	# マウス入力（タッチ直後のエミュレートイベントはスキップ）
+	if Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS:
 		return false
 
 	if event is InputEventMouseButton:
@@ -79,6 +89,7 @@ func _handle_press(screen_pos: Vector2) -> bool:
 
 	_current_anchor = result.point
 	_current_ratio = result.ratio
+	_drag_start_pos = screen_pos
 	_is_drawing = true
 	return true
 
@@ -88,9 +99,14 @@ func _handle_release(screen_pos: Vector2) -> bool:
 	if not _is_drawing:
 		return false
 
-	var ground_pos = _get_ground_position(screen_pos)
-	if ground_pos != null:
-		_finish_vision_point(ground_pos)
+	# ドラッグ距離が閾値未満の場合（タップ）はポイントを作成しない
+	var drag_distance = screen_pos.distance_to(_drag_start_pos)
+	if drag_distance >= MIN_DRAG_DISTANCE:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos != null:
+			_finish_vision_point(ground_pos)
+	else:
+		_remove_temp_point()
 
 	_is_drawing = false
 	return true
@@ -212,6 +228,7 @@ func clear_all() -> void:
 
 func reset_state() -> void:
 	_is_drawing = false
+	_drag_start_pos = Vector2.ZERO
 	_current_anchor = Vector3.ZERO
 	_current_ratio = 0.0
 	_remove_temp_point()

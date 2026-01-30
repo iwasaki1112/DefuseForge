@@ -186,37 +186,10 @@ func take_vision_meshes() -> Array[MeshInstance3D]:
 #endregion
 
 
-#region Run専用メソッド（後方互換）
-func get_run_segments() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.RUN)
+#region Wait専用メソッド（後方互換）
+func get_wait_points() -> Array[Dictionary]:
+	return get_points_as_dicts(ActionPointDataScript.Type.WAIT)
 
-func take_run_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.RUN)
-#endregion
-
-
-#region Clear専用メソッド（後方互換）
-func get_clear_points() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.CLEAR)
-
-func take_clear_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.CLEAR)
-#endregion
-
-
-#region Grenade専用メソッド（後方互換）
-func get_grenade_points() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.GRENADE)
-
-func take_grenade_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.GRENADE)
-#endregion
-
-
-#region Door専用メソッド（後方互換）
-func get_door_points() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.DOOR)
-
-func take_door_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.DOOR)
+func take_wait_meshes() -> Array[MeshInstance3D]:
+	return take_meshes(ActionPointDataScript.Type.WAIT)
 #endregion

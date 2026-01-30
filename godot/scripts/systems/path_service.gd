@@ -11,17 +11,19 @@ signal all_paths_completed()
 signal paths_cleared()
 signal mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
-signal run_segment_added(start_ratio: float, end_ratio: float)
-signal clear_point_added(path_ratio: float)
-signal grenade_point_added(path_ratio: float, target_pos: Vector3)
-signal smoke_grenade_point_added(path_ratio: float, target_pos: Vector3)
-signal door_point_added(path_ratio: float, door: Node3D)
 signal wait_point_added(path_ratio: float, wait_duration: float)
 
 var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
 var path_execution_manager: PathExecutionManager = null
 var path_mode_controller: PathModeController = null
+
+## 継続モードフラグ（既存パスの終点からパスを継続する場合にtrue）
+var _is_continuation_mode: bool = false
+## 移動中パス継続フラグ（移動中キャラクターのパスを継続する場合にtrue）
+var _is_moving_path_continuation: bool = false
+## 移動中パス継続対象キャラクター
+var _moving_continuation_character: Node = null
 
 
 func setup(
@@ -43,14 +45,12 @@ func setup(
 	if path_drawer:
 		path_drawer.mode_changed.connect(_on_path_mode_changed)
 		path_drawer.vision_point_added.connect(_on_vision_point_added)
-		path_drawer.run_segment_added.connect(_on_run_segment_added)
-		path_drawer.clear_point_added.connect(_on_clear_point_added)
-		path_drawer.grenade_point_added.connect(_on_grenade_point_added)
-		path_drawer.smoke_grenade_point_added.connect(_on_smoke_grenade_point_added)
-		path_drawer.door_point_added.connect(_on_door_point_added)
 		path_drawer.wait_point_added.connect(_on_wait_point_added)
 		path_drawer.path_undone.connect(_on_path_undone)
 		path_drawer.off_path_tapped.connect(_on_off_path_tapped)
+		# リアルタイム確定：パス開始時とポイント追加時に即座に反映
+		path_drawer.path_started.connect(_on_path_started)
+		path_drawer.path_point_added.connect(_on_path_point_added)
 
 	if path_mode_controller:
 		path_mode_controller.mode_started.connect(_on_path_mode_started)
@@ -96,68 +96,35 @@ func start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool:
 	return path_mode_controller.start(primary, char_color)
 
 
-## 既存パスでパスモード開始（パス先端ドラッグ時）
-func start_path_mode_with_existing_path(primary: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
-	if not path_mode_controller or not path_drawer or not selection_manager:
-		return false
-
-	if path_data.is_empty():
-		return false
-
-	# 選択状態を更新
-	selection_manager.capture_path_targets()
-
-	# 既存パスでパスモード開始
-	var started := path_mode_controller.start_with_existing_path(path_data, char_color)
-	if not started:
-		return false
-
-	# アクティブ編集キャラクターを設定
-	path_drawer.set_active_edit_character(primary)
-
-	return true
-
-
-## パス延長モード開始（キャラクター選択なし、一時的な選択リングを表示）
-func start_path_extension_mode(primary: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+## 特定の位置からパスモードを開始（パス継続用）
+## @param character: 対象キャラクター
+## @param start_point: 開始位置
+## @param char_color: キャラクター色
+## @param is_moving_path: 移動中パスの継続かどうか
+func start_path_mode_from_point(character: Node, start_point: Vector3, char_color: Color = Color.WHITE, is_moving_path: bool = false) -> bool:
 	if not path_mode_controller or not path_drawer:
 		return false
-	if path_data.is_empty():
-		return false
 
-	var started := path_mode_controller.start_extension_mode(primary, path_data, char_color)
-	if not started:
-		return false
+	# 継続モードを有効化（既存パスを維持）
+	_is_continuation_mode = true
+	_is_moving_path_continuation = is_moving_path
+	_moving_continuation_character = character if is_moving_path else null
 
-	path_drawer.set_active_edit_character(primary)
-	return true
+	# キャラクターを選択状態にする
+	if selection_manager:
+		selection_manager.deselect_all()
+		selection_manager.add_to_selection(character)
+		selection_manager.capture_path_targets()
 
-
-## 移動中パス延長モード開始（キャラクターは移動を継続しながら延長パスを描画）
-## @param is_extending_extension: 既存の延長パスをさらに延長するかどうか
-func start_moving_path_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool:
-	if not path_mode_controller or not path_drawer:
-		return false
-	if remaining_data.is_empty():
-		return false
-
-	var started := path_mode_controller.start_moving_extension_mode(character, remaining_data, char_color, is_extending_extension)
-	if not started:
-		return false
-
+	# パスモードを有効化（開始点を指定）
+	path_mode_controller.is_active = true
+	path_mode_controller.editing_character = character
+	path_drawer.enable_from_point(character as Node3D, start_point)
+	path_drawer.set_character_color(char_color)
 	path_drawer.set_active_edit_character(character)
+
+	path_mode_controller.mode_started.emit(character)
 	return true
-
-
-## 移動中延長モードかどうか
-func is_moving_extension_mode() -> bool:
-	return path_mode_controller and path_mode_controller.is_moving_extension_mode()
-
-
-## 移動中延長をキャンセル
-func cancel_moving_path_extension(character: Node) -> void:
-	if path_execution_manager:
-		path_execution_manager.cancel_extension_for_character(character)
 
 
 func confirm_path() -> void:
@@ -200,8 +167,8 @@ func is_path_mode() -> bool:
 	return path_mode_controller and path_mode_controller.is_path_mode()
 
 
-func has_pending_path() -> bool:
-	return path_drawer and path_drawer.has_pending_path()
+func has_path() -> bool:
+	return path_drawer and path_drawer.has_path()
 
 
 func get_pending_path_count() -> int:
@@ -247,52 +214,9 @@ func remove_last_vision_point() -> void:
 		path_drawer.remove_last_vision_point()
 
 
-func start_run_mode() -> void:
-	if path_drawer:
-		path_drawer.start_run_mode()
-
-
-func remove_last_run_segment() -> void:
-	if path_drawer:
-		path_drawer.remove_last_run_segment()
-
-
-func start_clear_mode() -> void:
-	if path_drawer:
-		path_drawer.start_clear_mode()
-
-
-func remove_last_clear_point() -> void:
-	if path_drawer:
-		path_drawer.remove_last_clear_point()
-
-
-func start_grenade_mode() -> void:
-	if path_drawer:
-		path_drawer.start_grenade_mode()
-
-
-func start_smoke_grenade_mode() -> void:
-	if path_drawer:
-		path_drawer.start_smoke_grenade_mode()
-
-
-func start_door_mode() -> void:
-	if path_drawer:
-		path_drawer.start_door_mode()
-
-
 func start_wait_mode() -> void:
 	if path_drawer:
 		path_drawer.start_wait_mode()
-
-
-func get_grenade_point_count() -> int:
-	return path_drawer.get_grenade_point_count() if path_drawer else 0
-
-
-func get_door_point_count() -> int:
-	return path_drawer.get_door_point_count() if path_drawer else 0
 
 
 func get_wait_point_count() -> int:
@@ -307,18 +231,6 @@ func undo_last_point() -> void:
 
 func get_vision_point_count() -> int:
 	return path_drawer.get_vision_point_count() if path_drawer else 0
-
-
-func get_run_segment_count() -> int:
-	return path_drawer.get_run_segment_count() if path_drawer else 0
-
-
-func get_clear_point_count() -> int:
-	return path_drawer.get_clear_point_count() if path_drawer else 0
-
-
-func has_incomplete_run_start() -> bool:
-	return path_drawer.has_incomplete_run_start() if path_drawer else false
 
 
 func set_active_edit_character(character: Node) -> void:
@@ -340,17 +252,23 @@ func _on_path_mode_started(character: Node) -> void:
 
 
 func _on_path_mode_ended() -> void:
+	_is_continuation_mode = false
+	_is_moving_path_continuation = false
+	_moving_continuation_character = null
 	mode_ended.emit()
 
 
 func _on_path_mode_cancelled() -> void:
+	_is_continuation_mode = false
+	_is_moving_path_continuation = false
+	_moving_continuation_character = null
 	mode_cancelled.emit()
 
 
 func _on_path_ready() -> void:
-	# 視線ポイントモードへ移行
-	# パス終点付近にVisionポイントを追加すると、その方向で最終向きが固定される
-	start_vision_mode()
+	# 新設計：パスはドラッグ終了時に自動確定されるため、
+	# Visionモードへの自動移行は行わない
+	# ユーザーが必要に応じて手動でVisionモードに入る
 	path_ready.emit()
 
 
@@ -374,26 +292,6 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 	vision_point_added.emit(anchor, direction)
 
 
-func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
-	run_segment_added.emit(start_ratio, end_ratio)
-
-
-func _on_clear_point_added(path_ratio: float) -> void:
-	clear_point_added.emit(path_ratio)
-
-
-func _on_grenade_point_added(path_ratio: float, target_pos: Vector3) -> void:
-	grenade_point_added.emit(path_ratio, target_pos)
-
-
-func _on_smoke_grenade_point_added(path_ratio: float, target_pos: Vector3) -> void:
-	smoke_grenade_point_added.emit(path_ratio, target_pos)
-
-
-func _on_door_point_added(path_ratio: float, door: Node3D) -> void:
-	door_point_added.emit(path_ratio, door)
-
-
 func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
 	wait_point_added.emit(path_ratio, wait_duration)
 
@@ -407,5 +305,33 @@ func _on_path_undone() -> void:
 
 
 func _on_off_path_tapped() -> void:
-	# パス外タップでパスを確定
+	# パス外タップでモードを終了（パスは既に確定済み）
 	confirm_path()
+
+
+## パス開始シグナルハンドラ（リアルタイム確定）
+func _on_path_started(character: Node, start_point: Vector3) -> void:
+	if not path_execution_manager:
+		return
+
+	# 移動中パス継続モードの場合は何もしない（パスは既にコントローラーに存在）
+	if _is_moving_path_continuation:
+		_is_continuation_mode = false  # フラグをリセット
+		return
+
+	# 継続モードの場合は既存パスを維持
+	var is_continuation := _is_continuation_mode
+	_is_continuation_mode = false  # フラグをリセット
+	path_execution_manager.start_realtime_path(character, start_point, is_continuation)
+
+
+## パスポイント追加シグナルハンドラ（リアルタイム確定）
+func _on_path_point_added(character: Node, point: Vector3) -> void:
+	if not path_execution_manager:
+		return
+
+	# 移動中パス継続モードの場合は移動中パスに追加
+	if _is_moving_path_continuation and _moving_continuation_character == character:
+		path_execution_manager.add_point_to_moving_path(character, point)
+	else:
+		path_execution_manager.add_realtime_path_point(character, point)

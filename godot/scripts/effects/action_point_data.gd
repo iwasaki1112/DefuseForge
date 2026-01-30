@@ -4,15 +4,10 @@ extends RefCounted
 ## アクションポイントデータの基底クラス
 ## 各ポイント種別のデータを統一的に扱うためのデータ構造
 
-## ポイントタイプ（ActionPoint.PointTypeと同じ）
+## ポイントタイプ
 enum Type {
 	VISION,
-	CLEAR,
-	RUN,
-	DOOR,
-	GRENADE,
-	WAIT,
-	SMOKE_GRENADE
+	WAIT
 }
 
 ## ポイントタイプ
@@ -62,18 +57,8 @@ static func create(point_type: Type) -> ActionPointData:
 	match point_type:
 		Type.VISION:
 			return VisionPointData.new()
-		Type.CLEAR:
-			return ClearPointData.new()
-		Type.RUN:
-			return RunPointData.new()
-		Type.DOOR:
-			return DoorPointData.new()
-		Type.GRENADE:
-			return GrenadePointData.new()
 		Type.WAIT:
 			return WaitPointData.new()
-		Type.SMOKE_GRENADE:
-			return SmokeGrenadePointData.new()
 		_:
 			return ActionPointData.new()
 
@@ -84,6 +69,39 @@ static func from_dictionary(data: Dictionary) -> ActionPointData:
 	var point_data = create(point_type)
 	point_data.from_dict(data)
 	return point_data
+
+
+## 発火結果を取得（子クラスでオーバーライド）
+## @return: 発火結果のDictionary
+func get_reached_result() -> Dictionary:
+	return {
+		"type": type,
+		"path_ratio": path_ratio,
+		"anchor": anchor
+	}
+
+
+## 発火時の処理を実行（子クラスでオーバーライド）
+## @param controller: PathFollowingControllerへの参照
+## @param point_index: 発火したポイントのインデックス
+## @return: 処理が実行されたらtrue
+func apply_reached_effect(controller: Node, point_index: int) -> bool:
+	return false
+
+
+## 静的メソッド: Dictionaryデータから発火結果を処理
+## @param data: ポイントデータのDictionary
+## @param controller: PathFollowingControllerへの参照
+## @param point_index: 発火したポイントのインデックス
+## @param point_type: ポイントタイプ（省略時はdataから判断、なければVISION）
+## @return: 処理が実行されたらtrue
+static func process_point_reached(data: Dictionary, controller: Node, point_index: int, point_type: Type = Type.VISION) -> bool:
+	# dataにtypeがなければ引数から設定
+	var data_with_type := data.duplicate()
+	if not data_with_type.has("type"):
+		data_with_type["type"] = point_type
+	var point_data = from_dictionary(data_with_type)
+	return point_data.apply_reached_effect(controller, point_index)
 
 
 #region Vision Point Data
@@ -119,122 +137,22 @@ class VisionPointData extends ActionPointData:
 		var point = MeshInstance3D.new()
 		point.set_script(preload("res://scripts/effects/vision_point.gd"))
 		return point
-#endregion
 
+	func get_reached_result() -> Dictionary:
+		var result = super.get_reached_result()
+		result["has_target"] = has_target
+		if has_target:
+			result["target_point"] = target_point
+		else:
+			result["direction"] = direction
+		return result
 
-#region Clear Point Data
-class ClearPointData extends ActionPointData:
-	func _init() -> void:
-		type = Type.CLEAR
-
-	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/clear_point.gd"))
-		return point
-#endregion
-
-
-#region Run Point Data
-class RunPointData extends ActionPointData:
-	## Run区間の開始比率
-	var start_ratio: float = 0.0
-	## Run区間の終了比率
-	var end_ratio: float = 0.0
-
-	func _init() -> void:
-		type = Type.RUN
-
-	func adjust_ratio_for_connection(connect_length: float, base_length: float) -> void:
-		if connect_length < 0.01 or base_length < 0.01:
-			return
-		var new_length = connect_length + base_length
-		start_ratio = (connect_length + start_ratio * base_length) / new_length
-		end_ratio = (connect_length + end_ratio * base_length) / new_length
-
-	func to_dict() -> Dictionary:
-		return {
-			"type": type,
-			"start_ratio": start_ratio,
-			"end_ratio": end_ratio
-		}
-
-	func from_dict(data: Dictionary) -> void:
-		super.from_dict(data)
-		if data.has("start_ratio"):
-			start_ratio = data.start_ratio
-		if data.has("end_ratio"):
-			end_ratio = data.end_ratio
-
-	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/run_point.gd"))
-		return point
-#endregion
-
-
-#region Door Point Data
-class DoorPointData extends ActionPointData:
-	## 対象ドアノード
-	var door_node: Node3D = null
-
-	func _init() -> void:
-		type = Type.DOOR
-
-	func to_dict() -> Dictionary:
-		var data = super.to_dict()
-		data["door_node"] = door_node
-		return data
-
-	func from_dict(data: Dictionary) -> void:
-		super.from_dict(data)
-		if data.has("door_node"):
-			door_node = data.door_node
-		elif data.has("door"):
-			door_node = data.door
-
-	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/door_point.gd"))
-		return point
-#endregion
-
-
-#region Grenade Point Data
-class GrenadePointData extends ActionPointData:
-	## 投擲目標位置
-	var target_pos: Vector3 = Vector3.ZERO
-	## バウンスポイント（壁に当たる位置）
-	var bounce_point: Vector3 = Vector3.ZERO
-	## バウンス法線
-	var bounce_normal: Vector3 = Vector3.ZERO
-	## バウンスがあるか
-	var has_bounce: bool = false
-
-	func _init() -> void:
-		type = Type.GRENADE
-
-	func to_dict() -> Dictionary:
-		var data = super.to_dict()
-		data["target_pos"] = target_pos
-		if has_bounce:
-			data["bounce_point"] = bounce_point
-			data["bounce_normal"] = bounce_normal
-		return data
-
-	func from_dict(data: Dictionary) -> void:
-		super.from_dict(data)
-		if data.has("target_pos"):
-			target_pos = data.target_pos
-		if data.has("bounce_point"):
-			bounce_point = data.bounce_point
-			has_bounce = true
-		if data.has("bounce_normal"):
-			bounce_normal = data.bounce_normal
-
-	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/grenade_point.gd"))
-		return point
+	func apply_reached_effect(controller: Node, point_index: int) -> bool:
+		# PathFollowingControllerのpublicメソッドを使用
+		var target := target_point if has_target else Vector3.ZERO
+		var dir := direction if not has_target else Vector3.ZERO
+		controller.apply_vision_effect(point_index, target, dir)
+		return true
 #endregion
 
 
@@ -260,43 +178,15 @@ class WaitPointData extends ActionPointData:
 		var point = MeshInstance3D.new()
 		point.set_script(preload("res://scripts/effects/wait_point.gd"))
 		return point
-#endregion
 
+	func get_reached_result() -> Dictionary:
+		var result = super.get_reached_result()
+		result["wait_duration"] = wait_duration
+		result["is_sync"] = wait_duration < 0
+		return result
 
-#region Smoke Grenade Point Data
-class SmokeGrenadePointData extends ActionPointData:
-	## 投擲目標位置
-	var target_pos: Vector3 = Vector3.ZERO
-	## バウンスポイント（壁に当たる位置）
-	var bounce_point: Vector3 = Vector3.ZERO
-	## バウンス法線
-	var bounce_normal: Vector3 = Vector3.ZERO
-	## バウンスがあるか
-	var has_bounce: bool = false
-
-	func _init() -> void:
-		type = Type.SMOKE_GRENADE
-
-	func to_dict() -> Dictionary:
-		var data = super.to_dict()
-		data["target_pos"] = target_pos
-		if has_bounce:
-			data["bounce_point"] = bounce_point
-			data["bounce_normal"] = bounce_normal
-		return data
-
-	func from_dict(data: Dictionary) -> void:
-		super.from_dict(data)
-		if data.has("target_pos"):
-			target_pos = data.target_pos
-		if data.has("bounce_point"):
-			bounce_point = data.bounce_point
-			has_bounce = true
-		if data.has("bounce_normal"):
-			bounce_normal = data.bounce_normal
-
-	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/smoke_grenade_point.gd"))
-		return point
+	func apply_reached_effect(controller: Node, point_index: int) -> bool:
+		# PathFollowingControllerのpublicメソッドを使用
+		controller.apply_wait_effect(point_index, to_dict(), wait_duration)
+		return true
 #endregion

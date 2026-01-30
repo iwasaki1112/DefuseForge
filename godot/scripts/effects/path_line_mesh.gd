@@ -2,13 +2,11 @@ class_name PathLineMesh
 extends MeshInstance3D
 
 ## パスの線描画
-## 破線 + 先端にドーナツ型の円
+## 実線 + 先端にドーナツ型の円
 
 @export var line_height: float = 0.15  # 地面からの高さ
 @export var line_width: float = 0.08   # 線の幅
 @export var line_color: Color = Color(0.0, 1.0, 0.0, 1.0)  # 緑
-@export var dash_length: float = 0.15  # 破線の長さ
-@export var gap_length: float = 0.1    # 破線の間隔
 @export var end_circle_radius: float = 0.15  # 先端円の半径
 @export var end_circle_thickness: float = 0.04  # 先端円の太さ
 @export var circle_segments: int = 24  # 円のセグメント数
@@ -49,8 +47,8 @@ func update_from_points(points: PackedVector3Array) -> void:
 	var vertices = PackedVector3Array()
 	var indices = PackedInt32Array()
 
-	# パスに沿って破線を描画
-	_add_dashed_line(vertices, indices, points)
+	# パスに沿って実線を描画
+	_add_solid_line(vertices, indices, points)
 
 	# 終点にドーナツ円を追加
 	var end_pos = points[points.size() - 1]
@@ -68,47 +66,18 @@ func update_from_points(points: PackedVector3Array) -> void:
 	_array_mesh.surface_set_material(0, _material)
 
 
-## 破線を描画
-func _add_dashed_line(vertices: PackedVector3Array, indices: PackedInt32Array, points: PackedVector3Array) -> void:
+## 実線を描画
+func _add_solid_line(vertices: PackedVector3Array, indices: PackedInt32Array, points: PackedVector3Array) -> void:
 	var half_width = line_width * 0.5
-	var total_length = 0.0
 
-	# 各セグメントの累積距離を計算
-	var segment_lengths: Array[float] = [0.0]
+	# 各セグメントを連続して描画
 	for i in range(1, points.size()):
-		total_length += points[i].distance_to(points[i - 1])
-		segment_lengths.append(total_length)
+		var start_pos = points[i - 1]
+		var end_pos = points[i]
+		var dir = (end_pos - start_pos).normalized()
 
-	# 破線パターンで描画
-	var dash_cycle = dash_length + gap_length
-	var current_dist = 0.0
-
-	while current_dist < total_length:
-		var dash_start = current_dist
-		var dash_end = minf(current_dist + dash_length, total_length)
-
-		if dash_end > dash_start:
-			var start_pos = _get_position_at_distance(points, segment_lengths, dash_start)
-			var end_pos = _get_position_at_distance(points, segment_lengths, dash_end)
-			var dir = (end_pos - start_pos).normalized()
-
-			if dir.length_squared() > 0.001:
-				_add_line_segment(vertices, indices, start_pos, end_pos, dir, half_width)
-
-		current_dist += dash_cycle
-
-
-## 指定距離でのパス上の位置を取得
-func _get_position_at_distance(points: PackedVector3Array, segment_lengths: Array[float], distance: float) -> Vector3:
-	for i in range(1, points.size()):
-		if segment_lengths[i] >= distance:
-			var seg_start = segment_lengths[i - 1]
-			var seg_length = segment_lengths[i] - seg_start
-			if seg_length > 0:
-				var t = (distance - seg_start) / seg_length
-				return points[i - 1].lerp(points[i], t)
-			return points[i - 1]
-	return points[points.size() - 1]
+		if dir.length_squared() > 0.001:
+			_add_line_segment(vertices, indices, start_pos, end_pos, dir, half_width)
 
 
 ## 線分セグメントを追加

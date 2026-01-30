@@ -741,10 +741,7 @@ func _path_message_to_dict(msg: NetworkMessages.PathConfirmMessage) -> Dictionar
 		"character_id": msg.character_id,
 		"path": path_array,
 		"vision_points": msg.vision_points.duplicate(true),
-		"run_segments": msg.run_segments.duplicate(true),
-		"clear_points": msg.clear_points.duplicate(true),
-		"grenade_points": msg.grenade_points.duplicate(true),
-		"door_points": msg.door_points.duplicate(true)
+		"wait_points": msg.wait_points.duplicate(true),
 	}
 
 
@@ -757,10 +754,7 @@ func _dict_to_path_message(data: Dictionary) -> NetworkMessages.PathConfirmMessa
 		msg.path.append(Vector3(p.get("x", 0), p.get("y", 0), p.get("z", 0)))
 
 	msg.vision_points = data.get("vision_points", []).duplicate(true)
-	msg.run_segments = data.get("run_segments", []).duplicate(true)
-	msg.clear_points = data.get("clear_points", []).duplicate(true)
-	msg.grenade_points = data.get("grenade_points", []).duplicate(true)
-	msg.door_points = data.get("door_points", []).duplicate(true)
+	msg.wait_points = data.get("wait_points", []).duplicate(true)
 
 	return msg
 

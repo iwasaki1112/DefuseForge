@@ -104,10 +104,10 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	return true
 
 
-## パス先端をドラッグしてパス延長モードを開始
-## @return: パス延長モードが開始された場合true
-func _try_start_path_extension_from_endpoint(screen_pos: Vector2) -> bool:
-	return game_manager.try_start_path_extension_at_position(screen_pos)
+## パス先端をドラッグしてパス継続モードを開始
+## @return: パス継続モードが開始された場合true
+func _try_start_path_continuation_from_endpoint(screen_pos: Vector2) -> bool:
+	return game_manager.try_start_path_continuation_at_position(screen_pos)
 
 
 ## 回転モードを開始
@@ -214,7 +214,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseMotion and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
 			# 現在のパスを確定してからパス延長を試みる
 			game_manager.confirm_path()
-			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+			if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
 				var path_drawer = _get_path_drawer()
@@ -242,14 +242,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			_rotation_target_character = null
 			_long_press_timer = 0.0
-			# パス先端延長中だった場合、PathDrawerに描画終了を通知
+			# パス先端継続中だった場合、PathDrawerに描画終了を通知してモード終了
 			if _path_endpoint_extension_started:
 				var drawer = _get_path_drawer()
 				if drawer:
 					drawer._handle_drawing_release()
-				# 移動中延長モードの場合は自動確定
-				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
-					game_manager.confirm_path()
+				game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -382,13 +380,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			# パス先端延長モードが開始された場合はタップ処理をスキップ
 			if _path_endpoint_extension_started:
-				# PathDrawerに描画終了を通知
+				# PathDrawerに描画終了を通知してモード終了
 				var path_drawer = _get_path_drawer()
 				if path_drawer:
 					path_drawer._handle_drawing_release()
-				# 移動中延長モードの場合は自動確定
-				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
-					game_manager.confirm_path()
+				game_manager.confirm_path()
 				_path_endpoint_extension_pending = false
 				_path_endpoint_extension_started = false
 				return
@@ -444,7 +440,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		# パス先端延長の待機中にドラッグが開始された場合
 		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
-			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+			if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
 				var path_drawer = _get_path_drawer()
@@ -500,6 +496,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 	# パスモード中の処理
 	if game_manager.is_path_mode():
+		var path_drawer = _get_path_drawer()
+
+		# ポイントモード中（Vision, Wait等）はPathDrawerに直接イベントを渡す
+		if path_drawer and path_drawer.is_point_mode():
+			if path_drawer.handle_point_touch_input(event):
+				get_viewport().set_input_as_handled()
+				return
+
 		# 回転モード中のドラッグ処理（タッチ）
 		if event is InputEventScreenDrag and _is_rotation_mode:
 			_process_rotation_drag(event.position)
@@ -508,7 +512,6 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 		# 即座パスモードでまだ描画開始していない場合のドラッグ検出
 		if event is InputEventScreenDrag and _immediate_path_mode_started and not _immediate_path_drawing_started:
-			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
 				_immediate_path_drawing_started = true
@@ -519,11 +522,10 @@ func _handle_touch_event(event: InputEvent) -> void:
 		if event is InputEventScreenDrag and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
 			# 現在のパスを確定してからパス延長を試みる
 			game_manager.confirm_path()
-			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+			if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
 				# パス延長開始時、PathDrawerに描画開始を通知
-				var path_drawer = _get_path_drawer()
 				if path_drawer:
 					path_drawer.handle_drawing_press(_left_click_start_pos)
 				return
@@ -532,7 +534,6 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 		# パス先端延長モードでドラッグ中の場合、PathDrawerにイベントを渡す
 		if event is InputEventScreenDrag and _path_endpoint_extension_started:
-			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer._handle_movement_input(event)
 				get_viewport().set_input_as_handled()
@@ -548,14 +549,11 @@ func _handle_touch_event(event: InputEvent) -> void:
 				return
 			_rotation_target_character = null
 			_long_press_timer = 0.0
-			# パス先端延長中だった場合、PathDrawerに描画終了を通知
+			# パス先端継続中だった場合、PathDrawerに描画終了を通知してモード終了
 			if _path_endpoint_extension_started:
-				var drawer = _get_path_drawer()
-				if drawer:
-					drawer._handle_drawing_release()
-				# 移動中延長モードの場合は自動確定
-				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
-					game_manager.confirm_path()
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -563,7 +561,6 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_path_endpoint_extension_pending = false
 			_path_endpoint_extension_started = false
 			# PathDrawerにリリースイベントを渡す
-			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				# ポイントモード中（Visionポイント等）の場合はポイント用リリース処理
 				if path_drawer.is_point_mode():
@@ -684,14 +681,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_immediate_path_drawing_started = false
 				get_viewport().set_input_as_handled()
 				return
-			# パス先端延長モードが開始された場合はタップ処理をスキップ
+			# パス先端継続モードが開始された場合はタップ処理をスキップ
 			if _path_endpoint_extension_started:
 				var path_drawer = _get_path_drawer()
 				if path_drawer:
 					path_drawer._handle_drawing_release()
-				# 移動中延長モードの場合は自動確定
-				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
-					game_manager.confirm_path()
+				game_manager.confirm_path()
 				_path_endpoint_extension_pending = false
 				_path_endpoint_extension_started = false
 				get_viewport().set_input_as_handled()
@@ -748,7 +743,7 @@ func _handle_touch_event(event: InputEvent) -> void:
 			return
 		# パス先端延長の待機中にドラッグが開始された場合
 		if _path_endpoint_extension_pending and not _path_endpoint_extension_started:
-			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
+			if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
 				var path_drawer = _get_path_drawer()
@@ -837,7 +832,7 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 		return false
 
 	var ground_pos: Vector3 = intersect as Vector3
-	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
+	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, 1.2)
 	return not result.is_empty()
 
 
@@ -862,7 +857,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 	var ground_pos: Vector3 = intersect as Vector3
 
 	# 確認済みパス上かチェック（先端は除外）
-	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, 0.5)
+	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, 1.2)
 	if not result.is_empty():
 		# 長押し待機を開始（確認済みパス）
 		_confirmed_path_longpress_pending = true

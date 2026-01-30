@@ -32,11 +32,6 @@ const POINT_DEAD_ALPHA := 0.3
 ## ポイントエディットパネル
 @onready var _point_edit_panel: Control = %MarkerEditPanel
 @onready var _vision_button: TextureButton = %VisionButton
-@onready var _run_button: TextureButton = %RunButton
-@onready var _clear_point_button: TextureButton = %ClearMarkerButton
-@onready var _grenade_button: TextureButton = %GrenadeButton
-@onready var _smoke_button: TextureButton = %SmokeButton
-@onready var _door_button: TextureButton = %DoorButton
 @onready var _wait_button: TextureButton = %WaitButton
 
 ## アクティブボタンの色
@@ -220,11 +215,6 @@ func _on_marker_pressed(point_name: String) -> void:
 func _setup_point_edit_buttons() -> void:
 	_action_to_button = {
 		"vision": _vision_button,
-		"run": _run_button,
-		"clear": _clear_point_button,
-		"grenade": _grenade_button,
-		"smoke": _smoke_button,
-		"door": _door_button,
 		"wait": _wait_button,
 	}
 

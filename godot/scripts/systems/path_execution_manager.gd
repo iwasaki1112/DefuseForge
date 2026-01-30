@@ -6,11 +6,6 @@ class_name PathExecutionManager
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
 const VisionPointScript = preload("res://scripts/effects/vision_point.gd")
-const RunPointScript = preload("res://scripts/effects/run_point.gd")
-const ClearPointScript = preload("res://scripts/effects/clear_point.gd")
-const GrenadePointScript = preload("res://scripts/effects/grenade_point.gd")
-const SmokeGrenadePointScript = preload("res://scripts/effects/smoke_grenade_point.gd")
-const DoorPointScript = preload("res://scripts/effects/door_point.gd")
 const WaitPointScript = preload("res://scripts/effects/wait_point.gd")
 const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
 
@@ -24,12 +19,6 @@ signal all_paths_completed()
 signal paths_cleared()
 ## 個別キャラクターのパス完了シグナル
 signal character_path_completed(character: Node)
-## グレネードポイント到達時のシグナル
-signal grenade_point_reached(character: Node, point_data: Dictionary)
-## スモークグレネードポイント到達時のシグナル
-signal smoke_grenade_point_reached(character: Node, point_data: Dictionary)
-## ドアポイント到達時のシグナル
-signal door_point_reached(character: Node, door: Node3D)
 ## Visionポイント到達時のシグナル（移動中パスポイント非表示用）
 signal vision_point_reached(character: Node, path_ratio: float)
 ## パス進行更新シグナル（移動中パスポイント非表示用）
@@ -40,10 +29,8 @@ signal extension_points_scaled(character: Node, scale: float)
 signal sync_wait_state_changed(has_waiting: bool)
 
 ## 保留中のパス（キャラクターごと）
-## { character_id: { "character": Node, "path": Array[Vector3], "vision_points_data": Array, "run_segments": Array, "clear_points_data": Array,
-##                   "grenade_points_data": Array, "smoke_grenade_points_data": Array, "door_points_data": Array, "wait_points_data": Array,
-##                   "path_mesh": Node3D, "vision_points": Array[MeshInstance3D], "run_points": Array[MeshInstance3D], "clear_points": Array[MeshInstance3D],
-##                   "grenade_points": Array[MeshInstance3D], "smoke_grenade_points": Array[MeshInstance3D], "door_points": Array[MeshInstance3D], "wait_points": Array[MeshInstance3D] } }
+## { character_id: { "character": Node, "path": Array[Vector3], "vision_points_data": Array, "wait_points_data": Array,
+##                   "path_mesh": Node3D, "vision_points": Array[MeshInstance3D], "wait_points": Array[MeshInstance3D] } }
 var pending_paths: Dictionary = {}
 
 ## プレイヤーごとの保留パス（マルチプレイヤー用）
@@ -75,13 +62,104 @@ func setup(mesh_parent: Node3D) -> void:
 	_mesh_parent = mesh_parent
 
 
-## パスを確定して保存
+## パス開始時に呼ばれる（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param start_point: パスの開始点
+## @param is_continuation: 既存パスの継続かどうか（trueなら既存パスをクリアしない）
+func start_realtime_path(character: Node, start_point: Vector3, is_continuation: bool = false) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# 継続モードの場合は既存パスを維持
+	if is_continuation and pending_paths.has(char_id):
+		return
+
+	# 既存のパスがあれば削除（新規開始）
+	_clear_pending_path_for_character(char_id)
+
+	# 新しいパスを開始
+	var path: Array[Vector3] = [start_point]
+	var path_mesh = _create_path_mesh(path, character)
+
+	pending_paths[char_id] = {
+		"character": character,
+		"path": path,
+		"vision_points_data": [],
+		"wait_points_data": [],
+		"path_mesh": path_mesh,
+		"vision_points": [],
+		"wait_points": []
+	}
+
+
+## パスにポイントを追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param point: 追加するポイント
+func add_realtime_path_point(character: Node, point: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		# パスがまだ開始されていない場合は開始
+		start_realtime_path(character, point)
+		return
+
+	var data = pending_paths[char_id]
+	var path: Array = data.get("path", [])
+	path.append(point)
+	data["path"] = path
+
+	# パスメッシュを更新
+	var path_mesh = data.get("path_mesh")
+	if path_mesh and is_instance_valid(path_mesh):
+		var packed_path = PackedVector3Array()
+		for p in path:
+			packed_path.append(p)
+		path_mesh.update_from_points(packed_path)
+
+
+## 移動中パスにポイントを追加
+## @param character: 対象キャラクター
+## @param point: 追加するポイント
+func add_point_to_moving_path(character: Node, point: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return
+
+	controller.append_path_point(point)
+
+	# パスメッシュを更新（残りパスのみ、通過済み部分は含めない）
+	if pending_paths.has(char_id):
+		var data = pending_paths[char_id]
+		# 保存されているパスにも追加（同期維持）
+		var stored_path: Array = data.get("path", [])
+		stored_path.append(point)
+		data["path"] = stored_path
+
+		var path_mesh = data.get("path_mesh")
+		if path_mesh and is_instance_valid(path_mesh):
+			# 残りパス（現在位置から先）を取得してメッシュを更新
+			var remaining_path = controller.get_full_remaining_path()
+			path_mesh.update_from_points(remaining_path)
+
+
+## パスを確定して保存（後方互換用）
 func confirm_path(
 	target_characters: Array[Node],
 	path_drawer: Node,
 	_primary_character: Node
 ) -> bool:
-	if not path_drawer.has_pending_path():
+	if not path_drawer.has_path():
 		return false
 
 	if target_characters.is_empty():
@@ -145,11 +223,6 @@ func execute_all_paths(run: bool) -> int:
 
 		var path := _copy_vector3_array(data.get("path", []))
 		var vision_points := _copy_dict_array(data.get("vision_points_data", []))
-		var run_segments := _copy_dict_array(data.get("run_segments", []))
-		var clear_points := _copy_dict_array(data.get("clear_points_data", []))
-		var grenade_points_data := _copy_dict_array(data.get("grenade_points_data", []))
-		var smoke_grenade_points_data := _copy_dict_array(data.get("smoke_grenade_points_data", []))
-		var door_points_data := _copy_dict_array(data.get("door_points_data", []))
 		var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
 
 		if not is_instance_valid(character):
@@ -163,7 +236,11 @@ func execute_all_paths(run: bool) -> int:
 		controller.set_movement_priority(_execution_order_counter)
 		_execution_order_counter += 1
 
-		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_points_data, door_points_data, wait_points_data, smoke_grenade_points_data):
+		var empty_run: Array[Dictionary] = []
+		var empty_clear: Array[Dictionary] = []
+		var empty_grenade: Array[Dictionary] = []
+		var empty_door: Array[Dictionary] = []
+		if controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data):
 			executed_count += 1
 
 	# ポイントデータのみクリア（パスとメッシュは残す）
@@ -173,11 +250,6 @@ func execute_all_paths(run: bool) -> int:
 		# NOTE: *_dataはデータ配列、*_pointsはメッシュ配列
 		# メッシュは通過時に非表示にするため残す
 		data.erase("vision_points_data")
-		data.erase("run_segments")
-		data.erase("clear_points_data")
-		data.erase("grenade_points_data")
-		data.erase("smoke_grenade_points_data")
-		data.erase("door_points_data")
 		data.erase("wait_points_data")
 		data.erase("character")
 
@@ -224,7 +296,7 @@ func take_pending_path_for_editing(character: Node) -> Dictionary:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, path_data: Dictionary} を返す。見つからない場合は空のDictionary
-func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -268,7 +340,7 @@ func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5)
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
-func find_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+func find_path_point_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -333,7 +405,7 @@ func is_any_path_following_active() -> bool:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
-func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -416,7 +488,7 @@ func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, endpoint: Vector3, distance: float, is_extending_extension: bool} を返す。見つからない場合は空のDictionary
-func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -769,9 +841,6 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	_mesh_parent.add_child(controller)
 	controller.path_completed.connect(_on_path_completed.bind(character))
 	controller.path_cancelled.connect(_on_path_cancelled.bind(character))
-	controller.grenade_point_reached.connect(_on_grenade_point_reached.bind(character))
-	controller.smoke_grenade_point_reached.connect(_on_smoke_grenade_point_reached.bind(character))
-	controller.door_point_reached.connect(_on_door_point_reached.bind(character))
 	controller.extension_path_activated.connect(_on_extension_path_activated.bind(character))
 	controller.path_progress_updated.connect(_on_path_progress_updated.bind(character))
 	controller.vision_point_reached.connect(_on_vision_point_reached.bind(character))
@@ -898,18 +967,6 @@ func _on_extension_path_activated(character: Node) -> void:
 		pending_paths[char_id]["path"] = new_path
 
 
-func _on_grenade_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
-	grenade_point_reached.emit(character, point_data)
-
-
-func _on_smoke_grenade_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
-	smoke_grenade_point_reached.emit(character, point_data)
-
-
-func _on_door_point_reached(_index: int, door: Node3D, character: Node) -> void:
-	door_point_reached.emit(character, door)
-
-
 ## ========================================
 ## ポイント非表示共通処理
 ## ========================================
@@ -919,8 +976,8 @@ func _on_door_point_reached(_index: int, door: Node3D, character: Node) -> void:
 ## @param anchor: ポイントのアンカー位置
 ## @param point_key: pending_paths内のポイント配列のキー名
 ## @param moving_points: 移動中パスのポイント配列（オプション）
-## @param threshold: マッチング距離閾値
-func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, moving_points: Array = [], threshold: float = 0.5) -> void:
+## @param threshold: マッチング距離閾値（デフォルト0.8でモバイルの精度問題に対応）
+func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, moving_points: Array = [], threshold: float = 0.8) -> void:
 	var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
 
 	# 移動中パスの動的ポイントを優先チェック
@@ -1026,14 +1083,15 @@ func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: b
 	controller.set_movement_priority(_execution_order_counter)
 	_execution_order_counter += 1
 
-	# 空のビジョン/Run/Clear/Grenade/Doorポイントでパス開始
+	# 空のビジョン/Waitポイントでパス開始
 	var empty_vision: Array[Dictionary] = []
+	var empty_wait: Array[Dictionary] = []
 	var empty_run: Array[Dictionary] = []
 	var empty_clear: Array[Dictionary] = []
 	var empty_grenade: Array[Dictionary] = []
 	var empty_door: Array[Dictionary] = []
 
-	return controller.start_path(path, empty_vision, empty_run, run, empty_clear, empty_grenade, empty_door)
+	return controller.start_path(path, empty_vision, empty_run, run, empty_clear, empty_grenade, empty_door, empty_wait)
 
 
 ## 特定キャラクターの保留パスをクリア（公開API）
@@ -1073,7 +1131,7 @@ func _free_pending_path_data(data: Dictionary) -> void:
 		data["path_mesh"].queue_free()
 
 	# ポイントメッシュを解放
-	var mesh_keys = ["vision_points", "run_points", "clear_points", "grenade_points", "smoke_grenade_points", "door_points", "wait_points"]
+	var mesh_keys = ["vision_points", "wait_points"]
 	for key in mesh_keys:
 		if data.has(key):
 			free_point_meshes(data[key])
@@ -1081,17 +1139,8 @@ func _free_pending_path_data(data: Dictionary) -> void:
 
 ## PathDrawerからポイントデータを取得
 func _get_point_data_from_drawer(path_drawer: Node) -> Dictionary:
-	var smoke_grenade = []
-	if path_drawer.has_method("get_smoke_grenade_points"):
-		smoke_grenade = path_drawer.get_smoke_grenade_points().duplicate()
-
 	return {
 		"vision": path_drawer.get_vision_points().duplicate(),
-		"run": path_drawer.get_run_segments().duplicate(),
-		"clear": path_drawer.get_clear_points().duplicate(),
-		"grenade": path_drawer.get_grenade_points().duplicate(),
-		"smoke_grenade": smoke_grenade,
-		"door": path_drawer.get_door_points().duplicate(),
 		"wait": path_drawer.get_wait_points().duplicate()
 	}
 
@@ -1100,11 +1149,6 @@ func _get_point_data_from_drawer(path_drawer: Node) -> Dictionary:
 func _get_point_data_from_path_message(path_msg: NetworkMessages.PathConfirmMessage) -> Dictionary:
 	return {
 		"vision": _copy_dict_array(path_msg.vision_points),
-		"run": _copy_dict_array(path_msg.run_segments),
-		"clear": _copy_dict_array(path_msg.clear_points),
-		"grenade": _copy_dict_array(path_msg.grenade_points),
-		"smoke_grenade": _copy_dict_array(path_msg.smoke_grenade_points),
-		"door": _copy_dict_array(path_msg.door_points),
 		"wait": _copy_dict_array(path_msg.wait_points)
 	}
 
@@ -1137,11 +1181,6 @@ func _build_connected_paths(char_pos: Vector3, base_path: Array[Vector3], displa
 func _adjust_point_data_for_connection(point_data: Dictionary, connect_length: float, base_length: float) -> Dictionary:
 	return {
 		"vision": _adjust_ratios_for_connection(point_data.get("vision", []), connect_length, base_length),
-		"run": _adjust_run_ratios_for_connection(point_data.get("run", []), connect_length, base_length),
-		"clear": _adjust_clear_ratios_for_connection(point_data.get("clear", []), connect_length, base_length),
-		"grenade": _adjust_grenade_ratios_for_connection(point_data.get("grenade", []), connect_length, base_length),
-		"smoke_grenade": _adjust_grenade_ratios_for_connection(point_data.get("smoke_grenade", []), connect_length, base_length),
-		"door": _adjust_door_ratios_for_connection(point_data.get("door", []), connect_length, base_length),
 		"wait": _adjust_wait_ratios_for_connection(point_data.get("wait", []), connect_length, base_length)
 	}
 
@@ -1150,11 +1189,6 @@ func _adjust_point_data_for_connection(point_data: Dictionary, connect_length: f
 func _create_point_nodes_for_path(path: Array[Vector3], point_data: Dictionary, character: Node) -> Dictionary:
 	return {
 		"vision": _create_vision_points_for_path(path, point_data.get("vision", []), character),
-		"run": _create_run_points_for_path(path, point_data.get("run", []), character),
-		"clear": _create_clear_points_for_path(path, point_data.get("clear", []), character),
-		"grenade": _create_grenade_points_for_path(path, point_data.get("grenade", []), character),
-		"smoke_grenade": _create_smoke_grenade_points_for_path(path, point_data.get("smoke_grenade", []), character),
-		"door": _create_door_points_for_path(path, point_data.get("door", []), character),
 		"wait": _create_wait_points_for_path(path, point_data.get("wait", []), character)
 	}
 
@@ -1162,12 +1196,6 @@ func _create_point_nodes_for_path(path: Array[Vector3], point_data: Dictionary, 
 ## PathDrawer側のポイントメッシュを解放
 func _free_drawer_point_meshes(path_drawer: Node) -> void:
 	free_point_meshes(path_drawer.take_vision_points())
-	free_point_meshes(path_drawer.take_run_points())
-	free_point_meshes(path_drawer.take_clear_points())
-	free_point_meshes(path_drawer.take_grenade_points())
-	if path_drawer.has_method("take_smoke_grenade_points"):
-		free_point_meshes(path_drawer.take_smoke_grenade_points())
-	free_point_meshes(path_drawer.take_door_points())
 	free_point_meshes(path_drawer.take_wait_points())
 
 
@@ -1185,19 +1213,9 @@ func _register_pending_path(
 		"character": character,
 		"path": full_path,
 		"vision_points_data": adjusted_points.get("vision", []),
-		"run_segments": adjusted_points.get("run", []),
-		"clear_points_data": adjusted_points.get("clear", []),
-		"grenade_points_data": adjusted_points.get("grenade", []),
-		"smoke_grenade_points_data": adjusted_points.get("smoke_grenade", []),
-		"door_points_data": adjusted_points.get("door", []),
 		"wait_points_data": adjusted_points.get("wait", []),
 		"path_mesh": path_mesh,
 		"vision_points": point_nodes.get("vision", []),
-		"run_points": point_nodes.get("run", []),
-		"clear_points": point_nodes.get("clear", []),
-		"grenade_points": point_nodes.get("grenade", []),
-		"smoke_grenade_points": point_nodes.get("smoke_grenade", []),
-		"door_points": point_nodes.get("door", []),
 		"wait_points": point_nodes.get("wait", [])
 	}
 
@@ -1263,22 +1281,6 @@ func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_len
 				"anchor": vp.anchor,
 				"direction": vp.direction
 			})
-
-	return adjusted
-
-
-## 接続線を考慮してRun区間の比率を調整
-func _adjust_run_ratios_for_connection(run_segments: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return run_segments.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for seg in run_segments:
-		adjusted.append({
-			"start_ratio": _adjust_single_ratio(seg.start_ratio, connect_length, base_length),
-			"end_ratio": _adjust_single_ratio(seg.end_ratio, connect_length, base_length)
-		})
 
 	return adjusted
 
@@ -1440,235 +1442,6 @@ func _create_vision_points_for_path(
 	return points
 
 
-## 調整済みRun区間から新しいRunPointを生成
-func _create_run_points_for_path(
-	path: Array[Vector3],
-	adjusted_run_segments: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-
-	for seg in adjusted_run_segments:
-		var start_ratio: float = seg.start_ratio
-		var end_ratio: float = seg.end_ratio
-
-		# パス上の位置を計算
-		var start_pos = _calculate_position_on_path(path, start_ratio)
-		var end_pos = _calculate_position_on_path(path, end_ratio)
-
-		# キャラクター色を取得
-		var char_color = CharacterColorManager.get_character_color(character)
-
-		# STARTポイントを作成
-		var start_point = MeshInstance3D.new()
-		start_point.set_script(RunPointScript)
-		_mesh_parent.add_child(start_point)
-		start_point.set_position_and_type(start_pos, 0)  # 0 = PointType.START
-		start_point.set_colors(char_color, Color.WHITE)
-		points.append(start_point)
-
-		# ENDポイントを作成
-		var end_point = MeshInstance3D.new()
-		end_point.set_script(RunPointScript)
-		_mesh_parent.add_child(end_point)
-		end_point.set_position_and_type(end_pos, 1)  # 1 = PointType.END
-		# 終点は少し暗い色に
-		var end_bg_color = Color(char_color.r * 0.8, char_color.g * 0.5, char_color.b * 0.3, 0.95)
-		end_point.set_colors(end_bg_color, Color.WHITE)
-		points.append(end_point)
-
-	return points
-
-
-## 接続線を考慮してClearポイントの比率を調整
-func _adjust_clear_ratios_for_connection(clear_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return clear_points.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for cp in clear_points:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(cp.path_ratio, connect_length, base_length)
-		})
-
-	return adjusted
-
-
-## 調整済みClearポイントから新しいClearPointを生成
-func _create_clear_points_for_path(
-	path: Array[Vector3],
-	adjusted_clear_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-
-	for cp in adjusted_clear_points:
-		var ratio: float = cp.path_ratio
-
-		# パス上の位置を計算
-		var pos = _calculate_position_on_path(path, ratio)
-
-		# ClearPointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(ClearPointScript)
-		_mesh_parent.add_child(point)
-
-		# 位置を設定
-		point.set_point_position(pos)
-
-		# キャラクター色を取得して適用
-		var char_color = CharacterColorManager.get_character_color(character)
-		point.set_colors(char_color, Color.WHITE)
-
-		points.append(point)
-
-	return points
-
-
-## 接続線を考慮してグレネードポイントの比率を調整
-func _adjust_grenade_ratios_for_connection(grenade_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return grenade_points.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for gp in grenade_points:
-		var new_point: Dictionary = {
-			"path_ratio": _adjust_single_ratio(gp.path_ratio, connect_length, base_length),
-			"anchor": gp.anchor,
-			"target_pos": gp.target_pos
-		}
-		# バウンスポイントがある場合はコピー
-		if gp.has("bounce_point"):
-			new_point["bounce_point"] = gp.bounce_point
-		if gp.has("bounce_normal"):
-			new_point["bounce_normal"] = gp.bounce_normal
-		adjusted.append(new_point)
-
-	return adjusted
-
-
-## 接続線を考慮してドアポイントの比率を調整
-func _adjust_door_ratios_for_connection(door_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return door_points.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for dp in door_points:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(dp.path_ratio, connect_length, base_length),
-			"door_node": dp.door_node if dp.has("door_node") else dp.get("door")
-		})
-
-	return adjusted
-
-
-## 調整済みグレネードポイントから新しいGrenadePointを生成
-func _create_grenade_points_for_path(
-	path: Array[Vector3],
-	adjusted_grenade_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-
-	for gp in adjusted_grenade_points:
-		var ratio: float = gp.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# GrenadePointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(GrenadePointScript)
-		_mesh_parent.add_child(point)
-
-		# バウンスポイントがあるかチェック
-		var bounce_point = Vector3.ZERO
-		if gp.has("bounce_point"):
-			bounce_point = gp.bounce_point
-
-		# 位置とターゲットを設定
-		point.set_position_and_target(anchor, gp.target_pos, bounce_point)
-
-		# キャラクター色を取得して適用（背景色は暗く、アイコン色はキャラクター色）
-		var char_color = CharacterColorManager.get_character_color(character)
-		point.set_colors(Color(0.1, 0.1, 0.1, 0.95), char_color)
-
-		points.append(point)
-
-	return points
-
-
-## 調整済みスモークグレネードポイントから新しいSmokeGrenadePointを生成
-func _create_smoke_grenade_points_for_path(
-	path: Array[Vector3],
-	adjusted_smoke_grenade_points: Array[Dictionary],
-	_character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-
-	for sgp in adjusted_smoke_grenade_points:
-		var ratio: float = sgp.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# SmokeGrenadePointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(SmokeGrenadePointScript)
-		_mesh_parent.add_child(point)
-
-		# バウンスポイントがあるかチェック
-		var bounce_point = Vector3.ZERO
-		if sgp.has("bounce_point"):
-			bounce_point = sgp.bounce_point
-
-		# 位置とターゲットを設定
-		point.set_position_and_target(anchor, sgp.target_pos, bounce_point)
-
-		# スモークグレネードは灰色/白色（デフォルト設定を使用）
-
-		points.append(point)
-
-	return points
-
-
-## 調整済みドアポイントから新しいDoorPointを生成
-func _create_door_points_for_path(
-	path: Array[Vector3],
-	adjusted_door_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-
-	for dp in adjusted_door_points:
-		var ratio: float = dp.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# DoorPointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(DoorPointScript)
-		_mesh_parent.add_child(point)
-
-		# ドアノードを取得（door_nodeキー）
-		var door_node = dp.door_node if dp.has("door_node") else dp.get("door")
-
-		# 位置とドアを設定
-		point.set_position_and_door(anchor, door_node)
-
-		# キャラクター色を取得して適用（背景色は暗く、アイコン色はキャラクター色）
-		var char_color = CharacterColorManager.get_character_color(character)
-		point.set_colors(Color(0.1, 0.1, 0.1, 0.95), char_color)
-
-		points.append(point)
-
-	return points
-
-
 ## 接続線を考慮してWaitポイントの比率を調整
 func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
 	if connect_length < 0.01 or base_length < 0.01:
@@ -1688,17 +1461,15 @@ func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_
 
 ## 調整済みWaitポイントから新しいWaitPointを生成
 func _create_wait_points_for_path(
-	path: Array[Vector3],
+	_path: Array[Vector3],
 	adjusted_wait_points: Array[Dictionary],
 	character: Node
 ) -> Array[MeshInstance3D]:
 	var points: Array[MeshInstance3D] = []
 
 	for wp in adjusted_wait_points:
-		var ratio: float = wp.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
+		# 元のanchor位置を使用（パス延長時も位置を維持）
+		var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
 
 		# WaitPointを作成
 		var point = MeshInstance3D.new()
@@ -1754,14 +1525,8 @@ func adjust_point_ratios_for_type(
 	match point_type:
 		PointType.VISION:
 			return _adjust_ratios_for_connection(point_data, connect_length, base_length)
-		PointType.RUN:
-			return _adjust_run_ratios_for_connection(point_data, connect_length, base_length)
-		PointType.CLEAR:
-			return _adjust_clear_ratios_for_connection(point_data, connect_length, base_length)
-		PointType.GRENADE:
-			return _adjust_grenade_ratios_for_connection(point_data, connect_length, base_length)
-		PointType.DOOR:
-			return _adjust_door_ratios_for_connection(point_data, connect_length, base_length)
+		PointType.WAIT:
+			return _adjust_wait_ratios_for_connection(point_data, connect_length, base_length)
 		_:
 			return point_data.duplicate()
 
@@ -1776,14 +1541,8 @@ func create_points_for_type(
 	match point_type:
 		PointType.VISION:
 			return _create_vision_points_for_path(path, point_data, character)
-		PointType.RUN:
-			return _create_run_points_for_path(path, point_data, character)
-		PointType.CLEAR:
-			return _create_clear_points_for_path(path, point_data, character)
-		PointType.GRENADE:
-			return _create_grenade_points_for_path(path, point_data, character)
-		PointType.DOOR:
-			return _create_door_points_for_path(path, point_data, character)
+		PointType.WAIT:
+			return _create_wait_points_for_path(path, point_data, character)
 		_:
 			return []
 
@@ -1914,16 +1673,6 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 	# ポイントデータをコピー
 	if data.has("vision_points_data"):
 		msg.vision_points.assign(data["vision_points_data"])
-	if data.has("run_segments"):
-		msg.run_segments.assign(data["run_segments"])
-	if data.has("clear_points_data"):
-		msg.clear_points.assign(data["clear_points_data"])
-	if data.has("grenade_points_data"):
-		msg.grenade_points.assign(data["grenade_points_data"])
-	if data.has("smoke_grenade_points_data"):
-		msg.smoke_grenade_points.assign(data["smoke_grenade_points_data"])
-	if data.has("door_points_data"):
-		msg.door_points.assign(data["door_points_data"])
 	if data.has("wait_points_data"):
 		msg.wait_points.assign(data["wait_points_data"])
 

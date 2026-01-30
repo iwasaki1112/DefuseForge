@@ -123,11 +123,11 @@ func _get_path_click_threshold() -> float:
 	return _path_drawer.path_click_threshold
 
 
-## 保留中パスがあるか
-func _has_pending_path() -> bool:
+## パスがあるか
+func _has_path() -> bool:
 	if not _path_drawer:
 		return false
-	return _path_drawer.has_pending_path()
+	return _path_drawer.has_path()
 
 
 ## PathDrawerに子ノードを追加

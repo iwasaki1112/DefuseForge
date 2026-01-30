@@ -340,8 +340,8 @@ func _process(_delta: float) -> void:
 ## ========================================
 
 func _on_execute_button_pressed() -> void:
-	# パスモード中で未確定のパスがあれば先に確定する
-	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_pending_path():
+	# パスモード中でパスがあればモードを終了する
+	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_path():
 		game_manager.path_service.confirm_path()
 
 	var count := game_manager.execute_all_paths(false)
@@ -369,7 +369,7 @@ func _on_point_edit_requested(action: String) -> void:
 		return
 
 	var path_service = game_manager.path_service
-	if not path_service.has_pending_path():
+	if not path_service.has_path():
 		return
 
 	match action:

@@ -21,132 +21,53 @@ func get_action_point_type() -> PointType:
 	return PointType.WAIT
 
 
-func _build_mesh() -> void:
-	var array_mesh = ArrayMesh.new()
-	_array_mesh = array_mesh
-	mesh = _array_mesh
-
-	# 1. 塗りつぶし円を生成
-	_build_circle_mesh()
-
-	# 2. 砂時計アイコンを生成
-	_build_icon()
-
-
-func _build_circle_mesh() -> void:
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	# 塗りつぶし円
-	var center = Vector3.ZERO
-	for i in range(segments):
-		var angle1 = TAU * i / segments
-		var angle2 = TAU * (i + 1) / segments
-		var p1 = Vector3(cos(angle1) * circle_radius, 0, sin(angle1) * circle_radius)
-		var p2 = Vector3(cos(angle2) * circle_radius, 0, sin(angle2) * circle_radius)
-
-		st.set_color(circle_color)
-		st.set_normal(Vector3.UP)
-		st.add_vertex(center)
-		st.add_vertex(p1)
-		st.add_vertex(p2)
-
-	st.commit(_array_mesh)
-
-	# マテリアル設定
-	var mat = StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.vertex_color_use_as_albedo = true
-	mat.render_priority = 10
-	mat.no_depth_test = true
-	_array_mesh.surface_set_material(0, mat)
-	_circle_material = mat
-
-
+## アイコン（砂時計）を構築
 func _build_icon() -> void:
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var vertices = PackedVector3Array()
+	var indices = PackedInt32Array()
 
-	# 砂時計アイコン: 2つの三角形が中央で接する形
-	var y_offset = 0.001  # 円より少し上
+	var y_offset = 0.02  # 円より少し上（Z-fighting防止）
 	var icon_half_width = circle_radius * 0.35
 	var icon_half_height = circle_radius * 0.45
 	var neck_width = icon_half_width * 0.15  # くびれ部分
 
-	# 上の三角形（頂点が下を向く）
+	# 上の台形（頂点が下を向く）
 	var top_left = Vector3(-icon_half_width, y_offset, -icon_half_height)
 	var top_right = Vector3(icon_half_width, y_offset, -icon_half_height)
 	var top_bottom_left = Vector3(-neck_width, y_offset, 0)
 	var top_bottom_right = Vector3(neck_width, y_offset, 0)
 
-	# 下の三角形（頂点が上を向く）
+	# 下の台形（頂点が上を向く）
 	var bottom_left = Vector3(-icon_half_width, y_offset, icon_half_height)
 	var bottom_right = Vector3(icon_half_width, y_offset, icon_half_height)
 	var bottom_top_left = Vector3(-neck_width, y_offset, 0)
 	var bottom_top_right = Vector3(neck_width, y_offset, 0)
 
-	st.set_color(icon_color)
-	st.set_normal(Vector3.UP)
+	# 頂点追加
+	vertices.append(top_left)        # 0
+	vertices.append(top_right)       # 1
+	vertices.append(top_bottom_right) # 2
+	vertices.append(top_bottom_left)  # 3
+	vertices.append(bottom_top_left)  # 4
+	vertices.append(bottom_top_right) # 5
+	vertices.append(bottom_right)     # 6
+	vertices.append(bottom_left)      # 7
 
-	# 上の三角形（台形風に4頂点）
-	st.add_vertex(top_left)
-	st.add_vertex(top_right)
-	st.add_vertex(top_bottom_right)
+	# 上の台形
+	indices.append(0); indices.append(1); indices.append(2)
+	indices.append(0); indices.append(2); indices.append(3)
 
-	st.add_vertex(top_left)
-	st.add_vertex(top_bottom_right)
-	st.add_vertex(top_bottom_left)
+	# 下の台形
+	indices.append(4); indices.append(5); indices.append(6)
+	indices.append(4); indices.append(6); indices.append(7)
 
-	# 下の三角形（台形風に4頂点）
-	st.add_vertex(bottom_top_left)
-	st.add_vertex(bottom_top_right)
-	st.add_vertex(bottom_right)
+	var arrays = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_INDEX] = indices
 
-	st.add_vertex(bottom_top_left)
-	st.add_vertex(bottom_right)
-	st.add_vertex(bottom_left)
-
-	# 枠線を追加（アウトライン効果）
-	var frame_thickness = 0.015
-	var frame_y = y_offset + 0.001
-
-	# 上の横線
-	_add_quad(st, Vector3(-icon_half_width - frame_thickness, frame_y, -icon_half_height - frame_thickness),
-			Vector3(icon_half_width + frame_thickness, frame_y, -icon_half_height - frame_thickness),
-			Vector3(icon_half_width + frame_thickness, frame_y, -icon_half_height),
-			Vector3(-icon_half_width - frame_thickness, frame_y, -icon_half_height))
-
-	# 下の横線
-	_add_quad(st, Vector3(-icon_half_width - frame_thickness, frame_y, icon_half_height),
-			Vector3(icon_half_width + frame_thickness, frame_y, icon_half_height),
-			Vector3(icon_half_width + frame_thickness, frame_y, icon_half_height + frame_thickness),
-			Vector3(-icon_half_width - frame_thickness, frame_y, icon_half_height + frame_thickness))
-
-	st.commit(_array_mesh)
-
-	# マテリアル設定（発光あり）
-	var mat = StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.vertex_color_use_as_albedo = true
-	mat.emission_enabled = true
-	mat.emission = icon_color
-	mat.emission_energy_multiplier = 1.2
-	mat.render_priority = 11
-	mat.no_depth_test = true
-	_array_mesh.surface_set_material(1, mat)
-	_icon_material = mat
-
-
-## 四角形を追加するヘルパー
-func _add_quad(st: SurfaceTool, p1: Vector3, p2: Vector3, p3: Vector3, p4: Vector3) -> void:
-	st.add_vertex(p1)
-	st.add_vertex(p2)
-	st.add_vertex(p3)
-	st.add_vertex(p1)
-	st.add_vertex(p3)
-	st.add_vertex(p4)
+	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_array_mesh.surface_set_material(1, _icon_material)
 
 
 ## 待機時間を設定
@@ -166,12 +87,12 @@ func _update_duration_label() -> void:
 	if not _duration_label:
 		_duration_label = Label3D.new()
 		_duration_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		_duration_label.no_depth_test = true
-		_duration_label.font_size = 48
-		_duration_label.outline_size = 8
+		_duration_label.font_size = 32
+		_duration_label.outline_size = 6
 		_duration_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		_duration_label.outline_modulate = Color(0, 0, 0, 0.8)
-		_duration_label.position = Vector3(0, 0.5, 0)
+		_duration_label.position = Vector3(0, 0.1, 0)  # 地面近くに配置
+		_duration_label.render_priority = 11
 		add_child(_duration_label)
 
 	# 同期ポイント（duration < 0）の場合は「W」を表示

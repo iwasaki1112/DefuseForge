@@ -6,28 +6,27 @@ extends Node3D
 ## ポイント処理は各ハンドラに委譲
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_POINT, CLEAR_POINT, GRENADE_POINT, DOOR_POINT, WAIT_POINT, SMOKE_GRENADE_POINT }
+enum DrawingMode { MOVEMENT, VISION_POINT, WAIT_POINT }
 
 ## ポイント履歴用の種別
-enum PointType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT, SMOKE_GRENADE }
+enum PointType { VISION, PATH, WAIT }
 
 #region シグナル
 signal drawing_finished(points: PackedVector3Array)
 signal vision_point_added(anchor: Vector3, target_point: Vector3)
-signal run_segment_added(start_ratio: float, end_ratio: float)
-signal clear_point_added(path_ratio: float)
-signal grenade_point_added(path_ratio: float, target_pos: Vector3)
-signal smoke_grenade_point_added(path_ratio: float, target_pos: Vector3)
-signal door_point_added(path_ratio: float, door: Node3D)
 signal wait_point_added(path_ratio: float, wait_duration: float)
 signal path_undone()
 signal mode_changed(mode: int)
-## パス外タップ時のシグナル（確定処理用）
+## パス外タップ時のシグナル（モード終了用）
 signal off_path_tapped()
 ## 自動確定リクエスト（確認済みパスへのVisionポイント配置後など）
 signal auto_confirm_requested()
 ## パス上タップ時のシグナル（コンテキストメニュー表示用）
 signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
+## パスポイント追加シグナル（リアルタイム確定用 - ポイント追加のたびに発火）
+signal path_point_added(character: Node, point: Vector3)
+## パス描画開始シグナル（新規パス開始時に発火）
+signal path_started(character: Node, start_point: Vector3)
 #endregion
 
 #region エクスポート設定
@@ -38,12 +37,12 @@ signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
 @export var line_width: float = 0.04
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
-@export var path_click_threshold: float = 0.7
+@export var path_click_threshold: float = 1.2
 @export var path_endpoint_threshold: float = 0.3
 @export_flags_3d_physics var wall_collision_mask: int = 2
 @export var enable_wall_sliding: bool = true
 @export var wall_slide_offset: float = 0.5  ## 壁からの距離
-@export var enable_smoothing: bool = true
+@export var enable_smoothing: bool = false
 @export var smoothing_epsilon: float = 0.15
 @export var smoothing_segments: int = 4
 #endregion
@@ -58,17 +57,12 @@ var _camera: Camera3D
 var _character: Node3D
 var _ground_plane: Plane
 var _is_drawing: bool = false
-var _is_extending_path: bool = false
 var _is_enabled: bool = false
-var _is_moving_extension_start: bool = false  ## 移動中延長の開始点が設定されているか
 var _drawing_mode: DrawingMode = DrawingMode.MOVEMENT
+## 現在描画中のパスポイント（リアルタイムで確定済み）
 var _path_points: PackedVector3Array = PackedVector3Array()
 var _path_mesh: MeshInstance3D
 
-var _pending_path: PackedVector3Array = PackedVector3Array()
-var _pending_character: CharacterBody3D = null
-var _executing_character: CharacterBody3D = null
-var _path_extension_snapshots: Array[PackedVector3Array] = []
 var _character_color: Color = Color(1.0, 1.0, 1.0)
 
 var _point_history: Array[int] = []
@@ -79,8 +73,11 @@ var _is_wall_sliding: bool = false           ## 壁沿いモード中か
 var _wall_slide_normal: Vector3 = Vector3.ZERO  ## 壁の法線
 var _wall_slide_direction: Vector3 = Vector3.ZERO  ## スライド方向
 
-## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
-var _touch_active: bool = false
+## 最後のタッチ時刻（エミュレートマウスイベント対策）
+var _last_touch_time: int = 0
+
+## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
+const TOUCH_MOUSE_INTERVAL_MS: int = 100
 
 ## パス上長押しでVisionポイント配置用
 var _path_longpress_pending: bool = false  ## 長押し待機中か
@@ -93,12 +90,10 @@ var _auto_confirm_after_vision: bool = false  ## Visionポイント配置後に�
 
 ## ポイントハンドラ
 var _vision_handler: VisionPointHandler
-var _run_handler: RunPointHandler
-var _clear_handler: ClearPointHandler
-var _grenade_handler: GrenadePointHandler
-var _smoke_grenade_handler: SmokeGrenadePointHandler
-var _door_handler: DoorPointHandler
 var _wait_handler: WaitPointHandler
+
+## 実行中のキャラクター（パス完了シグナル接続用）
+var _executing_character: Node = null
 #endregion
 
 
@@ -130,20 +125,10 @@ func _setup_mesh() -> void:
 
 func _setup_handlers() -> void:
 	_vision_handler = VisionPointHandler.new()
-	_run_handler = RunPointHandler.new()
-	_clear_handler = ClearPointHandler.new()
-	_grenade_handler = GrenadePointHandler.new()
-	_smoke_grenade_handler = SmokeGrenadePointHandler.new()
-	_door_handler = DoorPointHandler.new()
 	_wait_handler = WaitPointHandler.new()
 
 	# ハンドラのシグナル接続
 	_vision_handler.point_added.connect(_on_vision_point_added)
-	_run_handler.point_added.connect(_on_run_point_added)
-	_clear_handler.point_added.connect(_on_clear_point_added)
-	_grenade_handler.point_added.connect(_on_grenade_point_added)
-	_smoke_grenade_handler.point_added.connect(_on_smoke_grenade_point_added)
-	_door_handler.point_added.connect(_on_door_point_added)
 	_wait_handler.point_added.connect(_on_wait_point_added)
 
 
@@ -155,23 +140,13 @@ func _setup_handlers_with_camera() -> void:
 
 
 func _get_all_handlers() -> Array:
-	return [_vision_handler, _run_handler, _clear_handler, _grenade_handler, _smoke_grenade_handler, _door_handler, _wait_handler]
+	return [_vision_handler, _wait_handler]
 
 
 func _get_handler_for_mode(mode: DrawingMode):
 	match mode:
 		DrawingMode.VISION_POINT:
 			return _vision_handler
-		DrawingMode.RUN_POINT:
-			return _run_handler
-		DrawingMode.CLEAR_POINT:
-			return _clear_handler
-		DrawingMode.GRENADE_POINT:
-			return _grenade_handler
-		DrawingMode.SMOKE_GRENADE_POINT:
-			return _smoke_grenade_handler
-		DrawingMode.DOOR_POINT:
-			return _door_handler
 		DrawingMode.WAIT_POINT:
 			return _wait_handler
 		_:
@@ -198,31 +173,6 @@ func _on_vision_point_added(data: Dictionary) -> void:
 		auto_confirm_requested.emit()
 
 
-func _on_run_point_added(data: Dictionary) -> void:
-	_point_history.append(PointType.RUN)
-	run_segment_added.emit(data.get("start_ratio", 0.0), data.get("end_ratio", 0.0))
-
-
-func _on_clear_point_added(data: Dictionary) -> void:
-	_point_history.append(PointType.CLEAR)
-	clear_point_added.emit(data.get("path_ratio", 0.0))
-
-
-func _on_grenade_point_added(data: Dictionary) -> void:
-	_point_history.append(PointType.GRENADE)
-	grenade_point_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
-
-
-func _on_smoke_grenade_point_added(data: Dictionary) -> void:
-	_point_history.append(PointType.SMOKE_GRENADE)
-	smoke_grenade_point_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
-
-
-func _on_door_point_added(data: Dictionary) -> void:
-	_point_history.append(PointType.DOOR)
-	door_point_added.emit(data.get("path_ratio", 0.0), data.get("door_node", null))
-
-
 func _on_wait_point_added(data: Dictionary) -> void:
 	_point_history.append(PointType.WAIT)
 	wait_point_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
@@ -243,33 +193,25 @@ func enable(character: Node3D) -> void:
 	clear()
 
 
-## 指定した開始点からパス描画を開始（移動中延長用）
+## 指定した開始点からパス描画を開始
 ## @param character: 対象キャラクター
 ## @param start_point: パス開始点
 func enable_from_point(character: Node3D, start_point: Vector3) -> void:
 	_character = character
 	_is_enabled = true
 	_drawing_mode = DrawingMode.MOVEMENT
-	_pending_character = character as CharacterBody3D
 	clear()
 
-	# 移動中延長フラグを設定
-	_is_moving_extension_start = true
-
-	# 開始点を設定
+	# 開始点を設定（パス開始シグナルも発火）
 	_path_points.append(start_point)
-	_pending_path.append(start_point)
-
-	# パスメッシュを更新
 	if _path_mesh:
 		_path_mesh.update_from_points(_path_points)
+	path_started.emit(_character, start_point)
 
 
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false
-	_is_extending_path = false
-	_is_moving_extension_start = false
 
 
 func is_enabled() -> bool:
@@ -304,10 +246,6 @@ func get_active_edit_character() -> Node:
 #region 入力処理
 func _unhandled_input(event: InputEvent) -> void:
 	if _camera == null or not _is_enabled:
-		return
-
-	# パス継続描画の入力処理（優先）
-	if _handle_path_extension_input(event):
 		return
 
 	match _drawing_mode:
@@ -346,61 +284,17 @@ func _check_off_path_tap(event: InputEvent) -> void:
 
 	if is_press:
 		var ground_pos = _get_ground_position(screen_pos)
-		if ground_pos != null and has_pending_path():
+		if ground_pos != null and has_path():
 			if not is_point_on_path(ground_pos) and not _is_near_path_endpoint(ground_pos):
 				off_path_tapped.emit()
 				get_viewport().set_input_as_handled()
 
 
-func _handle_path_extension_input(event: InputEvent) -> bool:
-	if _is_extending_path:
-		# ドラッグ中（マウスまたはタッチ）
-		if event is InputEventMouseMotion or event is InputEventScreenDrag:
-			var ground_pos = _get_ground_position(event.position)
-			if ground_pos != null:
-				_add_extend_point(ground_pos)
-			get_viewport().set_input_as_handled()
-			return true
-		# リリース（マウス）
-		elif event is InputEventMouseButton:
-			var mouse_event = event as InputEventMouseButton
-			if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
-				_finish_extending_path()
-				get_viewport().set_input_as_handled()
-				return true
-		# リリース（タッチ）
-		elif event is InputEventScreenTouch and not event.pressed:
-			_finish_extending_path()
-			get_viewport().set_input_as_handled()
-			return true
-
-	# 延長開始判定（マウス）
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
-			if has_pending_path() and not _is_drawing:
-				var ground_pos = _get_ground_position(mouse_event.position)
-				if ground_pos != null and _is_near_path_endpoint(ground_pos):
-					_start_extending_path()
-					get_viewport().set_input_as_handled()
-					return true
-
-	# 延長開始判定（タッチ）
-	if event is InputEventScreenTouch and event.pressed:
-		if has_pending_path() and not _is_drawing:
-			var ground_pos = _get_ground_position(event.position)
-			if ground_pos != null and _is_near_path_endpoint(ground_pos):
-				_start_extending_path()
-				get_viewport().set_input_as_handled()
-				return true
-
-	return false
-
-
 func _handle_movement_input(event: InputEvent) -> void:
 	# タッチ入力（優先処理）
+	# タッチ入力
 	if event is InputEventScreenTouch:
-		_touch_active = event.pressed
+		_last_touch_time = Time.get_ticks_msec()
 		if event.pressed:
 			handle_movement_press(event.position)
 		else:
@@ -413,8 +307,8 @@ func _handle_movement_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
-	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
-	if _touch_active:
+	# マウス入力（タッチ直後のエミュレートイベントはスキップ）
+	if Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS:
 		return
 
 	if event is InputEventMouseButton:
@@ -440,7 +334,7 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 	var ground_pos = _get_ground_position(screen_pos)
 
 	# 既存パスがある場合、パス上の長押しをチェック
-	if has_pending_path() and ground_pos != null:
+	if has_path() and ground_pos != null:
 		var on_path = is_point_on_path(ground_pos)
 		var near_endpoint = _is_near_path_endpoint(ground_pos)
 		if on_path and not near_endpoint:
@@ -471,7 +365,7 @@ func handle_movement_release(_screen_pos: Vector2) -> void:
 			var path_data := {
 				"point": result.point,
 				"path_ratio": result.ratio,
-				"character": _pending_character
+				"character": _character
 			}
 			path_tapped.emit(screen_pos, path_data)
 		return
@@ -493,7 +387,7 @@ func handle_point_release(screen_pos: Vector2) -> bool:
 			var path_data := {
 				"point": result.point,
 				"path_ratio": result.ratio,
-				"character": _pending_character
+				"character": _character
 			}
 			path_tapped.emit(tap_screen_pos, path_data)
 		return true
@@ -509,6 +403,24 @@ func handle_point_release(screen_pos: Vector2) -> bool:
 		fake_event.pressed = false
 		fake_event.position = screen_pos
 		return handler.handle_input(fake_event)
+	return false
+
+
+## ポイントモードでのタッチ入力処理（外部から呼び出し可能）
+## InputControllerからタッチイベントを直接受け取り、ハンドラに委譲する
+func handle_point_touch_input(event: InputEvent) -> bool:
+	if _drawing_mode == DrawingMode.MOVEMENT:
+		return false
+
+	var handler = _get_handler_for_mode(_drawing_mode)
+	if handler and handler.handle_input(event):
+		# 長押しVisionモードでリリース後、描画が終了したらMOVEMENTに戻る
+		if _longpress_vision_mode and _drawing_mode == DrawingMode.VISION_POINT:
+			if not _vision_handler._is_drawing:
+				_longpress_vision_mode = false
+				_drawing_mode = DrawingMode.MOVEMENT
+				mode_changed.emit(int(DrawingMode.MOVEMENT))
+		return true
 	return false
 
 
@@ -529,10 +441,7 @@ func _handle_movement_motion(screen_pos: Vector2) -> void:
 	if _is_drawing:
 		var ground_pos = _get_ground_position(screen_pos)
 		if ground_pos != null:
-			if _is_extending_path:
-				_add_extend_point(ground_pos)
-			else:
-				_add_point(ground_pos)
+			_add_point(ground_pos)
 
 
 ## 描画開始処理（マウス/タッチ共通）
@@ -541,11 +450,10 @@ func _handle_drawing_press(screen_pos: Vector2) -> void:
 	if _is_drawing:
 		return
 
-	# 既に延長モードが開始されている場合（外部からstart_extending_path()が呼ばれた場合）
-	# _path_pointsは既にセットされているので、描画開始のみ行う
-	if _is_extending_path:
+	# 既にパスポイントがある場合（継続モードで終点から開始）、描画開始のみ行う
+	# enable_from_point で1点追加されているので >= 1 でチェック
+	if _path_points.size() >= 1:
 		_is_drawing = true
-		_point_history.append(PointType.PATH_EXTENSION)
 		return
 
 	var start_pos: Vector3
@@ -562,11 +470,7 @@ func _handle_drawing_press(screen_pos: Vector2) -> void:
 ## 描画終了処理（マウス/タッチ共通）
 func _handle_drawing_release() -> void:
 	if _is_drawing:
-		if _is_extending_path:
-			_finish_extending_path()
-			_is_drawing = false
-		else:
-			_finish_drawing()
+		_finish_drawing()
 	# Note: 描画が開始されていない場合（パスモード開始直後のリリース等）は何もしない
 	# キャンセルはユーザーが明示的にESCキーなどで行う
 
@@ -582,12 +486,6 @@ func _start_drawing(start_pos: Vector3) -> void:
 	# パス描画開始時に長押し状態をリセット
 	_reset_path_longpress()
 
-	# 移動中延長の場合は既存の開始点から続ける
-	if _is_moving_extension_start:
-		_is_drawing = true
-		_is_moving_extension_start = false
-		return
-
 	if _character:
 		var char_pos = Vector3(_character.global_position.x, ground_plane_height, _character.global_position.z)
 		var hit_result = _check_wall_between(char_pos, start_pos)
@@ -598,6 +496,9 @@ func _start_drawing(start_pos: Vector3) -> void:
 	_path_points.clear()
 	_path_points.append(start_pos)
 	_path_mesh.update_from_points(_path_points)
+
+	# パス開始シグナルを発火（リアルタイム確定）
+	path_started.emit(_character, start_pos)
 
 
 func _add_point(pos: Vector3) -> void:
@@ -619,12 +520,10 @@ func _add_point(pos: Vector3) -> void:
 				# 壁から離れる場合は通常のポイント追加を試みる
 				var exit_hit_result = _check_wall_between(last_point, pos)
 				if not exit_hit_result.hit:
-					_path_points.append(pos)
-					_path_mesh.update_from_points(_path_points)
+					_append_point_and_emit(pos)
 			return
 		if slide_result.new_point != Vector3.ZERO:
-			_path_points.append(slide_result.new_point)
-			_path_mesh.update_from_points(_path_points)
+			_append_point_and_emit(slide_result.new_point)
 		return
 
 	# 通常モードの処理
@@ -648,6 +547,8 @@ func _add_point(pos: Vector3) -> void:
 					corrected_last.y = ground_plane_height
 					_path_points[_path_points.size() - 1] = corrected_last
 					_path_mesh.update_from_points(_path_points)
+					# 修正されたポイントを通知
+					path_point_added.emit(_character, corrected_last)
 				else:
 					# last_point から wall_slide_start への線が壁を通らないかチェック
 					var check_hit = _check_wall_between(last_point, wall_slide_start)
@@ -655,11 +556,9 @@ func _add_point(pos: Vector3) -> void:
 						var slide_safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
 						slide_safe_pos.y = ground_plane_height
 						if slide_safe_pos.distance_to(last_point) >= min_point_distance:
-							_path_points.append(slide_safe_pos)
-							_path_mesh.update_from_points(_path_points)
+							_append_point_and_emit(slide_safe_pos)
 					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
-						_path_points.append(wall_slide_start)
-						_path_mesh.update_from_points(_path_points)
+						_append_point_and_emit(wall_slide_start)
 				return
 
 		# スライドできない場合は壁の手前で停止
@@ -667,15 +566,21 @@ func _add_point(pos: Vector3) -> void:
 		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
 		if safe_pos.distance_to(last_point) >= min_point_distance:
-			_path_points.append(safe_pos)
-			_path_mesh.update_from_points(_path_points)
+			_append_point_and_emit(safe_pos)
 		_finish_drawing()
 		return
 
 	# 壁に近すぎないかチェックして補正
 	var corrected_pos = _correct_position_away_from_wall(pos)
-	_path_points.append(corrected_pos)
+	_append_point_and_emit(corrected_pos)
+
+
+## ポイントを追加してシグナルを発火（リアルタイム確定）
+func _append_point_and_emit(pos: Vector3) -> void:
+	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
+	# リアルタイムでパスポイント追加を通知
+	path_point_added.emit(_character, pos)
 
 
 func _finish_drawing() -> void:
@@ -684,172 +589,23 @@ func _finish_drawing() -> void:
 	_reset_path_longpress()  # パス描画終了時に長押し状態をリセット
 
 	if _path_points.size() >= 2 and _character:
-		if enable_smoothing and _path_points.size() >= 3:
-			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
-		else:
-			_pending_path = _path_points.duplicate()
-		_pending_character = _character as CharacterBody3D
 		_point_history.append(PointType.PATH)
 
+	# パスは既にリアルタイムで確定済み - 描画終了を通知
 	drawing_finished.emit(_path_points)
-#endregion
 
 
-#region パス継続描画
-func can_extend_path() -> bool:
-	return has_pending_path() and not _is_drawing and not _is_extending_path
+## パスの先端から続けて描画可能かどうか
+func can_continue_path() -> bool:
+	return _path_points.size() >= 2 and not _is_drawing
 
 
-func is_extending_path() -> bool:
-	return _is_extending_path
-
-
-## パス延長を開始（外部から呼び出し可能）
-func start_extending_path() -> bool:
-	if not can_extend_path():
+## パスの先端から描画を継続開始
+func start_continue_from_endpoint() -> bool:
+	if not can_continue_path():
 		return false
-	_start_extending_path()
+	_is_drawing = true
 	return true
-
-
-func _start_extending_path() -> void:
-	if not has_pending_path():
-		return
-
-	_is_extending_path = true
-	_path_extension_snapshots.append(_pending_path.duplicate())
-	_path_points = _pending_path.duplicate()
-	_path_mesh.update_from_points(_path_points)
-
-
-func _add_extend_point(pos: Vector3) -> void:
-	if not _is_extending_path:
-		return
-
-	if _path_points.size() >= max_points:
-		_reset_wall_slide_state()
-		_finish_extending_path()
-		return
-
-	var last_point = _path_points[_path_points.size() - 1]
-	if pos.distance_to(last_point) < min_point_distance:
-		return
-
-	# 壁沿いモード中の処理
-	if _is_wall_sliding:
-		var slide_result = _process_wall_slide(pos)
-		if slide_result.should_exit:
-			_reset_wall_slide_state()
-			# 壁沿いモード終了後、通常の描画に戻る
-			if not slide_result.corner_hit:
-				# 壁から離れる場合は通常のポイント追加を試みる
-				var exit_hit_result = _check_wall_between(last_point, pos)
-				if not exit_hit_result.hit:
-					_path_points.append(pos)
-					_path_mesh.update_from_points(_path_points)
-			return
-		if slide_result.new_point != Vector3.ZERO:
-			_path_points.append(slide_result.new_point)
-			_path_mesh.update_from_points(_path_points)
-		return
-
-	# 通常モードの処理
-	var hit_result = _check_wall_between(last_point, pos)
-	if hit_result.hit:
-		var wall_pos = hit_result.position
-
-		if enable_wall_sliding:
-			# 壁沿いモードに入る
-			var move_dir = (pos - last_point).normalized()
-			if _enter_wall_slide_mode(hit_result, move_dir):
-				# 壁沿いの開始位置（壁の法線方向にオフセット）
-				var wall_slide_start = wall_pos + _wall_slide_normal * wall_slide_offset
-				wall_slide_start.y = ground_plane_height
-
-				# last_point が壁に近すぎる場合は修正
-				var last_to_wall_dist = last_point.distance_to(wall_pos)
-				if last_to_wall_dist < wall_slide_offset and _path_points.size() > 1:
-					# 最後のポイントを壁から離れた位置に修正
-					var corrected_last = wall_pos + _wall_slide_normal * wall_slide_offset
-					corrected_last.y = ground_plane_height
-					_path_points[_path_points.size() - 1] = corrected_last
-					_path_mesh.update_from_points(_path_points)
-				else:
-					# last_point から wall_slide_start への線が壁を通らないかチェック
-					var check_hit = _check_wall_between(last_point, wall_slide_start)
-					if check_hit.hit:
-						var slide_safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
-						slide_safe_pos.y = ground_plane_height
-						if slide_safe_pos.distance_to(last_point) >= min_point_distance:
-							_path_points.append(slide_safe_pos)
-							_path_mesh.update_from_points(_path_points)
-					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
-						_path_points.append(wall_slide_start)
-						_path_mesh.update_from_points(_path_points)
-				return
-
-		# スライドできない場合は壁の手前で停止
-		var to_wall = (wall_pos - last_point).normalized()
-		var safe_pos = wall_pos - to_wall * wall_slide_offset
-		safe_pos.y = ground_plane_height
-		if safe_pos.distance_to(last_point) >= min_point_distance:
-			_path_points.append(safe_pos)
-			_path_mesh.update_from_points(_path_points)
-		_finish_extending_path()
-		return
-
-	# 壁に近すぎないかチェックして補正
-	var corrected_pos = _correct_position_away_from_wall(pos)
-	_path_points.append(corrected_pos)
-	_path_mesh.update_from_points(_path_points)
-
-
-func _finish_extending_path() -> void:
-	_is_extending_path = false
-	_reset_wall_slide_state()
-
-	if _path_points.size() >= 2 and _character:
-		# 元のパス（既にスムージング済み）を取得
-		var original_path: PackedVector3Array = PackedVector3Array()
-		if _path_extension_snapshots.size() > 0:
-			original_path = _path_extension_snapshots[_path_extension_snapshots.size() - 1]
-
-		if original_path.size() > 0:
-			# 延長部分のみを抽出（元のパスの終点から新しいポイントまで）
-			var extension_points := PackedVector3Array()
-
-			# 元のパスの終点を延長部分の開始点として追加（スムージングの接続用）
-			extension_points.append(original_path[original_path.size() - 1])
-
-			# 延長で追加されたポイントを追加
-			for i in range(original_path.size(), _path_points.size()):
-				extension_points.append(_path_points[i])
-
-			if extension_points.size() >= 2:
-				# 延長部分のみスムージング
-				var smoothed_extension: PackedVector3Array
-				if enable_smoothing and extension_points.size() >= 3:
-					smoothed_extension = PathSmoother.smooth_path(extension_points, smoothing_epsilon, smoothing_segments * 2)
-				else:
-					smoothed_extension = extension_points.duplicate()
-
-				# 元のパス + スムージング済み延長部分を結合（最初の点は重複するのでスキップ）
-				_pending_path = original_path.duplicate()
-				for i in range(1, smoothed_extension.size()):
-					_pending_path.append(smoothed_extension[i])
-			else:
-				# 延長部分がない場合は元のパスをそのまま使用
-				_pending_path = original_path.duplicate()
-		else:
-			# スナップショットがない場合は従来通り全体をスムージング
-			if enable_smoothing and _path_points.size() >= 3:
-				_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
-			else:
-				_pending_path = _path_points.duplicate()
-
-		_point_history.append(PointType.PATH_EXTENSION)
-
-	drawing_finished.emit(_path_points)
 #endregion
 
 
@@ -1088,19 +844,19 @@ func _correct_position_away_from_wall(pos: Vector3) -> Vector3:
 
 
 func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
-	return PathCalculator.find_closest_point_on_path(_pending_path, pos)
+	return PathCalculator.find_closest_point_on_path(_path_points, pos)
 
 
 func _find_offset_point_on_path(base_ratio: float, offset_distance: float) -> Dictionary:
-	return PathCalculator.find_offset_point_on_path(_pending_path, base_ratio, offset_distance)
+	return PathCalculator.find_offset_point_on_path(_path_points, base_ratio, offset_distance)
 
 
 func _get_path_endpoint() -> Vector3:
-	return PathCalculator.get_path_endpoint(_pending_path)
+	return PathCalculator.get_path_endpoint(_path_points)
 
 
 func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
-	return PathCalculator.is_near_path_endpoint(_pending_path, ground_pos, path_endpoint_threshold)
+	return PathCalculator.is_near_path_endpoint(_path_points, ground_pos, path_endpoint_threshold)
 
 
 func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
@@ -1108,17 +864,12 @@ func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
 	return PathRaycastHelper.raycast_wall_or_floor(_camera, space_state, screen_pos)
 
 
-func _raycast_door(screen_pos: Vector2) -> Node3D:
-	var space_state = get_world_3d().direct_space_state
-	return PathRaycastHelper.raycast_door(_camera, space_state, screen_pos)
-
-
 ## パス上長押しからVisionモードを開始
 func _start_vision_mode_from_longpress() -> void:
 	_path_longpress_pending = false
 	_path_longpress_timer = 0.0
 
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return
 
 	# パス上の最も近い点を見つける
@@ -1163,68 +914,22 @@ func start_movement_mode() -> void:
 
 
 func start_vision_mode() -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return false
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
 	_longpress_vision_mode = false  # UIから開始した場合は自動復帰しない
+	_vision_handler.reset_state()
 	mode_changed.emit(int(DrawingMode.VISION_POINT))
 	return true
 
 
-func start_run_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.RUN_POINT
-	_is_enabled = true
-	_run_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.RUN_POINT))
-	return true
-
-
-func start_clear_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.CLEAR_POINT
-	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.CLEAR_POINT))
-	return true
-
-
-func start_grenade_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.GRENADE_POINT
-	_is_enabled = true
-	_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.GRENADE_POINT))
-	return true
-
-
-func start_smoke_grenade_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.SMOKE_GRENADE_POINT
-	_is_enabled = true
-	_smoke_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.SMOKE_GRENADE_POINT))
-	return true
-
-
-func start_door_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.DOOR_POINT
-	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.DOOR_POINT))
-	return true
-
-
 func start_wait_mode() -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return false
 	_drawing_mode = DrawingMode.WAIT_POINT
 	_is_enabled = true
+	_wait_handler.reset_state()
 	mode_changed.emit(int(DrawingMode.WAIT_POINT))
 	return true
 #endregion
@@ -1245,90 +950,6 @@ func get_vision_point_count() -> int:
 
 func take_vision_points() -> Array[MeshInstance3D]:
 	return _vision_handler.take_points()
-
-
-func has_run_segments() -> bool:
-	return _run_handler.has_points()
-
-
-func get_run_segments() -> Array[Dictionary]:
-	return _run_handler.get_points()
-
-
-func get_run_segment_count() -> int:
-	return _run_handler.get_point_count()
-
-
-func has_incomplete_run_start() -> bool:
-	return _run_handler.has_incomplete_run_start()
-
-
-func take_run_points() -> Array[MeshInstance3D]:
-	return _run_handler.take_points()
-
-
-func has_clear_points() -> bool:
-	return _clear_handler.has_points()
-
-
-func get_clear_points() -> Array[Dictionary]:
-	return _clear_handler.get_points()
-
-
-func get_clear_point_count() -> int:
-	return _clear_handler.get_point_count()
-
-
-func take_clear_points() -> Array[MeshInstance3D]:
-	return _clear_handler.take_points()
-
-
-func has_grenade_points() -> bool:
-	return _grenade_handler.has_points()
-
-
-func get_grenade_points() -> Array[Dictionary]:
-	return _grenade_handler.get_points()
-
-
-func get_grenade_point_count() -> int:
-	return _grenade_handler.get_point_count()
-
-
-func take_grenade_points() -> Array[MeshInstance3D]:
-	return _grenade_handler.take_points()
-
-
-func has_smoke_grenade_points() -> bool:
-	return _smoke_grenade_handler.has_points()
-
-
-func get_smoke_grenade_points() -> Array[Dictionary]:
-	return _smoke_grenade_handler.get_points()
-
-
-func get_smoke_grenade_point_count() -> int:
-	return _smoke_grenade_handler.get_point_count()
-
-
-func take_smoke_grenade_points() -> Array[MeshInstance3D]:
-	return _smoke_grenade_handler.take_points()
-
-
-func has_door_points() -> bool:
-	return _door_handler.has_points()
-
-
-func get_door_points() -> Array[Dictionary]:
-	return _door_handler.get_points()
-
-
-func get_door_point_count() -> int:
-	return _door_handler.get_point_count()
-
-
-func take_door_points() -> Array[MeshInstance3D]:
-	return _door_handler.take_points()
 
 
 func has_wait_points() -> bool:
@@ -1363,36 +984,6 @@ func get_all_vision_points() -> Dictionary:
 	return {}
 
 
-func get_all_run_segments() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_run_segments() }
-	return {}
-
-
-func get_all_clear_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_clear_points() }
-	return {}
-
-
-func get_all_grenade_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_grenade_points() }
-	return {}
-
-
-func get_all_smoke_grenade_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_smoke_grenade_points() }
-	return {}
-
-
-func get_all_door_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_door_points() }
-	return {}
-
-
 func get_all_wait_points() -> Dictionary:
 	if _active_edit_character:
 		return { _active_edit_character.get_instance_id(): get_wait_points() }
@@ -1402,36 +993,6 @@ func get_all_wait_points() -> Dictionary:
 func take_all_vision_points() -> Dictionary:
 	if _active_edit_character:
 		return { _active_edit_character.get_instance_id(): take_vision_points() }
-	return {}
-
-
-func take_all_run_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_run_points() }
-	return {}
-
-
-func take_all_clear_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_clear_points() }
-	return {}
-
-
-func take_all_grenade_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_grenade_points() }
-	return {}
-
-
-func take_all_smoke_grenade_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_smoke_grenade_points() }
-	return {}
-
-
-func take_all_door_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_door_points() }
 	return {}
 
 
@@ -1452,22 +1013,10 @@ func undo_last_point() -> int:
 	match last_type:
 		PointType.VISION:
 			_vision_handler.undo_last()
-		PointType.RUN:
-			_run_handler.undo_last()
-		PointType.CLEAR:
-			_clear_handler.undo_last()
-		PointType.GRENADE:
-			_grenade_handler.undo_last()
-		PointType.SMOKE_GRENADE:
-			_smoke_grenade_handler.undo_last()
-		PointType.DOOR:
-			_door_handler.undo_last()
 		PointType.WAIT:
 			_wait_handler.undo_last()
 		PointType.PATH:
 			_undo_path()
-		PointType.PATH_EXTENSION:
-			_undo_path_extension()
 
 	return last_type
 
@@ -1475,9 +1024,6 @@ func undo_last_point() -> int:
 func _undo_path() -> void:
 	_path_points.clear()
 	_path_mesh.clear()
-	_pending_path.clear()
-	_pending_character = null
-	_path_extension_snapshots.clear()
 	_is_drawing = false
 	_drawing_mode = DrawingMode.MOVEMENT
 
@@ -1490,43 +1036,19 @@ func _undo_path() -> void:
 	path_undone.emit()
 
 
-func _undo_path_extension() -> void:
-	if _path_extension_snapshots.is_empty():
-		return
-
-	var previous_path = _path_extension_snapshots.pop_back()
-	_pending_path = previous_path
-	_path_points = previous_path.duplicate()
-
-	if _path_mesh:
-		_path_mesh.update_from_points(_path_points)
-
-
 func remove_last_vision_point() -> void:
 	_vision_handler.undo_last()
-
-
-func remove_last_run_segment() -> void:
-	_run_handler.undo_last()
-
-
-func remove_last_clear_point() -> void:
-	_clear_handler.undo_last()
 #endregion
 
 
 #region クリア
 func clear() -> void:
 	_path_points.clear()
-	_path_mesh.clear()
+	if _path_mesh:
+		_path_mesh.clear()
 	_is_drawing = false
-	_is_extending_path = false
-	_is_moving_extension_start = false
 	_reset_wall_slide_state()
 	_drawing_mode = DrawingMode.MOVEMENT
-	_pending_path.clear()
-	_pending_character = null
-	_path_extension_snapshots.clear()
 	_point_history.clear()
 	_active_edit_character = null
 
@@ -1534,9 +1056,10 @@ func clear() -> void:
 		handler.clear_all()
 
 
-func clear_pending() -> void:
-	_pending_path.clear()
-	_pending_character = null
+func clear_path() -> void:
+	_path_points.clear()
+	if _path_mesh:
+		_path_mesh.clear()
 	for handler in _get_all_handlers():
 		handler.clear_all()
 #endregion
@@ -1548,23 +1071,23 @@ func get_drawn_path() -> PackedVector3Array:
 
 
 func get_smoothed_path() -> PackedVector3Array:
-	return _pending_path
+	return _path_points
 
 
 func get_relative_path() -> PackedVector3Array:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return PackedVector3Array()
-	var start = _pending_path[0]
+	var start = _path_points[0]
 	var relative = PackedVector3Array()
-	for point in _pending_path:
+	for point in _path_points:
 		relative.append(point - start)
 	return relative
 
 
 func get_relative_vision_points() -> Array[Dictionary]:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return []
-	var start = _pending_path[0]
+	var start = _path_points[0]
 	var relative_points: Array[Dictionary] = []
 	for vp in get_vision_points():
 		relative_points.append({
@@ -1576,11 +1099,11 @@ func get_relative_vision_points() -> Array[Dictionary]:
 
 
 func is_drawing() -> bool:
-	return _is_drawing or _is_extending_path
+	return _is_drawing
 
 
 func is_point_on_path(ground_pos: Vector3) -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return false
 	var result = _find_closest_point_on_path(ground_pos)
 	return result.distance <= path_click_threshold
@@ -1594,65 +1117,62 @@ func is_point_mode() -> bool:
 	return _drawing_mode != DrawingMode.MOVEMENT
 
 
-func has_pending_path() -> bool:
-	return _pending_path.size() >= 2 and _pending_character != null
+## パスが存在するかどうか（2点以上）
+func has_path() -> bool:
+	return _path_points.size() >= 2
 
 
 func has_preview_path() -> bool:
-	if _is_drawing or _is_extending_path:
-		return _path_points.size() >= 2 and _character != null
-	return has_pending_path()
+	return _path_points.size() >= 2
 
 
 func get_preview_path() -> PackedVector3Array:
-	if _is_drawing or _is_extending_path:
-		return _path_points
-	return _pending_path
+	return _path_points
 #endregion
 
 
 #region 実行 API
 func execute(run: bool = false) -> bool:
-	if _pending_path.size() < 2 or _pending_character == null:
+	if _path_points.size() < 2 or _character == null:
 		return false
 
 	var path_array: Array[Vector3] = []
-	for point in _pending_path:
+	for point in _path_points:
 		path_array.append(point)
-	_pending_character.set_path(path_array, run)
+	_character.set_path(path_array, run)
 
-	_executing_character = _pending_character
+	_executing_character = _character
 
 	if not _executing_character.path_completed.is_connected(_on_path_completed):
 		_executing_character.path_completed.connect(_on_path_completed)
 
-	_pending_path.clear()
-	_pending_character = null
+	_path_points.clear()
+	_character = null
 
 	return true
 
 
 func execute_with_vision(run: bool = false) -> bool:
-	if _pending_path.size() < 2 or _pending_character == null:
+	if _path_points.size() < 2 or _character == null:
 		return false
 
 	var path_array: Array[Vector3] = []
-	for point in _pending_path:
+	for point in _path_points:
 		path_array.append(point)
 
 	var vision_points = get_vision_points()
 	if vision_points.size() > 0:
-		_pending_character.set_path_with_vision_points(path_array, vision_points.duplicate(), run)
+		_character.set_path_with_vision_points(path_array, vision_points.duplicate(), run)
 	else:
-		_pending_character.set_path(path_array, run)
+		_character.set_path(path_array, run)
 
-	_executing_character = _pending_character
+	_executing_character = _character
 
 	if not _executing_character.path_completed.is_connected(_on_path_completed):
 		_executing_character.path_completed.connect(_on_path_completed)
 
-	_pending_path.clear()
-	_pending_character = null
+	_path_points.clear()
+	_character = null
 
 	return true
 
@@ -1672,18 +1192,8 @@ func get_points_by_type(point_type: ActionPointDataScript.Type) -> Array[Diction
 	match point_type:
 		ActionPointDataScript.Type.VISION:
 			return get_vision_points()
-		ActionPointDataScript.Type.RUN:
-			return get_run_segments()
-		ActionPointDataScript.Type.CLEAR:
-			return get_clear_points()
-		ActionPointDataScript.Type.GRENADE:
-			return get_grenade_points()
-		ActionPointDataScript.Type.DOOR:
-			return get_door_points()
 		ActionPointDataScript.Type.WAIT:
 			return get_wait_points()
-		ActionPointDataScript.Type.SMOKE_GRENADE:
-			return get_smoke_grenade_points()
 		_:
 			return []
 
@@ -1692,18 +1202,8 @@ func take_points_by_type(point_type: ActionPointDataScript.Type) -> Array[MeshIn
 	match point_type:
 		ActionPointDataScript.Type.VISION:
 			return take_vision_points()
-		ActionPointDataScript.Type.RUN:
-			return take_run_points()
-		ActionPointDataScript.Type.CLEAR:
-			return take_clear_points()
-		ActionPointDataScript.Type.GRENADE:
-			return take_grenade_points()
-		ActionPointDataScript.Type.DOOR:
-			return take_door_points()
 		ActionPointDataScript.Type.WAIT:
 			return take_wait_points()
-		ActionPointDataScript.Type.SMOKE_GRENADE:
-			return take_smoke_grenade_points()
 		_:
 			return []
 
@@ -1712,18 +1212,8 @@ func get_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionar
 	match point_type:
 		ActionPointDataScript.Type.VISION:
 			return get_all_vision_points()
-		ActionPointDataScript.Type.RUN:
-			return get_all_run_segments()
-		ActionPointDataScript.Type.CLEAR:
-			return get_all_clear_points()
-		ActionPointDataScript.Type.GRENADE:
-			return get_all_grenade_points()
-		ActionPointDataScript.Type.DOOR:
-			return get_all_door_points()
 		ActionPointDataScript.Type.WAIT:
 			return get_all_wait_points()
-		ActionPointDataScript.Type.SMOKE_GRENADE:
-			return get_all_smoke_grenade_points()
 		_:
 			return {}
 
@@ -1732,18 +1222,8 @@ func take_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictiona
 	match point_type:
 		ActionPointDataScript.Type.VISION:
 			return take_all_vision_points()
-		ActionPointDataScript.Type.RUN:
-			return take_all_run_points()
-		ActionPointDataScript.Type.CLEAR:
-			return take_all_clear_points()
-		ActionPointDataScript.Type.GRENADE:
-			return take_all_grenade_points()
-		ActionPointDataScript.Type.DOOR:
-			return take_all_door_points()
 		ActionPointDataScript.Type.WAIT:
 			return take_all_wait_points()
-		ActionPointDataScript.Type.SMOKE_GRENADE:
-			return take_all_smoke_grenade_points()
 		_:
 			return {}
 
@@ -1764,7 +1244,7 @@ func take_all_point_types_meshes() -> Dictionary:
 
 
 #region 復元 API
-func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
+func restore_path_points(character: Node3D, path_data: Dictionary) -> bool:
 	if path_data.is_empty():
 		return false
 
@@ -1773,13 +1253,13 @@ func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
 	_character = character
 	_is_enabled = true
 	_drawing_mode = DrawingMode.MOVEMENT
-	_pending_character = character as CharacterBody3D
+	_character = character as CharacterBody3D
 
 	if path_data.has("path"):
-		_pending_path.clear()
+		_path_points.clear()
 		for point in path_data["path"]:
-			_pending_path.append(point)
-		_path_points = _pending_path.duplicate()
+			_path_points.append(point)
+		_path_points = _path_points.duplicate()
 	if _path_points.size() < 2:
 		return false
 
@@ -1807,46 +1287,6 @@ func _restore_all_points(path_data: Dictionary) -> void:
 		_vision_handler.restore_points(vision_data, vision_meshes)
 		for _i in range(vision_data.size()):
 			_point_history.append(PointType.VISION)
-
-	# Run points
-	var run_data = path_data.get("run_segments", [])
-	var run_meshes = path_data.get("run_points", [])
-	if run_data.size() > 0:
-		_run_handler.restore_points(run_data, run_meshes)
-		for _i in range(run_data.size()):
-			_point_history.append(PointType.RUN)
-
-	# Clear points
-	var clear_data = path_data.get("clear_points_data", [])
-	var clear_meshes = path_data.get("clear_points", [])
-	if clear_data.size() > 0:
-		_clear_handler.restore_points(clear_data, clear_meshes)
-		for _i in range(clear_data.size()):
-			_point_history.append(PointType.CLEAR)
-
-	# Grenade points
-	var grenade_data = path_data.get("grenade_points_data", [])
-	var grenade_meshes = path_data.get("grenade_points", [])
-	if grenade_data.size() > 0:
-		_grenade_handler.restore_points(grenade_data, grenade_meshes)
-		for _i in range(grenade_data.size()):
-			_point_history.append(PointType.GRENADE)
-
-	# Smoke grenade points
-	var smoke_data = path_data.get("smoke_grenade_points_data", [])
-	var smoke_meshes = path_data.get("smoke_grenade_points", [])
-	if smoke_data.size() > 0:
-		_smoke_grenade_handler.restore_points(smoke_data, smoke_meshes)
-		for _i in range(smoke_data.size()):
-			_point_history.append(PointType.SMOKE_GRENADE)
-
-	# Door points
-	var door_data = path_data.get("door_points_data", [])
-	var door_meshes = path_data.get("door_points", [])
-	if door_data.size() > 0:
-		_door_handler.restore_points(door_data, door_meshes)
-		for _i in range(door_data.size()):
-			_point_history.append(PointType.DOOR)
 
 	# Wait points
 	var wait_data = path_data.get("wait_points_data", [])

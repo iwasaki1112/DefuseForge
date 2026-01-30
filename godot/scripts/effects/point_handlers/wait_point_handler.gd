@@ -11,6 +11,8 @@ const WaitPointScript = preload("res://scripts/effects/wait_point.gd")
 const WAIT_MIN_DURATION: float = 0.0
 ## 最大待機時間（秒）
 const WAIT_MAX_DURATION: float = 10.0
+## 最小押下時間（秒）- これ未満はタップとみなしキャンセル
+const MIN_PRESS_DURATION: float = 0.15
 
 
 ## Waitポイントデータ配列
@@ -34,15 +36,18 @@ var _pending_anchor: Vector3 = Vector3.ZERO
 ## 保留中比率
 var _pending_ratio: float = 0.0
 
-## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
-var _touch_active: bool = false
+## 最後のタッチ時刻（エミュレートマウスイベント対策）
+var _last_touch_time: int = 0
+
+## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
+const TOUCH_MOUSE_INTERVAL_MS: int = 100
 
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
-	# タッチ入力（優先処理）
+	# タッチ入力
 	if event is InputEventScreenTouch:
-		_touch_active = event.pressed
+		_last_touch_time = Time.get_ticks_msec()
 		if event.pressed:
 			return _start_press(event.position)
 		else:
@@ -57,8 +62,8 @@ func handle_input(event: InputEvent) -> bool:
 			return true
 		return false
 
-	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
-	if _touch_active:
+	# マウス入力（タッチ直後のエミュレートイベントはスキップ）
+	if Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS:
 		return false
 
 	if event is InputEventMouseButton:
@@ -111,7 +116,12 @@ func _finish_press() -> void:
 	var duration = current_time - _press_start_time
 	_is_pressing = false
 
-	# 最小時間未満はキャンセル
+	# 最小押下時間未満はタップとみなしキャンセル
+	if duration < MIN_PRESS_DURATION:
+		_remove_preview_point()
+		return
+
+	# 最小待機時間未満はキャンセル
 	if duration < WAIT_MIN_DURATION:
 		_remove_preview_point()
 		return

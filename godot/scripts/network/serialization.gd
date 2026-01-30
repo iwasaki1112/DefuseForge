@@ -77,12 +77,7 @@ static func serialize_path_message(msg: NetworkMessages.PathConfirmMessage) -> P
 	# ポイントデータ（JSON形式で簡易シリアライズ）
 	var points_dict := {
 		"vision": msg.vision_points,
-		"run": msg.run_segments,
-		"clear": msg.clear_points,
-		"grenade": msg.grenade_points,
-		"door": msg.door_points,
 		"wait": msg.wait_points,
-		"smoke": msg.smoke_grenade_points,
 	}
 	var points_json := JSON.stringify(points_dict)
 	var points_bytes := points_json.to_utf8_buffer()
@@ -124,12 +119,7 @@ static func deserialize_path_message(data: PackedByteArray) -> NetworkMessages.P
 			if json.parse(points_json) == OK:
 				var points_dict: Dictionary = json.data
 				msg.vision_points.assign(points_dict.get("vision", []))
-				msg.run_segments.assign(points_dict.get("run", []))
-				msg.clear_points.assign(points_dict.get("clear", []))
-				msg.grenade_points.assign(points_dict.get("grenade", []))
-				msg.door_points.assign(points_dict.get("door", []))
 				msg.wait_points.assign(points_dict.get("wait", []))
-				msg.smoke_grenade_points.assign(points_dict.get("smoke", []))
 
 	return msg
 
@@ -413,13 +403,7 @@ static func validate_path_message(msg: NetworkMessages.PathConfirmMessage) -> bo
 	# ポイント数が上限以内
 	if msg.vision_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
-	if msg.run_segments.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
-		return false
-	if msg.clear_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
-		return false
-	if msg.grenade_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
-		return false
-	if msg.door_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
+	if msg.wait_points.size() > NetworkConstants.MAX_POINTS_PER_TYPE:
 		return false
 
 	return true

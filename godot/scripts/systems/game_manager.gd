@@ -24,7 +24,6 @@ signal all_paths_completed()
 signal paths_cleared()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
-signal run_segment_added(start_ratio: float, end_ratio: float)
 ## グレネード投擲シグナル
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
@@ -177,12 +176,12 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 						selection_manager.add_to_selection(clicked_character)
 					start_move_mode()
 					return true
-				# パスモード中に別のキャラクターをクリック: 現在のパスを確定して新キャラクターへ
+				# パスモード中に別のキャラクターをクリック: 現在のパスモードを終了して新キャラクターへ
 				if path_service and path_service.is_path_mode():
 					var editing_char = path_mode_controller.get_editing_character() if path_mode_controller else null
 					if clicked_character != editing_char:
-						# 現在のパスを確定（パスがあれば）
-						if path_service.has_pending_path():
+						# 現在のモードを終了（パスがあれば確定、なければキャンセル）
+						if path_service.has_path():
 							path_service.confirm_path()
 						else:
 							path_service.cancel_path()
@@ -202,7 +201,7 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				# キャラクター以外をクリック
 				# パスモード中の場合
 				if path_service and path_service.is_path_mode():
-					if path_service.has_pending_path():
+					if path_service.has_path():
 						path_service.confirm_path()
 					else:
 						path_service.cancel_path()
@@ -280,14 +279,14 @@ func execute_all_paths(run: bool) -> int:
 	return path_service.execute_all_paths(run) if path_service else 0
 
 
-## 指定位置近くにある確定済みパスの先端を検索し、パス延長モードを開始
+## 指定位置近くにある確定済みパスまたは移動中パスの先端を検索し、パス継続モードを開始
 ## @param screen_pos: 画面座標
-## @return: パス延長モードを開始した場合true
-func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
+## @return: パス継続モードを開始した場合true
+func try_start_path_continuation_at_position(screen_pos: Vector2) -> bool:
 	if not path_execution_manager or not camera:
 		return false
 
-	# パスモード中は通常のパス延長処理に任せる
+	# パスモード中は通常のパス処理に任せる
 	if is_path_mode():
 		return false
 
@@ -302,8 +301,8 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 	var ground_pos: Vector3 = intersect as Vector3
 
 	# 確定済みパスと移動中パスの両方を検索
-	var pending_result := path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
-	var moving_result := path_execution_manager.find_moving_path_endpoint_at_position(ground_pos, 0.5)
+	var pending_result := path_execution_manager.find_path_endpoint_at_position(ground_pos, 1.5)
+	var moving_result := path_execution_manager.find_moving_path_endpoint_at_position(ground_pos, 1.5)
 
 	# より近い方を選択
 	var use_pending := false
@@ -320,31 +319,23 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 	else:
 		return false
 
-	# 移動中パスの延長
-	if use_moving:
-		var is_extending_extension: bool = moving_result.get("is_extending_extension", false)
-		return _start_moving_path_extension(moving_result.get("character"), ground_pos, is_extending_extension)
+	var result := pending_result if use_pending else moving_result
+	var is_moving_path := use_moving
 
-	# 確定済みパスの延長（既存の処理）
-	if use_pending:
-		var character: Node = pending_result.get("character")
-		if not is_instance_valid(character):
-			return false
+	var character: Node = result.get("character")
+	if not is_instance_valid(character):
+		return false
 
-		# パスデータを取り出して編集モードに入る
-		var path_data := path_execution_manager.take_pending_path_for_editing(character)
-		if path_data.is_empty():
-			return false
+	var endpoint: Vector3 = result.get("endpoint", Vector3.ZERO)
+	if endpoint == Vector3.ZERO:
+		return false
 
-		# キャラクター選択をスキップ（延長モードで一時的な選択リングを表示）
-		var char_color := CharacterColorManager.get_character_color(character)
-		if path_service:
-			path_service.start_path_extension_mode(character, path_data, char_color)
+	# キャラクター色を取得
+	var char_color := CharacterColorManager.get_character_color(character)
 
-		# 即座にパス延長モードを開始
-		if path_drawer and path_drawer.has_method("start_extending_path"):
-			path_drawer.start_extending_path()
-		return true
+	# 終点からパスモードを開始（既存パスに追加される）
+	if path_service:
+		return path_service.start_path_mode_from_point(character, endpoint, char_color, is_moving_path)
 
 	return false
 
@@ -369,7 +360,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		target_ground_pos = intersect as Vector3
 
 	# 確定済みパス上の点を検索（先端は除外）
-	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, 0.5)
+	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, 1.2)
 	if path_result.is_empty():
 		return false
 
@@ -377,17 +368,16 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 	if not is_instance_valid(character):
 		return false
 
-	# パスデータを取り出して編集モードに入る
-	var path_data := path_execution_manager.take_pending_path_for_editing(character)
-	if path_data.is_empty():
-		return false
-
 	# キャラクター色を取得
 	var char_color := CharacterColorManager.get_character_color(character)
 
-	# パス編集モードを開始（選択なしの拡張モード）
+	# パス上からVisionポイントを追加するために、キャラクターを選択してパスモードに入る
+	# 注意: パスは既にPathExecutionManagerに確定済みなので、取り出さない
+	var endpoint := path_execution_manager.find_path_endpoint_at_position(target_ground_pos, 100.0)
+	var start_point: Vector3 = endpoint.get("endpoint", character.global_position)
+
 	if path_service:
-		path_service.start_path_extension_mode(character, path_data, char_color)
+		path_service.start_path_mode_from_point(character, start_point, char_color)
 
 	# Visionモードを開始して、長押し位置をアンカーとして設定
 	if path_drawer:
@@ -423,7 +413,7 @@ func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vect
 		target_ground_pos = intersect as Vector3
 
 	# 移動中パス上の点を検索（先端は除外）
-	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, 0.5)
+	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, 1.2)
 	if path_result.is_empty():
 		return {}
 
@@ -543,31 +533,6 @@ func hide_passed_moving_path_vision_points(character: Node, _current_ratio: floa
 		# キャラクターがポイント位置に十分近い（1.0ユニット以内）なら非表示
 		if distance < 1.0:
 			point.visible = false
-
-
-## 移動中パス延長モードを開始
-## @param character: 対象キャラクター
-## @param _ground_pos: タップ位置（未使用、将来の拡張用）
-## @param is_extending_extension: 既存の延長パスをさらに延長するかどうか
-## @return: 成功したらtrue
-func _start_moving_path_extension(character: Node, _ground_pos: Vector3, is_extending_extension: bool = false) -> bool:
-	if not is_instance_valid(character):
-		return false
-
-	# 残りパスデータを取得（延長の延長の場合は延長パスのデータを取得）
-	var remaining_data := path_execution_manager.get_remaining_path_for_character(character, is_extending_extension)
-	if remaining_data.is_empty():
-		return false
-
-	# キャラクター色を取得
-	var char_color := CharacterColorManager.get_character_color(character)
-
-	# 移動中延長モードを開始（延長の延長フラグを渡す）
-	if path_service:
-		if not path_service.start_moving_path_extension_mode(character, remaining_data, char_color, is_extending_extension):
-			return false
-
-	return true
 
 
 ## 全保留パスをクリア
@@ -752,9 +717,9 @@ func get_selection_count() -> int:
 ## PathDrawer委譲API
 ## ========================================
 
-## パス描画済みか
-func has_pending_path() -> bool:
-	return path_service.has_pending_path() if path_service else false
+## パスがあるか
+func has_path() -> bool:
+	return path_service.has_path() if path_service else false
 
 
 ## 視線モード開始
@@ -768,31 +733,9 @@ func remove_last_vision_point() -> void:
 		path_service.remove_last_vision_point()
 
 
-## Runモード開始
-func start_run_mode() -> void:
-	if path_service:
-		path_service.start_run_mode()
-
-
-## 最後のRun区間を削除
-func remove_last_run_segment() -> void:
-	if path_service:
-		path_service.remove_last_run_segment()
-
-
 ## 視線ポイント数を取得
 func get_vision_point_count() -> int:
 	return path_service.get_vision_point_count() if path_service else 0
-
-
-## Run区間数を取得
-func get_run_segment_count() -> int:
-	return path_service.get_run_segment_count() if path_service else 0
-
-
-## 未完了のRun開始点があるか
-func has_incomplete_run_start() -> bool:
-	return path_service.has_incomplete_run_start() if path_service else false
 
 
 ## アクティブ編集キャラクターを設定
@@ -888,10 +831,6 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
 		add_child(path_execution_manager)
 		path_execution_manager.setup(mesh_parent)
-		# グレネード/スモークグレネード/ドアポイント到達シグナルを接続
-		path_execution_manager.grenade_point_reached.connect(_on_grenade_point_reached)
-		path_execution_manager.smoke_grenade_point_reached.connect(_on_smoke_grenade_point_reached)
-		path_execution_manager.door_point_reached.connect(_on_door_point_reached)
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
 		# パス完了時に移動中パスVisionポイントをクリア
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
@@ -1011,7 +950,6 @@ func _setup_path_service() -> void:
 		path_service.paths_cleared.connect(_on_paths_cleared)
 		path_service.mode_changed.connect(_on_path_mode_changed)
 		path_service.vision_point_added.connect(_on_vision_point_added)
-		path_service.run_segment_added.connect(_on_run_segment_added)
 
 
 func _setup_round_manager() -> void:
@@ -1179,10 +1117,6 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 	vision_point_added.emit(anchor, direction)
 
 
-func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
-	run_segment_added.emit(start_ratio, end_ratio)
-
-
 func _on_path_drawer_auto_confirm_requested() -> void:
 	confirm_path()
 
@@ -1292,88 +1226,8 @@ func _open_door(door: Node3D, character: CharacterBody3D) -> void:
 
 
 ## ========================================
-## パスポイント到達時の処理
+## グレネード関連
 ## ========================================
-
-## グレネードポイント到達時（移動を継続しながら投擲）
-func _on_grenade_point_reached(character: Node, marker_data: Dictionary) -> void:
-	if not is_instance_valid(character):
-		return
-
-	var char_body := character as CharacterBody3D
-	if not char_body:
-		return
-
-	# マルチプレイヤーモード: ローカルキャラクターのみが投擲を実行
-	var game_char := character as GameCharacter
-	if game_char and not game_char.is_local():
-		return  # リモートキャラクターの投擲はネットワークイベントで処理
-
-	# ポイントデータからターゲット位置を取得
-	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
-	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
-
-	if target_pos == Vector3.ZERO:
-		return
-
-	# 投擲開始位置
-	var start_pos = char_body.global_position + Vector3(0, 1.5, 0)
-
-	# グレネードを生成して投擲（戻り値: [grenade, velocity, grenade_id]）
-	var result := _spawn_and_throw_grenade(start_pos, target_pos, bounce_point, char_body)
-	var grenade: Grenade = result[0]
-	var velocity: Vector3 = result[1]
-	var grenade_id: int = result[2]
-	if not grenade:
-		return
-
-	print("[GRENADE LOCAL] start=", start_pos, " target=", target_pos, " vel=", velocity, " id=", grenade_id)
-
-	# シグナル発火（ネットワーク送信用）
-	grenade_thrown.emit(grenade, char_body)
-
-	# ネットワークイベントを送信（velocityとIDを送信）
-	_emit_grenade_network_event(start_pos, velocity, false, grenade_id)
-
-
-## スモークグレネードポイント到達時（移動を継続しながら投擲）
-func _on_smoke_grenade_point_reached(character: Node, marker_data: Dictionary) -> void:
-	if not is_instance_valid(character):
-		return
-
-	var char_body := character as CharacterBody3D
-	if not char_body:
-		return
-
-	# マルチプレイヤーモード: ローカルキャラクターのみが投擲を実行
-	var game_char := character as GameCharacter
-	if game_char and not game_char.is_local():
-		return  # リモートキャラクターの投擲はネットワークイベントで処理
-
-	# ポイントデータからターゲット位置を取得
-	var target_pos: Vector3 = marker_data.get("target_pos", Vector3.ZERO)
-	var bounce_point: Vector3 = marker_data.get("bounce_point", Vector3.ZERO)
-
-	if target_pos == Vector3.ZERO:
-		return
-
-	# 投擲開始位置
-	var start_pos = char_body.global_position + Vector3(0, 1.5, 0)
-
-	# スモークグレネードを生成して投擲（戻り値: [smoke_grenade, velocity, grenade_id]）
-	var result := _spawn_and_throw_smoke_grenade(start_pos, target_pos, bounce_point, char_body)
-	var smoke_grenade: SmokeGrenade = result[0]
-	var velocity: Vector3 = result[1]
-	var grenade_id: int = result[2]
-	if not smoke_grenade:
-		return
-
-	# シグナル発火
-	smoke_grenade_thrown.emit(smoke_grenade, char_body)
-
-	# ネットワークイベントを送信（velocityとIDを送信）
-	_emit_grenade_network_event(start_pos, velocity, true, grenade_id)
-
 
 ## グレネードを生成して投擲（内部ヘルパー）
 ## 戻り値: [grenade, velocity, grenade_id] のトリプル
@@ -1500,133 +1354,6 @@ func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, _is
 
 	if is_instance_valid(grenade):
 		grenade.explode_at_position(position)
-
-
-## ドアポイント到達時（移動を一時停止してドアキック）
-func _on_door_point_reached(character: Node, door: Node3D) -> void:
-	if not is_instance_valid(character) or not is_instance_valid(door):
-		# ドアが無効な場合はパス追従を再開
-		_resume_path_after_door(character)
-		return
-
-	var char_body := character as CharacterBody3D
-	if not char_body:
-		_resume_path_after_door(character)
-		return
-
-	# ドアキック実行（完了後にパス追従を再開）
-	_execute_door_kick_from_point(char_body, door)
-
-
-## ポイントからのドアキック実行（完了後にパス追従を再開）
-func _execute_door_kick_from_point(character: CharacterBody3D, door: Node3D) -> void:
-	if not is_instance_valid(character) or not is_instance_valid(door):
-		_resume_path_after_door(character)
-		return
-
-	var door_pos := door.global_position
-	door_pos.y = character.global_position.y
-
-	# モデルをTweenでスムーズに回転
-	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
-	if not anim_ctrl:
-		_resume_path_after_door(character)
-		return
-
-	# 現在の回転と目標の回転を計算
-	var model = anim_ctrl.get_model() if anim_ctrl.has_method("get_model") else null
-	if not model:
-		# フォールバック: 即座に向きを変えてキック
-		if character.has_method("face_towards"):
-			character.face_towards(door_pos)
-		_play_door_kick_animation_from_point(character, door)
-		return
-
-	# 目標方向を計算（Mixamoモデルは+Zが前方）
-	var direction := (door_pos - character.global_position).normalized()
-	direction.y = 0.0
-	if direction.length_squared() < 0.001:
-		direction = Vector3.FORWARD
-
-	# Basis.looking_at(-direction) でMixamoモデルの向きを正しく設定
-	var target_basis := Basis.looking_at(-direction, Vector3.UP)
-	var target_quat := target_basis.get_rotation_quaternion()
-	var current_quat := Quaternion(model.transform.basis)
-
-	# Tweenでスムーズに回転（0.25秒）
-	var tween := create_tween()
-	tween.tween_method(
-		func(t: float):
-			if is_instance_valid(model):
-				var new_quat := current_quat.slerp(target_quat, t)
-				model.transform.basis = Basis(new_quat),
-		0.0, 1.0, 0.25
-	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-
-	# 回転完了後にキックアニメーション再生
-	tween.tween_callback(_play_door_kick_animation_from_point.bind(character, door))
-
-
-## ドアキックアニメーション再生（ポイントから）
-func _play_door_kick_animation_from_point(character: CharacterBody3D, door: Node3D) -> void:
-	if not is_instance_valid(character) or not is_instance_valid(door):
-		_resume_path_after_door(character)
-		return
-
-	var anim_ctrl = character.get_anim_controller() if character.has_method("get_anim_controller") else null
-	if not anim_ctrl or not anim_ctrl.has_method("play_door_kick"):
-		_resume_path_after_door(character)
-		return
-
-	# ドア方向を保存（キック完了後にこの向きを維持するため）
-	var door_dir := (door.global_position - character.global_position).normalized()
-	door_dir.y = 0.0
-	if door_dir.length_squared() > 0.001:
-		_door_kick_directions[character.get_instance_id()] = door_dir.normalized()
-
-	# door_kick_impactシグナルに接続（キックがドアに当たるタイミングでドアを開く）
-	if anim_ctrl.has_signal("door_kick_impact"):
-		if not anim_ctrl.door_kick_impact.is_connected(_on_door_kick_done.bind(door, character)):
-			anim_ctrl.door_kick_impact.connect(_on_door_kick_done.bind(door, character), CONNECT_ONE_SHOT)
-
-	# door_kick_finishedシグナルに接続（アニメーション完了後にパス追従を再開）
-	if anim_ctrl.has_signal("door_kick_finished"):
-		if not anim_ctrl.door_kick_finished.is_connected(_on_door_kick_animation_finished_from_point.bind(character)):
-			anim_ctrl.door_kick_finished.connect(_on_door_kick_animation_finished_from_point.bind(character), CONNECT_ONE_SHOT)
-
-	anim_ctrl.play_door_kick()
-
-
-## ドアキックアニメーション完了時（ポイントから）
-func _on_door_kick_animation_finished_from_point(character: CharacterBody3D) -> void:
-	if not is_instance_valid(character):
-		return
-
-	var char_id := character.get_instance_id()
-	if _door_kick_directions.has(char_id):
-		var door_dir: Vector3 = _door_kick_directions[char_id]
-		_door_kick_directions.erase(char_id)
-
-		# キャラクターの向きをドア方向に設定
-		if character.has_method("set_facing_direction_vec"):
-			character.set_facing_direction_vec(door_dir)
-
-	# パス追従を再開
-	_resume_path_after_door(character)
-
-
-## ドアキック後にパス追従を再開
-func _resume_path_after_door(character: Node) -> void:
-	if not is_instance_valid(character):
-		return
-
-	# PathExecutionManagerからコントローラーを取得してresumeを呼ぶ
-	if path_execution_manager:
-		var char_id = character.get_instance_id()
-		if path_execution_manager._path_controllers.has(char_id):
-			var controller = path_execution_manager._path_controllers[char_id]
-			if controller.has_method("resume_after_door"):
-				controller.resume_after_door()
 
 
 ## ========================================
