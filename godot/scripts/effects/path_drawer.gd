@@ -26,6 +26,8 @@ signal mode_changed(mode: int)
 signal off_path_tapped()
 ## 自動確定リクエスト（確認済みパスへのVisionマーカー配置後など）
 signal auto_confirm_requested()
+## パス上タップ時のシグナル（コンテキストメニュー表示用）
+signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
 #endregion
 
 #region エクスポート設定
@@ -107,11 +109,12 @@ func _process(delta: float) -> void:
 	if _wait_handler and _wait_handler.is_pressing():
 		_wait_handler.update_preview()
 
-	# パス上長押し検出
+	# パス上長押し検出（1フレーム遅延させて入力イベント処理を優先）
 	if _path_longpress_pending:
-		_path_longpress_timer += delta
 		if _path_longpress_timer >= _path_longpress_threshold:
 			_start_vision_mode_from_longpress()
+		else:
+			_path_longpress_timer += delta
 
 
 func _setup_mesh() -> void:
@@ -444,9 +447,20 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 
 ## 移動モードでのリリース処理（外部から呼び出し可能）
 func handle_movement_release(_screen_pos: Vector2) -> void:
-	# 長押し待機中だった場合はリセット
+	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
 	if _path_longpress_pending:
+		var screen_pos := _path_longpress_screen_pos
+		var ground_pos := _path_longpress_ground_pos
 		_reset_path_longpress()
+		# パス上タップをシグナル発火（コンテキストメニュー表示用）
+		var result := _find_closest_point_on_path(ground_pos)
+		if not result.is_empty():
+			var path_data := {
+				"point": result.point,
+				"path_ratio": result.ratio,
+				"character": _pending_character
+			}
+			path_tapped.emit(screen_pos, path_data)
 		return
 
 	_handle_drawing_release()
@@ -455,6 +469,22 @@ func handle_movement_release(_screen_pos: Vector2) -> void:
 ## マーカーモードでのリリース処理（外部から呼び出し可能）
 ## Visionマーカー等のドラッグリリース時に呼ばれる
 func handle_marker_release(screen_pos: Vector2) -> bool:
+	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
+	if _path_longpress_pending:
+		var tap_screen_pos := _path_longpress_screen_pos
+		var tap_ground_pos := _path_longpress_ground_pos
+		_reset_path_longpress()
+		# パス上タップをシグナル発火（コンテキストメニュー表示用）
+		var result := _find_closest_point_on_path(tap_ground_pos)
+		if not result.is_empty():
+			var path_data := {
+				"point": result.point,
+				"path_ratio": result.ratio,
+				"character": _pending_character
+			}
+			path_tapped.emit(tap_screen_pos, path_data)
+		return true
+
 	if _drawing_mode == DrawingMode.MOVEMENT:
 		return false
 
@@ -532,6 +562,9 @@ func handle_drawing_press(screen_pos: Vector2) -> void:
 
 #region パス描画
 func _start_drawing(start_pos: Vector3) -> void:
+	# パス描画開始時に長押し状態をリセット
+	_reset_path_longpress()
+
 	# 移動中延長の場合は既存の開始点から続ける
 	if _is_moving_extension_start:
 		_is_drawing = true
@@ -631,6 +664,7 @@ func _add_point(pos: Vector3) -> void:
 func _finish_drawing() -> void:
 	_is_drawing = false
 	_reset_wall_slide_state()
+	_reset_path_longpress()  # パス描画終了時に長押し状態をリセット
 
 	if _path_points.size() >= 2 and _character:
 		if enable_smoothing and _path_points.size() >= 3:

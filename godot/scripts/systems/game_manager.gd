@@ -54,6 +54,7 @@ var round_manager: RoundManager = null
 
 ## UIコンポーネント
 var label_manager: CharacterLabelManager = null
+var path_context_menu: PathContextMenu = null
 
 ## 外部参照
 var camera: Camera3D = null
@@ -102,6 +103,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_map_manager()
 	_setup_path_service()
 	_setup_label_manager()
+	_setup_path_context_menu()
 	_setup_round_manager()
 	_setup_character_setup_service()
 
@@ -819,6 +821,30 @@ func refresh_character_colors() -> void:
 			character_setup_service.assign_color_and_label(character)
 
 
+## パス上タップ時のコンテキストメニューを表示
+## @param screen_pos: 表示位置（スクリーン座標）
+## @param path_data: パス情報（character, path_ratio, point等）
+func show_path_context_menu(screen_pos: Vector2, path_data: Dictionary) -> void:
+	if path_context_menu and not path_context_menu.is_open():
+		path_context_menu.show_at_position(screen_pos, path_data)
+
+
+## コンテキストメニューが開いているか
+func is_path_context_menu_open() -> bool:
+	return path_context_menu and path_context_menu.is_open()
+
+
+## コンテキストメニュー選択時のコールバック
+func _on_path_context_menu_selected(item_id: String, path_data: Dictionary) -> void:
+	# TODO: 将来的にWait Point等の機能を実装
+	print("[GameManager] Context menu selected: ", item_id, " path_data: ", path_data)
+
+
+## コンテキストメニュー閉じ時のコールバック
+func _on_path_context_menu_closed() -> void:
+	pass
+
+
 ## ========================================
 ## 内部：システムセットアップ
 ## ========================================
@@ -880,6 +906,7 @@ func _setup_path_drawer() -> void:
 		add_child(path_drawer)
 		path_drawer.setup(camera, null)
 		path_drawer.auto_confirm_requested.connect(_on_path_drawer_auto_confirm_requested)
+		path_drawer.path_tapped.connect(_on_path_drawer_path_tapped)
 
 
 func _setup_path_mode_controller() -> void:
@@ -926,6 +953,18 @@ func _setup_label_manager() -> void:
 		label_manager = CharacterLabelManager.new()
 		label_manager.name = GameConstants.NODE_LABEL_MANAGER
 		add_child(label_manager)
+
+
+func _setup_path_context_menu() -> void:
+	if path_context_menu == null:
+		path_context_menu = PathContextMenu.new()
+		path_context_menu.name = "PathContextMenu"
+		if _ui_layer:
+			_ui_layer.add_child(path_context_menu)
+		else:
+			add_child(path_context_menu)
+		path_context_menu.menu_item_selected.connect(_on_path_context_menu_selected)
+		path_context_menu.menu_closed.connect(_on_path_context_menu_closed)
 
 
 func _setup_path_service() -> void:
@@ -1122,6 +1161,11 @@ func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
 
 func _on_path_drawer_auto_confirm_requested() -> void:
 	confirm_path()
+
+
+func _on_path_drawer_path_tapped(screen_pos: Vector2, path_data: Dictionary) -> void:
+	# パスモード中のパス上タップでコンテキストメニューを表示
+	show_path_context_menu(screen_pos, path_data)
 
 
 func _on_round_started() -> void:

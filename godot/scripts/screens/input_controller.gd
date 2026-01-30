@@ -38,6 +38,7 @@ var _confirmed_path_longpress_timer: float = 0.0     ## 長押しタイマー
 var _confirmed_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
 var _confirmed_path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始スクリーン位置
 var _confirmed_path_longpress_ground_pos: Vector3 = Vector3.ZERO  ## 長押し開始地面位置
+var _confirmed_path_tap_path_data: Dictionary = {}  ## タップしたパスの情報（コンテキストメニュー用）
 
 ## 移動中パス上長押しでVisionマーカー配置用
 var _moving_path_longpress_pending: bool = false  ## 長押し待機中か
@@ -46,6 +47,7 @@ var _moving_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
 var _moving_path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始スクリーン位置
 var _moving_path_longpress_data: Dictionary = {}  ## 移動中パスの情報（character, path_ratio, point等）
 var _moving_path_vision_drawing: bool = false  ## 移動中パスへのVision描画中か
+var _moving_path_tap_path_data: Dictionary = {}  ## タップした移動中パスの情報（コンテキストメニュー用）
 
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
@@ -63,15 +65,17 @@ func _process(delta: float) -> void:
 
 	# 確認済みパス上長押し検出
 	if _confirmed_path_longpress_pending:
-		_confirmed_path_longpress_timer += delta
 		if _confirmed_path_longpress_timer >= _confirmed_path_longpress_threshold:
 			_start_vision_mode_on_confirmed_path()
+		else:
+			_confirmed_path_longpress_timer += delta
 
 	# 移動中パス上長押し検出
 	if _moving_path_longpress_pending:
-		_moving_path_longpress_timer += delta
 		if _moving_path_longpress_timer >= _moving_path_longpress_threshold:
 			_start_vision_mode_on_moving_path()
+		else:
+			_moving_path_longpress_timer += delta
 
 
 ## パス未設定キャラクターかどうかを判定
@@ -351,12 +355,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _moving_path_vision_drawing:
 				_finish_moving_path_vision_marker(event.position)
 				return
-			# 確認済みパス長押し待機中だった場合はリセット
+			# 確認済みパス長押し待機中だった場合（タップ判定）
 			if _confirmed_path_longpress_pending:
+				# 長押しにならなかった = タップ → コンテキストメニュー表示
+				_show_path_context_menu_for_confirmed_path()
 				_reset_confirmed_path_longpress()
-			# 移動中パス長押し待機中だった場合はリセット
+				return
+			# 移動中パス長押し待機中だった場合（タップ判定）
 			if _moving_path_longpress_pending:
+				# 長押しにならなかった = タップ → コンテキストメニュー表示
+				_show_path_context_menu_for_moving_path()
 				_reset_moving_path_longpress()
+				return
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			# カメラドラッグ中だった場合はタップ処理をスキップ
@@ -644,12 +654,20 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_finish_moving_path_vision_marker(event.position)
 				get_viewport().set_input_as_handled()
 				return
-			# 確認済みパス長押し待機中だった場合はリセット
+			# 確認済みパス長押し待機中だった場合（タップ判定）
 			if _confirmed_path_longpress_pending:
+				# 長押しにならなかった = タップ → コンテキストメニュー表示
+				_show_path_context_menu_for_confirmed_path()
 				_reset_confirmed_path_longpress()
-			# 移動中パス長押し待機中だった場合はリセット
+				get_viewport().set_input_as_handled()
+				return
+			# 移動中パス長押し待機中だった場合（タップ判定）
 			if _moving_path_longpress_pending:
+				# 長押しにならなかった = タップ → コンテキストメニュー表示
+				_show_path_context_menu_for_moving_path()
 				_reset_moving_path_longpress()
+				get_viewport().set_input_as_handled()
+				return
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			# カメラパン中だった場合はタップ処理をスキップ
@@ -851,6 +869,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 		_confirmed_path_longpress_timer = 0.0
 		_confirmed_path_longpress_screen_pos = screen_pos
 		_confirmed_path_longpress_ground_pos = ground_pos
+		_confirmed_path_tap_path_data = result  # コンテキストメニュー用に保存
 		return true
 
 	# 移動中パス上かチェック（先端は除外）
@@ -861,6 +880,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 		_moving_path_longpress_timer = 0.0
 		_moving_path_longpress_screen_pos = screen_pos
 		_moving_path_longpress_data = moving_result
+		_moving_path_tap_path_data = moving_result  # コンテキストメニュー用に保存
 		return true
 
 	return false
@@ -886,6 +906,20 @@ func _reset_confirmed_path_longpress() -> void:
 	_confirmed_path_longpress_timer = 0.0
 	_confirmed_path_longpress_screen_pos = Vector2.ZERO
 	_confirmed_path_longpress_ground_pos = Vector3.ZERO
+	_confirmed_path_tap_path_data = {}
+
+
+## 確認済みパス上タップ時にコンテキストメニューを表示
+func _show_path_context_menu_for_confirmed_path() -> void:
+	if _confirmed_path_tap_path_data.is_empty():
+		return
+	if not game_manager:
+		return
+
+	game_manager.show_path_context_menu(
+		_confirmed_path_longpress_screen_pos,
+		_confirmed_path_tap_path_data
+	)
 
 
 ## 移動中パス上でVisionモードを開始
@@ -966,6 +1000,20 @@ func _reset_moving_path_longpress() -> void:
 	_moving_path_longpress_screen_pos = Vector2.ZERO
 	_moving_path_longpress_data = {}
 	_moving_path_vision_drawing = false
+	_moving_path_tap_path_data = {}
 	# プレビューをクリア
 	if game_manager:
 		game_manager.clear_moving_path_vision_preview()
+
+
+## 移動中パス上タップ時にコンテキストメニューを表示
+func _show_path_context_menu_for_moving_path() -> void:
+	if _moving_path_tap_path_data.is_empty():
+		return
+	if not game_manager:
+		return
+
+	game_manager.show_path_context_menu(
+		_moving_path_longpress_screen_pos,
+		_moving_path_tap_path_data
+	)
