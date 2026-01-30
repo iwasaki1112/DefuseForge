@@ -32,6 +32,21 @@ var _is_rotation_mode: bool = false  ## 回転モード中かどうか
 var _rotation_target_character: Node = null  ## 回転対象のキャラクター
 var _rotation_center_screen_pos: Vector2 = Vector2.ZERO  ## 回転中心のスクリーン座標
 
+## 確認済みパス上長押しでVisionマーカー配置用
+var _confirmed_path_longpress_pending: bool = false  ## 長押し待機中か
+var _confirmed_path_longpress_timer: float = 0.0     ## 長押しタイマー
+var _confirmed_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
+var _confirmed_path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始スクリーン位置
+var _confirmed_path_longpress_ground_pos: Vector3 = Vector3.ZERO  ## 長押し開始地面位置
+
+## 移動中パス上長押しでVisionマーカー配置用
+var _moving_path_longpress_pending: bool = false  ## 長押し待機中か
+var _moving_path_longpress_timer: float = 0.0     ## 長押しタイマー
+var _moving_path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
+var _moving_path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始スクリーン位置
+var _moving_path_longpress_data: Dictionary = {}  ## 移動中パスの情報（character, path_ratio, point等）
+var _moving_path_vision_drawing: bool = false  ## 移動中パスへのVision描画中か
+
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 	game_manager = manager
@@ -39,12 +54,24 @@ func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 
 
 func _process(delta: float) -> void:
-	# 長押し検出
+	# 長押し検出（キャラクター回転用）
 	if _left_button_pressed and not _is_rotation_mode and not _immediate_path_drawing_started:
 		if _rotation_target_character and is_instance_valid(_rotation_target_character):
 			_long_press_timer += delta
 			if _long_press_timer >= _long_press_threshold:
 				_start_rotation_mode()
+
+	# 確認済みパス上長押し検出
+	if _confirmed_path_longpress_pending:
+		_confirmed_path_longpress_timer += delta
+		if _confirmed_path_longpress_timer >= _confirmed_path_longpress_threshold:
+			_start_vision_mode_on_confirmed_path()
+
+	# 移動中パス上長押し検出
+	if _moving_path_longpress_pending:
+		_moving_path_longpress_timer += delta
+		if _moving_path_longpress_timer >= _moving_path_longpress_threshold:
+			_start_vision_mode_on_moving_path()
 
 
 ## パス未設定キャラクターかどうかを判定
@@ -225,6 +252,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			# パス先端延長フラグもリセット
 			_path_endpoint_extension_pending = false
 			_path_endpoint_extension_started = false
+			# PathDrawerにリリースイベントを渡す
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				# マーカーモード中（Visionマーカー等）の場合はマーカー用リリース処理
+				if path_drawer.is_marker_mode():
+					path_drawer.handle_marker_release(event.position)
+				else:
+					path_drawer.handle_movement_release(event.position)
 			if camera_pan_controller:
 				if camera_pan_controller.is_dragging():
 					camera_pan_controller.end_drag()
@@ -258,7 +293,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				# キャラクターがクリックされなかった場合、パス先端延長を試みる
 				_path_endpoint_extension_pending = true
 				_path_endpoint_extension_started = false
-				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
+				# PathDrawerにプレスイベントを渡す（長押しVisionマーカー用）
+				var path_drawer = _get_path_drawer()
+				var longpress_started = false
+				if path_drawer:
+					longpress_started = path_drawer.handle_movement_press(event.position)
+				# 長押し待機を開始した場合
+				if longpress_started:
+					# パス延長待機をキャンセル（モーション時にconfirm_pathが呼ばれないように）
+					_path_endpoint_extension_pending = false
+				else:
+					game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
 				return
 		# それ以外はPathDrawerに委譲
@@ -288,6 +333,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 
+			# 確認済みパス上の長押しを検出
+			if _try_start_confirmed_path_longpress(event.position):
+				get_viewport().set_input_as_handled()
+				return
+
 			# パス先端近くをタップした場合、ドラッグ開始待機状態にする
 			_path_endpoint_extension_pending = true
 			_path_endpoint_extension_started = false
@@ -297,6 +347,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_rotation_mode:
 				_end_rotation_mode()
 				return
+			# 移動中パスVision描画中だった場合、マーカーを確定
+			if _moving_path_vision_drawing:
+				_finish_moving_path_vision_marker(event.position)
+				return
+			# 確認済みパス長押し待機中だった場合はリセット
+			if _confirmed_path_longpress_pending:
+				_reset_confirmed_path_longpress()
+			# 移動中パス長押し待機中だった場合はリセット
+			if _moving_path_longpress_pending:
+				_reset_moving_path_longpress()
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			# カメラドラッグ中だった場合はタップ処理をスキップ
@@ -341,6 +401,28 @@ func _unhandled_input(event: InputEvent) -> void:
 			_process_rotation_drag(event.position)
 			get_viewport().set_input_as_handled()
 			return
+
+		# 移動中パスVision描画中のプレビュー更新
+		if _moving_path_vision_drawing:
+			_update_moving_path_vision_preview(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
+		# 確認済みパス長押し待機中にドラッグが検出された場合、キャンセルしてカメラパンへ
+		if _confirmed_path_longpress_pending:
+			var move_dist = event.position.distance_to(_confirmed_path_longpress_screen_pos)
+			if move_dist > 20.0:
+				_reset_confirmed_path_longpress()
+				if camera_pan_controller:
+					camera_pan_controller.start_potential_drag(_left_click_start_pos)
+
+		# 移動中パス長押し待機中にドラッグが検出された場合、キャンセルしてカメラパンへ
+		if _moving_path_longpress_pending:
+			var move_dist = event.position.distance_to(_moving_path_longpress_screen_pos)
+			if move_dist > 20.0:
+				_reset_moving_path_longpress()
+				if camera_pan_controller:
+					camera_pan_controller.start_potential_drag(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
@@ -470,6 +552,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 			# パス先端延長フラグもリセット
 			_path_endpoint_extension_pending = false
 			_path_endpoint_extension_started = false
+			# PathDrawerにリリースイベントを渡す
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				# マーカーモード中（Visionマーカー等）の場合はマーカー用リリース処理
+				if path_drawer.is_marker_mode():
+					path_drawer.handle_marker_release(event.position)
 			if camera_pan_controller.is_touch_panning():
 				camera_pan_controller.end_touch_pan()
 			elif camera_pan_controller.is_pending_touch_pan():
@@ -536,6 +624,11 @@ func _handle_touch_event(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 
+			# 確認済みパス上の長押しを検出
+			if _try_start_confirmed_path_longpress(event.position):
+				get_viewport().set_input_as_handled()
+				return
+
 			# パス先端近くをタップした場合、ドラッグ開始待機状態にする
 			_path_endpoint_extension_pending = true
 			_path_endpoint_extension_started = false
@@ -546,6 +639,17 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_end_rotation_mode()
 				get_viewport().set_input_as_handled()
 				return
+			# 移動中パスVision描画中だった場合、マーカーを確定
+			if _moving_path_vision_drawing:
+				_finish_moving_path_vision_marker(event.position)
+				get_viewport().set_input_as_handled()
+				return
+			# 確認済みパス長押し待機中だった場合はリセット
+			if _confirmed_path_longpress_pending:
+				_reset_confirmed_path_longpress()
+			# 移動中パス長押し待機中だった場合はリセット
+			if _moving_path_longpress_pending:
+				_reset_moving_path_longpress()
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			# カメラパン中だった場合はタップ処理をスキップ
@@ -595,6 +699,26 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_process_rotation_drag(event.position)
 			get_viewport().set_input_as_handled()
 			return
+
+		# 移動中パスVision描画中のプレビュー更新
+		if _moving_path_vision_drawing:
+			_update_moving_path_vision_preview(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
+		# 確認済みパス長押し待機中にドラッグが検出された場合、キャンセルしてカメラパンへ
+		if _confirmed_path_longpress_pending:
+			var move_dist = event.position.distance_to(_confirmed_path_longpress_screen_pos)
+			if move_dist > 20.0:
+				_reset_confirmed_path_longpress()
+				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
+
+		# 移動中パス長押し待機中にドラッグが検出された場合、キャンセルしてカメラパンへ
+		if _moving_path_longpress_pending:
+			var move_dist = event.position.distance_to(_moving_path_longpress_screen_pos)
+			if move_dist > 20.0:
+				_reset_moving_path_longpress()
+				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
@@ -697,3 +821,150 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 	var ground_pos: Vector3 = intersect as Vector3
 	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
 	return not result.is_empty()
+
+
+## 確認済みパスまたは移動中パス上かをチェックし、長押し待機を開始
+## @return: 長押し待機を開始した場合true
+func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
+	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
+		return false
+
+	# パスモード中は処理しない（PathDrawerが処理する）
+	if game_manager.is_path_mode():
+		return false
+
+	# 地面位置を取得
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := game_manager.camera.project_ray_origin(screen_pos)
+	var ray_dir := game_manager.camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	if not intersect:
+		return false
+
+	var ground_pos: Vector3 = intersect as Vector3
+
+	# 確認済みパス上かチェック（先端は除外）
+	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, 0.5)
+	if not result.is_empty():
+		# 長押し待機を開始（確認済みパス）
+		_confirmed_path_longpress_pending = true
+		_confirmed_path_longpress_timer = 0.0
+		_confirmed_path_longpress_screen_pos = screen_pos
+		_confirmed_path_longpress_ground_pos = ground_pos
+		return true
+
+	# 移動中パス上かチェック（先端は除外）
+	var moving_result := game_manager.try_start_vision_marker_on_moving_path(screen_pos, ground_pos)
+	if not moving_result.is_empty():
+		# 長押し待機を開始（移動中パス）
+		_moving_path_longpress_pending = true
+		_moving_path_longpress_timer = 0.0
+		_moving_path_longpress_screen_pos = screen_pos
+		_moving_path_longpress_data = moving_result
+		return true
+
+	return false
+
+
+## 確認済みパス上でVisionモードを開始
+func _start_vision_mode_on_confirmed_path() -> void:
+	_confirmed_path_longpress_pending = false
+	_confirmed_path_longpress_timer = 0.0
+
+	if game_manager.try_start_vision_marker_on_confirmed_path(
+		_confirmed_path_longpress_screen_pos,
+		_confirmed_path_longpress_ground_pos
+	):
+		# 成功した場合、他の状態をクリア
+		_path_endpoint_extension_pending = false
+		_path_endpoint_extension_started = false
+
+
+## 確認済みパス長押し状態をリセット
+func _reset_confirmed_path_longpress() -> void:
+	_confirmed_path_longpress_pending = false
+	_confirmed_path_longpress_timer = 0.0
+	_confirmed_path_longpress_screen_pos = Vector2.ZERO
+	_confirmed_path_longpress_ground_pos = Vector3.ZERO
+
+
+## 移動中パス上でVisionモードを開始
+func _start_vision_mode_on_moving_path() -> void:
+	_moving_path_longpress_pending = false
+	_moving_path_longpress_timer = 0.0
+
+	if _moving_path_longpress_data.is_empty():
+		return
+
+	# 移動中パスへのVision描画モードを開始
+	_moving_path_vision_drawing = true
+
+
+## 移動中パスへのVisionマーカー配置を完了
+func _finish_moving_path_vision_marker(screen_pos: Vector2) -> void:
+	if not _moving_path_vision_drawing or _moving_path_longpress_data.is_empty():
+		_reset_moving_path_longpress()
+		return
+
+	# 地面位置を取得
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := game_manager.camera.project_ray_origin(screen_pos)
+	var ray_dir := game_manager.camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	if not intersect:
+		_reset_moving_path_longpress()
+		return
+
+	var target_point: Vector3 = intersect as Vector3
+	target_point.y = 0.0
+
+	var anchor: Vector3 = _moving_path_longpress_data.get("point", Vector3.ZERO)
+	var path_ratio: float = _moving_path_longpress_data.get("path_ratio", 0.0)
+	var character: Node = _moving_path_longpress_data.get("character")
+
+	# 視線方向が短すぎる場合はキャンセル
+	var direction = target_point - anchor
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		_reset_moving_path_longpress()
+		return
+
+	# 移動中パスにVisionマーカーを追加
+	game_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
+
+	_reset_moving_path_longpress()
+
+
+## 移動中パスVisionマーカーのプレビューを更新
+func _update_moving_path_vision_preview(screen_pos: Vector2) -> void:
+	if _moving_path_longpress_data.is_empty():
+		return
+
+	# 地面位置を取得
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := game_manager.camera.project_ray_origin(screen_pos)
+	var ray_dir := game_manager.camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	if not intersect:
+		return
+
+	var target_point: Vector3 = intersect as Vector3
+	target_point.y = 0.0
+
+	var anchor: Vector3 = _moving_path_longpress_data.get("point", Vector3.ZERO)
+	var character: Node = _moving_path_longpress_data.get("character")
+
+	# プレビューを更新
+	game_manager.update_moving_path_vision_preview(character, anchor, target_point)
+
+
+## 移動中パス長押し状態をリセット
+func _reset_moving_path_longpress() -> void:
+	_moving_path_longpress_pending = false
+	_moving_path_longpress_timer = 0.0
+	_moving_path_longpress_screen_pos = Vector2.ZERO
+	_moving_path_longpress_data = {}
+	_moving_path_vision_drawing = false
+	# プレビューをクリア
+	if game_manager:
+		game_manager.clear_moving_path_vision_preview()

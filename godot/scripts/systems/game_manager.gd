@@ -73,6 +73,11 @@ var default_vision_range: float = 15.0
 var default_weapon_id: String = "glock"
 var is_vision_enabled: bool = false
 
+## 移動中パスVisionプレビュー用
+var _moving_path_vision_preview: MeshInstance3D = null
+## 移動中パスに追加されたVisionマーカー（キャラクターIDをキーとした配列）
+var _moving_path_vision_markers: Dictionary = {}  # { char_id: Array[MeshInstance3D] }
+
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
 ## map_container: マップを追加する親ノード（省略時はmesh_parentを使用）
@@ -337,6 +342,156 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 		return true
 
 	return false
+
+
+## 指定位置近くにある確定済みパス上でVisionマーカー配置モードを開始
+## @param screen_pos: 画面座標
+## @param ground_pos: 地面座標（既に計算済みの場合）
+## @return: Visionマーカー配置モードを開始した場合true
+func try_start_vision_marker_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool:
+	if not path_execution_manager or not camera:
+		return false
+
+	# 地面位置が未指定の場合は計算
+	var target_ground_pos := ground_pos
+	if target_ground_pos == Vector3.ZERO:
+		var ground_plane := Plane(Vector3.UP, 0.0)
+		var ray_origin := camera.project_ray_origin(screen_pos)
+		var ray_dir := camera.project_ray_normal(screen_pos)
+		var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+		if not intersect:
+			return false
+		target_ground_pos = intersect as Vector3
+
+	# 確定済みパス上の点を検索（先端は除外）
+	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, 0.5)
+	if path_result.is_empty():
+		return false
+
+	var character: Node = path_result.get("character")
+	if not is_instance_valid(character):
+		return false
+
+	# パスデータを取り出して編集モードに入る
+	var path_data := path_execution_manager.take_pending_path_for_editing(character)
+	if path_data.is_empty():
+		return false
+
+	# キャラクター色を取得
+	var char_color := CharacterColorManager.get_character_color(character)
+
+	# パス編集モードを開始（選択なしの拡張モード）
+	if path_service:
+		path_service.start_path_extension_mode(character, path_data, char_color)
+
+	# Visionモードを開始して、長押し位置をアンカーとして設定
+	if path_drawer:
+		path_drawer.start_vision_mode()
+		# Visionハンドラに直接アンカー位置を設定
+		if path_drawer._vision_handler:
+			path_drawer._vision_handler._current_anchor = path_result.point
+			path_drawer._vision_handler._current_ratio = path_result.path_ratio
+			path_drawer._vision_handler._is_drawing = true
+			path_drawer._longpress_vision_mode = true
+			path_drawer._auto_confirm_after_vision = true  # 確認済みパスからなので自動確定
+
+	return true
+
+
+## 指定位置近くにある移動中パス上でVisionマーカー配置モードを開始
+## @param screen_pos: 画面座標
+## @param ground_pos: 地面座標（既に計算済みの場合）
+## @return: Visionマーカー配置モードを開始した場合の情報Dictionary、失敗時は空
+func try_start_vision_marker_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary:
+	if not path_execution_manager or not camera:
+		return {}
+
+	# 地面位置が未指定の場合は計算
+	var target_ground_pos := ground_pos
+	if target_ground_pos == Vector3.ZERO:
+		var ground_plane := Plane(Vector3.UP, 0.0)
+		var ray_origin := camera.project_ray_origin(screen_pos)
+		var ray_dir := camera.project_ray_normal(screen_pos)
+		var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+		if not intersect:
+			return {}
+		target_ground_pos = intersect as Vector3
+
+	# 移動中パス上の点を検索（先端は除外）
+	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, 0.5)
+	if path_result.is_empty():
+		return {}
+
+	return path_result
+
+
+## 移動中パスにVisionマーカーを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の比率
+## @param anchor: アンカー位置
+## @param target_point: 視線方向の目標点
+## @return: 成功した場合true
+func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
+	if not path_execution_manager:
+		return false
+	var result = path_execution_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
+	if result and _moving_path_vision_preview:
+		# プレビューを永続マーカーとして保持
+		var char_id = character.get_instance_id()
+		if not _moving_path_vision_markers.has(char_id):
+			_moving_path_vision_markers[char_id] = []
+		_moving_path_vision_markers[char_id].append(_moving_path_vision_preview)
+		# プレビュー参照をクリア（ノードは保持）
+		_moving_path_vision_preview = null
+	return result
+
+
+## 移動中パスVisionマーカーのプレビューを更新
+## @param character: 対象キャラクター（色取得用）
+## @param anchor: アンカー位置
+## @param target_point: 視線方向の目標点
+func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3) -> void:
+	var char_color := CharacterColorManager.get_character_color(character) if character else Color.WHITE
+
+	if not _moving_path_vision_preview:
+		# プレビューマーカーを作成
+		var VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
+		_moving_path_vision_preview = MeshInstance3D.new()
+		_moving_path_vision_preview.set_script(VisionMarkerScript)
+		_mesh_parent.add_child(_moving_path_vision_preview)
+
+	_moving_path_vision_preview.set_position_and_target(anchor, target_point)
+	_moving_path_vision_preview.set_colors(char_color, Color.WHITE)
+	_moving_path_vision_preview.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
+
+
+## 移動中パスVisionマーカーのプレビューをクリア
+func clear_moving_path_vision_preview() -> void:
+	if _moving_path_vision_preview and is_instance_valid(_moving_path_vision_preview):
+		_moving_path_vision_preview.queue_free()
+		_moving_path_vision_preview = null
+
+
+## 移動中パスVisionマーカーをクリア（キャラクター指定）
+## @param character: 対象キャラクター
+func clear_moving_path_vision_markers_for_character(character: Node) -> void:
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if _moving_path_vision_markers.has(char_id):
+		for marker in _moving_path_vision_markers[char_id]:
+			if is_instance_valid(marker):
+				marker.queue_free()
+		_moving_path_vision_markers.erase(char_id)
+
+
+## 全ての移動中パスVisionマーカーをクリア
+func clear_all_moving_path_vision_markers() -> void:
+	for char_id in _moving_path_vision_markers:
+		for marker in _moving_path_vision_markers[char_id]:
+			if is_instance_valid(marker):
+				marker.queue_free()
+	_moving_path_vision_markers.clear()
 
 
 ## 移動中パス延長モードを開始
@@ -639,6 +794,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached)
 		path_execution_manager.door_marker_reached.connect(_on_door_marker_reached)
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
+		# パス完了時に移動中パスVisionマーカーをクリア
+		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
 
 
 func _setup_idle_manager() -> void:
@@ -667,6 +824,7 @@ func _setup_path_drawer() -> void:
 		path_drawer.name = GameConstants.NODE_PATH_DRAWER
 		add_child(path_drawer)
 		path_drawer.setup(camera, null)
+		path_drawer.auto_confirm_requested.connect(_on_path_drawer_auto_confirm_requested)
 
 
 func _setup_path_mode_controller() -> void:
@@ -800,6 +958,11 @@ func _on_all_paths_completed() -> void:
 	all_paths_completed.emit()
 
 
+func _on_character_path_completed(character: Node) -> void:
+	# 移動中パスVisionマーカーをクリア
+	clear_moving_path_vision_markers_for_character(character)
+
+
 func _on_paths_execution_started(count: int) -> void:
 	paths_execution_started.emit(count)
 
@@ -818,6 +981,10 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 
 func _on_run_segment_added(start_ratio: float, end_ratio: float) -> void:
 	run_segment_added.emit(start_ratio, end_ratio)
+
+
+func _on_path_drawer_auto_confirm_requested() -> void:
+	confirm_path()
 
 
 func _on_round_started() -> void:

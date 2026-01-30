@@ -366,12 +366,148 @@ func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5)
 	return result
 
 
+## 指定位置が確定済みパス上にあるかを検索（先端は除外）
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+func find_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	for char_id in pending_paths:
+		var data: Dictionary = pending_paths[char_id]
+		if not data.has("path") or not data.has("character"):
+			continue
+
+		var path: Array = data["path"]
+		if path.size() < 2:
+			continue
+
+		var character: Node = data["character"]
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# PackedVector3Arrayに変換してPathCalculatorを使用
+		var path_packed := PackedVector3Array()
+		for p in path:
+			path_packed.append(p)
+
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var path_result := PathCalculator.find_closest_point_on_path(path_packed, check_pos)
+		if path_result.is_empty():
+			continue
+
+		var distance: float = path_result.distance
+		if distance < closest_distance:
+			# 先端（終点）付近は除外
+			var endpoint: Vector3 = path[path.size() - 1]
+			endpoint.y = 0.0
+			if path_result.point.distance_to(endpoint) < threshold:
+				continue
+
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"path_ratio": path_result.ratio,
+				"point": path_result.point,
+				"distance": distance
+			}
+
+	return result
+
+
 ## パス追従中のコントローラーがあるかチェック
 func is_any_path_following_active() -> bool:
 	for controller in _path_controllers.values():
 		if controller.is_following_path():
 			return true
 	return false
+
+
+## 移動中パス上の点を検索（先端は除外）
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+
+		if not controller.is_following_path():
+			continue
+
+		# キャラクターを取得
+		var character: Node = null
+		if "_character" in controller:
+			character = controller._character
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# 残りパスと延長パスを結合して取得
+		var full_path: PackedVector3Array = controller.get_full_remaining_path()
+		if full_path.size() < 2:
+			continue
+
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var path_result := PathCalculator.find_closest_point_on_path(full_path, check_pos)
+		if path_result.is_empty():
+			continue
+
+		var distance: float = path_result.distance
+		if distance < closest_distance:
+			# 先端（終点）付近は除外
+			var endpoint: Vector3 = full_path[full_path.size() - 1]
+			endpoint.y = 0.0
+			if path_result.point.distance_to(endpoint) < threshold:
+				continue
+
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"path_ratio": path_result.ratio,
+				"point": path_result.point,
+				"distance": distance
+			}
+
+	return result
+
+
+## 移動中パスにVisionマーカーを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の比率
+## @param anchor: アンカー位置
+## @param target_point: 視線方向の目標点
+## @return: 成功した場合true
+func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
+	if not is_instance_valid(character):
+		return false
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return false
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return false
+
+	controller.add_vision_point_to_extension(path_ratio, anchor, target_point)
+	return true
 
 
 ## ========================================

@@ -1410,6 +1410,47 @@ func get_path_endpoint() -> Vector3:
 	return _current_path[_current_path.size() - 1]
 
 
+## 残りパスと延長パスを結合して取得（Visionマーカー配置用）
+## @return: PackedVector3Array（現在位置から先のパス全体）
+func get_full_remaining_path() -> PackedVector3Array:
+	var result := PackedVector3Array()
+
+	# 残りの元のパス（現在のインデックスから終点まで）
+	for i in range(_path_index, _current_path.size()):
+		result.append(_current_path[i])
+
+	# 延長パスがある場合は追加（最初の点は元のパス終点と重複するのでスキップ）
+	if _has_extension and _extension_path.size() > 0:
+		var start_idx = 1 if _extension_path[0].distance_to(_current_path[_current_path.size() - 1]) < 0.1 else 0
+		for i in range(start_idx, _extension_path.size()):
+			result.append(_extension_path[i])
+
+	return result
+
+
+## 移動中パスにVisionマーカーを追加
+## 延長パスが未開始の場合は_extension_vision_pointsに、
+## 既に延長パスに切り替わっている場合は_vision_pointsに追加
+## @param path_ratio: パス全体での比率（残りパス + 延長パス全体に対する比率）
+## @param anchor: アンカー位置
+## @param target_point: 視線方向の目標点
+func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_point: Vector3) -> void:
+	var new_vp := {
+		"path_ratio": path_ratio,
+		"anchor": anchor,
+		"target_point": target_point
+	}
+
+	if _has_extension:
+		# 延長パスがまだ開始されていない場合は延長用配列に追加
+		_extension_vision_points.append(new_vp)
+		_extension_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+	else:
+		# 延長パスに切り替わっている（または延長がない）場合は直接追加
+		_vision_points.append(new_vp)
+		_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+
+
 ## 残りのパスデータを取得（延長用）
 ## @return: { path: Array[Vector3], vision_points: Array, run_segments: Array, ... }
 func get_remaining_path_data() -> Dictionary:
