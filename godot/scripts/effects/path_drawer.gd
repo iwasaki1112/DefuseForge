@@ -79,6 +79,9 @@ var _is_wall_sliding: bool = false           ## 壁沿いモード中か
 var _wall_slide_normal: Vector3 = Vector3.ZERO  ## 壁の法線
 var _wall_slide_direction: Vector3 = Vector3.ZERO  ## スライド方向
 
+## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
+var _touch_active: bool = false
+
 ## パス上長押しでVisionポイント配置用
 var _path_longpress_pending: bool = false  ## 長押し待機中か
 var _path_longpress_timer: float = 0.0     ## 長押しタイマー
@@ -395,7 +398,25 @@ func _handle_path_extension_input(event: InputEvent) -> bool:
 
 
 func _handle_movement_input(event: InputEvent) -> void:
-	# マウス入力
+	# タッチ入力（優先処理）
+	if event is InputEventScreenTouch:
+		_touch_active = event.pressed
+		if event.pressed:
+			handle_movement_press(event.position)
+		else:
+			handle_movement_release(event.position)
+		get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventScreenDrag:
+		_handle_movement_motion(event.position)
+		get_viewport().set_input_as_handled()
+		return
+
+	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
+	if _touch_active:
+		return
+
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -408,22 +429,14 @@ func _handle_movement_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		_handle_movement_motion(event.position)
 
-	# タッチ入力
-	if event is InputEventScreenTouch:
-		if event.pressed:
-			handle_movement_press(event.position)
-		else:
-			handle_movement_release(event.position)
-		get_viewport().set_input_as_handled()
-
-	if event is InputEventScreenDrag:
-		_handle_movement_motion(event.position)
-		get_viewport().set_input_as_handled()
-
 
 ## 移動モードでのプレス処理（外部から呼び出し可能）
 ## @return: 長押し待機を開始した場合true（handle_clickをスキップすべき）
 func handle_movement_press(screen_pos: Vector2) -> bool:
+	# 既にプレス中の場合は無視（重複イベント対策）
+	if _path_longpress_pending or _is_drawing:
+		return true
+
 	var ground_pos = _get_ground_position(screen_pos)
 
 	# 既存パスがある場合、パス上の長押しをチェック
@@ -524,6 +537,10 @@ func _handle_movement_motion(screen_pos: Vector2) -> void:
 
 ## 描画開始処理（マウス/タッチ共通）
 func _handle_drawing_press(screen_pos: Vector2) -> void:
+	# 既に描画中の場合は無視（重複イベント対策）
+	if _is_drawing:
+		return
+
 	# 既に延長モードが開始されている場合（外部からstart_extending_path()が呼ばれた場合）
 	# _path_pointsは既にセットされているので、描画開始のみ行う
 	if _is_extending_path:

@@ -23,10 +23,30 @@ var _current_ratio: float = 0.0
 ## 視線描画中フラグ
 var _is_drawing: bool = false
 
+## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
+var _touch_active: bool = false
+
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
-	# マウス入力
+	# タッチ入力（優先処理）
+	if event is InputEventScreenTouch:
+		_touch_active = event.pressed
+		if event.pressed:
+			return _handle_press(event.position)
+		else:
+			return _handle_release(event.position)
+
+	if event is InputEventScreenDrag:
+		if _is_drawing:
+			_handle_motion(event.position)
+			return true
+		return false
+
+	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
+	if _touch_active:
+		return false
+
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -40,23 +60,15 @@ func handle_input(event: InputEvent) -> bool:
 			_handle_motion(event.position)
 			return true
 
-	# タッチ入力
-	if event is InputEventScreenTouch:
-		if event.pressed:
-			return _handle_press(event.position)
-		else:
-			return _handle_release(event.position)
-
-	if event is InputEventScreenDrag:
-		if _is_drawing:
-			_handle_motion(event.position)
-			return true
-
 	return false
 
 
 ## マウス押下処理
 func _handle_press(screen_pos: Vector2) -> bool:
+	# 既に描画中の場合は無視（重複イベント対策）
+	if _is_drawing:
+		return true
+
 	var ground_pos = _get_ground_position(screen_pos)
 	if ground_pos == null:
 		return false

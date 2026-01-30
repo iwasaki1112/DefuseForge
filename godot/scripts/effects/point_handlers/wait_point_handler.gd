@@ -34,10 +34,33 @@ var _pending_anchor: Vector3 = Vector3.ZERO
 ## 保留中比率
 var _pending_ratio: float = 0.0
 
+## タッチ入力中フラグ（エミュレートマウスイベント重複防止用）
+var _touch_active: bool = false
+
 
 ## 入力処理
 func handle_input(event: InputEvent) -> bool:
-	# マウス入力
+	# タッチ入力（優先処理）
+	if event is InputEventScreenTouch:
+		_touch_active = event.pressed
+		if event.pressed:
+			return _start_press(event.position)
+		else:
+			if _is_pressing:
+				_finish_press()
+				return true
+		return false
+
+	if event is InputEventScreenDrag:
+		if _is_pressing:
+			update_preview()
+			return true
+		return false
+
+	# マウス入力（タッチ中はスキップ - エミュレートイベント対策）
+	if _touch_active:
+		return false
+
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -53,25 +76,15 @@ func handle_input(event: InputEvent) -> bool:
 			update_preview()
 			return true
 
-	# タッチ入力
-	if event is InputEventScreenTouch:
-		if event.pressed:
-			return _start_press(event.position)
-		else:
-			if _is_pressing:
-				_finish_press()
-				return true
-
-	if event is InputEventScreenDrag:
-		if _is_pressing:
-			update_preview()
-			return true
-
 	return false
 
 
 ## 長押し開始
 func _start_press(screen_pos: Vector2) -> bool:
+	# 既にプレス中の場合は無視（重複イベント対策）
+	if _is_pressing:
+		return true
+
 	var ground_pos = _get_ground_position(screen_pos)
 	if ground_pos == null:
 		return false
