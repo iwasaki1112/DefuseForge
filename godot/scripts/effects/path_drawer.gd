@@ -443,7 +443,7 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 
 
 ## 移動モードでのリリース処理（外部から呼び出し可能）
-func handle_movement_release(screen_pos: Vector2) -> void:
+func handle_movement_release(_screen_pos: Vector2) -> void:
 	# 長押し待機中だった場合はリセット
 	if _path_longpress_pending:
 		_reset_path_longpress()

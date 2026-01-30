@@ -240,9 +240,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_long_press_timer = 0.0
 			# パス先端延長中だった場合、PathDrawerに描画終了を通知
 			if _path_endpoint_extension_started:
-				var path_drawer = _get_path_drawer()
-				if path_drawer:
-					path_drawer._handle_drawing_release()
+				var drawer = _get_path_drawer()
+				if drawer:
+					drawer._handle_drawing_release()
 				# 移動中延長モードの場合は自動確定
 				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
 					game_manager.confirm_path()
@@ -540,9 +540,9 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_long_press_timer = 0.0
 			# パス先端延長中だった場合、PathDrawerに描画終了を通知
 			if _path_endpoint_extension_started:
-				var path_drawer = _get_path_drawer()
-				if path_drawer:
-					path_drawer._handle_drawing_release()
+				var drawer = _get_path_drawer()
+				if drawer:
+					drawer._handle_drawing_release()
 				# 移動中延長モードの場合は自動確定
 				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
 					game_manager.confirm_path()
