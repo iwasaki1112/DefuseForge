@@ -156,6 +156,24 @@ PathDrawerを無効化する。
 
 **戻り値:** MOVEMENTモード以外なら`true`
 
+### Input Handling Methods (InputController連携)
+
+#### `handle_drawing_press(screen_pos: Vector2) -> void`
+描画開始（プレス）処理。InputControllerから呼び出される。
+
+#### `handle_drawing_release() -> void`
+描画終了（リリース）処理。
+
+#### `handle_movement_press(screen_pos: Vector2) -> bool`
+移動モードでのプレス処理（長押しVisionモード判定用）。
+**戻り値:** 長押しモードを開始した場合 `true`
+
+#### `handle_movement_release(screen_pos: Vector2) -> void`
+移動モードでのリリース処理。
+
+#### `handle_marker_release(screen_pos: Vector2) -> void`
+マーカーモードでのリリース処理。
+
 ### Path Extension API
 
 パス終点付近をタップ＆ドラッグして、既存パスの末尾から継続描画する機能。

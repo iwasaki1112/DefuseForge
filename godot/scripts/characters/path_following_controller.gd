@@ -230,6 +230,11 @@ func get_current_path_index() -> int:
 	return _path_index
 
 
+## 現在のビジョンポイント配列を取得
+func get_vision_points() -> Array[Dictionary]:
+	return _vision_points
+
+
 ## 移動優先度を設定（PathExecutionManagerから呼ばれる）
 func set_movement_priority(priority: int) -> void:
 	_movement_priority = priority

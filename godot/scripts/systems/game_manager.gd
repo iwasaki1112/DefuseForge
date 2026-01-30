@@ -75,8 +75,11 @@ var is_vision_enabled: bool = false
 
 ## 移動中パスVisionプレビュー用
 var _moving_path_vision_preview: MeshInstance3D = null
+## 現在プレビュー中のpath_ratio
+var _moving_path_preview_ratio: float = 0.0
 ## 移動中パスに追加されたVisionマーカー（キャラクターIDをキーとした配列）
-var _moving_path_vision_markers: Dictionary = {}  # { char_id: Array[MeshInstance3D] }
+## { char_id: Array[{ "marker": MeshInstance3D, "path_ratio": float }] }
+var _moving_path_vision_markers: Dictionary = {}
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
@@ -436,13 +439,17 @@ func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor
 		return false
 	var result = path_execution_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
 	if result and _moving_path_vision_preview:
-		# プレビューを永続マーカーとして保持
+		# プレビューを永続マーカーとして保持（path_ratioも保存）
 		var char_id = character.get_instance_id()
 		if not _moving_path_vision_markers.has(char_id):
 			_moving_path_vision_markers[char_id] = []
-		_moving_path_vision_markers[char_id].append(_moving_path_vision_preview)
+		_moving_path_vision_markers[char_id].append({
+			"marker": _moving_path_vision_preview,
+			"path_ratio": _moving_path_preview_ratio
+		})
 		# プレビュー参照をクリア（ノードは保持）
 		_moving_path_vision_preview = null
+		_moving_path_preview_ratio = 0.0
 	return result
 
 
@@ -450,7 +457,8 @@ func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor
 ## @param character: 対象キャラクター（色取得用）
 ## @param anchor: アンカー位置
 ## @param target_point: 視線方向の目標点
-func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3) -> void:
+## @param path_ratio: パス上の比率（マーカー非表示判定用）
+func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float = 0.0) -> void:
 	var char_color := CharacterColorManager.get_character_color(character) if character else Color.WHITE
 
 	if not _moving_path_vision_preview:
@@ -463,6 +471,7 @@ func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_
 	_moving_path_vision_preview.set_position_and_target(anchor, target_point)
 	_moving_path_vision_preview.set_colors(char_color, Color.WHITE)
 	_moving_path_vision_preview.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
+	_moving_path_preview_ratio = path_ratio
 
 
 ## 移動中パスVisionマーカーのプレビューをクリア
@@ -479,7 +488,8 @@ func clear_moving_path_vision_markers_for_character(character: Node) -> void:
 		return
 	var char_id = character.get_instance_id()
 	if _moving_path_vision_markers.has(char_id):
-		for marker in _moving_path_vision_markers[char_id]:
+		for marker_data in _moving_path_vision_markers[char_id]:
+			var marker = marker_data.get("marker")
 			if is_instance_valid(marker):
 				marker.queue_free()
 		_moving_path_vision_markers.erase(char_id)
@@ -488,10 +498,28 @@ func clear_moving_path_vision_markers_for_character(character: Node) -> void:
 ## 全ての移動中パスVisionマーカーをクリア
 func clear_all_moving_path_vision_markers() -> void:
 	for char_id in _moving_path_vision_markers:
-		for marker in _moving_path_vision_markers[char_id]:
+		for marker_data in _moving_path_vision_markers[char_id]:
+			var marker = marker_data.get("marker")
 			if is_instance_valid(marker):
 				marker.queue_free()
 	_moving_path_vision_markers.clear()
+
+
+## 移動中パスVisionマーカーを進行状況に応じて非表示
+## @param character: 対象キャラクター
+## @param current_ratio: 現在のパス進行率
+func hide_passed_moving_path_vision_markers(character: Node, current_ratio: float) -> void:
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if not _moving_path_vision_markers.has(char_id):
+		return
+
+	for marker_data in _moving_path_vision_markers[char_id]:
+		var marker = marker_data.get("marker")
+		var marker_ratio = marker_data.get("path_ratio", 0.0)
+		if is_instance_valid(marker) and current_ratio >= marker_ratio:
+			marker.visible = false
 
 
 ## 移動中パス延長モードを開始
@@ -796,6 +824,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
 		# パス完了時に移動中パスVisionマーカーをクリア
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
+		# Visionマーカー到達時に移動中パスマーカーを非表示
+		path_execution_manager.vision_point_reached.connect(_on_vision_point_reached)
 
 
 func _setup_idle_manager() -> void:
@@ -961,6 +991,11 @@ func _on_all_paths_completed() -> void:
 func _on_character_path_completed(character: Node) -> void:
 	# 移動中パスVisionマーカーをクリア
 	clear_moving_path_vision_markers_for_character(character)
+
+
+func _on_vision_point_reached(character: Node, path_ratio: float) -> void:
+	# 移動中パスVisionマーカーを進行状況に応じて非表示
+	hide_passed_moving_path_vision_markers(character, path_ratio)
 
 
 func _on_paths_execution_started(count: int) -> void:

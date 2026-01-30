@@ -30,6 +30,8 @@ signal grenade_marker_reached(character: Node, marker_data: Dictionary)
 signal smoke_grenade_marker_reached(character: Node, marker_data: Dictionary)
 ## ドアマーカー到達時のシグナル
 signal door_marker_reached(character: Node, door: Node3D)
+## Visionマーカー到達時のシグナル（移動中パスマーカー非表示用）
+signal vision_point_reached(character: Node, path_ratio: float)
 
 ## 保留中のパス（キャラクターごと）
 ## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
@@ -787,6 +789,7 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	controller.door_marker_reached.connect(_on_door_marker_reached.bind(character))
 	controller.extension_path_activated.connect(_on_extension_path_activated.bind(character))
 	controller.path_progress_updated.connect(_on_path_progress_updated.bind(character))
+	controller.vision_point_reached.connect(_on_vision_point_reached.bind(character))
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -899,6 +902,36 @@ func _on_smoke_grenade_marker_reached(_index: int, marker_data: Dictionary, char
 
 func _on_door_marker_reached(_index: int, door: Node3D, character: Node) -> void:
 	door_marker_reached.emit(character, door)
+
+
+## Visionマーカー到達時のコールバック
+## 通過したVisionマーカーを非表示にする
+func _on_vision_point_reached(index: int, _direction: Vector3, character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# path_ratioを取得してシグナルを発行（移動中パスマーカー非表示用）
+	var path_ratio: float = 0.0
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		var vision_points = controller.get_vision_points()
+		if index >= 0 and index < vision_points.size():
+			path_ratio = vision_points[index].get("path_ratio", 0.0)
+	vision_point_reached.emit(character, path_ratio)
+
+	# 確認済みパスのマーカーを非表示
+	if not pending_paths.has(char_id):
+		return
+
+	var path_data = pending_paths[char_id]
+	var vision_markers = path_data.get("vision_markers", [])
+
+	if index >= 0 and index < vision_markers.size():
+		var marker = vision_markers[index]
+		if is_instance_valid(marker):
+			marker.visible = false
 
 
 ## 直接パスを実行（UI経由せず、パスメッシュなし）

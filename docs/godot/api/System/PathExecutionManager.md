@@ -76,6 +76,9 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
 #### `find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
 移動中のパスの終点を検索する（パス延長用）。
 
+#### `find_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
+確定済みパス上で、指定座標に近い点を検索する（Visionマーカー追加用）。
+
 #### `add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool`
 移動中のパスにVisionマーカーを動的に追加する。
 
@@ -87,6 +90,9 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
 
 #### `cancel_extension_for_character(character: Node) -> void`
 設定された延長パスをキャンセルする。
+
+#### `take_pending_path_for_editing(character: Node) -> Dictionary`
+指定キャラクターの保留パスを編集用に取り出す（pending_pathsからは削除される）。
 
 ### Query
 
@@ -104,6 +110,9 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
 
 #### `get_character_progress(character: Node) -> float`
 指定キャラクターの現在のパス進行率（0.0〜1.0）を取得。
+
+#### `get_character_waiting_state(character: Node) -> Dictionary`
+指定キャラクターの待機状態（Wait/Door/ClosedDoor）を取得。
 
 #### `get_all_progress() -> Dictionary`
 全アクティブキャラクターの進行状況と待機状態を取得。

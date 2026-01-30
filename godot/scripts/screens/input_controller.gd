@@ -952,10 +952,11 @@ func _update_moving_path_vision_preview(screen_pos: Vector2) -> void:
 	target_point.y = 0.0
 
 	var anchor: Vector3 = _moving_path_longpress_data.get("point", Vector3.ZERO)
+	var path_ratio: float = _moving_path_longpress_data.get("path_ratio", 0.0)
 	var character: Node = _moving_path_longpress_data.get("character")
 
-	# プレビューを更新
-	game_manager.update_moving_path_vision_preview(character, anchor, target_point)
+	# プレビューを更新（path_ratioも渡す）
+	game_manager.update_moving_path_vision_preview(character, anchor, target_point, path_ratio)
 
 
 ## 移動中パス長押し状態をリセット

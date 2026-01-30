@@ -93,6 +93,9 @@
 - `_try_start_immediate_path_mode(screen_pos) -> bool`: タップ位置のキャラクターで即時パスモードを開始できるか判定。
 - `_try_start_path_extension_from_endpoint(screen_pos) -> bool`: パス終点からの延長モードを開始できるか判定。
 - `_is_near_path_endpoint(screen_pos) -> bool`: タップ位置がパス終点付近か判定。
+- `_try_start_confirmed_path_longpress(screen_pos) -> bool`: 確認済みパスまたは移動中パス上での長押し判定。
+- `_start_rotation_mode() -> void`: 長押し回転モードを開始。
+- `_process_rotation_drag(screen_pos) -> void`: 回転モード中のドラッグ処理。
 
 ## 関連クラス
 

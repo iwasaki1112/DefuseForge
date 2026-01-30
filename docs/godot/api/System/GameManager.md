@@ -179,11 +179,55 @@ func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor
 移動中のパスにVisionマーカーを追加する。
 
 ```gdscript
+func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3) -> void
+```
+移動中パスVisionマーカーのプレビュー表示を更新する。
+
+```gdscript
+func clear_moving_path_vision_preview() -> void
+```
+移動中パスVisionマーカーのプレビューを消去する。
+
+```gdscript
+func clear_moving_path_vision_markers_for_character(character: Node) -> void
+```
+指定キャラクターの移動中パスVisionマーカーをクリアする（パス完了時など）。
+
+```gdscript
 func confirm_path() -> void
 func cancel_path() -> void
 func execute_all_paths(run: bool) -> int
 func clear_all_pending_paths() -> void
 ```
+
+### ネットワーク同期・イベント
+
+```gdscript
+func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void
+```
+ネットワーク経由でグレネードを生成・投擲する。
+
+```gdscript
+func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void
+```
+ネットワーク経由でスモークグレネードを生成・投擲する。
+
+```gdscript
+func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void
+```
+ネットワーク経由でドアキックイベントを適用する。
+
+### ドア管理
+
+```gdscript
+func register_door(door: Node3D) -> int
+```
+ドアを登録し、ネットワーク同期用のIDを割り当てる。
+
+```gdscript
+func get_door_by_id(door_id: int) -> Node3D
+```
+IDからドアノードを取得する。
 
 ### 視界/FoW制御
 

@@ -79,6 +79,23 @@ CombatAwarenessComponentを設定する（敵自動追跡用）。
 #### `is_following_path() -> bool`
 パス追従中か確認する。
 
+### Extension Path Accessors
+
+#### `get_full_remaining_path() -> PackedVector3Array`
+現在位置からゴールまでの残りのパスポイント（延長パス含む）を取得する。
+
+#### `get_remaining_path_data() -> Dictionary`
+現在のメインパスの残りデータを取得する。
+
+#### `get_extension_path_data() -> Dictionary`
+設定されている延長パスのデータを取得する。
+
+#### `get_extension_path_endpoint() -> Vector3`
+延長パスの終点を取得する。
+
+#### `has_extension_path() -> bool`
+延長パスが設定されているか確認する。
+
 ### Avoidance Logic
 
 #### `set_movement_priority(priority: int) -> void`
