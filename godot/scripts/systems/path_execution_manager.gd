@@ -45,6 +45,9 @@ var _pending_paths_by_player: Dictionary = {}
 ## パス追従コントローラー { character_id -> PathFollowingController }
 var _path_controllers: Dictionary = {}
 
+## 延長パスのメッシュ { character_id -> MeshInstance3D }
+var _extension_path_meshes: Dictionary = {}
+
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
 
@@ -367,6 +370,134 @@ func is_any_path_following_active() -> bool:
 	return false
 
 
+## ========================================
+## 移動中パス延長機能
+## ========================================
+
+## 移動中パスの終点を検索
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, endpoint: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+
+		if not controller.is_following_path():
+			continue
+
+		# 既に延長パスがある場合はスキップ
+		if controller.has_extension_path():
+			continue
+
+		# キャラクターを取得
+		var character: Node = null
+		if "_character" in controller:
+			character = controller._character
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# パス終点を取得
+		var endpoint: Vector3 = controller.get_path_endpoint()
+		if endpoint == Vector3.ZERO:
+			continue
+
+		endpoint.y = 0.0
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var distance := endpoint.distance_to(check_pos)
+
+		if distance < closest_distance:
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"endpoint": endpoint,
+				"distance": distance
+			}
+
+	return result
+
+
+## 移動中キャラクターの残りパスデータを取得
+## @param character: 対象キャラクター
+## @return: 残りパスデータのDictionary
+func get_remaining_path_for_character(character: Node) -> Dictionary:
+	if not character:
+		return {}
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return {}
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return {}
+
+	return controller.get_remaining_path_data()
+
+
+## 移動中キャラクターに延長パスを設定
+## @param character: 対象キャラクター
+## @param extension_path: 延長パス
+## @param markers: マーカーデータ
+## @return: 設定成功したらtrue
+func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary) -> bool:
+	if not character:
+		return false
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return false
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return false
+
+	controller.set_extension_path(extension_path, markers)
+
+	# 延長パスのメッシュを作成
+	_free_extension_mesh(char_id)
+	var mesh = _create_path_mesh(extension_path, character)
+	if mesh:
+		_extension_path_meshes[char_id] = mesh
+
+	return true
+
+
+## 延長パスのメッシュを解放
+func _free_extension_mesh(char_id: int) -> void:
+	if _extension_path_meshes.has(char_id):
+		var mesh = _extension_path_meshes[char_id]
+		if is_instance_valid(mesh):
+			mesh.queue_free()
+		_extension_path_meshes.erase(char_id)
+
+
+## 移動中キャラクターの延長パスをキャンセル
+## @param character: 対象キャラクター
+func cancel_extension_for_character(character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return
+
+	var controller = _path_controllers[char_id]
+	controller.cancel_extension()
+
+	# 延長パスのメッシュも削除
+	_free_extension_mesh(char_id)
+
+
 ## 指定キャラクターがパス追従中かチェック
 func is_character_following_path(character: Node) -> bool:
 	if not character:
@@ -498,6 +629,8 @@ func _on_path_completed(character: Node) -> void:
 		if pending_paths.has(char_id):
 			_free_pending_path_data(pending_paths[char_id])
 			pending_paths.erase(char_id)
+		# 延長パスのメッシュも削除
+		_free_extension_mesh(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -581,6 +714,9 @@ func _clear_pending_path_for_character(char_id: int) -> void:
 func _clear_all_path_meshes() -> void:
 	for char_id in pending_paths:
 		_free_pending_path_data(pending_paths[char_id])
+	# 延長パスのメッシュも削除
+	for char_id in _extension_path_meshes.keys():
+		_free_extension_mesh(char_id)
 
 
 ## pending_pathsのデータからメッシュとマーカーを解放

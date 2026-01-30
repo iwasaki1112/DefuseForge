@@ -124,13 +124,32 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer.handle_drawing_press(_left_click_start_pos)
 				return
 			else:
 				_path_endpoint_extension_pending = false
 
+		# パス先端延長モードでドラッグ中の場合、PathDrawerにイベントを渡す
+		if event is InputEventMouseMotion and _path_endpoint_extension_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer._handle_movement_input(event)
+				get_viewport().set_input_as_handled()
+			return
+
 		# マウスボタンリリース時：カメラドラッグ状態をクリア
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_left_button_pressed = false
+			# パス先端延長中だった場合、PathDrawerに描画終了を通知
+			if _path_endpoint_extension_started:
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				# 移動中延長モードの場合は自動確定
+				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
+					game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -207,6 +226,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			# パス先端延長モードが開始された場合はタップ処理をスキップ
 			if _path_endpoint_extension_started:
+				# PathDrawerに描画終了を通知
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				# 移動中延長モードの場合は自動確定
+				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
+					game_manager.confirm_path()
 				_path_endpoint_extension_pending = false
 				_path_endpoint_extension_started = false
 				return
@@ -214,11 +240,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _path_endpoint_extension_pending:
 				_path_endpoint_extension_pending = false
 				if _is_near_path_endpoint(_left_click_start_pos):
-					return  # タップ処理をスキップ（選択解除を防ぐ）
+					return
 			_path_endpoint_extension_started = false
-			# タップ判定（ドラッグ距離が閾値以下ならタップ）
+			# タップ判定
 			var distance = _left_click_start_pos.distance_to(event.position)
-			if distance < 50.0:  # トラックパッドのクリックブレを考慮して閾値を大きめに
+			if distance < 50.0:
 				_handle_tap(event.position)
 		return
 
@@ -229,13 +255,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
-				# パスモードに入ったのでPathDrawerに委譲
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer.handle_drawing_press(_left_click_start_pos)
 				return
 			else:
 				# パス先端でなければカメラパン候補を開始
 				_path_endpoint_extension_pending = false
 				if camera_pan_controller:
 					camera_pan_controller.start_potential_drag(_left_click_start_pos)
+		# パス先端延長モードでドラッグ中の場合、PathDrawerにイベントを渡す
+		if _path_endpoint_extension_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer._handle_movement_input(event)
+				get_viewport().set_input_as_handled()
+			return
 		# カメラパン処理
 		if camera_pan_controller:
 			if camera_pan_controller.is_pending_drag():
@@ -289,12 +324,32 @@ func _handle_touch_event(event: InputEvent) -> void:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
+				# パス延長開始時、PathDrawerに描画開始を通知
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer.handle_drawing_press(_left_click_start_pos)
 				return
 			else:
 				_path_endpoint_extension_pending = false
 
+		# パス先端延長モードでドラッグ中の場合、PathDrawerにイベントを渡す
+		if event is InputEventScreenDrag and _path_endpoint_extension_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer._handle_movement_input(event)
+				get_viewport().set_input_as_handled()
+			return
+
 		# タッチ終了時：カメラパン状態をクリア
 		if event is InputEventScreenTouch and not event.pressed:
+			# パス先端延長中だった場合、PathDrawerに描画終了を通知
+			if _path_endpoint_extension_started:
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				# 移動中延長モードの場合は自動確定
+				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
+					game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -374,6 +429,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 				return
 			# パス先端延長モードが開始された場合はタップ処理をスキップ
 			if _path_endpoint_extension_started:
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				# 移動中延長モードの場合は自動確定
+				if game_manager.path_service and game_manager.path_service.is_moving_extension_mode():
+					game_manager.confirm_path()
 				_path_endpoint_extension_pending = false
 				_path_endpoint_extension_started = false
 				get_viewport().set_input_as_handled()
@@ -383,11 +444,11 @@ func _handle_touch_event(event: InputEvent) -> void:
 				_path_endpoint_extension_pending = false
 				if _is_near_path_endpoint(_left_click_start_pos):
 					get_viewport().set_input_as_handled()
-					return  # タップ処理をスキップ（選択解除を防ぐ）
+					return
 			_path_endpoint_extension_started = false
 			# タッチ終了：タップ判定
 			var distance = _left_click_start_pos.distance_to(event.position)
-			if distance < 20.0:  # タップ判定閾値
+			if distance < 20.0:
 				_handle_tap(event.position)
 			get_viewport().set_input_as_handled()
 		return
@@ -399,12 +460,21 @@ func _handle_touch_event(event: InputEvent) -> void:
 			if _try_start_path_extension_from_endpoint(_left_click_start_pos):
 				_path_endpoint_extension_started = true
 				_path_endpoint_extension_pending = false
-				# パスモードに入ったのでPathDrawerに委譲
+				var path_drawer = _get_path_drawer()
+				if path_drawer:
+					path_drawer.handle_drawing_press(_left_click_start_pos)
 				return
 			else:
 				# パス先端でなければカメラパン候補を開始
 				_path_endpoint_extension_pending = false
 				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
+		# パス先端延長モードでドラッグ中の場合、PathDrawerにイベントを渡す
+		if _path_endpoint_extension_started:
+			var path_drawer = _get_path_drawer()
+			if path_drawer:
+				path_drawer._handle_movement_input(event)
+				get_viewport().set_input_as_handled()
+			return
 		# カメラパン処理
 		if camera_pan_controller.is_pending_touch_pan():
 			camera_pan_controller.check_and_start_touch_pan(event.position)

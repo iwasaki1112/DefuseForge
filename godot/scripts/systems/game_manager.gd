@@ -193,10 +193,8 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				# パスモード中の場合
 				if path_service and path_service.is_path_mode():
 					if path_service.has_pending_path():
-						# パスがあれば確定
 						path_service.confirm_path()
 					else:
-						# パスがなければキャンセル
 						path_service.cancel_path()
 					return true
 				# 通常時: 選択解除
@@ -293,32 +291,74 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool:
 
 	var ground_pos: Vector3 = intersect as Vector3
 
-	# 確定済みパスの先端を検索
-	var result := path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
-	if result.is_empty():
+	# 確定済みパスと移動中パスの両方を検索
+	var pending_result := path_execution_manager.find_path_endpoint_at_position(ground_pos, 0.5)
+	var moving_result := path_execution_manager.find_moving_path_endpoint_at_position(ground_pos, 0.5)
+
+	# より近い方を選択
+	var use_pending := false
+	var use_moving := false
+	if not pending_result.is_empty() and not moving_result.is_empty():
+		if pending_result.get("distance", INF) <= moving_result.get("distance", INF):
+			use_pending = true
+		else:
+			use_moving = true
+	elif not pending_result.is_empty():
+		use_pending = true
+	elif not moving_result.is_empty():
+		use_moving = true
+	else:
 		return false
 
-	var character: Node = result.get("character")
+	# 移動中パスの延長
+	if use_moving:
+		return _start_moving_path_extension(moving_result.get("character"), ground_pos)
+
+	# 確定済みパスの延長（既存の処理）
+	if use_pending:
+		var character: Node = pending_result.get("character")
+		if not is_instance_valid(character):
+			return false
+
+		# パスデータを取り出して編集モードに入る
+		var path_data := path_execution_manager.take_pending_path_for_editing(character)
+		if path_data.is_empty():
+			return false
+
+		# キャラクター選択をスキップ（延長モードで一時的な選択リングを表示）
+		var char_color := CharacterColorManager.get_character_color(character)
+		if path_service:
+			path_service.start_path_extension_mode(character, path_data, char_color)
+
+		# 即座にパス延長モードを開始
+		if path_drawer and path_drawer.has_method("start_extending_path"):
+			path_drawer.start_extending_path()
+		return true
+
+	return false
+
+
+## 移動中パス延長モードを開始
+## @param character: 対象キャラクター
+## @param _ground_pos: タップ位置（未使用、将来の拡張用）
+## @return: 成功したらtrue
+func _start_moving_path_extension(character: Node, _ground_pos: Vector3) -> bool:
 	if not is_instance_valid(character):
 		return false
 
-	# 移動中のキャラクターは対象外
-	if path_service and path_service.is_character_following_path(character):
+	# 残りパスデータを取得
+	var remaining_data := path_execution_manager.get_remaining_path_for_character(character)
+	if remaining_data.is_empty():
 		return false
 
-	# パスデータを取り出して編集モードに入る
-	var path_data := path_execution_manager.take_pending_path_for_editing(character)
-	if path_data.is_empty():
-		return false
-
-	# キャラクター選択をスキップ（延長モードで一時的な選択リングを表示）
+	# キャラクター色を取得
 	var char_color := CharacterColorManager.get_character_color(character)
-	if path_service:
-		path_service.start_path_extension_mode(character, path_data, char_color)
 
-	# 即座にパス延長モードを開始
-	if path_drawer and path_drawer.has_method("start_extending_path"):
-		path_drawer.start_extending_path()
+	# 移動中延長モードを開始
+	if path_service:
+		if not path_service.start_moving_path_extension_mode(character, remaining_data, char_color):
+			return false
+
 	return true
 
 

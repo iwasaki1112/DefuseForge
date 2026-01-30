@@ -119,13 +119,6 @@ func _apply_outline(character: Node) -> void:
 	if _outlined_meshes_by_character.has(char_id):
 		return
 
-	# CharacterModelだけを検索（武器を除外）
-	var model = character.get_node_or_null("CharacterModel")
-	var search_root = model if model else character
-	var meshes = _find_mesh_instances(search_root)
-	var outlined: Array[MeshInstance3D] = []
-	var original_materials: Dictionary = {}  # { mesh_instance_id: { surface_index: Material } }
-
 	# Note: Stencil outline (STENCIL_MODE_OUTLINE) removed for Godot 4.4 compatibility
 	# Selection is indicated by selection marker only
 

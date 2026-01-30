@@ -230,10 +230,10 @@ func _setup_marker_edit_buttons() -> void:
 ## マーカーエディットパネルを表示
 ## NOTE: 一時的に無効化（入力の邪魔になっている可能性のため）
 func show_marker_edit_panel() -> void:
-	return  # 一時的に無効化
-	if _marker_edit_panel:
-		_marker_edit_panel.visible = true
-		_reset_marker_edit_buttons()
+	pass  # 一時的に無効化
+	#if _marker_edit_panel:
+	#	_marker_edit_panel.visible = true
+	#	_reset_marker_edit_buttons()
 
 
 ## マーカーエディットパネルを非表示

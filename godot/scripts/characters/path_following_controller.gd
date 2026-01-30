@@ -58,6 +58,17 @@ var _last_move_direction: Vector3 = Vector3.ZERO
 var _combat_awareness: Node = null  # CombatAwarenessComponent
 var _active_target_point: Vector3 = Vector3.ZERO  # ターゲットポイントモード用
 
+## 延長パス用の変数（移動中のパス延長機能）
+var _extension_path: Array[Vector3] = []
+var _extension_vision_points: Array[Dictionary] = []
+var _extension_run_segments: Array[Dictionary] = []
+var _extension_clear_points: Array[Dictionary] = []
+var _extension_grenade_markers: Array[Dictionary] = []
+var _extension_smoke_grenade_markers: Array[Dictionary] = []
+var _extension_door_markers: Array[Dictionary] = []
+var _extension_wait_markers: Array[Dictionary] = []
+var _has_extension: bool = false
+
 ## スタック検出用
 var _last_position: Vector3 = Vector3.ZERO
 var _stuck_time: float = 0.0
@@ -811,6 +822,11 @@ func _update_idle_animation_while_waiting() -> void:
 
 ## パス追従完了
 func _finish() -> void:
+	# 延長パスがある場合は切り替えて移動継続
+	if _has_extension:
+		_switch_to_extension_path()
+		return
+
 	# キャラクターの速度を停止
 	if _character:
 		_character.velocity = Vector3.ZERO
@@ -1367,3 +1383,104 @@ func _is_ally_at_destination() -> bool:
 			return true
 
 	return false
+
+
+## ========================================
+## パス延長機能（移動中のパス延長）
+## ========================================
+
+## 現在のパス終点を取得
+func get_path_endpoint() -> Vector3:
+	if _current_path.size() == 0:
+		return Vector3.ZERO
+	return _current_path[_current_path.size() - 1]
+
+
+## 残りのパスデータを取得（延長用）
+## @return: { path: Array[Vector3], vision_points: Array, run_segments: Array, ... }
+func get_remaining_path_data() -> Dictionary:
+	if not _is_following or _current_path.size() == 0:
+		return {}
+
+	# 現在のパス終点を返す（延長はパス終点から開始）
+	var endpoint := get_path_endpoint()
+
+	return {
+		"path": [endpoint],  # 延長開始点のみ
+		"endpoint": endpoint,
+		"vision_points": [],  # 延長パスでは新規マーカーのみ
+		"run_segments": [],
+		"clear_points": [],
+		"grenade_markers_data": [],
+		"smoke_grenade_markers_data": [],
+		"door_markers_data": [],
+		"wait_markers_data": []
+	}
+
+
+## 延長パスを設定
+## @param extension_path: 延長パス（Vector3の配列）
+## @param markers: マーカーデータの辞書
+func set_extension_path(extension_path: Array[Vector3], markers: Dictionary) -> void:
+	if extension_path.size() < 2:
+		return
+
+	_extension_path = extension_path.duplicate()
+	_extension_vision_points = markers.get("vision_points", []).duplicate()
+	_extension_run_segments = markers.get("run_segments", []).duplicate()
+	_extension_clear_points = markers.get("clear_points", []).duplicate()
+	_extension_grenade_markers = markers.get("grenade_markers_data", []).duplicate()
+	_extension_smoke_grenade_markers = markers.get("smoke_grenade_markers_data", []).duplicate()
+	_extension_door_markers = markers.get("door_markers_data", []).duplicate()
+	_extension_wait_markers = markers.get("wait_markers_data", []).duplicate()
+	_has_extension = true
+
+
+## 延長パスをキャンセル
+func cancel_extension() -> void:
+	_extension_path.clear()
+	_extension_vision_points.clear()
+	_extension_run_segments.clear()
+	_extension_clear_points.clear()
+	_extension_grenade_markers.clear()
+	_extension_smoke_grenade_markers.clear()
+	_extension_door_markers.clear()
+	_extension_wait_markers.clear()
+	_has_extension = false
+
+
+## 延長パスがあるか
+func has_extension_path() -> bool:
+	return _has_extension
+
+
+## 延長パスに切り替え（内部メソッド）
+func _switch_to_extension_path() -> void:
+	if not _has_extension or _extension_path.size() < 2:
+		_has_extension = false
+		return
+
+	# 延長パスを現在のパスに設定
+	_current_path = _extension_path.duplicate()
+	_vision_points = _extension_vision_points.duplicate()
+	_run_segments = _extension_run_segments.duplicate()
+	_clear_points = _extension_clear_points.duplicate()
+	_grenade_markers = _extension_grenade_markers.duplicate()
+	_smoke_grenade_markers = _extension_smoke_grenade_markers.duplicate()
+	_door_markers = _extension_door_markers.duplicate()
+	_wait_markers = _extension_wait_markers.duplicate()
+
+	# インデックスをリセット
+	_path_index = 1
+	_vision_index = 0
+	_clear_index = 0
+	_grenade_index = 0
+	_smoke_grenade_index = 0
+	_door_index = 0
+	_wait_index = 0
+
+	# パス長キャッシュを再構築
+	_build_path_length_cache()
+
+	# 延長データをクリア
+	cancel_extension()

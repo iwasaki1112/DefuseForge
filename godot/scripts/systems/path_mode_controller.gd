@@ -24,6 +24,10 @@ var selection_manager: CharacterSelectionManager = null
 var path_execution_manager: PathExecutionManager = null
 ## 延長モード用のキャラクター（選択マネージャーをバイパス）
 var _extension_mode_character: Node = null
+## 移動中延長モードフラグ
+var _is_moving_extension_mode: bool = false
+## 移動中延長対象キャラクター
+var _moving_extension_character: Node = null
 
 
 ## セットアップ
@@ -120,6 +124,40 @@ func start_extension_mode(character: Node, path_data: Dictionary, char_color: Co
 	return true
 
 
+## 移動中パス延長モード開始（キャラクターは移動を継続しながら延長パスを描画）
+func start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE) -> bool:
+	if not character or not path_drawer:
+		return false
+	if remaining_data.is_empty():
+		return false
+
+	_is_moving_extension_mode = true
+	_moving_extension_character = character
+
+	# 一時的な選択リングを表示
+	_show_temporary_outline(character)
+
+	# パスモード開始（終点から延長を開始）
+	is_active = true
+	editing_character = character
+
+	# 移動中延長は既存パスを復元せず、終点から新規パスを開始
+	var endpoint: Vector3 = remaining_data.get("endpoint", Vector3.ZERO)
+	if endpoint == Vector3.ZERO:
+		path_drawer.enable(character)
+	else:
+		path_drawer.enable_from_point(character as Node3D, endpoint)
+	path_drawer.set_character_color(char_color)
+
+	mode_started.emit(character)
+	return true
+
+
+## 移動中延長モードかどうか
+func is_moving_extension_mode() -> bool:
+	return _is_moving_extension_mode
+
+
 ## 一時的なアウトライン表示
 func _show_temporary_outline(character: Node) -> void:
 	if character.has_method("show_outline"):
@@ -138,6 +176,10 @@ func confirm() -> bool:
 	if not is_active or not path_drawer.has_pending_path():
 		cancel()
 		return false
+
+	# 移動中延長モードの場合は特別な処理
+	if _is_moving_extension_mode and _moving_extension_character:
+		return _confirm_moving_extension()
 
 	# 延長モードの場合は _extension_mode_character を使用
 	var targets: Array[Node] = []
@@ -163,6 +205,44 @@ func confirm() -> bool:
 		# パス確定後は選択を解除
 		if should_deselect and selection_manager:
 			selection_manager.deselect_all()
+		return true
+	else:
+		cancel()
+		return false
+
+
+## 移動中延長モードの確定処理
+func _confirm_moving_extension() -> bool:
+	var character := _moving_extension_character
+	if not is_instance_valid(character):
+		cancel()
+		return false
+
+	# パスデータを取得
+	var extension_path: Array[Vector3] = []
+	var smoothed: PackedVector3Array = path_drawer.get_smoothed_path()
+	for p in smoothed:
+		extension_path.append(p)
+
+	if extension_path.size() < 2:
+		cancel()
+		return false
+
+	# マーカーデータを取得
+	var markers := {
+		"vision_points": path_drawer.get_vision_points().duplicate(),
+		"run_segments": path_drawer.get_run_segments().duplicate(),
+		"clear_points": path_drawer.get_clear_points().duplicate(),
+		"grenade_markers_data": path_drawer.get_grenade_markers().duplicate(),
+		"smoke_grenade_markers_data": path_drawer.get_smoke_grenade_markers().duplicate(),
+		"door_markers_data": path_drawer.get_door_markers().duplicate(),
+		"wait_markers_data": path_drawer.get_wait_markers().duplicate()
+	}
+
+	# PathExecutionManagerに延長パスを設定
+	if path_execution_manager.set_extension_path_for_character(character, extension_path, markers):
+		_cleanup()
+		mode_ended.emit()
 		return true
 	else:
 		cancel()
@@ -236,6 +316,12 @@ func _cleanup() -> void:
 	editing_character = null
 	_hide_temporary_outline()
 	_extension_mode_character = null
+	# 移動中延長モードをクリア
+	if _is_moving_extension_mode and _moving_extension_character:
+		if is_instance_valid(_moving_extension_character) and _moving_extension_character.has_method("show_outline"):
+			_moving_extension_character.show_outline(false)
+	_is_moving_extension_mode = false
+	_moving_extension_character = null
 	if selection_manager:
 		selection_manager.clear_path_targets()
 	if path_drawer:

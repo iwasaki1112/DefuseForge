@@ -54,6 +54,7 @@ var _ground_plane: Plane
 var _is_drawing: bool = false
 var _is_extending_path: bool = false
 var _is_enabled: bool = false
+var _is_moving_extension_start: bool = false  ## 移動中延長の開始点が設定されているか
 var _drawing_mode: DrawingMode = DrawingMode.MOVEMENT
 var _path_points: PackedVector3Array = PackedVector3Array()
 var _path_mesh: MeshInstance3D
@@ -198,10 +199,33 @@ func enable(character: Node3D) -> void:
 	clear()
 
 
+## 指定した開始点からパス描画を開始（移動中延長用）
+## @param character: 対象キャラクター
+## @param start_point: パス開始点
+func enable_from_point(character: Node3D, start_point: Vector3) -> void:
+	_character = character
+	_is_enabled = true
+	_drawing_mode = DrawingMode.MOVEMENT
+	_pending_character = character as CharacterBody3D
+	clear()
+
+	# 移動中延長フラグを設定
+	_is_moving_extension_start = true
+
+	# 開始点を設定
+	_path_points.append(start_point)
+	_pending_path.append(start_point)
+
+	# パスメッシュを更新
+	if _path_mesh:
+		_path_mesh.update_from_points(_path_points)
+
+
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false
 	_is_extending_path = false
+	_is_moving_extension_start = false
 
 
 func is_enabled() -> bool:
@@ -385,6 +409,12 @@ func handle_drawing_press(screen_pos: Vector2) -> void:
 
 #region パス描画
 func _start_drawing(start_pos: Vector3) -> void:
+	# 移動中延長の場合は既存の開始点から続ける
+	if _is_moving_extension_start:
+		_is_drawing = true
+		_is_moving_extension_start = false
+		return
+
 	if _character:
 		var char_pos = Vector3(_character.global_position.x, ground_plane_height, _character.global_position.z)
 		var hit_result = _check_wall_between(char_pos, start_pos)
@@ -901,6 +931,7 @@ func clear() -> void:
 	_path_mesh.clear()
 	_is_drawing = false
 	_is_extending_path = false
+	_is_moving_extension_start = false
 	_drawing_mode = DrawingMode.MOVEMENT
 	_pending_path.clear()
 	_pending_character = null
