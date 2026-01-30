@@ -758,10 +758,45 @@ func _finish_extending_path() -> void:
 	_reset_wall_slide_state()
 
 	if _path_points.size() >= 2 and _character:
-		if enable_smoothing and _path_points.size() >= 3:
-			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
+		# 元のパス（既にスムージング済み）を取得
+		var original_path: PackedVector3Array = PackedVector3Array()
+		if _path_extension_snapshots.size() > 0:
+			original_path = _path_extension_snapshots[_path_extension_snapshots.size() - 1]
+
+		if original_path.size() > 0:
+			# 延長部分のみを抽出（元のパスの終点から新しいポイントまで）
+			var extension_start_idx := original_path.size() - 1
+			var extension_points := PackedVector3Array()
+
+			# 元のパスの終点を延長部分の開始点として追加（スムージングの接続用）
+			extension_points.append(original_path[original_path.size() - 1])
+
+			# 延長で追加されたポイントを追加
+			for i in range(original_path.size(), _path_points.size()):
+				extension_points.append(_path_points[i])
+
+			if extension_points.size() >= 2:
+				# 延長部分のみスムージング
+				var smoothed_extension: PackedVector3Array
+				if enable_smoothing and extension_points.size() >= 3:
+					smoothed_extension = PathSmoother.smooth_path(extension_points, smoothing_epsilon, smoothing_segments * 2)
+				else:
+					smoothed_extension = extension_points.duplicate()
+
+				# 元のパス + スムージング済み延長部分を結合（最初の点は重複するのでスキップ）
+				_pending_path = original_path.duplicate()
+				for i in range(1, smoothed_extension.size()):
+					_pending_path.append(smoothed_extension[i])
+			else:
+				# 延長部分がない場合は元のパスをそのまま使用
+				_pending_path = original_path.duplicate()
 		else:
-			_pending_path = _path_points.duplicate()
+			# スナップショットがない場合は従来通り全体をスムージング
+			if enable_smoothing and _path_points.size() >= 3:
+				_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
+			else:
+				_pending_path = _path_points.duplicate()
+
 		_marker_history.append(MarkerType.PATH_EXTENSION)
 
 	drawing_finished.emit(_path_points)

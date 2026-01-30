@@ -439,13 +439,15 @@ func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor
 		return false
 	var result = path_execution_manager.add_vision_marker_to_moving_path(character, path_ratio, anchor, target_point)
 	if result and _moving_path_vision_preview:
-		# プレビューを永続マーカーとして保持（path_ratioも保存）
+		# プレビューを永続マーカーとして保持（path_ratio, anchor, target_pointも保存）
 		var char_id = character.get_instance_id()
 		if not _moving_path_vision_markers.has(char_id):
 			_moving_path_vision_markers[char_id] = []
 		_moving_path_vision_markers[char_id].append({
 			"marker": _moving_path_vision_preview,
-			"path_ratio": _moving_path_preview_ratio
+			"path_ratio": path_ratio,  # 渡されたpath_ratioを使用
+			"anchor": anchor,  # 元のワールド位置を保存
+			"target_point": target_point  # ターゲット位置も保存
 		})
 		# プレビュー参照をクリア（ノードは保持）
 		_moving_path_vision_preview = null
@@ -826,6 +828,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
 		# Visionマーカー到達時に移動中パスマーカーを非表示
 		path_execution_manager.vision_point_reached.connect(_on_vision_point_reached)
+		# 延長マーカーの比率がスケールされた時に移動中パスマーカーの比率を更新
+		path_execution_manager.extension_markers_scaled.connect(_on_extension_markers_scaled)
 
 
 func _setup_idle_manager() -> void:
@@ -996,6 +1000,27 @@ func _on_character_path_completed(character: Node) -> void:
 func _on_vision_point_reached(character: Node, path_ratio: float) -> void:
 	# 移動中パスVisionマーカーを進行状況に応じて非表示
 	hide_passed_moving_path_vision_markers(character, path_ratio)
+
+
+func _on_extension_markers_scaled(character: Node, scale: float) -> void:
+	# 移動中パスVisionマーカーの比率をスケール
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if not _moving_path_vision_markers.has(char_id):
+		return
+
+	for marker_data in _moving_path_vision_markers[char_id]:
+		var old_ratio = marker_data.get("path_ratio", 0.0)
+		marker_data["path_ratio"] = old_ratio * scale
+
+		# 視覚的なマーカー位置が変わっていないか確認し、必要であれば元の位置に戻す
+		var marker = marker_data.get("marker")
+		var anchor = marker_data.get("anchor", Vector3.ZERO)
+		var target_point = marker_data.get("target_point", Vector3.ZERO)
+		if is_instance_valid(marker) and anchor != Vector3.ZERO:
+			# マーカーの位置を元のanchorに強制的に戻す
+			marker.set_position_and_target(anchor, target_point)
 
 
 func _on_paths_execution_started(count: int) -> void:

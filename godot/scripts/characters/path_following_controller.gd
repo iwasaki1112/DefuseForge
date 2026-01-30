@@ -14,6 +14,7 @@ signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
 signal door_marker_reached(index: int, door: Node3D)
 signal extension_path_activated()  ## 延長パスに切り替わった時
 signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
+signal extension_markers_scaled(scale: float)  ## 延長マーカーの比率がスケールされた時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -1499,6 +1500,9 @@ func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, app
 		var new_length := _calculate_path_length_array(extension_path)
 		var total_length := old_length + new_length
 		if total_length > 0.001:
+			# 既存マーカーの比率を新しい全長に合わせて再スケール
+			if old_length > 0.001:
+				_scale_existing_extension_markers(old_length, total_length)
 			# 新しいマーカーの比率を調整して追加
 			_append_extension_markers(markers, old_length, new_length, total_length)
 	else:
@@ -1582,6 +1586,36 @@ func _append_extension_markers(markers: Dictionary, old_length: float, new_lengt
 		var new_wm: Dictionary = wm.duplicate()
 		new_wm["path_ratio"] = adjusted_ratio
 		_extension_wait_markers.append(new_wm)
+
+
+## 既存延長マーカーの比率を新しい全長に合わせて再スケール
+func _scale_existing_extension_markers(old_length: float, total_length: float) -> void:
+	var scale := old_length / total_length
+
+	for i in range(_extension_vision_points.size()):
+		_extension_vision_points[i]["path_ratio"] = _extension_vision_points[i].path_ratio * scale
+
+	for i in range(_extension_run_segments.size()):
+		_extension_run_segments[i]["start_ratio"] = _extension_run_segments[i].start_ratio * scale
+		_extension_run_segments[i]["end_ratio"] = _extension_run_segments[i].end_ratio * scale
+
+	for i in range(_extension_clear_points.size()):
+		_extension_clear_points[i]["path_ratio"] = _extension_clear_points[i].path_ratio * scale
+
+	for i in range(_extension_grenade_markers.size()):
+		_extension_grenade_markers[i]["path_ratio"] = _extension_grenade_markers[i].path_ratio * scale
+
+	for i in range(_extension_smoke_grenade_markers.size()):
+		_extension_smoke_grenade_markers[i]["path_ratio"] = _extension_smoke_grenade_markers[i].path_ratio * scale
+
+	for i in range(_extension_door_markers.size()):
+		_extension_door_markers[i]["path_ratio"] = _extension_door_markers[i].path_ratio * scale
+
+	for i in range(_extension_wait_markers.size()):
+		_extension_wait_markers[i]["path_ratio"] = _extension_wait_markers[i].path_ratio * scale
+
+	# マーカースケールシグナルを発火（game_managerのマーカー同期用）
+	extension_markers_scaled.emit(scale)
 
 
 ## 延長パスをキャンセル
