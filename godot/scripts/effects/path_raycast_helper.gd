@@ -11,7 +11,7 @@ extends RefCounted
 ## @param to: 終了位置
 ## @param wall_collision_mask: 壁検出用のコリジョンマスク
 ## @param ground_plane_height: 地面の高さ
-## @return: { "hit": bool, "position": Vector3 (ヒット位置、hitがtrueの場合) }
+## @return: { "hit": bool, "position": Vector3, "normal": Vector3 (ヒット時のみ) }
 static func check_wall_between(
 	space_state: PhysicsDirectSpaceState3D,
 	from: Vector3,
@@ -46,10 +46,15 @@ static func check_wall_between(
 				excluded_rids.append(collider.get_rid())
 			continue
 
-		# 壁にヒット - 位置を地面高さに補正
+		# 壁にヒット - 位置を地面高さに補正、法線も返す
 		var hit_pos = result.position
 		hit_pos.y = ground_plane_height
-		return { "hit": true, "position": hit_pos }
+		var hit_normal: Vector3 = result.normal
+		# 法線をXZ平面に投影（Y成分を除去して正規化）
+		hit_normal.y = 0.0
+		if hit_normal.length() > 0.001:
+			hit_normal = hit_normal.normalized()
+		return { "hit": true, "position": hit_pos, "normal": hit_normal }
 
 	return { "hit": false }
 

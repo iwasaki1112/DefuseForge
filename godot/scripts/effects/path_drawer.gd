@@ -37,6 +37,8 @@ signal off_path_tapped()
 @export var path_click_threshold: float = 0.5
 @export var path_endpoint_threshold: float = 0.3
 @export_flags_3d_physics var wall_collision_mask: int = 2
+@export var enable_wall_sliding: bool = true
+@export var wall_slide_offset: float = 0.15  ## 壁からの距離
 @export var enable_smoothing: bool = true
 @export var smoothing_epsilon: float = 0.15
 @export var smoothing_segments: int = 4
@@ -67,6 +69,11 @@ var _character_color: Color = Color(1.0, 1.0, 1.0)
 
 var _marker_history: Array[int] = []
 var _active_edit_character: Node = null
+
+## 壁沿いモード状態
+var _is_wall_sliding: bool = false           ## 壁沿いモード中か
+var _wall_slide_normal: Vector3 = Vector3.ZERO  ## 壁の法線
+var _wall_slide_direction: Vector3 = Vector3.ZERO  ## スライド方向
 
 ## マーカーハンドラ
 var _vision_handler: VisionMarkerHandler
@@ -446,17 +453,50 @@ func _start_drawing(start_pos: Vector3) -> void:
 
 func _add_point(pos: Vector3) -> void:
 	if _path_points.size() >= max_points:
+		_reset_wall_slide_state()
 		return
 
 	var last_point = _path_points[_path_points.size() - 1]
 	if pos.distance_to(last_point) < min_point_distance:
 		return
 
+	# 壁沿いモード中の処理
+	if _is_wall_sliding:
+		var slide_result = _process_wall_slide(pos)
+		if slide_result.should_exit:
+			_reset_wall_slide_state()
+			# 壁沿いモード終了後、通常の描画に戻る
+			if not slide_result.corner_hit:
+				# 壁から離れる場合は通常のポイント追加を試みる
+				var hit_result = _check_wall_between(last_point, pos)
+				if not hit_result.hit:
+					_path_points.append(pos)
+					_path_mesh.update_from_points(_path_points)
+			return
+		if slide_result.new_point != Vector3.ZERO:
+			_path_points.append(slide_result.new_point)
+			_path_mesh.update_from_points(_path_points)
+		return
+
+	# 通常モードの処理
 	var hit_result = _check_wall_between(last_point, pos)
 	if hit_result.hit:
+		if enable_wall_sliding:
+			# 壁沿いモードに入る
+			var move_dir = (pos - last_point).normalized()
+			if _enter_wall_slide_mode(hit_result, move_dir):
+				# 壁沿い位置にポイントを追加
+				var wall_pos = hit_result.position
+				var safe_pos = wall_pos + _wall_slide_normal * wall_slide_offset
+				safe_pos.y = ground_plane_height
+				if safe_pos.distance_to(last_point) >= min_point_distance:
+					_path_points.append(safe_pos)
+					_path_mesh.update_from_points(_path_points)
+				return
+		# スライドできない場合は壁の手前で停止
 		var wall_pos = hit_result.position
 		var to_wall = (wall_pos - last_point).normalized()
-		var safe_pos = wall_pos - to_wall * 0.1
+		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
 		_path_points.append(safe_pos)
 		_path_mesh.update_from_points(_path_points)
@@ -469,6 +509,7 @@ func _add_point(pos: Vector3) -> void:
 
 func _finish_drawing() -> void:
 	_is_drawing = false
+	_reset_wall_slide_state()
 
 	if _path_points.size() >= 2 and _character:
 		if enable_smoothing and _path_points.size() >= 3:
@@ -514,6 +555,7 @@ func _add_extend_point(pos: Vector3) -> void:
 		return
 
 	if _path_points.size() >= max_points:
+		_reset_wall_slide_state()
 		_finish_extending_path()
 		return
 
@@ -521,11 +563,43 @@ func _add_extend_point(pos: Vector3) -> void:
 	if pos.distance_to(last_point) < min_point_distance:
 		return
 
+	# 壁沿いモード中の処理
+	if _is_wall_sliding:
+		var slide_result = _process_wall_slide(pos)
+		if slide_result.should_exit:
+			_reset_wall_slide_state()
+			# 壁沿いモード終了後、通常の描画に戻る
+			if not slide_result.corner_hit:
+				# 壁から離れる場合は通常のポイント追加を試みる
+				var hit_result = _check_wall_between(last_point, pos)
+				if not hit_result.hit:
+					_path_points.append(pos)
+					_path_mesh.update_from_points(_path_points)
+			return
+		if slide_result.new_point != Vector3.ZERO:
+			_path_points.append(slide_result.new_point)
+			_path_mesh.update_from_points(_path_points)
+		return
+
+	# 通常モードの処理
 	var hit_result = _check_wall_between(last_point, pos)
 	if hit_result.hit:
+		if enable_wall_sliding:
+			# 壁沿いモードに入る
+			var move_dir = (pos - last_point).normalized()
+			if _enter_wall_slide_mode(hit_result, move_dir):
+				# 壁沿い位置にポイントを追加
+				var wall_pos = hit_result.position
+				var safe_pos = wall_pos + _wall_slide_normal * wall_slide_offset
+				safe_pos.y = ground_plane_height
+				if safe_pos.distance_to(last_point) >= min_point_distance:
+					_path_points.append(safe_pos)
+					_path_mesh.update_from_points(_path_points)
+				return
+		# スライドできない場合は壁の手前で停止
 		var wall_pos = hit_result.position
 		var to_wall = (wall_pos - last_point).normalized()
-		var safe_pos = wall_pos - to_wall * 0.1
+		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
 		_path_points.append(safe_pos)
 		_path_mesh.update_from_points(_path_points)
@@ -538,6 +612,7 @@ func _add_extend_point(pos: Vector3) -> void:
 
 func _finish_extending_path() -> void:
 	_is_extending_path = false
+	_reset_wall_slide_state()
 
 	if _path_points.size() >= 2 and _character:
 		if enable_smoothing and _path_points.size() >= 3:
@@ -558,6 +633,181 @@ func _get_ground_position(screen_pos: Vector2) -> Variant:
 func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
 	var space_state = get_world_3d().direct_space_state
 	return PathRaycastHelper.check_wall_between(space_state, from, to, wall_collision_mask, ground_plane_height)
+
+
+## 壁沿いにスライドした位置を計算
+## @param from: 開始位置
+## @param to: 目標位置（壁にぶつかった）
+## @param hit_result: 壁ヒット結果 { position, normal }
+## @return: スライド後の位置（スライド不可の場合はVector3.ZERO）
+func _calculate_wall_slide_position(from: Vector3, to: Vector3, hit_result: Dictionary) -> Vector3:
+	var wall_normal: Vector3 = hit_result.get("normal", Vector3.ZERO)
+	if wall_normal.length() < 0.001:
+		return Vector3.ZERO
+
+	# 移動方向
+	var move_dir := (to - from).normalized()
+
+	# スライド方向 = 移動方向から壁法線成分を除去
+	var slide_dir := move_dir - wall_normal * move_dir.dot(wall_normal)
+	if slide_dir.length() < 0.001:
+		# 壁に真正面から当たった
+		return Vector3.ZERO
+	slide_dir = slide_dir.normalized()
+
+	# 壁の手前位置（安全な距離を確保）
+	# wall_normalは壁から離れる方向を向いているので、その方向にオフセット
+	var wall_pos: Vector3 = hit_result.position
+	var safe_wall_pos := wall_pos + wall_normal * wall_slide_offset
+	safe_wall_pos.y = ground_plane_height
+
+	# スライド方向への移動量（元の目標までの残り距離を使用）
+	var remaining_distance := wall_pos.distance_to(to)
+	var slide_target := safe_wall_pos + slide_dir * remaining_distance
+	slide_target.y = ground_plane_height
+
+	# スライド先が壁にぶつからないかチェック
+	var slide_hit := _check_wall_between(safe_wall_pos, slide_target)
+	if slide_hit.hit:
+		# 壁角に当たった - スライド先の壁の手前で止める
+		var slide_wall_pos: Vector3 = slide_hit.position
+		var slide_wall_normal: Vector3 = slide_hit.get("normal", Vector3.ZERO)
+		if slide_wall_normal.length() > 0.001:
+			var corner_pos := slide_wall_pos + slide_wall_normal * wall_slide_offset
+			corner_pos.y = ground_plane_height
+			# 最低距離を確保
+			if corner_pos.distance_to(from) >= min_point_distance:
+				return corner_pos
+		return Vector3.ZERO
+
+	# 最低距離を確保
+	if slide_target.distance_to(from) < min_point_distance:
+		return Vector3.ZERO
+
+	return slide_target
+
+
+## 壁沿いモードに入る
+## @param hit_result: 壁ヒット結果 { position, normal }
+## @param move_dir: 移動方向
+## @return: 成功した場合true
+func _enter_wall_slide_mode(hit_result: Dictionary, move_dir: Vector3) -> bool:
+	var wall_normal: Vector3 = hit_result.get("normal", Vector3.ZERO)
+	if wall_normal.length() < 0.001:
+		return false
+
+	# Y成分を除去して水平方向のみで計算
+	wall_normal.y = 0
+	wall_normal = wall_normal.normalized()
+	if wall_normal.length() < 0.001:
+		return false
+
+	# スライド方向 = 移動方向から壁法線成分を除去
+	var slide_dir := move_dir - wall_normal * move_dir.dot(wall_normal)
+	slide_dir.y = 0
+	if slide_dir.length() < 0.001:
+		# 壁に真正面から当たった
+		return false
+	slide_dir = slide_dir.normalized()
+
+	_is_wall_sliding = true
+	_wall_slide_normal = wall_normal
+	_wall_slide_direction = slide_dir
+
+	return true
+
+
+## 壁沿いモード中の処理
+## @param user_pos: ユーザーの入力位置
+## @return: { should_exit: bool, corner_hit: bool, new_point: Vector3 }
+func _process_wall_slide(user_pos: Vector3) -> Dictionary:
+	var result = { "should_exit": false, "corner_hit": false, "new_point": Vector3.ZERO }
+
+	if _path_points.size() == 0:
+		result.should_exit = true
+		return result
+
+	var last_point = _path_points[_path_points.size() - 1]
+
+	# ユーザーの移動方向を計算
+	var user_move_dir = (user_pos - last_point)
+	user_move_dir.y = 0
+	if user_move_dir.length() < 0.001:
+		return result  # 動いていない
+	user_move_dir = user_move_dir.normalized()
+
+	# 壁沿いモード終了判定
+	if _should_exit_wall_slide(user_pos, user_move_dir):
+		result.should_exit = true
+		result.corner_hit = false
+		return result
+
+	# スライド方向への移動量を計算
+	var slide_amount = user_move_dir.dot(_wall_slide_direction)
+	if slide_amount < 0.1:
+		# スライド方向にほとんど動いていない
+		return result
+
+	# スライド方向に沿って新しい位置を計算
+	var move_distance = user_pos.distance_to(last_point) * slide_amount
+	var new_pos = last_point + _wall_slide_direction * move_distance
+	new_pos.y = ground_plane_height
+
+	# 最低距離チェック
+	if new_pos.distance_to(last_point) < min_point_distance:
+		return result
+
+	# スライド先が壁にぶつからないかチェック（角の検出）
+	var slide_hit = _check_wall_between(last_point, new_pos)
+	if slide_hit.hit:
+		# 角に当たった - 壁沿いモード終了
+		var corner_wall_pos: Vector3 = slide_hit.position
+		var corner_wall_normal: Vector3 = slide_hit.get("normal", Vector3.ZERO)
+		if corner_wall_normal.length() > 0.001:
+			corner_wall_normal.y = 0
+			corner_wall_normal = corner_wall_normal.normalized()
+			var corner_pos = corner_wall_pos + corner_wall_normal * wall_slide_offset
+			corner_pos.y = ground_plane_height
+			if corner_pos.distance_to(last_point) >= min_point_distance:
+				result.new_point = corner_pos
+		result.should_exit = true
+		result.corner_hit = true
+		return result
+
+	result.new_point = new_pos
+	return result
+
+
+## 壁沿いモード終了判定
+## @param user_pos: ユーザーの入力位置
+## @param user_move_dir: ユーザーの移動方向（正規化済み）
+## @return: 終了すべき場合true
+func _should_exit_wall_slide(user_pos: Vector3, user_move_dir: Vector3) -> bool:
+	# ユーザーが壁から離れる方向に動いているかチェック
+	# 壁法線とユーザー移動方向のドット積が正なら、壁から離れている
+	var away_from_wall = user_move_dir.dot(_wall_slide_normal)
+
+	# スライド方向との角度をチェック
+	var slide_alignment = abs(user_move_dir.dot(_wall_slide_direction))
+
+	# 壁から離れる方向に明確に動いている場合（閾値: 0.3）
+	# かつスライド方向との整合性が低い場合
+	if away_from_wall > 0.3 and slide_alignment < 0.5:
+		return true
+
+	# ユーザーがスライド方向と逆方向に大きく動いている場合も終了
+	var reverse_slide = user_move_dir.dot(_wall_slide_direction)
+	if reverse_slide < -0.5:
+		return true
+
+	return false
+
+
+## 壁沿い状態をリセット
+func _reset_wall_slide_state() -> void:
+	_is_wall_sliding = false
+	_wall_slide_normal = Vector3.ZERO
+	_wall_slide_direction = Vector3.ZERO
 
 
 func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
@@ -949,6 +1199,7 @@ func clear() -> void:
 	_is_drawing = false
 	_is_extending_path = false
 	_is_moving_extension_start = false
+	_reset_wall_slide_state()
 	_drawing_mode = DrawingMode.MOVEMENT
 	_pending_path.clear()
 	_pending_character = null
