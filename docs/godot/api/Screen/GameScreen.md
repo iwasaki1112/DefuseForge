@@ -60,6 +60,10 @@ func cleanup() -> void
 ```
 
 リソースのクリーンアップを行います。
+- マップのアンロード（キャラクター含む）
+- HUDの削除
+- ネットワーク接続の切断（MultiplayerModeProvider経由）
+- PlayerStateシグナルの切断
 
 ## 初期化フロー
 
@@ -93,6 +97,10 @@ if _mode_provider is MultiplayerModeProvider:
     var mp = _mode_provider as MultiplayerModeProvider
     var is_host = mp.is_host()
 ```
+
+## デバッグ機能
+
+- **F3キー**: 視界デバッグ表示（Vision Debug Draw）の切り替え。敵の視界範囲やレイキャストが表示されます。
 
 ## シグナル接続
 

@@ -70,6 +70,8 @@
 | `path_click_threshold` | `float` | `0.5` | パスクリック判定距離 |
 | `path_endpoint_threshold` | `float` | `0.3` | パス終点タップ検出距離（継続描画用） |
 | `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
+| `enable_wall_sliding` | `bool` | `true` | 壁沿いの自動スライド機能を有効化 |
+| `wall_slide_offset` | `float` | `0.15` | 壁スライド時の壁からのオフセット距離 |
 | `enable_smoothing` | `bool` | `true` | パススムージングを有効化 |
 | `smoothing_epsilon` | `float` | `0.15` | RDP間引き許容誤差（大きいほど間引き強） |
 | `smoothing_segments` | `int` | `4` | Catmull-Rom曲線の分割数（大きいほど滑らか） |
@@ -90,6 +92,13 @@ PathDrawerを有効化する。
 
 **引数:**
 - `character` - パス追従キャラクター
+
+#### enable_from_point(character: Node3D, start_point: Vector3) -> void
+指定した開始点からパス描画を開始する（移動中延長用）。
+
+**引数:**
+- `character` - パス追従キャラクター
+- `start_point` - パス開始点（キャラクターの現在位置ではなく、この点から描画開始）
 
 #### restore_pending_path(character: Node3D, path_data: Dictionary) -> bool
 既存の確定済みパスを読み込んで編集モードに入る。PathExecutionManagerから取得したパスデータを復元する。
@@ -611,12 +620,22 @@ path_drawer.smoothing_segments = 5   # より滑らかな曲線
 
 詳細は [PathSmoother](PathSmoother.md) を参照。
 
-## 障害物（壁）検出
+## 障害物（壁）検出と壁沿いスライド
 
-パス描画中に障害物を貫通しないよう、以下のレイキャストチェックを行う:
+パス描画中に障害物を貫通しないよう、以下のチェックと補正を行う:
 
-1. **描画開始時**: キャラクター位置→開始点間に壁があれば描画開始を拒否
-2. **ポイント追加時**: 直前のポイント→新ポイント間に壁があれば、壁直前で停止して描画終了
+1. **壁検出 (Wall Detection)**:
+    - 描画開始時: キャラクター位置→開始点間に壁があれば描画開始を拒否
+    - ポイント追加時: 直前のポイント→新ポイント間に壁があれば検出
+
+2. **壁沿いスライド (Wall Sliding)**:
+    - `enable_wall_sliding` が `true` の場合、壁に当たると自動的に「壁沿いモード」に移行
+    - ユーザーが壁に向かってドラッグし続けても、パスは壁に沿って滑らかに伸びる
+    - 壁の角（コーナー）を検出すると、自動的に角を曲がって描画を継続
+    - `wall_slide_offset` だけ壁から離れた位置にパスポイントを生成し、キャラクターが壁に埋まるのを防ぐ
+
+3. **壁手前停止**:
+    - スライドが無効または不可能な場合、壁の直前でパス描画が停止する
 
 壁検出は`wall_collision_mask`で指定されたコリジョンレイヤーを対象とする（デフォルト: レイヤー2）。
 
@@ -660,6 +679,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `set_line_color(color: Color) -> void`
 - `set_character_color(color: Color) -> void`
 - `enable(character: Node3D) -> void`
+- `enable_from_point(character: Node3D, start_point: Vector3) -> void`
 - `restore_pending_path(character: Node3D, path_data: Dictionary) -> bool`
 - `disable() -> void`
 - `is_enabled() -> bool`

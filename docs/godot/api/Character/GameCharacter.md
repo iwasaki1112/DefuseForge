@@ -188,13 +188,19 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** `WeaponSocket`ノードまたは`null`
 
-### Muzzle Flash API
+### Muzzle Flash & Bullet Trail API
 
 #### set_muzzle_flash_preview(enabled: bool) -> void
 マズルフラッシュの常時プレビュー表示を切り替える（調整用）。
 
 #### update_muzzle_flash_preview() -> void
 現在のWeaponPreset値でマズルフラッシュのプレビュー表示を更新する。
+
+#### _play_bullet_trail() -> void
+発砲時に弾道トレイル（Bullet Trail）を描画する。
+- Shaderベースのマテリアルを使用
+- ターゲット（敵または最大距離）に向かって描画
+- 時間経過でフェードアウト
 
 ## ライフサイクル
 
@@ -253,7 +259,16 @@ character.equip_weapon(weapon)
 所有者のpeer_idを設定する。
 
 ### apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void
-リモートからの状態更新を適用する。ローカルキャラクターには適用されない。
+リモートからの状態更新を適用する。
+- スナップショットバッファに状態を追加
+- 初回受信時は即座に反映（テレポート防止）
+- 以降は`update_remote_interpolation`で補間される
+
+### update_remote_interpolation(delta: float) -> void
+リモートキャラクターの位置・回転を補間更新する。
+- 過去の2つのスナップショット間を補間
+- データ不足時は外挿（Extrapolation）または直近値を使用
+- 回転は四元数SLERPで滑らかに更新
 
 ### to_character_state() -> NetworkMessages.CharacterStateMessage
 現在の状態をCharacterStateMessageに変換する。
