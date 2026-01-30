@@ -13,6 +13,7 @@ signal grenade_marker_reached(index: int, marker_data: Dictionary)
 signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
 signal door_marker_reached(index: int, door: Node3D)
 signal extension_path_activated()  ## 延長パスに切り替わった時
+signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -219,6 +220,16 @@ func is_following_path() -> bool:
 	return _is_following
 
 
+## 現在のパスを取得
+func get_current_path() -> Array[Vector3]:
+	return _current_path
+
+
+## 現在のパスインデックスを取得
+func get_current_path_index() -> int:
+	return _path_index
+
+
 ## 移動優先度を設定（PathExecutionManagerから呼ばれる）
 func set_movement_priority(priority: int) -> void:
 	_movement_priority = priority
@@ -346,6 +357,7 @@ func process(delta: float) -> void:
 			# 中間地点でスタック → 次のポイントにスキップ
 			_path_index += 1
 			_stuck_time = 0.0
+			path_progress_updated.emit(_path_index)
 			if _path_index >= _current_path.size():
 				_finish()
 				return
@@ -356,6 +368,7 @@ func process(delta: float) -> void:
 	# 目標点に到達したら次へ
 	if distance < 0.15:
 		_path_index += 1
+		path_progress_updated.emit(_path_index)
 		if _path_index >= _current_path.size():
 			_finish()
 			return

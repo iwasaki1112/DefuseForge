@@ -270,10 +270,10 @@ func execute_all_paths(run: bool) -> int:
 		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_markers_data, door_markers_data, wait_markers_data, smoke_grenade_markers_data):
 			executed_count += 1
 
-	# パスデータのみクリア（メッシュは残す）
+	# マーカーデータのみクリア（パスとメッシュは残す）
 	for char_id in pending_paths:
 		var data = pending_paths[char_id]
-		data.erase("path")
+		# パスは進行状況表示のために残す
 		data.erase("vision_points")
 		data.erase("run_segments")
 		data.erase("clear_points")
@@ -650,6 +650,7 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	controller.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached.bind(character))
 	controller.door_marker_reached.connect(_on_door_marker_reached.bind(character))
 	controller.extension_path_activated.connect(_on_extension_path_activated.bind(character))
+	controller.path_progress_updated.connect(_on_path_progress_updated.bind(character))
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -679,23 +680,77 @@ func _on_path_cancelled(_character: Node) -> void:
 	pass
 
 
+## パス進行状況更新時のコールバック
+## 通過したパス部分を削除してメッシュを更新
+func _on_path_progress_updated(path_index: int, character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# 通常のパスメッシュを更新
+	if pending_paths.has(char_id):
+		var path_data = pending_paths[char_id]
+		var full_path = path_data.get("path", [])
+
+		if full_path.size() < 2:
+			return
+
+		var path_mesh = path_data.get("path_mesh")
+		if not path_mesh or not is_instance_valid(path_mesh):
+			return
+
+		if path_index >= full_path.size() - 1:
+			# 最後のポイントに到達 - メッシュをクリア
+			path_mesh.clear()
+			return
+
+		# path_index以降のポイントで新しいパスを作成
+		var remaining_path = PackedVector3Array()
+		for i in range(path_index, full_path.size()):
+			remaining_path.append(full_path[i])
+
+		# パスメッシュを更新
+		if remaining_path.size() >= 2:
+			path_mesh.update_from_points(remaining_path)
+		else:
+			path_mesh.clear()
+
+
 ## 延長パスに切り替わった時のコールバック
-## 延長パスメッシュをアクティブパスメッシュに移動（次の延長で削除されないように）
+## 古いパスメッシュをクリアし、延長パスメッシュを新しいメインパスとして設定
 func _on_extension_path_activated(character: Node) -> void:
 	if not character:
 		return
 
 	var char_id = character.get_instance_id()
 
-	# 延長パスメッシュをアクティブパスメッシュに移動
+	# 古いパスメッシュをクリア
+	if pending_paths.has(char_id):
+		var path_data = pending_paths[char_id]
+		var old_mesh = path_data.get("path_mesh")
+		if old_mesh and is_instance_valid(old_mesh):
+			old_mesh.clear()
+
+	# アクティブパスメッシュ（過去の延長パス）もクリア
+	if _active_path_meshes.has(char_id):
+		for mesh in _active_path_meshes[char_id]:
+			if is_instance_valid(mesh):
+				mesh.clear()
+		_active_path_meshes[char_id].clear()
+
+	# 延長パスメッシュを新しいメインパスメッシュとして設定
 	if _extension_path_meshes.has(char_id):
 		var mesh = _extension_path_meshes[char_id]
-		if is_instance_valid(mesh):
-			# アクティブパスメッシュ配列に追加
-			if not _active_path_meshes.has(char_id):
-				_active_path_meshes[char_id] = []
-			_active_path_meshes[char_id].append(mesh)
+		if is_instance_valid(mesh) and pending_paths.has(char_id):
+			pending_paths[char_id]["path_mesh"] = mesh
 		_extension_path_meshes.erase(char_id)
+
+	# コントローラから新しいパスデータを取得して保存
+	if _path_controllers.has(char_id) and pending_paths.has(char_id):
+		var controller = _path_controllers[char_id]
+		var new_path = controller.get_current_path()
+		pending_paths[char_id]["path"] = new_path
 
 
 func _on_grenade_marker_reached(_index: int, marker_data: Dictionary, character: Node) -> void:
