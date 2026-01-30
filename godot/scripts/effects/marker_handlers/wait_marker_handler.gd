@@ -233,6 +233,25 @@ func reset_state() -> void:
 	_press_start_time = 0.0
 
 
+## 同期Waitマーカーを追加（コンテキストメニューから呼ばれる）
+## wait_duration = -1 は同期ポイント（Wボタンで解放されるまで待機）を示す
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: マーカーの3D位置
+func add_sync_marker(path_ratio: float, anchor: Vector3) -> void:
+	var new_marker = {
+		"path_ratio": path_ratio,
+		"anchor": anchor,
+		"wait_duration": -1.0  # 同期ポイント（無期限待機）
+	}
+	_wait_markers.append(new_marker)
+
+	# マーカーメッシュを作成（"W"表示）
+	var marker = _create_wait_marker_node(anchor, -1.0)
+	_wait_meshes.append(marker)
+
+	marker_added.emit(new_marker)
+
+
 ## マーカーを復元
 func restore_markers(data: Array, meshes: Array) -> void:
 	for d in data:

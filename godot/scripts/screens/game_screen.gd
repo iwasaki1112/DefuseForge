@@ -125,6 +125,9 @@ func _setup_game_manager() -> void:
 		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
 		game_manager.round_timer_updated.connect(_on_round_timer_updated)
 		game_manager.round_ended.connect(_on_round_ended)
+		# 同期待機状態変更シグナル
+		if game_manager.path_execution_manager:
+			game_manager.path_execution_manager.sync_wait_state_changed.connect(_on_sync_wait_state_changed)
 
 
 func _load_map() -> void:
@@ -204,6 +207,7 @@ func _setup_hud() -> void:
 		_hud.marker_edit_requested.connect(_on_marker_edit_requested)
 		_hud.marker_undo_requested.connect(_on_marker_undo_requested)
 		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
+		_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
 
 
 func _setup_round_hud() -> void:
@@ -346,6 +350,18 @@ func _on_execute_button_pressed() -> void:
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
+
+
+func _on_sync_go_button_pressed() -> void:
+	game_manager.release_all_sync_waiting_characters()
+	# ボタンを非表示にする
+	if _hud:
+		_hud.hide_sync_go_button()
+
+
+func _on_sync_wait_state_changed(has_waiting: bool) -> void:
+	if _hud:
+		_hud.update_sync_go_button_visibility(has_waiting)
 
 
 func _on_marker_edit_requested(action: String) -> void:

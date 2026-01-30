@@ -10,6 +10,7 @@ signal character_marker_pressed(character: Node)
 signal marker_edit_requested(action: String)
 signal marker_undo_requested()
 signal marker_cancel_requested()
+signal sync_go_requested()  ## W解放ボタン押下
 
 const TIMER_WARNING_THRESHOLD := 10.0
 const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)
@@ -20,6 +21,7 @@ const MARKER_DEAD_ALPHA := 0.3
 @onready var _timer_label: Label = %TimerLabel
 @onready var _money_label: Label = %MoneyLabel
 @onready var _execute_button: TextureButton = %ExecuteButton
+@onready var _sync_go_button: Button = %SyncGoButton
 @warning_ignore("unused_private_class_variable")
 @onready var _character_markers: HBoxContainer = %CharacterMarkers
 @onready var _marker_alpha: TextureButton = %MarkerAlpha
@@ -286,3 +288,31 @@ func _on_marker_undo_pressed() -> void:
 ## Cancelボタン押下時のコールバック
 func _on_marker_cancel_pressed() -> void:
 	marker_cancel_requested.emit()
+
+
+## ========================================
+## 同期待機解放ボタンAPI
+## ========================================
+
+## W解放ボタン押下時のコールバック
+func _on_sync_go_pressed() -> void:
+	sync_go_requested.emit()
+
+
+## W解放ボタンを表示
+func show_sync_go_button() -> void:
+	if _sync_go_button:
+		_sync_go_button.visible = true
+
+
+## W解放ボタンを非表示
+func hide_sync_go_button() -> void:
+	if _sync_go_button:
+		_sync_go_button.visible = false
+
+
+## W解放ボタンの表示状態を設定
+## @param has_waiting: 同期待機中のキャラクターがいるか
+func update_sync_go_button_visibility(has_waiting: bool) -> void:
+	if _sync_go_button:
+		_sync_go_button.visible = has_waiting

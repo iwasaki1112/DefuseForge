@@ -1328,6 +1328,14 @@ func get_wait_marker_count() -> int:
 
 func take_wait_markers() -> Array[MeshInstance3D]:
 	return _wait_handler.take_markers()
+
+
+## 同期Waitマーカーを追加（コンテキストメニューから呼ばれる）
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: マーカーの3D位置
+func add_sync_wait_marker(path_ratio: float, anchor: Vector3) -> void:
+	_wait_handler.add_sync_marker(path_ratio, anchor)
+	_marker_history.append(int(MarkerType.WAIT))
 #endregion
 
 

@@ -12,9 +12,12 @@ signal vision_point_reached(index: int, direction: Vector3)
 signal grenade_marker_reached(index: int, marker_data: Dictionary)
 signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
 signal door_marker_reached(index: int, door: Node3D)
+signal wait_marker_reached(index: int, marker_data: Dictionary)
 signal extension_path_activated()  ## 延長パスに切り替わった時
 signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
 signal extension_markers_scaled(scale: float)  ## 延長マーカーの比率がスケールされた時
+signal sync_wait_started()  ## 同期待機開始時
+signal sync_wait_released()  ## 同期待機解放時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -54,6 +57,7 @@ var _waiting_door: Node3D = null  # 待機中のドアノード
 var _wait_markers: Array[Dictionary] = []  # { path_ratio, anchor, wait_duration }
 var _wait_index: int = 0
 var _is_waiting_for_wait: bool = false  # Wait待機中状態
+var _is_sync_waiting: bool = false  # 同期待機中状態（Wボタンで解放）
 var _wait_timer: float = 0.0  # 現在の待機経過時間
 var _current_wait_duration: float = 0.0  # 現在の待機時間目標
 var _forced_look_direction: Vector3 = Vector3.ZERO
@@ -156,6 +160,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
 	_is_waiting_for_wait = false
+	_is_sync_waiting = false
 	_wait_timer = 0.0
 	_current_wait_duration = 0.0
 	_waiting_door = null
@@ -193,6 +198,7 @@ func cancel() -> void:
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
 	_is_waiting_for_wait = false
+	_is_sync_waiting = false
 	_is_avoiding_collision = false
 	_is_sidestepping = false
 	_wait_timer = 0.0
@@ -259,7 +265,12 @@ func process(delta: float) -> void:
 	if _is_waiting_for_door:
 		return
 
-	# Wait待機中の場合
+	# 同期待機中の場合（Wボタンで解放されるまで待機）
+	if _is_sync_waiting:
+		_update_idle_animation_while_waiting()
+		return
+
+	# Wait待機中の場合（時間ベース）
 	if _is_waiting_for_wait:
 		_wait_timer += delta
 		if _wait_timer >= _current_wait_duration:
@@ -740,15 +751,26 @@ func _check_wait_markers(progress: float) -> bool:
 	while _wait_index < _wait_markers.size():
 		var wm = _wait_markers[_wait_index]
 		if progress >= wm.path_ratio:
-			# Waitマーカーに到達: 待機開始
-			_is_waiting_for_wait = true
-			_wait_timer = 0.0
-			_current_wait_duration = wm.wait_duration if wm.has("wait_duration") else 1.0
+			var duration: float = wm.wait_duration if wm.has("wait_duration") else 1.0
+			var reached_index = _wait_index
 			_wait_index += 1
+
+			# マーカー到達シグナルを発火（視覚マーカー非表示用）
+			wait_marker_reached.emit(reached_index, wm)
 
 			# キャラクターを停止
 			if _character:
 				_character.velocity = Vector3.ZERO
+
+			# 同期ポイント（duration < 0）の場合は同期待機
+			if duration < 0:
+				_is_sync_waiting = true
+				sync_wait_started.emit()
+			else:
+				# 通常の時間ベース待機
+				_is_waiting_for_wait = true
+				_wait_timer = 0.0
+				_current_wait_duration = duration
 
 			# アイドルアニメーションに切り替え
 			_update_idle_animation_while_waiting()
@@ -883,6 +905,7 @@ func _finish() -> void:
 	_is_waiting_for_door = false
 	_is_waiting_for_closed_door = false
 	_is_waiting_for_wait = false
+	_is_sync_waiting = false
 	_is_avoiding_collision = false
 	_is_sidestepping = false
 	_wait_timer = 0.0
@@ -1349,7 +1372,13 @@ func get_current_progress() -> float:
 ## 待機状態を取得
 ## @return: { is_waiting: bool, type: String, remaining: float }
 func get_waiting_state() -> Dictionary:
-	if _is_waiting_for_wait:
+	if _is_sync_waiting:
+		return {
+			"is_waiting": true,
+			"type": "sync",
+			"remaining": -1.0  # 無期限
+		}
+	elif _is_waiting_for_wait:
 		return {
 			"is_waiting": true,
 			"type": "wait",
@@ -1373,6 +1402,18 @@ func get_waiting_state() -> Dictionary:
 			"type": "",
 			"remaining": 0.0
 		}
+
+
+## 同期待機中かどうか
+func is_sync_waiting() -> bool:
+	return _is_sync_waiting
+
+
+## 同期待機を解除して移動を再開
+func release_sync_wait() -> void:
+	if _is_sync_waiting:
+		_is_sync_waiting = false
+		sync_wait_released.emit()
 
 
 ## パス追従中かどうか（_is_followingの公開版）
@@ -1455,6 +1496,22 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 		# 延長パスに切り替わっている（または延長がない）場合は直接追加
 		_vision_points.append(new_vp)
 		_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+
+
+## Waitマーカーを追加（実行中のパスに）
+## @param marker_data: { path_ratio, anchor, wait_duration }
+func add_wait_marker(marker_data: Dictionary) -> void:
+	if not _is_following:
+		return
+
+	if _has_extension:
+		# 延長パスがまだ開始されていない場合は延長用配列に追加
+		_extension_wait_markers.append(marker_data)
+		_extension_wait_markers.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+	else:
+		# 延長パスに切り替わっている（または延長がない）場合は直接追加
+		_wait_markers.append(marker_data)
+		_wait_markers.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 
 
 ## 残りのパスデータを取得（延長用）

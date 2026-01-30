@@ -174,7 +174,11 @@ func _update_duration_label() -> void:
 		_duration_label.position = Vector3(0, 0.5, 0)
 		add_child(_duration_label)
 
-	_duration_label.text = "%.1fs" % _wait_duration
+	# 同期ポイント（duration < 0）の場合は「W」を表示
+	if _wait_duration < 0:
+		_duration_label.text = "W"
+	else:
+		_duration_label.text = "%.1fs" % _wait_duration
 
 
 ## 色を変更（WaitMarkerは再構築が必要）

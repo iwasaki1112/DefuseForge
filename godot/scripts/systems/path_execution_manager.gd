@@ -36,6 +36,8 @@ signal vision_point_reached(character: Node, path_ratio: float)
 signal path_progress_updated(character: Node)
 ## 延長マーカーの比率がスケールされた時のシグナル
 signal extension_markers_scaled(character: Node, scale: float)
+## 同期待機状態変更シグナル（HUD更新用）
+signal sync_wait_state_changed(has_waiting: bool)
 
 ## 保留中のパス（キャラクターごと）
 ## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
@@ -57,6 +59,9 @@ var _extension_path_meshes: Dictionary = {}
 ## アクティブパスメッシュ（延長後に切り替わったパス） { character_id -> Array[MeshInstance3D] }
 ## 複数回延長した場合に全てのセグメントを保持
 var _active_path_meshes: Dictionary = {}
+
+## 移動中パスのWaitマーカーメッシュ { character_id -> Array[MeshInstance3D] }
+var _moving_path_wait_markers: Dictionary = {}
 
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
@@ -561,6 +566,16 @@ func _free_active_path_meshes(char_id: int) -> void:
 		_active_path_meshes.erase(char_id)
 
 
+## 移動中パスのWaitマーカーメッシュを解放
+func _free_moving_path_wait_markers(char_id: int) -> void:
+	if _moving_path_wait_markers.has(char_id):
+		var markers: Array = _moving_path_wait_markers[char_id]
+		for marker in markers:
+			if is_instance_valid(marker):
+				marker.queue_free()
+		_moving_path_wait_markers.erase(char_id)
+
+
 ## 移動中キャラクターの延長パスをキャンセル
 ## @param character: 対象キャラクター
 func cancel_extension_for_character(character: Node) -> void:
@@ -632,6 +647,65 @@ func get_all_progress() -> Dictionary:
 	return result
 
 
+## 全キャラクターの同期待機を解除
+func release_all_sync_waiting() -> void:
+	for controller in _path_controllers.values():
+		if controller.is_following_path() and controller.is_sync_waiting():
+			controller.release_sync_wait()
+
+
+## 同期待機中のキャラクターがいるか
+func has_sync_waiting_characters() -> bool:
+	for controller in _path_controllers.values():
+		if controller.is_following_path() and controller.is_sync_waiting():
+			return true
+	return false
+
+
+## 確認済みパスに同期Waitマーカーを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: マーカーの3D位置
+func add_sync_wait_marker_to_path(character: Node, path_ratio: float, anchor: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	var marker_data = {
+		"path_ratio": path_ratio,
+		"anchor": anchor,
+		"wait_duration": -1.0
+	}
+
+	# 移動中のパスに追加
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.is_following_path():
+			controller.add_wait_marker(marker_data)
+
+			# 視覚的なマーカーメッシュを作成
+			var visual_marker = _create_single_wait_marker(anchor, -1.0, character)
+			if visual_marker:
+				if not _moving_path_wait_markers.has(char_id):
+					_moving_path_wait_markers[char_id] = []
+				_moving_path_wait_markers[char_id].append(visual_marker)
+			return
+
+	# 確定済み（未実行）のパスに追加
+	if pending_paths.has(char_id):
+		var path_data = pending_paths[char_id]
+		if not path_data.has("wait_markers_data"):
+			path_data["wait_markers_data"] = []
+		path_data["wait_markers_data"].append(marker_data)
+
+		# 視覚的なマーカーメッシュを作成（既存のwait_markersに追加）
+		if not path_data.has("wait_markers"):
+			path_data["wait_markers"] = []
+		var visual_marker = _create_single_wait_marker(anchor, -1.0, character)
+		if visual_marker:
+			path_data["wait_markers"].append(visual_marker)
+
+
 ## 全てのパス追従をキャンセル
 func cancel_all_path_following() -> void:
 	for controller in _path_controllers.values():
@@ -700,6 +774,9 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	controller.path_progress_updated.connect(_on_path_progress_updated.bind(character))
 	controller.vision_point_reached.connect(_on_vision_point_reached.bind(character))
 	controller.extension_markers_scaled.connect(_on_extension_markers_scaled.bind(character))
+	controller.sync_wait_started.connect(_on_sync_wait_started)
+	controller.sync_wait_released.connect(_on_sync_wait_released)
+	controller.wait_marker_reached.connect(_on_wait_marker_reached.bind(character))
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -720,6 +797,8 @@ func _on_path_completed(character: Node) -> void:
 		_free_extension_mesh(char_id)
 		# アクティブパスメッシュも削除（複数回延長した場合の全セグメント）
 		_free_active_path_meshes(char_id)
+		# 移動中パスのWaitマーカーも削除
+		_free_moving_path_wait_markers(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -727,6 +806,18 @@ func _on_path_completed(character: Node) -> void:
 
 func _on_path_cancelled(_character: Node) -> void:
 	pass
+
+
+## 同期待機開始時のコールバック
+func _on_sync_wait_started() -> void:
+	sync_wait_state_changed.emit(true)
+
+
+## 同期待機解放時のコールバック
+func _on_sync_wait_released() -> void:
+	# 他に同期待機中のキャラクターがいるか確認
+	var has_waiting := has_sync_waiting_characters()
+	sync_wait_state_changed.emit(has_waiting)
 
 
 ## パス進行状況更新時のコールバック
@@ -847,6 +938,40 @@ func _on_vision_point_reached(index: int, _direction: Vector3, character: Node) 
 			marker.visible = false
 
 
+## Waitマーカー到達時のコールバック
+## 通過したWaitマーカーを非表示にする
+func _on_wait_marker_reached(index: int, marker_data: Dictionary, character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	var anchor: Vector3 = marker_data.get("anchor", Vector3.ZERO)
+	var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+
+	# 移動中パスの動的マーカーを優先チェック（位置ベースマッチング）
+	if _moving_path_wait_markers.has(char_id):
+		var wait_markers = _moving_path_wait_markers[char_id]
+		for marker in wait_markers:
+			if is_instance_valid(marker) and marker.visible:
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.5:
+					marker.visible = false
+					return
+
+	# 確認済みパスのマーカーを非表示（位置ベースマッチング）
+	if pending_paths.has(char_id):
+		var path_data = pending_paths[char_id]
+		var wait_markers = path_data.get("wait_markers", [])
+		for marker in wait_markers:
+			if is_instance_valid(marker) and marker.visible:
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.5:
+					marker.visible = false
+					return
+
+
 ## 延長マーカーの比率がスケールされた時のコールバック
 func _on_extension_markers_scaled(scale: float, character: Node) -> void:
 	extension_markers_scaled.emit(character, scale)
@@ -920,6 +1045,9 @@ func _clear_all_path_meshes() -> void:
 	# アクティブパスメッシュも削除
 	for char_id in _active_path_meshes.keys():
 		_free_active_path_meshes(char_id)
+	# 移動中パスのWaitマーカーも削除
+	for char_id in _moving_path_wait_markers.keys():
+		_free_moving_path_wait_markers(char_id)
 
 
 ## pending_pathsのデータからメッシュとマーカーを解放
@@ -927,9 +1055,9 @@ func _free_pending_path_data(data: Dictionary) -> void:
 	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
 		data["path_mesh"].queue_free()
 
-	# 全マーカータイプを一括解放
-	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "smoke_grenade_markers", "door_markers", "wait_markers"]
-	for key in marker_keys:
+	# マーカーメッシュを解放
+	var mesh_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "smoke_grenade_markers", "door_markers", "wait_markers"]
+	for key in mesh_keys:
 		if data.has(key):
 			free_marker_meshes(data[key])
 
@@ -1574,6 +1702,24 @@ func _create_wait_markers_for_path(
 		markers.append(marker)
 
 	return markers
+
+
+## 単一のWaitMarkerメッシュを作成
+func _create_single_wait_marker(anchor: Vector3, duration: float, character: Node) -> MeshInstance3D:
+	if not _mesh_parent:
+		return null
+
+	var marker = MeshInstance3D.new()
+	marker.set_script(WaitMarkerScript)
+	_mesh_parent.add_child(marker)
+
+	marker.set_marker_position(anchor)
+	marker.set_wait_duration(duration)
+
+	var char_color = CharacterColorManager.get_character_color(character)
+	marker.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
+
+	return marker
 
 
 #region 統一マーカーAPI

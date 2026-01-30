@@ -120,6 +120,7 @@ func _setup_hud() -> void:
 	_hud.setup()
 	_hud.execute_all_requested.connect(_on_execute_button_pressed)
 	_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
+	_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
 
 
 func _setup_camera_pan() -> void:
@@ -253,6 +254,13 @@ func _on_execute_button_pressed() -> void:
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
 	_log_message("[color=orange]Paths cleared[/color]")
+
+
+func _on_sync_go_button_pressed() -> void:
+	game_manager.release_all_sync_waiting_characters()
+	if _hud:
+		_hud.hide_sync_go_button()
+	_log_message("[color=cyan]Sync waiting characters released[/color]")
 
 
 func _manual_sync() -> void:

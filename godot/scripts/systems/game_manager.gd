@@ -836,13 +836,37 @@ func is_path_context_menu_open() -> bool:
 
 ## コンテキストメニュー選択時のコールバック
 func _on_path_context_menu_selected(item_id: String, path_data: Dictionary) -> void:
-	# TODO: 将来的にWait Point等の機能を実装
-	print("[GameManager] Context menu selected: ", item_id, " path_data: ", path_data)
+	match item_id:
+		"wait_point":
+			_add_sync_wait_point(path_data)
 
 
 ## コンテキストメニュー閉じ時のコールバック
 func _on_path_context_menu_closed() -> void:
 	pass
+
+
+## 同期Waitポイントを追加
+## @param path_data: パス情報（character, path_ratio, point等）
+func _add_sync_wait_point(path_data: Dictionary) -> void:
+	var path_ratio: float = path_data.get("path_ratio", 0.0)
+	var anchor: Vector3 = path_data.get("point", Vector3.ZERO)
+	var character = path_data.get("character", null)
+
+	# パスモード中（pending path）の場合、PathDrawerにマーカーを追加
+	if is_path_mode() and path_drawer:
+		path_drawer.add_sync_wait_marker(path_ratio, anchor)
+		return
+
+	# 確認済みパスの場合、PathExecutionManagerにマーカーを追加
+	if character and path_execution_manager:
+		path_execution_manager.add_sync_wait_marker_to_path(character, path_ratio, anchor)
+
+
+## 全キャラクターの同期待機を解除
+func release_all_sync_waiting_characters() -> void:
+	if path_execution_manager:
+		path_execution_manager.release_all_sync_waiting()
 
 
 ## ========================================
