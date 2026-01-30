@@ -499,7 +499,6 @@ func _add_point(pos: Vector3) -> void:
 					corrected_last.y = ground_plane_height
 					_path_points[_path_points.size() - 1] = corrected_last
 					_path_mesh.update_from_points(_path_points)
-					print("[WallSlide] Corrected last point: ", corrected_last)
 				else:
 					# last_point から wall_slide_start への線が壁を通らないかチェック
 					var check_hit = _check_wall_between(last_point, wall_slide_start)
