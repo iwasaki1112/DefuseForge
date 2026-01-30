@@ -25,10 +25,26 @@ var _path_endpoint_extension_pending: bool = false
 ## パス先端延長モードが開始されたかどうか
 var _path_endpoint_extension_started: bool = false
 
+## 長押し回転モード用変数
+var _long_press_timer: float = 0.0
+var _long_press_threshold: float = 1.0  ## 長押し判定の閾値（秒）
+var _is_rotation_mode: bool = false  ## 回転モード中かどうか
+var _rotation_target_character: Node = null  ## 回転対象のキャラクター
+var _rotation_center_screen_pos: Vector2 = Vector2.ZERO  ## 回転中心のスクリーン座標
+
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 	game_manager = manager
 	camera_pan_controller = pan_controller
+
+
+func _process(delta: float) -> void:
+	# 長押し検出
+	if _left_button_pressed and not _is_rotation_mode and not _immediate_path_drawing_started:
+		if _rotation_target_character and is_instance_valid(_rotation_target_character):
+			_long_press_timer += delta
+			if _long_press_timer >= _long_press_threshold:
+				_start_rotation_mode()
 
 
 ## パス未設定キャラクターかどうかを判定
@@ -61,6 +77,46 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 ## @return: パス延長モードが開始された場合true
 func _try_start_path_extension_from_endpoint(screen_pos: Vector2) -> bool:
 	return game_manager.try_start_path_extension_at_position(screen_pos)
+
+
+## 回転モードを開始
+func _start_rotation_mode() -> void:
+	if not _rotation_target_character or not is_instance_valid(_rotation_target_character):
+		return
+	_is_rotation_mode = true
+	_immediate_path_mode_started = false
+	_immediate_path_drawing_started = false
+	# キャラクターの位置をスクリーン座標に変換して回転中心とする
+	var char_pos = _rotation_target_character.global_position
+	_rotation_center_screen_pos = game_manager.camera.unproject_position(char_pos)
+
+
+## 回転モードを終了
+func _end_rotation_mode() -> void:
+	_is_rotation_mode = false
+	_rotation_target_character = null
+	_long_press_timer = 0.0
+
+
+## 回転モード中のドラッグ処理
+func _process_rotation_drag(screen_pos: Vector2) -> void:
+	if not _rotation_target_character or not is_instance_valid(_rotation_target_character):
+		_end_rotation_mode()
+		return
+
+	# スクリーン座標からキャラクター中心への方向を計算
+	var dir_from_center = screen_pos - _rotation_center_screen_pos
+	if dir_from_center.length() < 10.0:
+		return  # 中心に近すぎる場合は無視
+
+	# スクリーン座標の方向をワールド座標の方向に変換
+	# スクリーン: 右が+X、下が+Y
+	# ワールド: 右が+X、手前が-Z（カメラが上から見下ろしている場合）
+	var angle = atan2(dir_from_center.x, dir_from_center.y)
+
+	# キャラクターの向きを設定
+	var direction = Vector3(sin(angle), 0, cos(angle))
+	_rotation_target_character.set_facing_direction_vec(direction)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -108,6 +164,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	# パスモード中の処理
 	# ========================================
 	if game_manager.is_path_mode():
+		# 回転モード中のドラッグ処理
+		if event is InputEventMouseMotion and _is_rotation_mode:
+			_process_rotation_drag(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
 		# 即座パスモードでまだ描画開始していない場合のドラッグ検出
 		if event is InputEventMouseMotion and _immediate_path_mode_started and not _immediate_path_drawing_started:
 			var path_drawer = _get_path_drawer()
@@ -142,6 +204,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		# マウスボタンリリース時：カメラドラッグ状態をクリア
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_left_button_pressed = false
+			# 回転モード中だった場合は終了
+			if _is_rotation_mode:
+				_end_rotation_mode()
+				get_viewport().set_input_as_handled()
+				return
+			_rotation_target_character = null
+			_long_press_timer = 0.0
 			# パス先端延長中だった場合、PathDrawerに描画終了を通知
 			if _path_endpoint_extension_started:
 				var path_drawer = _get_path_drawer()
@@ -167,11 +236,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			_left_button_pressed = true
 			_left_click_start_pos = event.position
+			_long_press_timer = 0.0
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
+						# 長押し回転用にキャラクターを記録
+						_rotation_target_character = clicked
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
 						game_manager.selection_manager.deselect_all()
@@ -200,6 +272,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			_left_button_pressed = true
 			_left_click_start_pos = event.position
+			_long_press_timer = 0.0
+
+			# キャラクターがクリックされたか確認して、長押し回転用に記録
+			var clicked = game_manager.raycast_character(event.position)
+			if clicked and not PlayerState.is_enemy(clicked):
+				_rotation_target_character = clicked
+			else:
+				_rotation_target_character = null
 
 			# キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
 			if _try_start_immediate_path_mode(event.position):
@@ -213,6 +293,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_path_endpoint_extension_started = false
 		else:
 			_left_button_pressed = false
+			# 回転モード中だった場合は終了
+			if _is_rotation_mode:
+				_end_rotation_mode()
+				return
+			_rotation_target_character = null
+			_long_press_timer = 0.0
 			# カメラドラッグ中だった場合はタップ処理をスキップ
 			if camera_pan_controller and camera_pan_controller.is_dragging():
 				camera_pan_controller.end_drag()
@@ -250,6 +336,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# 1本指マウスドラッグ処理
 	if event is InputEventMouseMotion and _left_button_pressed:
+		# 回転モード中のドラッグ処理
+		if _is_rotation_mode:
+			_process_rotation_drag(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
 			game_manager.start_move_mode()
@@ -316,6 +408,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 	# パスモード中の処理
 	if game_manager.is_path_mode():
+		# 回転モード中のドラッグ処理（タッチ）
+		if event is InputEventScreenDrag and _is_rotation_mode:
+			_process_rotation_drag(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
 		# 即座パスモードでまだ描画開始していない場合のドラッグ検出
 		if event is InputEventScreenDrag and _immediate_path_mode_started and not _immediate_path_drawing_started:
 			var path_drawer = _get_path_drawer()
@@ -350,6 +448,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 		# タッチ終了時：カメラパン状態をクリア
 		if event is InputEventScreenTouch and not event.pressed:
+			_left_button_pressed = false
+			# 回転モード中だった場合は終了
+			if _is_rotation_mode:
+				_end_rotation_mode()
+				get_viewport().set_input_as_handled()
+				return
+			_rotation_target_character = null
+			_long_press_timer = 0.0
 			# パス先端延長中だった場合、PathDrawerに描画終了を通知
 			if _path_endpoint_extension_started:
 				var path_drawer = _get_path_drawer()
@@ -372,12 +478,16 @@ func _handle_touch_event(event: InputEvent) -> void:
 			return
 		# タッチ開始時：キャラクタータップ
 		if event is InputEventScreenTouch and event.pressed:
+			_left_button_pressed = true
 			_left_click_start_pos = event.position
+			_long_press_timer = 0.0
 			var clicked = game_manager.raycast_character(event.position)
 			if clicked:
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
+						# 長押し回転用にキャラクターを記録
+						_rotation_target_character = clicked
 						# 現在のパスを確定してから切り替え
 						game_manager.confirm_path()
 						game_manager.selection_manager.deselect_all()
@@ -408,7 +518,16 @@ func _handle_touch_event(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			# タッチ開始：タップ候補として記録
+			_left_button_pressed = true
 			_left_click_start_pos = event.position
+			_long_press_timer = 0.0
+
+			# キャラクターがタッチされたか確認して、長押し回転用に記録
+			var clicked = game_manager.raycast_character(event.position)
+			if clicked and not PlayerState.is_enemy(clicked):
+				_rotation_target_character = clicked
+			else:
+				_rotation_target_character = null
 
 			# パス未設定キャラクターなら即座にパスモード開始（描画はドラッグ時に開始）
 			if _try_start_immediate_path_mode(event.position):
@@ -421,6 +540,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_path_endpoint_extension_pending = true
 			_path_endpoint_extension_started = false
 		else:
+			_left_button_pressed = false
+			# 回転モード中だった場合は終了
+			if _is_rotation_mode:
+				_end_rotation_mode()
+				get_viewport().set_input_as_handled()
+				return
+			_rotation_target_character = null
+			_long_press_timer = 0.0
 			# カメラパン中だった場合はタップ処理をスキップ
 			if camera_pan_controller.is_touch_panning():
 				camera_pan_controller.end_touch_pan()
@@ -463,6 +590,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 	# 1本指ドラッグ処理
 	if event is InputEventScreenDrag:
+		# 回転モード中のドラッグ処理（タッチ）
+		if _is_rotation_mode:
+			_process_rotation_drag(event.position)
+			get_viewport().set_input_as_handled()
+			return
+
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
 			game_manager.start_move_mode()
