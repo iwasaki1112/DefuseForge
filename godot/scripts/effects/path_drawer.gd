@@ -468,8 +468,8 @@ func _add_point(pos: Vector3) -> void:
 			# 壁沿いモード終了後、通常の描画に戻る
 			if not slide_result.corner_hit:
 				# 壁から離れる場合は通常のポイント追加を試みる
-				var hit_result = _check_wall_between(last_point, pos)
-				if not hit_result.hit:
+				var exit_hit_result = _check_wall_between(last_point, pos)
+				if not exit_hit_result.hit:
 					_path_points.append(pos)
 					_path_mesh.update_from_points(_path_points)
 			return
@@ -503,10 +503,10 @@ func _add_point(pos: Vector3) -> void:
 					# last_point から wall_slide_start への線が壁を通らないかチェック
 					var check_hit = _check_wall_between(last_point, wall_slide_start)
 					if check_hit.hit:
-						var safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
-						safe_pos.y = ground_plane_height
-						if safe_pos.distance_to(last_point) >= min_point_distance:
-							_path_points.append(safe_pos)
+						var slide_safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
+						slide_safe_pos.y = ground_plane_height
+						if slide_safe_pos.distance_to(last_point) >= min_point_distance:
+							_path_points.append(slide_safe_pos)
 							_path_mesh.update_from_points(_path_points)
 					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
 						_path_points.append(wall_slide_start)
@@ -593,8 +593,8 @@ func _add_extend_point(pos: Vector3) -> void:
 			# 壁沿いモード終了後、通常の描画に戻る
 			if not slide_result.corner_hit:
 				# 壁から離れる場合は通常のポイント追加を試みる
-				var hit_result = _check_wall_between(last_point, pos)
-				if not hit_result.hit:
+				var exit_hit_result = _check_wall_between(last_point, pos)
+				if not exit_hit_result.hit:
 					_path_points.append(pos)
 					_path_mesh.update_from_points(_path_points)
 			return
@@ -628,10 +628,10 @@ func _add_extend_point(pos: Vector3) -> void:
 					# last_point から wall_slide_start への線が壁を通らないかチェック
 					var check_hit = _check_wall_between(last_point, wall_slide_start)
 					if check_hit.hit:
-						var safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
-						safe_pos.y = ground_plane_height
-						if safe_pos.distance_to(last_point) >= min_point_distance:
-							_path_points.append(safe_pos)
+						var slide_safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
+						slide_safe_pos.y = ground_plane_height
+						if slide_safe_pos.distance_to(last_point) >= min_point_distance:
+							_path_points.append(slide_safe_pos)
 							_path_mesh.update_from_points(_path_points)
 					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
 						_path_points.append(wall_slide_start)
@@ -838,10 +838,10 @@ func _process_wall_slide(user_pos: Vector3) -> Dictionary:
 
 
 ## 壁沿いモード終了判定
-## @param user_pos: ユーザーの入力位置
+## @param _user_pos: ユーザーの入力位置（将来の拡張用、現在未使用）
 ## @param user_move_dir: ユーザーの移動方向（正規化済み）
 ## @return: 終了すべき場合true
-func _should_exit_wall_slide(user_pos: Vector3, user_move_dir: Vector3) -> bool:
+func _should_exit_wall_slide(_user_pos: Vector3, user_move_dir: Vector3) -> bool:
 	# ユーザーが壁から離れる方向に動いているかチェック
 	# 壁法線とユーザー移動方向のドット積が正なら、壁から離れている
 	var away_from_wall = user_move_dir.dot(_wall_slide_normal)
