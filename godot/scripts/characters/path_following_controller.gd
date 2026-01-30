@@ -1592,8 +1592,12 @@ func _append_extension_markers(markers: Dictionary, old_length: float, new_lengt
 func _scale_existing_extension_markers(old_length: float, total_length: float) -> void:
 	var scale := old_length / total_length
 
-	for i in range(_extension_vision_points.size()):
-		_extension_vision_points[i]["path_ratio"] = _extension_vision_points[i].path_ratio * scale
+	# Visionマーカーはアンカー位置から比率を再計算（スケールではなく）
+	_recalculate_extension_vision_ratios_from_anchors()
+
+	# 他のマーカーは従来通りスケール
+	#for i in range(_extension_vision_points.size()):
+	#	_extension_vision_points[i]["path_ratio"] = _extension_vision_points[i].path_ratio * scale
 
 	for i in range(_extension_run_segments.size()):
 		_extension_run_segments[i]["start_ratio"] = _extension_run_segments[i].start_ratio * scale
@@ -1616,6 +1620,73 @@ func _scale_existing_extension_markers(old_length: float, total_length: float) -
 
 	# マーカースケールシグナルを発火（game_managerのマーカー同期用）
 	extension_markers_scaled.emit(scale)
+
+
+## 延長パスのVisionマーカーの比率をアンカー位置から再計算
+func _recalculate_extension_vision_ratios_from_anchors() -> void:
+	if _extension_path.size() < 2:
+		return
+
+	for i in range(_extension_vision_points.size()):
+		var vp = _extension_vision_points[i]
+		if vp.has("anchor") and vp.anchor != Vector3.ZERO:
+			var new_ratio = _calculate_ratio_from_position_on_path(_extension_path, vp.anchor)
+			_extension_vision_points[i]["path_ratio"] = new_ratio
+
+
+## 現在のパスのVisionマーカーの比率をアンカー位置から再計算
+func _recalculate_vision_ratios_from_anchors() -> void:
+	if _current_path.size() < 2:
+		return
+
+	for i in range(_vision_points.size()):
+		var vp = _vision_points[i]
+		if vp.has("anchor") and vp.anchor != Vector3.ZERO:
+			var new_ratio = _calculate_ratio_from_position_on_path(_current_path, vp.anchor)
+			_vision_points[i]["path_ratio"] = new_ratio
+
+
+## ワールド座標からパス上の比率を計算（最近点を使用）
+func _calculate_ratio_from_position_on_path(path: Array[Vector3], position: Vector3) -> float:
+	if path.is_empty():
+		return 0.0
+	if path.size() == 1:
+		return 0.0
+
+	var total_length := _calculate_path_length_array(path)
+	if total_length < 0.001:
+		return 0.0
+
+	# パス上の最近点を見つける
+	var best_ratio: float = 0.0
+	var best_distance: float = INF
+	var accumulated: float = 0.0
+
+	for i in range(1, path.size()):
+		var segment_start = path[i - 1]
+		var segment_end = path[i]
+		var segment_length = segment_start.distance_to(segment_end)
+
+		if segment_length < 0.001:
+			accumulated += segment_length
+			continue
+
+		# セグメント上の最近点を計算
+		var segment_dir = (segment_end - segment_start).normalized()
+		var to_pos = position - segment_start
+		var proj_length = to_pos.dot(segment_dir)
+		proj_length = clamp(proj_length, 0.0, segment_length)
+
+		var closest_point = segment_start + segment_dir * proj_length
+		var dist = position.distance_to(closest_point)
+
+		if dist < best_distance:
+			best_distance = dist
+			best_ratio = (accumulated + proj_length) / total_length
+
+		accumulated += segment_length
+
+	return clamp(best_ratio, 0.0, 1.0)
 
 
 ## 延長パスをキャンセル
@@ -1691,6 +1762,9 @@ func _switch_to_extension_path() -> void:
 
 	# パス長キャッシュを再構築
 	_build_path_length_cache()
+
+	# Visionマーカーの比率をアンカー位置から再計算
+	_recalculate_vision_ratios_from_anchors()
 
 	# 延長データをクリア
 	cancel_extension()

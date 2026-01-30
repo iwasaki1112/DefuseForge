@@ -185,7 +185,7 @@ func create_character_from_preset(preset: CharacterPresetScript, position: Vecto
 	var collision := CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.3
+	capsule.radius = 0.4
 	capsule.height = 1.8
 	collision.shape = capsule
 	collision.position.y = 0.9

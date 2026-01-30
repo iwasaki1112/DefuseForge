@@ -1028,25 +1028,76 @@ func _on_path_progress_updated(character: Node) -> void:
 	hide_passed_moving_path_vision_markers(character, 0.0)
 
 
-func _on_extension_markers_scaled(character: Node, scale: float) -> void:
-	# 移動中パスVisionマーカーの比率をスケール
-	if not character:
+func _on_extension_markers_scaled(character: Node, _scale: float) -> void:
+	# 移動中パスVisionマーカーの比率をアンカー位置から再計算
+	if not character or not path_execution_manager:
 		return
 	var char_id = character.get_instance_id()
 	if not _moving_path_vision_markers.has(char_id):
 		return
 
-	for marker_data in _moving_path_vision_markers[char_id]:
-		var old_ratio = marker_data.get("path_ratio", 0.0)
-		marker_data["path_ratio"] = old_ratio * scale
+	# 現在の完全な残りパスを取得
+	var full_path: Array[Vector3] = path_execution_manager.get_full_remaining_path_array(character)
+	if full_path.size() < 2:
+		return
 
-		# 視覚的なマーカー位置が変わっていないか確認し、必要であれば元の位置に戻す
-		var marker = marker_data.get("marker")
+	for marker_data in _moving_path_vision_markers[char_id]:
 		var anchor = marker_data.get("anchor", Vector3.ZERO)
+		if anchor != Vector3.ZERO:
+			# アンカー位置からパス上の比率を再計算
+			var new_ratio = _calculate_ratio_from_position_on_path(full_path, anchor)
+			marker_data["path_ratio"] = new_ratio
+
+		# 視覚的なマーカー位置を維持
+		var marker = marker_data.get("marker")
 		var target_point = marker_data.get("target_point", Vector3.ZERO)
 		if is_instance_valid(marker) and anchor != Vector3.ZERO:
-			# マーカーの位置を元のanchorに強制的に戻す
 			marker.set_position_and_target(anchor, target_point)
+
+
+## ワールド座標からパス上の比率を計算（最近点を使用）
+func _calculate_ratio_from_position_on_path(path: Array[Vector3], position: Vector3) -> float:
+	if path.is_empty() or path.size() < 2:
+		return 0.0
+
+	# パス全体の長さを計算
+	var total_length: float = 0.0
+	for i in range(1, path.size()):
+		total_length += path[i - 1].distance_to(path[i])
+
+	if total_length < 0.001:
+		return 0.0
+
+	# パス上の最近点を見つける
+	var best_ratio: float = 0.0
+	var best_distance: float = INF
+	var accumulated: float = 0.0
+
+	for i in range(1, path.size()):
+		var segment_start = path[i - 1]
+		var segment_end = path[i]
+		var segment_length = segment_start.distance_to(segment_end)
+
+		if segment_length < 0.001:
+			accumulated += segment_length
+			continue
+
+		# セグメント上の最近点を計算
+		var segment_dir = (segment_end - segment_start).normalized()
+		var to_pos = position - segment_start
+		var proj_length = to_pos.dot(segment_dir)
+		proj_length = clamp(proj_length, 0.0, segment_length)
+
+		var closest_point = segment_start + segment_dir * proj_length
+		var dist = position.distance_to(closest_point)
+
+		if dist < best_distance:
+			best_distance = dist
+			best_ratio = (accumulated + proj_length) / total_length
+
+		accumulated += segment_length
+
+	return clamp(best_ratio, 0.0, 1.0)
 
 
 func _on_paths_execution_started(count: int) -> void:
