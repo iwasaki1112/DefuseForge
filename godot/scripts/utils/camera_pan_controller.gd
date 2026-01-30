@@ -1,8 +1,9 @@
 class_name CameraPanController
 extends RefCounted
 ## カメラを平行移動、ズームする簡易コントローラー
-## PC: 左ドラッグでパン、マウスホイールでズーム
-## モバイル: 1本指でパン、2本指でズーム（パスモード時は1本指でパス描画）
+## PC: 1本指ドラッグでパン、マウスホイールでズーム
+## モバイル: 1本指でパン、2本指でズーム
+## パスモード時は1本指でパス描画
 ## 参考: https://github.com/DionHo/GodotTouchCamera
 
 var camera: Camera3D = null
@@ -194,16 +195,6 @@ func handle_magnify_gesture(factor: float) -> void:
 	_target_zoom = clampf(_target_zoom + zoom_delta, zoom_min, zoom_max)
 
 
-## トラックパッドの2本指パン（Pan）ジェスチャー処理
-## 参考: https://github.com/williambcosta/godot-touch-camera-2d
-func handle_pan_gesture(delta: Vector2) -> void:
-	if not camera:
-		return
-	# deltaを直接使用（3Dカメラ用にX→X, Y→Zにマッピング）
-	var trackpad_speed: float = 0.25  # トラックパッド専用の速度係数
-	camera.global_position += Vector3(delta.x * trackpad_speed, 0, delta.y * trackpad_speed)
-
-
 ## ピンチ開始時の処理
 func _start_pinch() -> void:
 	_is_pinching = true
@@ -229,7 +220,7 @@ func _calc_std_deviation(centroid: Vector2) -> float:
 	return sqrt(d / _touch_points.size())
 
 
-## 2本指ピンチでズーム＋パン処理
+## 2本指ピンチでズーム処理
 func _update_pinch_zoom() -> void:
 	if not camera or _touch_points.size() < 2:
 		return
@@ -238,13 +229,6 @@ func _update_pinch_zoom() -> void:
 	var current_std_deviation = _calc_std_deviation(current_centroid)
 
 	var scale_pinch = current_std_deviation / _prev_std_deviation if _prev_std_deviation > 0 else 1.0
-
-	# パン処理（重心の移動に基づく）
-	var centroid_delta = current_centroid - _prev_centroid
-	var adjusted_speed = _get_adjusted_pan_speed(mobile_pan_speed)
-	var move_x = -centroid_delta.x * adjusted_speed
-	var move_z = -centroid_delta.y * adjusted_speed
-	camera.global_position += Vector3(move_x, 0, move_z)
 
 	_prev_centroid = current_centroid
 	_prev_std_deviation = current_std_deviation

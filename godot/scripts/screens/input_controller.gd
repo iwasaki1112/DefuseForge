@@ -84,7 +84,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	# ========================================
-	# Macトラックパッドジェスチャー（ピンチズーム、2本指パン）
+	# Macトラックパッドジェスチャー（ピンチズーム）
 	# 微小なジェスチャーは無視（クリック時のノイズ対策）
 	# ========================================
 	if event is InputEventMagnifyGesture:
@@ -94,13 +94,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		# 微小な場合は無視して次の処理へ（returnしない）
-
-	if event is InputEventPanGesture:
-		# すべてのパンジェスチャーをそのまま処理
-		if camera_pan_controller:
-			camera_pan_controller.handle_pan_gesture(event.delta)
-			get_viewport().set_input_as_handled()
-		return
 
 	# ========================================
 	# マウスホイール（カメラズーム）
@@ -182,7 +175,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# ========================================
 	# 左クリック処理（PC向け・非パスモード）
-	# 1本指はタップのみ、カメラパンは2本指ジェスチャーで行う
+	# 1本指でタップ/パン、2本指でズーム
 	# ========================================
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
@@ -201,6 +194,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_path_endpoint_extension_started = false
 		else:
 			_left_button_pressed = false
+			# カメラドラッグ中だった場合はタップ処理をスキップ
+			if camera_pan_controller and camera_pan_controller.is_dragging():
+				camera_pan_controller.end_drag()
+				return
+			if camera_pan_controller and camera_pan_controller.is_pending_drag():
+				camera_pan_controller.cancel_potential_drag()
 			# 即座にパスモードを開始した場合はタップ処理をスキップ
 			if _immediate_path_mode_started:
 				_immediate_path_mode_started = false
@@ -233,9 +232,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				# パスモードに入ったのでPathDrawerに委譲
 				return
 			else:
-				# パス先端でなければ待機状態をクリア
+				# パス先端でなければカメラパン候補を開始
 				_path_endpoint_extension_pending = false
-		# 非パスモードでは1本指ドラッグを無視（カメラパンしない）
+				if camera_pan_controller:
+					camera_pan_controller.start_potential_drag(_left_click_start_pos)
+		# カメラパン処理
+		if camera_pan_controller:
+			if camera_pan_controller.is_pending_drag():
+				camera_pan_controller.check_and_start_drag(event.position)
+			if camera_pan_controller.is_dragging():
+				camera_pan_controller.handle_input(event)
+				get_viewport().set_input_as_handled()
 		return
 
 
@@ -328,7 +335,7 @@ func _handle_touch_event(event: InputEvent) -> void:
 		# それ以外はPathDrawerに委譲
 		return
 
-	# 1本指タッチ（非パスモード）- タップのみ、パンは2本指で行う
+	# 1本指タッチ（非パスモード）- タップとパン、2本指でズーム
 	var is_one_finger = camera_pan_controller.get_touch_count() == 1
 	var is_one_finger_release = event is InputEventScreenTouch and not event.pressed and touch_count_before == 1
 
@@ -351,6 +358,13 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_path_endpoint_extension_pending = true
 			_path_endpoint_extension_started = false
 		else:
+			# カメラパン中だった場合はタップ処理をスキップ
+			if camera_pan_controller.is_touch_panning():
+				camera_pan_controller.end_touch_pan()
+				get_viewport().set_input_as_handled()
+				return
+			if camera_pan_controller.is_pending_touch_pan():
+				camera_pan_controller.cancel_potential_touch_pan()
 			# 即座にパスモードを開始した場合はタップ処理をスキップ
 			# （パスモードに入った状態で、その後のドラッグでパスを描ける）
 			if _immediate_path_mode_started:
@@ -388,8 +402,14 @@ func _handle_touch_event(event: InputEvent) -> void:
 				# パスモードに入ったのでPathDrawerに委譲
 				return
 			else:
-				# パス先端でなければ待機状態をクリア
+				# パス先端でなければカメラパン候補を開始
 				_path_endpoint_extension_pending = false
+				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
+		# カメラパン処理
+		if camera_pan_controller.is_pending_touch_pan():
+			camera_pan_controller.check_and_start_touch_pan(event.position)
+		if camera_pan_controller.is_touch_panning():
+			camera_pan_controller.update_touch_pan(event.position)
 		get_viewport().set_input_as_handled()
 
 
