@@ -38,7 +38,7 @@ signal off_path_tapped()
 @export var path_endpoint_threshold: float = 0.3
 @export_flags_3d_physics var wall_collision_mask: int = 2
 @export var enable_wall_sliding: bool = true
-@export var wall_slide_offset: float = 0.15  ## 壁からの距離
+@export var wall_slide_offset: float = 0.5  ## 壁からの距離
 @export var enable_smoothing: bool = true
 @export var smoothing_epsilon: float = 0.15
 @export var smoothing_segments: int = 4
@@ -464,6 +464,7 @@ func _add_point(pos: Vector3) -> void:
 	if _is_wall_sliding:
 		var slide_result = _process_wall_slide(pos)
 		if slide_result.should_exit:
+			print("[WallSlide] Exit mode: corner_hit=", slide_result.corner_hit)
 			_reset_wall_slide_state()
 			# 壁沿いモード終了後、通常の描画に戻る
 			if not slide_result.corner_hit:
@@ -474,6 +475,7 @@ func _add_point(pos: Vector3) -> void:
 					_path_mesh.update_from_points(_path_points)
 			return
 		if slide_result.new_point != Vector3.ZERO:
+			print("[WallSlide] Slide point: last=", last_point, " new=", slide_result.new_point)
 			_path_points.append(slide_result.new_point)
 			_path_mesh.update_from_points(_path_points)
 		return
@@ -481,25 +483,46 @@ func _add_point(pos: Vector3) -> void:
 	# 通常モードの処理
 	var hit_result = _check_wall_between(last_point, pos)
 	if hit_result.hit:
+		var wall_pos = hit_result.position
+
 		if enable_wall_sliding:
 			# 壁沿いモードに入る
 			var move_dir = (pos - last_point).normalized()
 			if _enter_wall_slide_mode(hit_result, move_dir):
-				# 壁沿い位置にポイントを追加
-				var wall_pos = hit_result.position
-				var safe_pos = wall_pos + _wall_slide_normal * wall_slide_offset
-				safe_pos.y = ground_plane_height
-				if safe_pos.distance_to(last_point) >= min_point_distance:
-					_path_points.append(safe_pos)
+				# 壁沿いの開始位置（壁の法線方向にオフセット）
+				var wall_slide_start = wall_pos + _wall_slide_normal * wall_slide_offset
+				wall_slide_start.y = ground_plane_height
+
+				# last_point が壁に近すぎる場合は修正
+				var last_to_wall_dist = last_point.distance_to(wall_pos)
+				if last_to_wall_dist < wall_slide_offset and _path_points.size() > 1:
+					# 最後のポイントを壁から離れた位置に修正
+					var corrected_last = wall_pos + _wall_slide_normal * wall_slide_offset
+					corrected_last.y = ground_plane_height
+					_path_points[_path_points.size() - 1] = corrected_last
 					_path_mesh.update_from_points(_path_points)
+					print("[WallSlide] Corrected last point: ", corrected_last)
+				else:
+					# last_point から wall_slide_start への線が壁を通らないかチェック
+					var check_hit = _check_wall_between(last_point, wall_slide_start)
+					if check_hit.hit:
+						var safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
+						safe_pos.y = ground_plane_height
+						if safe_pos.distance_to(last_point) >= min_point_distance:
+							_path_points.append(safe_pos)
+							_path_mesh.update_from_points(_path_points)
+					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
+						_path_points.append(wall_slide_start)
+						_path_mesh.update_from_points(_path_points)
 				return
+
 		# スライドできない場合は壁の手前で停止
-		var wall_pos = hit_result.position
 		var to_wall = (wall_pos - last_point).normalized()
 		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
-		_path_points.append(safe_pos)
-		_path_mesh.update_from_points(_path_points)
+		if safe_pos.distance_to(last_point) >= min_point_distance:
+			_path_points.append(safe_pos)
+			_path_mesh.update_from_points(_path_points)
 		_finish_drawing()
 		return
 
@@ -584,25 +607,45 @@ func _add_extend_point(pos: Vector3) -> void:
 	# 通常モードの処理
 	var hit_result = _check_wall_between(last_point, pos)
 	if hit_result.hit:
+		var wall_pos = hit_result.position
+
 		if enable_wall_sliding:
 			# 壁沿いモードに入る
 			var move_dir = (pos - last_point).normalized()
 			if _enter_wall_slide_mode(hit_result, move_dir):
-				# 壁沿い位置にポイントを追加
-				var wall_pos = hit_result.position
-				var safe_pos = wall_pos + _wall_slide_normal * wall_slide_offset
-				safe_pos.y = ground_plane_height
-				if safe_pos.distance_to(last_point) >= min_point_distance:
-					_path_points.append(safe_pos)
+				# 壁沿いの開始位置（壁の法線方向にオフセット）
+				var wall_slide_start = wall_pos + _wall_slide_normal * wall_slide_offset
+				wall_slide_start.y = ground_plane_height
+
+				# last_point が壁に近すぎる場合は修正
+				var last_to_wall_dist = last_point.distance_to(wall_pos)
+				if last_to_wall_dist < wall_slide_offset and _path_points.size() > 1:
+					# 最後のポイントを壁から離れた位置に修正
+					var corrected_last = wall_pos + _wall_slide_normal * wall_slide_offset
+					corrected_last.y = ground_plane_height
+					_path_points[_path_points.size() - 1] = corrected_last
 					_path_mesh.update_from_points(_path_points)
+				else:
+					# last_point から wall_slide_start への線が壁を通らないかチェック
+					var check_hit = _check_wall_between(last_point, wall_slide_start)
+					if check_hit.hit:
+						var safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
+						safe_pos.y = ground_plane_height
+						if safe_pos.distance_to(last_point) >= min_point_distance:
+							_path_points.append(safe_pos)
+							_path_mesh.update_from_points(_path_points)
+					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
+						_path_points.append(wall_slide_start)
+						_path_mesh.update_from_points(_path_points)
 				return
+
 		# スライドできない場合は壁の手前で停止
-		var wall_pos = hit_result.position
 		var to_wall = (wall_pos - last_point).normalized()
 		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
-		_path_points.append(safe_pos)
-		_path_mesh.update_from_points(_path_points)
+		if safe_pos.distance_to(last_point) >= min_point_distance:
+			_path_points.append(safe_pos)
+			_path_mesh.update_from_points(_path_points)
 		_finish_extending_path()
 		return
 
@@ -773,6 +816,21 @@ func _process_wall_slide(user_pos: Vector3) -> Dictionary:
 		result.should_exit = true
 		result.corner_hit = true
 		return result
+
+	# 新しい位置から壁方向にレイキャストして、壁が近すぎないかチェック
+	var wall_check_pos = new_pos - _wall_slide_normal * (wall_slide_offset * 2)
+	var wall_distance_hit = _check_wall_between(new_pos, wall_check_pos)
+	if wall_distance_hit.hit:
+		# 壁が近い場合は壁から離れた位置に補正
+		var nearby_wall_pos: Vector3 = wall_distance_hit.position
+		var nearby_wall_normal: Vector3 = wall_distance_hit.get("normal", _wall_slide_normal)
+		nearby_wall_normal.y = 0
+		if nearby_wall_normal.length() > 0.001:
+			nearby_wall_normal = nearby_wall_normal.normalized()
+			new_pos = nearby_wall_pos + nearby_wall_normal * wall_slide_offset
+			new_pos.y = ground_plane_height
+			# 壁法線を更新（壁が曲がっている場合に対応）
+			_wall_slide_normal = nearby_wall_normal
 
 	result.new_point = new_pos
 	return result
