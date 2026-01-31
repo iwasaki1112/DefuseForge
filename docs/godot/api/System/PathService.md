@@ -24,9 +24,9 @@
 | `vision_point_added` | 視線ポイント追加 |
 | `run_segment_added` | Run区間追加 |
 | `clear_point_added` | Clearポイント追加 |
-| `grenade_marker_added` | グレネードマーカー追加 |
-| `door_marker_added` | ドアマーカー追加 |
-| `wait_marker_added` | Waitマーカー追加 |
+| `grenade_point_added` | グレネードポイント追加 |
+| `door_point_added` | ドアポイント追加 |
+| `wait_point_added` | Waitポイント追加 |
 
 ## 主なメソッド
 
@@ -81,8 +81,8 @@
 ### `handle_click_to_cancel(clicked_character: Node) -> bool`
 パスモード時のクリックキャンセル処理を委譲する。
 
-### `is_marker_mode() -> bool`
-視線/Runマーカー設定モードか判定する。
+### `is_point_mode() -> bool`
+視線/Runポイント設定モードか判定する。
 
 ### `start_vision_mode() -> bool`
 視線ポイントの追加モードを開始する。
@@ -103,25 +103,25 @@ Clearポイント追加モードを開始する。
 最後のClearポイントを削除する。
 
 ### `start_grenade_mode() -> void`
-グレネードマーカー追加モードを開始する。
+グレネードポイント追加モードを開始する。
 
 ### `start_door_mode() -> void`
-ドアマーカー追加モードを開始する。
+ドアポイント追加モードを開始する。
 
 ### `start_wait_mode() -> void`
-Waitマーカー追加モードを開始する。長押し時間が待機時間になる。
+Waitポイント追加モードを開始する。長押し時間が待機時間になる。
 
-### `get_grenade_marker_count() -> int`
-グレネードマーカー数を取得する。
+### `get_grenade_point_count() -> int`
+グレネードポイント数を取得する。
 
-### `get_door_marker_count() -> int`
-ドアマーカー数を取得する。
+### `get_door_point_count() -> int`
+ドアポイント数を取得する。
 
-### `get_wait_marker_count() -> int`
-Waitマーカー数を取得する。
+### `get_wait_point_count() -> int`
+Waitポイント数を取得する。
 
-### `undo_last_marker() -> void`
-最後に追加したマーカーを種別を問わず削除する（統一Undo）。
+### `undo_last_point() -> void`
+最後に追加したポイントを種別を問わず削除する（統一Undo）。
 
 ### `get_vision_point_count() -> int`
 視線ポイント数を取得する。
@@ -165,9 +165,9 @@ Run開始のみ設定された未完了区間があるか判定する。
 | `vision_point_added` | `anchor: Vector3, direction: Vector3` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
-| `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` |
-| `door_marker_added` | `path_ratio: float, door: Node3D` |
-| `wait_marker_added` | `path_ratio: float, wait_duration: float` |
+| `grenade_point_added` | `path_ratio: float, target_pos: Vector3` |
+| `door_point_added` | `path_ratio: float, door: Node3D` |
+| `wait_point_added` | `path_ratio: float, wait_duration: float` |
 
 ### メソッド
 - `setup(`
@@ -187,7 +187,7 @@ Run開始のみ設定された未完了区間があるか判定する。
 - `is_any_path_following_active() -> bool`
 - `is_character_following_path(character: Node) -> bool`
 - `handle_click_to_cancel(clicked_character: Node) -> bool`
-- `is_marker_mode() -> bool`
+- `is_point_mode() -> bool`
 - `start_vision_mode() -> bool`
 - `remove_last_vision_point() -> void`
 - `start_run_mode() -> void`
@@ -200,10 +200,10 @@ Run開始のみ設定された未完了区間があるか判定する。
 - `get_vision_point_count() -> int`
 - `get_run_segment_count() -> int`
 - `get_clear_point_count() -> int`
-- `get_grenade_marker_count() -> int`
-- `get_door_marker_count() -> int`
-- `get_wait_marker_count() -> int`
-- `undo_last_marker() -> void`
+- `get_grenade_point_count() -> int`
+- `get_door_point_count() -> int`
+- `get_wait_point_count() -> int`
+- `undo_last_point() -> void`
 - `has_incomplete_run_start() -> bool`
 - `set_active_edit_character(character: Node) -> void`
 - `set_path_drawer_color(color: Color) -> void`

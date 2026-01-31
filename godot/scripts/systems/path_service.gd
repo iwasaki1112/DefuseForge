@@ -123,6 +123,11 @@ func start_path_mode_from_point(character: Node, start_point: Vector3, char_colo
 	path_drawer.set_character_color(char_color)
 	path_drawer.set_active_edit_character(character)
 
+	# 移動中パス継続モードの場合、PathDrawerのメッシュを非表示にする
+	# （PathExecutionManagerのメッシュがリアルタイムで更新されるのでそちらを使う）
+	if is_moving_path and path_drawer:
+		path_drawer.hide_path_mesh()
+
 	path_mode_controller.mode_started.emit(character)
 	return true
 
@@ -252,6 +257,7 @@ func _on_path_mode_started(character: Node) -> void:
 
 
 func _on_path_mode_ended() -> void:
+	_cleanup_moving_continuation()
 	_is_continuation_mode = false
 	_is_moving_path_continuation = false
 	_moving_continuation_character = null
@@ -259,6 +265,7 @@ func _on_path_mode_ended() -> void:
 
 
 func _on_path_mode_cancelled() -> void:
+	_cleanup_moving_continuation(true)  # キャンセル時は元のメッシュを再表示
 	_is_continuation_mode = false
 	_is_moving_path_continuation = false
 	_moving_continuation_character = null
@@ -323,6 +330,12 @@ func _on_path_started(character: Node, start_point: Vector3) -> void:
 	var is_continuation := _is_continuation_mode
 	_is_continuation_mode = false  # フラグをリセット
 	path_execution_manager.start_realtime_path(character, start_point, is_continuation)
+
+
+## 移動中パス継続モードのクリーンアップ
+func _cleanup_moving_continuation(_is_cancel: bool = false) -> void:
+	# 特に何もしない（PathExecutionManagerのメッシュがそのまま使われる）
+	pass
 
 
 ## パスポイント追加シグナルハンドラ（リアルタイム確定）

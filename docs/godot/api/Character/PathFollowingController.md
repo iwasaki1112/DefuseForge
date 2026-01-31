@@ -1,7 +1,7 @@
 # PathFollowingController
 
 パス追従を管理するコントローラークラス。キャラクターが描画されたパスに沿って移動し、視線ポイントで向きを変える。
-Run区間では走行速度で移動し、敵認識・視線ポイントを無視する。Waitマーカーでは指定時間アイドル待機する。
+Run区間では走行速度で移動し、敵認識・視線ポイントを無視する。Waitポイントでは指定時間アイドル待機する。
 Door Kickers 2スタイルの協調的衝突回避（Sidestep）ロジックを実装している。
 
 ## 基本情報
@@ -40,9 +40,9 @@ Door Kickers 2スタイルの協調的衝突回避（Sidestep）ロジックを�
 | `path_completed` | なし | パス追従正常完了時 |
 | `path_cancelled` | なし | パス追従キャンセル時 |
 | `vision_point_reached` | `index: int, direction: Vector3` | 視線ポイント到達時 |
-| `grenade_marker_reached` | `index: int, marker_data: Dictionary` | グレネードマーカー到達時 |
-| `smoke_grenade_marker_reached` | `index: int, marker_data: Dictionary` | スモークグレネードマーカー到達時 |
-| `door_marker_reached` | `index: int, door: Node3D` | ドアマーカー到達時（パス一時停止） |
+| `grenade_point_reached` | `index: int, point_data: Dictionary` | グレネードポイント到達時 |
+| `smoke_grenade_point_reached` | `index: int, point_data: Dictionary` | スモークグレネードポイント到達時 |
+| `door_point_reached` | `index: int, door: Node3D` | ドアポイント到達時（パス一時停止） |
 | `path_progress_updated` | `index: int, character: Node` | パス進行状況更新時（通過したポイントのインデックス） |
 | `extension_path_activated` | `character: Node` | 延長パスへの切り替え発生時 |
 
@@ -140,10 +140,10 @@ CombatAwarenessComponentを設定する（敵自動追跡用）。
 ### マーカー処理
 
 *   **Grenade/Smoke**: 到達時にシグナルを発火し、移動を止めずに投擲アクションを行う。
-*   **Door**: 到達時にパスを一時停止し、`door_marker_reached`を発火。ドアキック等の完了を待つ。
+*   **Door**: 到達時にパスを一時停止し、`door_point_reached`を発火。ドアキック等の完了を待つ。
 *   **Wait**: 到達時にパスを一時停止し、指定時間（`wait_duration`）待機する。
 *   **Clear**: 視線方向とRun状態をリセットし、進行方向を向く。
 
 ### 閉じたドア待機
 
-移動方向に閉じたドアがあり、かつDoorマーカーが設定されていない場合、キャラクターはドアの手前で自動的に停止し、ドアが開くのを待つ（`_is_waiting_for_closed_door`）。
+移動方向に閉じたドアがあり、かつDoorポイントが設定されていない場合、キャラクターはドアの手前で自動的に停止し、ドアが開くのを待つ（`_is_waiting_for_closed_door`）。

@@ -164,34 +164,34 @@ func try_start_path_extension_at_position(screen_pos: Vector2) -> bool
 指定位置近くのパス終端を検索し、パス延長モードを開始する（確定済みパス・移動中パス両対応）。
 
 ```gdscript
-func try_start_vision_marker_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool
+func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool
 ```
-確認済みパス上での長押しによるVisionマーカー追加モードを開始する。
+確認済みパス上での長押しによるVisionポイント追加モードを開始する。
 
 ```gdscript
-func try_start_vision_marker_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary
+func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary
 ```
 移動中パス上での長押し判定を行い、成功すれば対象データを返す。
 
 ```gdscript
-func add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool
+func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool
 ```
-移動中のパスにVisionマーカーを追加する。
+移動中のパスにVisionポイントを追加する。
 
 ```gdscript
 func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3) -> void
 ```
-移動中パスVisionマーカーのプレビュー表示を更新する。
+移動中パスVisionポイントのプレビュー表示を更新する。
 
 ```gdscript
 func clear_moving_path_vision_preview() -> void
 ```
-移動中パスVisionマーカーのプレビューを消去する。
+移動中パスVisionポイントのプレビューを消去する。
 
 ```gdscript
-func clear_moving_path_vision_markers_for_character(character: Node) -> void
+func clear_moving_path_vision_points_for_character(character: Node) -> void
 ```
-指定キャラクターの移動中パスVisionマーカーをクリアする（パス完了時など）。
+指定キャラクターの移動中パスVisionポイントをクリアする（パス完了時など）。
 
 ```gdscript
 func confirm_path() -> void

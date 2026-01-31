@@ -39,8 +39,8 @@ func set_character_timeline(
     character: Node,
     path: Array[Vector3],
     run_segments: Array[Dictionary] = [],
-    wait_markers: Array[Dictionary] = [],
-    door_markers: Array[Dictionary] = [],
+    wait_points: Array[Dictionary] = [],
+    door_points: Array[Dictionary] = [],
     label_text: String = "A",
     color: Color = Color.CYAN
 ) -> void
@@ -51,8 +51,8 @@ func set_character_timeline(
 | `character` | Node | キャラクターノード |
 | `path` | Array[Vector3] | パスポイント配列 |
 | `run_segments` | Array[Dictionary] | Run区間配列 |
-| `wait_markers` | Array[Dictionary] | Waitマーカー配列 |
-| `door_markers` | Array[Dictionary] | Doorマーカー配列 |
+| `wait_points` | Array[Dictionary] | Waitポイント配列 |
+| `door_points` | Array[Dictionary] | Doorポイント配列 |
 | `label_text` | String | ラベル文字 (A, B, C...) |
 | `color` | Color | キャラクター色 |
 
@@ -157,8 +157,8 @@ timeline_ui.set_character_timeline(
     character_a,
     path_points,
     run_segments,
-    wait_markers,
-    door_markers,
+    wait_points,
+    door_points,
     "A",
     Color(0.2, 0.6, 1.0)
 )

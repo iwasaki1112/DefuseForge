@@ -677,6 +677,14 @@ func is_character_following_path(character: Node) -> bool:
 	return false
 
 
+## 指定キャラクターのPathFollowingControllerを取得
+func get_controller_for_character(character: Node) -> Node:
+	if not character:
+		return null
+	var char_id = character.get_instance_id()
+	return _path_controllers.get(char_id, null)
+
+
 ## 指定キャラクターの進行率を取得 (0.0 ~ 1.0)
 func get_character_progress(character: Node) -> float:
 	if not character:

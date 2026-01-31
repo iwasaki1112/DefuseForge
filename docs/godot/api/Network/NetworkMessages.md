@@ -21,13 +21,13 @@ class PathConfirmMessage extends RefCounted:
     var player_id: int              # 送信元プレイヤーID
     var character_id: int           # 対象キャラクターID
     var path: Array[Vector3]        # パス座標配列
-    var vision_markers: Array[Dictionary]      # 視線マーカー
+    var vision_points: Array[Dictionary]      # 視線マーカー
     var run_segments: Array[Dictionary]        # Run区間
-    var clear_markers: Array[Dictionary]       # Clearマーカー
-    var grenade_markers: Array[Dictionary]     # グレネードマーカー
-    var door_markers: Array[Dictionary]        # ドアマーカー
-    var wait_markers: Array[Dictionary]        # Waitマーカー
-    var smoke_grenade_markers: Array[Dictionary] # スモークグレネードマーカー
+    var clear_points: Array[Dictionary]       # Clearポイント
+    var grenade_points: Array[Dictionary]     # グレネードポイント
+    var door_points: Array[Dictionary]        # ドアポイント
+    var wait_points: Array[Dictionary]        # Waitポイント
+    var smoke_grenade_points: Array[Dictionary] # スモークグレネードポイント
     var timestamp: int              # タイムスタンプ（msec）
 
     func to_dict() -> Dictionary
@@ -159,7 +159,7 @@ GameEventMessageを作成。
 # パス確定メッセージの作成
 var path: Array[Vector3] = [Vector3(0, 0, 0), Vector3(5, 0, 3)]
 var msg = NetworkMessages.create_path_confirm(1, 100, path)
-msg.vision_markers.append({
+msg.vision_points.append({
     "path_ratio": 0.5,
     "target_point": [10.0, 1.0, 5.0],
     "has_target": true
@@ -186,4 +186,4 @@ var damage_event = NetworkMessages.create_game_event(
 - [NetworkConstants](NetworkConstants.md) - ネットワーク定数
 - [SyncState](SyncState.md) - 同期状態クラス
 - [NetworkSerializer](NetworkSerializer.md) - シリアライズユーティリティ
-- [ActionMarkerData](ActionMarkerData.md) - マーカーデータ構造
+- [ActionPointData](ActionPointData.md) - マーカーデータ構造

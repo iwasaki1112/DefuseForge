@@ -1307,3 +1307,11 @@ func _emit_drawing_finished_after_restore() -> void:
 func is_multi_character_mode() -> bool:
 	return false
 #endregion
+
+
+#region 移動中パス継続用
+## パスメッシュを非表示にする（移動中継続モード用）
+func hide_path_mesh() -> void:
+	if _path_mesh:
+		_path_mesh.visible = false
+#endregion
