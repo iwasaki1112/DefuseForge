@@ -388,13 +388,12 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		if not path_drawer.start_vision_mode():
 			print("[PointDebug] try_start_vision_point_on_confirmed_path: start_vision_mode failed")
 			return false
-		# Visionハンドラに直接アンカー位置を設定
-		if path_drawer._vision_handler:
-			path_drawer._vision_handler._current_anchor = path_result.point
-			path_drawer._vision_handler._current_ratio = path_result.path_ratio
-			path_drawer._vision_handler._is_active = true
-			path_drawer._longpress_vision_mode = true
-			path_drawer._auto_confirm_after_vision = true  # 確認済みパスからなので自動確定
+		# 公開APIを使用してアンカー位置でVisionモードを開始
+		path_drawer.start_vision_mode_with_anchor(
+			path_result.point,
+			path_result.path_ratio,
+			true  # 確認済みパスからなので自動確定
+		)
 
 	return true
 

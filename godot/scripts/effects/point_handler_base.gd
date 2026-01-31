@@ -144,6 +144,23 @@ func take_points() -> Array[MeshInstance3D]:
 	return points
 
 
+## メッシュを指定親ノードに転送し、データもクリア（所有権完全移譲）
+## NOTE: 現在のUndoなし設計では_pointsもクリアする。
+##       将来「ポイント編集」機能を再有効化する場合は、_pointsを残すか
+##       「編集モード時は転送しない」などの分岐が必要になる可能性あり。
+## @param parent: 転送先の親ノード
+## @return: 転送されたメッシュの配列
+func transfer_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
+	var transferred: Array[MeshInstance3D] = []
+	for mesh in _meshes:
+		if is_instance_valid(mesh):
+			mesh.reparent(parent)
+			transferred.append(mesh)
+	_meshes.clear()
+	_points.clear()
+	return transferred
+
+
 ## 最後のポイントをUndo
 func undo_last() -> Dictionary:
 	if _points.size() == 0:

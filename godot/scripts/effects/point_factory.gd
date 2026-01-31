@@ -3,14 +3,10 @@ extends RefCounted
 
 ## ポイントメッシュ作成ファクトリ
 ## VisionPoint/WaitPointの作成を一元化し、重複コードを削減
+## NOTE: iOSビルド互換のためpreloadを使用せず、class_name参照を使用
 
-
-const VisionPointScript = preload("res://scripts/effects/vision_point.gd")
-const WaitPointScript = preload("res://scripts/effects/wait_point.gd")
-const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
-
-## ポイントタイプのエイリアス
-const PointType = ActionPointDataScript.Type
+## ポイントタイプのエイリアス（ActionPointDataはclass_name定義済み）
+const PointType = ActionPointData.Type
 
 
 ## VisionPointを作成
@@ -27,8 +23,7 @@ static func create_vision_point(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = MeshInstance3D.new()
-	point.set_script(VisionPointScript)
+	var point = VisionPoint.new()
 
 	if parent:
 		parent.add_child(point)
@@ -79,8 +74,7 @@ static func create_wait_point(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = MeshInstance3D.new()
-	point.set_script(WaitPointScript)
+	var point = WaitPoint.new()
 
 	if parent:
 		parent.add_child(point)
@@ -166,8 +160,7 @@ static func create_wait_point_preview(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = MeshInstance3D.new()
-	point.set_script(WaitPointScript)
+	var point = WaitPoint.new()
 
 	if parent:
 		parent.add_child(point)

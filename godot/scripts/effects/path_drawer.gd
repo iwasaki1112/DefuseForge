@@ -954,11 +954,8 @@ func _start_vision_mode_from_longpress() -> void:
 	_drawing_mode = DrawingMode.VISION_POINT
 	mode_changed.emit(int(DrawingMode.VISION_POINT))
 
-	# Visionハンドラにアンカーとしてのプレスをシミュレートするために
-	# 内部状態を直接設定
-	_vision_handler._current_anchor = result.point
-	_vision_handler._current_ratio = result.ratio
-	_vision_handler._is_active = true
+	# Visionハンドラに指定アンカーでモード開始（公開APIを使用）
+	_vision_handler.start_with_anchor(result.point, result.ratio)
 
 
 ## パス上長押し状態をリセット
@@ -1058,6 +1055,33 @@ func get_wait_point_count() -> int:
 
 func take_wait_points() -> Array[MeshInstance3D]:
 	return _wait_handler.take_points()
+
+
+## Visionポイントメッシュを指定親ノードに転送（データもクリア）
+## @param parent: 転送先の親ノード
+## @return: 転送されたメッシュの配列
+func transfer_vision_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
+	return _vision_handler.transfer_meshes_to(parent)
+
+
+## Waitポイントメッシュを指定親ノードに転送（データもクリア）
+## @param parent: 転送先の親ノード
+## @return: 転送されたメッシュの配列
+func transfer_wait_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
+	return _wait_handler.transfer_meshes_to(parent)
+
+
+## 指定アンカー位置でVisionモードを開始（外部からの呼び出し用）
+## 内部状態の直接操作を避けるためのAPI
+## @param anchor: アンカー位置
+## @param ratio: パス上の比率
+## @param auto_confirm: ポイント追加後に自動確定するかどうか
+func start_vision_mode_with_anchor(anchor: Vector3, ratio: float, auto_confirm: bool = false) -> void:
+	_longpress_vision_mode = true
+	_auto_confirm_after_vision = auto_confirm
+	_drawing_mode = DrawingMode.VISION_POINT
+	mode_changed.emit(int(DrawingMode.VISION_POINT))
+	_vision_handler.start_with_anchor(anchor, ratio)
 
 
 ## 同期Waitポイントを追加（コンテキストメニューから呼ばれる）
