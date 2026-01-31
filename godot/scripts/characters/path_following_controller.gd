@@ -738,6 +738,43 @@ func _calculate_anchor_distance(anchor: Vector3) -> float:
 	return best_accumulated_length
 
 
+## 指定したパス上でのanchor位置の距離を計算
+func _calculate_anchor_distance_on_path(path: Array, anchor: Vector3) -> float:
+	if path.size() < 2:
+		return 0.0
+
+	var pos = anchor
+	pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+	var accumulated_length = 0.0
+
+	for i in range(1, path.size()):
+		var p1 = path[i - 1]
+		var p2 = path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var segment_length = sqrt(segment_length_sq)
+		var t = clampf((pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			best_accumulated_length = accumulated_length + segment_length * t
+
+		accumulated_length += segment_length
+
+	return best_accumulated_length
+
+
 ## Run区間内かどうかを判定
 func _is_in_run_segment(progress: float) -> bool:
 	for seg in _run_segments:
@@ -1625,15 +1662,38 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 
 	if _has_extension:
 		# 延長パスがまだ開始されていない場合は延長用配列に追加
+		# path_distanceを計算（延長パス上での距離）
+		new_vp["path_distance"] = _calculate_anchor_distance_on_path(_extension_path, anchor)
 		_extension_vision_points.append(new_vp)
-		_extension_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		_extension_vision_points.sort_custom(_compare_by_path_distance)
 	else:
-		# 延長パスに切り替わっている場合は、anchorから現在のパス上のratioを再計算
-		var recalculated_ratio := _calculate_ratio_from_position_on_path(_current_path, anchor)
-		new_vp["path_ratio"] = recalculated_ratio
+		# 延長パスに切り替わっている場合は、path_distanceを計算
+		new_vp["path_distance"] = _calculate_anchor_distance(anchor)
 		_vision_points.append(new_vp)
-		_vision_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
-		print("[VP] added: orig_ratio=%.3f recalc_ratio=%.3f" % [path_ratio, recalculated_ratio])
+		_vision_points.sort_custom(_compare_by_path_distance)
+		# ソート後にインデックスを再計算
+		_recalc_vision_index()
+
+
+## 現在のキャラクター位置に基づいてvision_indexを再計算
+func _recalc_vision_index() -> void:
+	var char_distance := _calculate_distance_traveled()
+	var i := 0
+	while i < _vision_points.size():
+		var vp = _vision_points[i]
+		var point_distance: float
+		if vp.has("path_distance"):
+			point_distance = vp.path_distance
+		elif vp.has("anchor"):
+			point_distance = _calculate_anchor_distance(vp.anchor)
+			vp["path_distance"] = point_distance
+		else:
+			point_distance = vp.get("path_ratio", 0.0) * _cached_total_length
+
+		if point_distance > char_distance:
+			break
+		i += 1
+	_vision_index = i
 
 
 ## Waitポイントを追加（実行中のパスに）
@@ -1644,12 +1704,48 @@ func add_wait_point(point_data: Dictionary) -> void:
 
 	if _has_extension:
 		# 延長パスがまだ開始されていない場合は延長用配列に追加
+		# path_distanceを計算（延長パス上での距離）
+		if point_data.has("anchor") and not point_data.has("path_distance"):
+			point_data["path_distance"] = _calculate_anchor_distance_on_path(_extension_path, point_data.anchor)
 		_extension_wait_points.append(point_data)
-		_extension_wait_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		_extension_wait_points.sort_custom(_compare_by_path_distance)
 	else:
 		# 延長パスに切り替わっている（または延長がない）場合は直接追加
+		# path_distanceを計算（現在のパス上での距離）
+		if point_data.has("anchor") and not point_data.has("path_distance"):
+			point_data["path_distance"] = _calculate_anchor_distance(point_data.anchor)
 		_wait_points.append(point_data)
-		_wait_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
+		_wait_points.sort_custom(_compare_by_path_distance)
+		# ソート後にインデックスを再計算
+		_recalc_wait_index()
+
+
+## path_distanceでソートするための比較関数
+func _compare_by_path_distance(a: Dictionary, b: Dictionary) -> bool:
+	var dist_a: float = a.get("path_distance", a.get("path_ratio", 0.0) * _cached_total_length)
+	var dist_b: float = b.get("path_distance", b.get("path_ratio", 0.0) * _cached_total_length)
+	return dist_a < dist_b
+
+
+## 現在のキャラクター位置に基づいてwait_indexを再計算
+func _recalc_wait_index() -> void:
+	var char_distance := _calculate_distance_traveled()
+	var i := 0
+	while i < _wait_points.size():
+		var wp = _wait_points[i]
+		var point_distance: float
+		if wp.has("path_distance"):
+			point_distance = wp.path_distance
+		elif wp.has("anchor"):
+			point_distance = _calculate_anchor_distance(wp.anchor)
+			wp["path_distance"] = point_distance
+		else:
+			point_distance = wp.get("path_ratio", 0.0) * _cached_total_length
+
+		if point_distance > char_distance:
+			break
+		i += 1
+	_wait_index = i
 
 
 ## 残りのパスデータを取得（延長用）

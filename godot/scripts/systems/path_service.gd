@@ -297,10 +297,69 @@ func _on_path_mode_changed(mode: int) -> void:
 
 func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 	vision_point_added.emit(anchor, direction)
+	# リアルタイム確定：pending_pathsにポイントを追加
+	_sync_points_to_pending_paths()
 
 
 func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
 	wait_point_added.emit(path_ratio, wait_duration)
+	# リアルタイム確定：pending_pathsにポイントを追加
+	_sync_points_to_pending_paths()
+
+
+## PathDrawerのポイントをpending_pathsに同期（メッシュの所有権も移譲）
+func _sync_points_to_pending_paths() -> void:
+	if not path_drawer or not path_execution_manager:
+		return
+
+	var character = path_drawer.get_active_edit_character()
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not path_execution_manager.pending_paths.has(char_id):
+		return
+
+	var data = path_execution_manager.pending_paths[char_id]
+
+	# PathDrawerからポイントデータを取得して同期
+	data["vision_points_data"] = path_drawer.get_vision_points().duplicate()
+	data["wait_points_data"] = path_drawer.get_wait_points().duplicate()
+
+	# メッシュをPathExecutionManagerの親ノードに移動（所有権を移譲）
+	var mesh_parent = path_execution_manager._mesh_parent
+	if not mesh_parent:
+		return
+
+	# 既存のメッシュ配列を取得（なければ初期化）
+	var vision_meshes: Array[MeshInstance3D] = []
+	if data.has("vision_points"):
+		for m in data["vision_points"]:
+			if is_instance_valid(m):
+				vision_meshes.append(m)
+
+	# 新しいメッシュを追加
+	for m in path_drawer._vision_handler._vision_meshes:
+		if is_instance_valid(m):
+			m.reparent(mesh_parent)
+			vision_meshes.append(m)
+	data["vision_points"] = vision_meshes
+	path_drawer._vision_handler._vision_meshes.clear()
+
+	# 既存のメッシュ配列を取得（なければ初期化）
+	var wait_meshes: Array[MeshInstance3D] = []
+	if data.has("wait_points"):
+		for m in data["wait_points"]:
+			if is_instance_valid(m):
+				wait_meshes.append(m)
+
+	# 新しいメッシュを追加
+	for m in path_drawer._wait_handler._wait_meshes:
+		if is_instance_valid(m):
+			m.reparent(mesh_parent)
+			wait_meshes.append(m)
+	data["wait_points"] = wait_meshes
+	path_drawer._wait_handler._wait_meshes.clear()
 
 
 func _on_path_undone() -> void:
