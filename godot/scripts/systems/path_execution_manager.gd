@@ -1011,27 +1011,19 @@ func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, m
 
 
 ## Visionポイント到達時のコールバック
-## 通過したVisionポイントを非表示にする
-func _on_vision_point_reached(index: int, _direction: Vector3, character: Node) -> void:
+## 通過したVisionポイントを非表示にする（WaitPointと同じ処理フロー）
+func _on_vision_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
 	if not character:
 		return
 
 	var char_id = character.get_instance_id()
-
-	# path_ratioとanchorを取得
-	var path_ratio: float = 0.0
-	var anchor: Vector3 = Vector3.ZERO
-	if _path_controllers.has(char_id):
-		var controller = _path_controllers[char_id]
-		var vision_points = controller.get_vision_points()
-		if index >= 0 and index < vision_points.size():
-			path_ratio = vision_points[index].get("path_ratio", 0.0)
-			anchor = vision_points[index].get("anchor", Vector3.ZERO)
+	var path_ratio: float = point_data.get("path_ratio", 0.0)
+	var anchor: Vector3 = point_data.get("anchor", Vector3.ZERO)
 
 	# シグナルを発行（移動中パスポイント非表示用）
 	vision_point_reached.emit(character, path_ratio)
 
-	# 確認済みパスのポイントを非表示（位置ベースマッチング）
+	# 共通処理でポイントを非表示（位置ベースマッチング）
 	if anchor != Vector3.ZERO:
 		_hide_point_at_position(char_id, anchor, "vision_points")
 

@@ -322,9 +322,16 @@ func _sync_points_to_pending_paths() -> void:
 
 	var data = path_execution_manager.pending_paths[char_id]
 
-	# PathDrawerからポイントデータを取得して同期
-	data["vision_points_data"] = path_drawer.get_vision_points().duplicate()
-	data["wait_points_data"] = path_drawer.get_wait_points().duplicate()
+	# PathDrawerから新しいポイントデータを追加（上書きではなく追加）
+	if not data.has("vision_points_data"):
+		data["vision_points_data"] = []
+	for vp in path_drawer.get_vision_points():
+		data["vision_points_data"].append(vp)
+
+	if not data.has("wait_points_data"):
+		data["wait_points_data"] = []
+	for wp in path_drawer.get_wait_points():
+		data["wait_points_data"].append(wp)
 
 	# メッシュをPathExecutionManagerの親ノードに移動（所有権を移譲）
 	var mesh_parent = path_execution_manager._mesh_parent
@@ -344,7 +351,9 @@ func _sync_points_to_pending_paths() -> void:
 			m.reparent(mesh_parent)
 			vision_meshes.append(m)
 	data["vision_points"] = vision_meshes
+	# メッシュとデータの両方をクリア（同期済みなので一時ポイントロジックが正常に動作する）
 	path_drawer._vision_handler._vision_meshes.clear()
+	path_drawer._vision_handler._vision_points.clear()
 
 	# 既存のメッシュ配列を取得（なければ初期化）
 	var wait_meshes: Array[MeshInstance3D] = []
@@ -360,6 +369,7 @@ func _sync_points_to_pending_paths() -> void:
 			wait_meshes.append(m)
 	data["wait_points"] = wait_meshes
 	path_drawer._wait_handler._wait_meshes.clear()
+	path_drawer._wait_handler._wait_points.clear()  # データもクリア（一時ポイントロジック用）
 
 
 func _on_path_undone() -> void:
