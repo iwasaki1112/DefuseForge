@@ -879,6 +879,7 @@ func _setup_path_drawer() -> void:
 		path_drawer.name = GameConstants.NODE_PATH_DRAWER
 		add_child(path_drawer)
 		path_drawer.setup(camera, null)
+		path_drawer.set_path_execution_manager(path_execution_manager)
 		path_drawer.auto_confirm_requested.connect(_on_path_drawer_auto_confirm_requested)
 		path_drawer.path_tapped.connect(_on_path_drawer_path_tapped)
 

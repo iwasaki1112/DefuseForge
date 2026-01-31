@@ -98,6 +98,9 @@ var _progress_ring: LongPressProgressRing = null
 var _vision_handler: VisionPointHandler
 var _wait_handler: WaitPointHandler
 
+## 他パスとの比較用（PathExecutionManagerへの参照）
+var _path_execution_manager: Node = null
+
 ## 実行中のキャラクター（パス完了シグナル接続用）
 var _executing_character: Node = null
 #endregion
@@ -202,6 +205,11 @@ func setup(camera: Camera3D, character: Node3D = null) -> void:
 ## 長押しプログレスリングを設定
 func set_progress_ring(ring: LongPressProgressRing) -> void:
 	_progress_ring = ring
+
+
+## PathExecutionManagerの参照を設定（他パスとの比較用）
+func set_path_execution_manager(manager: Node) -> void:
+	_path_execution_manager = manager
 
 
 func enable(character: Node3D) -> void:
@@ -1190,7 +1198,27 @@ func is_point_on_path(ground_pos: Vector3) -> bool:
 	if _path_points.size() < 2:
 		return false
 	var result = _find_closest_point_on_path(ground_pos)
-	return result.distance <= path_click_threshold
+	var distance_to_current: float = result.distance
+	print("[PointDebug] is_point_on_path: distance_to_current=%.3f, threshold=%.3f" % [distance_to_current, path_click_threshold])
+	if distance_to_current > path_click_threshold:
+		return false
+
+	# 他のパスがより近い場合はfalseを返す（誤操作防止）
+	if _path_execution_manager and _character:
+		var current_char_id: int = _character.get_instance_id()
+		# 確定済みパスをチェック
+		if _path_execution_manager.has_method("get_all_pending_path_distances"):
+			var distances: Dictionary = _path_execution_manager.get_all_pending_path_distances(ground_pos)
+			print("[PointDebug] is_point_on_path: checking %d other paths, current_char_id=%d" % [distances.size(), current_char_id])
+			for char_id in distances:
+				if char_id != current_char_id:
+					var other_distance: float = distances[char_id]
+					print("[PointDebug] is_point_on_path: char_id=%d, other_distance=%.3f" % [char_id, other_distance])
+					if other_distance < distance_to_current:
+						print("[PointDebug] is_point_on_path: REJECTED - other path is closer (current=%.3f, other=%.3f)" % [distance_to_current, other_distance])
+						return false
+
+	return true
 
 
 func is_near_path_endpoint(ground_pos: Vector3) -> bool:

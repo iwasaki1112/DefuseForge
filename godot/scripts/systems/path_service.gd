@@ -64,15 +64,22 @@ func setup(
 ## ========================================
 
 func start_move_mode() -> bool:
+	print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
+		str(selection_manager != null),
+		str(selection_manager.has_selection() if selection_manager else "N/A")
+	])
 	if not selection_manager or not selection_manager.has_selection():
+		print("[PointDebug] start_move_mode: returning false - no selection")
 		return false
 
 	if not path_drawer or not path_mode_controller:
 		push_warning("[PathService] PathDrawer or PathModeController not set")
+		print("[PointDebug] start_move_mode: returning false - no drawer or controller")
 		return false
 
 	# プライマリキャラクターの色を取得
 	var primary = selection_manager.primary_character
+	print("[PointDebug] start_move_mode: primary=%s" % (primary.name if primary else "null"))
 	var char_color = CharacterColorManager.get_character_color(primary)
 
 	# 既存の確定済みパスがある場合、削除して新規パスとして開始

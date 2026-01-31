@@ -468,6 +468,43 @@ func is_any_path_following_active() -> bool:
 	return false
 
 
+## 全ての確定済みパスへの距離を取得（他パスとの比較用）
+## @param ground_pos: 地面上の位置（y=0）
+## @return: { char_id: distance } の辞書
+func get_all_pending_path_distances(ground_pos: Vector3) -> Dictionary:
+	var distances: Dictionary = {}
+	var check_pos := ground_pos
+	check_pos.y = 0.0
+
+	for char_id in pending_paths:
+		var data: Dictionary = pending_paths[char_id]
+		if not data.has("path") or not data.has("character"):
+			continue
+
+		var path: Array = data["path"]
+		if path.size() < 2:
+			continue
+
+		var character: Node = data["character"]
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# PackedVector3Arrayに変換してPathCalculatorを使用
+		var path_packed := PackedVector3Array()
+		for p in path:
+			path_packed.append(p)
+
+		var path_result := PathCalculator.find_closest_point_on_path(path_packed, check_pos)
+		if not path_result.is_empty():
+			distances[char_id] = path_result.distance
+
+	return distances
+
+
 ## 移動中パス上の点を検索（先端は除外）
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
@@ -948,17 +985,41 @@ func process_controllers(delta: float) -> void:
 
 ## パス追従完了時のコールバック（外部から呼ばれる）
 func on_path_following_completed(_character: Node) -> void:
+	print("[PointDebug] on_path_following_completed: character=%s" % (_character.name if _character else "null"))
 	# 全てのコントローラーが完了したかチェック
 	var any_active = false
 	for controller in _path_controllers.values():
 		if controller.is_following_path():
 			any_active = true
 			break
+	print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, pending_paths.size()])
 	if not any_active:
-		# 全員完了したのでパスメッシュを削除
-		_clear_all_path_meshes()
-		pending_paths.clear()
-		all_paths_completed.emit()
+		# 実行済みパスのみクリア（characterキーがないもの）
+		# まだ実行されていないパス（characterキーがあるもの）は保持
+		var chars_to_clear: Array[int] = []
+		var chars_to_keep: int = 0
+		for char_id in pending_paths:
+			var data = pending_paths[char_id]
+			if not data.has("character"):
+				# 実行済み（characterが削除されている）のでクリア対象
+				chars_to_clear.append(char_id)
+			else:
+				# まだ実行されていないので保持
+				chars_to_keep += 1
+
+		print("[PointDebug] on_path_following_completed: clearing %d executed paths, keeping %d pending paths" % [chars_to_clear.size(), chars_to_keep])
+
+		# 実行済みパスのメッシュを解放してエントリを削除
+		for char_id in chars_to_clear:
+			_free_pending_path_data(pending_paths[char_id])
+			pending_paths.erase(char_id)
+
+		# まだ未実行のパスがなければ完了シグナルを発行
+		if pending_paths.is_empty():
+			print("[PointDebug] on_path_following_completed: all paths completed, emitting signal")
+			all_paths_completed.emit()
+		else:
+			print("[PointDebug] on_path_following_completed: %d pending paths remaining" % pending_paths.size())
 
 
 ## キャラクター用のPathFollowingControllerを取得または作成

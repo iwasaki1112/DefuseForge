@@ -222,6 +222,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not game_manager:
 		return
 
+	# デバッグ：マウスボタンイベントをログ
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		print("[PointDebug] _unhandled_input: mouse_left pressed=%s, is_path_mode=%s" % [
+			str(event.pressed), str(game_manager.is_path_mode())
+		])
+	if event is InputEventMouseMotion and _left_button_pressed:
+		print("[PointDebug] _unhandled_input: mouse_motion, is_path_mode=%s, _immediate_path_mode_started=%s, _left_button_pressed=%s" % [
+			str(game_manager.is_path_mode()), str(_immediate_path_mode_started), str(_left_button_pressed)
+		])
+
 	# ========================================
 	# タッチ中またはピンチ中はマウスイベントを無視
 	# （タッチからエミュレートされたマウスイベントを防ぐ）
@@ -350,19 +360,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			_long_press_timer = 0.0
 			var clicked = game_manager.raycast_character(event.position)
+			print("[PointDebug] path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
 			if clicked:
+				var is_enemy = PlayerState.is_enemy(clicked)
+				var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
+				print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 長押し回転用にキャラクターを記録
 						_rotation_target_character = clicked
 						# 現在のパスを確定してから切り替え
+						print("[PointDebug] path_mode click: confirming current path and selecting %s" % clicked.name)
 						game_manager.confirm_path()
+						print("[PointDebug] path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
 						game_manager.selection_manager.deselect_all()
 						game_manager.selection_manager.add_to_selection(clicked)
 						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
 						_immediate_path_mode_started = true
 						_immediate_path_drawing_started = false
+						print("[PointDebug] path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
 						get_viewport().set_input_as_handled()
 						return
 				# それ以外はGameManagerに委譲
@@ -526,12 +543,15 @@ func _unhandled_input(event: InputEvent) -> void:
 					camera_pan_controller.start_potential_drag(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
+		print("[PointDebug] non-path_mode mouse drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s" % [_immediate_path_mode_started, _immediate_path_drawing_started])
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
 			# 回転長押しをキャンセル（パス描画が優先）
+			print("[PointDebug] non-path_mode mouse drag: starting path mode for character")
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			_hide_progress_ring()
-			game_manager.start_move_mode()
+			var result = game_manager.start_move_mode()
+			print("[PointDebug] non-path_mode mouse drag: start_move_mode result=%s" % result)
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -682,19 +702,26 @@ func _handle_touch_event(event: InputEvent) -> void:
 			_left_click_start_pos = event.position
 			_long_press_timer = 0.0
 			var clicked = game_manager.raycast_character(event.position)
+			print("[PointDebug] touch path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
 			if clicked:
+				var is_enemy = PlayerState.is_enemy(clicked)
+				var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
+				print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
 					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
 						# 長押し回転用にキャラクターを記録
 						_rotation_target_character = clicked
 						# 現在のパスを確定してから切り替え
+						print("[PointDebug] touch path_mode click: confirming current path and selecting %s" % clicked.name)
 						game_manager.confirm_path()
+						print("[PointDebug] touch path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
 						game_manager.selection_manager.deselect_all()
 						game_manager.selection_manager.add_to_selection(clicked)
 						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
 						_immediate_path_mode_started = true
 						_immediate_path_drawing_started = false
+						print("[PointDebug] touch path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
 						get_viewport().set_input_as_handled()
 						return
 				# それ以外はGameManagerに委譲
@@ -854,12 +881,15 @@ func _handle_touch_event(event: InputEvent) -> void:
 				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
+		print("[PointDebug] non-path_mode touch drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s" % [_immediate_path_mode_started, _immediate_path_drawing_started])
 		if _immediate_path_mode_started and not _immediate_path_drawing_started:
 			# 回転長押しをキャンセル（パス描画が優先）
+			print("[PointDebug] non-path_mode touch drag: starting path mode for character")
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			_hide_progress_ring()
-			game_manager.start_move_mode()
+			var result = game_manager.start_move_mode()
+			print("[PointDebug] non-path_mode touch drag: start_move_mode result=%s" % result)
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -1168,7 +1198,13 @@ func _show_path_context_menu_for_moving_path() -> void:
 ## パスモード終了時のハンドラ（フラグをリセット）
 func _on_path_mode_ended() -> void:
 	var current_frame = Engine.get_process_frames()
-	print("[PointDebug] _on_path_mode_ended: frame=%d, resetting flags" % current_frame)
+	print("[PointDebug] _on_path_mode_ended: frame=%d, _left_button_pressed=%s" % [current_frame, _left_button_pressed])
+	# 左ボタンが押されている場合は、キャラクター切り替え中の可能性があるため
+	# フラグをリセットしない（ドラッグ継続を許可）
+	if _left_button_pressed:
+		print("[PointDebug] _on_path_mode_ended: skipping reset because left button still pressed (character switch)")
+		_path_mode_ended_frame = current_frame
+		return
 	_path_endpoint_extension_pending = false
 	_path_endpoint_extension_started = false
 	_immediate_path_mode_started = false
