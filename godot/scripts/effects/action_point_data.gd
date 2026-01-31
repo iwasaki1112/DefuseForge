@@ -176,9 +176,8 @@ class VisionPointData extends ActionPointData:
 			has_target = false
 
 	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/vision_point.gd"))
-		return point
+		# VisionPointはclass_name定義済みなので直接参照（iOS互換）
+		return VisionPoint.new()
 
 	func get_reached_result() -> Dictionary:
 		var result = super.get_reached_result()
@@ -217,9 +216,8 @@ class WaitPointData extends ActionPointData:
 			wait_duration = data.wait_duration
 
 	func create_point_node() -> Node3D:
-		var point = MeshInstance3D.new()
-		point.set_script(preload("res://scripts/effects/wait_point.gd"))
-		return point
+		# WaitPointはclass_name定義済みなので直接参照（iOS互換）
+		return WaitPoint.new()
 
 	func get_reached_result() -> Dictionary:
 		var result = super.get_reached_result()

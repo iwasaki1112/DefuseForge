@@ -3,6 +3,9 @@ class_name PathExecutionManager
 ## パス実行管理
 ## パス確定・実行・pending_paths管理を担当
 
+## デバッグログ出力フラグ（運用時はfalseに設定）
+const DEBUG_PATH: bool = false
+
 ## スクリプト参照（iOSビルドでのpreload問題を回避するためloadを使用）
 var PathLineMeshScript: GDScript = null
 var PathFollowingCtrl: GDScript = null
@@ -63,6 +66,11 @@ var _execution_order_counter: int = 0
 ## セットアップ
 func setup(mesh_parent: Node3D) -> void:
 	_mesh_parent = mesh_parent
+
+
+## メッシュ親ノードを取得（内部状態を隠蔽するAPI）
+func get_mesh_parent() -> Node3D:
+	return _mesh_parent
 
 
 ## パス開始時に呼ばれる（リアルタイム確定用）
@@ -513,19 +521,19 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
-	print("[PointDebug] find_moving_path_point: controllers=%d, ground=%s" % [_path_controllers.size(), ground_pos])
+	if DEBUG_PATH:
+		print("[PointDebug] find_moving_path_point: controllers=%d, ground=%s" % [_path_controllers.size(), ground_pos])
 
 	for char_id in _path_controllers:
 		var controller = _path_controllers[char_id]
 
 		if not controller.is_following_path():
-			print("[PointDebug] find_moving_path_point: char_id=%d not following path" % char_id)
+			if DEBUG_PATH:
+				print("[PointDebug] find_moving_path_point: char_id=%d not following path" % char_id)
 			continue
 
-		# キャラクターを取得
-		var character: Node = null
-		if "_character" in controller:
-			character = controller._character
+		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
+		var character: Node = controller.get_character() if controller.has_method("get_character") else null
 		if not is_instance_valid(character):
 			continue
 
@@ -535,7 +543,8 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 
 		# 残りパスと延長パスを結合して取得
 		var full_path: PackedVector3Array = controller.get_full_remaining_path()
-		print("[PointDebug] find_moving_path_point: char_id=%d, full_path_size=%d" % [char_id, full_path.size()])
+		if DEBUG_PATH:
+			print("[PointDebug] find_moving_path_point: char_id=%d, full_path_size=%d" % [char_id, full_path.size()])
 		if full_path.size() < 2:
 			continue
 
@@ -544,20 +553,24 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 
 		var path_result := PathCalculator.find_closest_point_on_path(full_path, check_pos)
 		if path_result.is_empty():
-			print("[PointDebug] find_moving_path_point: path_result is empty")
+			if DEBUG_PATH:
+				print("[PointDebug] find_moving_path_point: path_result is empty")
 			continue
 
 		var distance: float = path_result.distance
-		print("[PointDebug] find_moving_path_point: distance=%.3f, threshold=%.3f, ratio=%.3f" % [distance, threshold, path_result.ratio])
+		if DEBUG_PATH:
+			print("[PointDebug] find_moving_path_point: distance=%.3f, threshold=%.3f, ratio=%.3f" % [distance, threshold, path_result.ratio])
 		if distance < closest_distance:
 			# 先端（終点）付近は除外（パス延長用に狭い範囲のみ除外）
 			var endpoint: Vector3 = full_path[full_path.size() - 1]
 			endpoint.y = 0.0
 			const ENDPOINT_EXCLUSION_THRESHOLD := 0.15  # パス延長用の除外範囲
 			var endpoint_dist: float = path_result.point.distance_to(endpoint)
-			print("[PointDebug] find_moving_path_point: endpoint_dist=%.3f, exclusion=%.3f" % [endpoint_dist, ENDPOINT_EXCLUSION_THRESHOLD])
+			if DEBUG_PATH:
+				print("[PointDebug] find_moving_path_point: endpoint_dist=%.3f, exclusion=%.3f" % [endpoint_dist, ENDPOINT_EXCLUSION_THRESHOLD])
 			if endpoint_dist < ENDPOINT_EXCLUSION_THRESHOLD:
-				print("[PointDebug] find_moving_path_point: EXCLUDED (too close to endpoint)")
+				if DEBUG_PATH:
+					print("[PointDebug] find_moving_path_point: EXCLUDED (too close to endpoint)")
 				continue
 
 			closest_distance = distance
@@ -600,20 +613,24 @@ func _get_moving_path_points(char_id: int, point_type: int) -> Array:
 ## @return: 成功した場合true
 func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
 	if not is_instance_valid(character):
-		print("[PointDebug] add_vision_point_to_moving_path: invalid character")
+		if DEBUG_PATH:
+			print("[PointDebug] add_vision_point_to_moving_path: invalid character")
 		return false
 
 	var char_id = character.get_instance_id()
 	if not _path_controllers.has(char_id):
-		print("[PointDebug] add_vision_point_to_moving_path: no controller for char_id=%d" % char_id)
+		if DEBUG_PATH:
+			print("[PointDebug] add_vision_point_to_moving_path: no controller for char_id=%d" % char_id)
 		return false
 
 	var controller = _path_controllers[char_id]
 	if not controller.is_following_path():
-		print("[PointDebug] add_vision_point_to_moving_path: not following path")
+		if DEBUG_PATH:
+			print("[PointDebug] add_vision_point_to_moving_path: not following path")
 		return false
 
-	print("[PointDebug] add_vision_point_to_moving_path: ratio=%.3f, anchor=%s" % [path_ratio, str(anchor)])
+	if DEBUG_PATH:
+		print("[PointDebug] add_vision_point_to_moving_path: ratio=%.3f, anchor=%s" % [path_ratio, str(anchor)])
 	controller.add_vision_point_to_extension(path_ratio, anchor, target_point)
 
 	# 視覚的なポイントメッシュを作成
@@ -642,10 +659,8 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 		if not controller.is_following_path():
 			continue
 
-		# キャラクターを取得
-		var character: Node = null
-		if "_character" in controller:
-			character = controller._character
+		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
+		var character: Node = controller.get_character() if controller.has_method("get_character") else null
 		if not is_instance_valid(character):
 			continue
 
@@ -735,24 +750,28 @@ func get_full_remaining_path_array(character: Node) -> Array[Vector3]:
 ## @return: 設定成功したらtrue
 func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> bool:
 	if not character:
-		print("[PointDebug] set_extension_path: failed (no character)")
+		if DEBUG_PATH:
+			print("[PointDebug] set_extension_path: failed (no character)")
 		return false
 
 	var char_id = character.get_instance_id()
 	if not _path_controllers.has(char_id):
-		print("[PointDebug] set_extension_path: failed (no controller)")
+		if DEBUG_PATH:
+			print("[PointDebug] set_extension_path: failed (no controller)")
 		return false
 
 	var controller = _path_controllers[char_id]
 	if not controller.is_following_path():
-		print("[PointDebug] set_extension_path: failed (not following)")
+		if DEBUG_PATH:
+			print("[PointDebug] set_extension_path: failed (not following)")
 		return false
 
-	print("[PointDebug] set_extension_path: path_len=%d, append=%s, markers=%s" % [
-		extension_path.size(),
-		str(append_to_existing),
-		str(markers.keys())
-	])
+	if DEBUG_PATH:
+		print("[PointDebug] set_extension_path: path_len=%d, append=%s, markers=%s" % [
+			extension_path.size(),
+			str(append_to_existing),
+			str(markers.keys())
+		])
 
 	# 既存の延長パスに追加する場合、現在のメッシュをアクティブメッシュに移動
 	if append_to_existing and controller.has_extension_path():
@@ -985,14 +1004,16 @@ func process_controllers(delta: float) -> void:
 
 ## パス追従完了時のコールバック（外部から呼ばれる）
 func on_path_following_completed(_character: Node) -> void:
-	print("[PointDebug] on_path_following_completed: character=%s" % (_character.name if _character else "null"))
+	if DEBUG_PATH:
+		print("[PointDebug] on_path_following_completed: character=%s" % (_character.name if _character else "null"))
 	# 全てのコントローラーが完了したかチェック
 	var any_active = false
 	for controller in _path_controllers.values():
 		if controller.is_following_path():
 			any_active = true
 			break
-	print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, pending_paths.size()])
+	if DEBUG_PATH:
+		print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, pending_paths.size()])
 	if not any_active:
 		# 実行済みパスのみクリア（characterキーがないもの）
 		# まだ実行されていないパス（characterキーがあるもの）は保持
@@ -1007,7 +1028,8 @@ func on_path_following_completed(_character: Node) -> void:
 				# まだ実行されていないので保持
 				chars_to_keep += 1
 
-		print("[PointDebug] on_path_following_completed: clearing %d executed paths, keeping %d pending paths" % [chars_to_clear.size(), chars_to_keep])
+		if DEBUG_PATH:
+			print("[PointDebug] on_path_following_completed: clearing %d executed paths, keeping %d pending paths" % [chars_to_clear.size(), chars_to_keep])
 
 		# 実行済みパスのメッシュを解放してエントリを削除
 		for char_id in chars_to_clear:
@@ -1016,10 +1038,12 @@ func on_path_following_completed(_character: Node) -> void:
 
 		# まだ未実行のパスがなければ完了シグナルを発行
 		if pending_paths.is_empty():
-			print("[PointDebug] on_path_following_completed: all paths completed, emitting signal")
+			if DEBUG_PATH:
+				print("[PointDebug] on_path_following_completed: all paths completed, emitting signal")
 			all_paths_completed.emit()
 		else:
-			print("[PointDebug] on_path_following_completed: %d pending paths remaining" % pending_paths.size())
+			if DEBUG_PATH:
+				print("[PointDebug] on_path_following_completed: %d pending paths remaining" % pending_paths.size())
 
 
 ## キャラクター用のPathFollowingControllerを取得または作成

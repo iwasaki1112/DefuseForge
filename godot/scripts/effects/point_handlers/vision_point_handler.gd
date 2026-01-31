@@ -120,3 +120,13 @@ func _remove_temp_point() -> void:
 func reset_state() -> void:
 	super.reset_state()
 	_remove_temp_point()
+
+
+## 指定したアンカー位置でVisionモードを開始（外部からの呼び出し用）
+## 内部状態の直接操作を避けるためのAPI
+## @param anchor: アンカー位置
+## @param ratio: パス上の比率
+func start_with_anchor(anchor: Vector3, ratio: float) -> void:
+	_current_anchor = anchor
+	_current_ratio = ratio
+	_is_active = true

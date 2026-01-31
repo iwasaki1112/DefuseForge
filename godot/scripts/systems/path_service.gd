@@ -2,6 +2,9 @@ class_name PathService
 extends Node
 ## パス描画・編集・実行の統合サービス
 
+## デバッグログ出力フラグ（運用時はfalseに設定）
+const DEBUG_PATH: bool = false
+
 signal mode_started(character: Node)
 signal mode_ended()
 signal mode_cancelled()
@@ -64,22 +67,26 @@ func setup(
 ## ========================================
 
 func start_move_mode() -> bool:
-	print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
-		str(selection_manager != null),
-		str(selection_manager.has_selection() if selection_manager else "N/A")
-	])
+	if DEBUG_PATH:
+		print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
+			str(selection_manager != null),
+			str(selection_manager.has_selection() if selection_manager else "N/A")
+		])
 	if not selection_manager or not selection_manager.has_selection():
-		print("[PointDebug] start_move_mode: returning false - no selection")
+		if DEBUG_PATH:
+			print("[PointDebug] start_move_mode: returning false - no selection")
 		return false
 
 	if not path_drawer or not path_mode_controller:
 		push_warning("[PathService] PathDrawer or PathModeController not set")
-		print("[PointDebug] start_move_mode: returning false - no drawer or controller")
+		if DEBUG_PATH:
+			print("[PointDebug] start_move_mode: returning false - no drawer or controller")
 		return false
 
 	# プライマリキャラクターの色を取得
 	var primary = selection_manager.primary_character
-	print("[PointDebug] start_move_mode: primary=%s" % (primary.name if primary else "null"))
+	if DEBUG_PATH:
+		print("[PointDebug] start_move_mode: primary=%s" % (primary.name if primary else "null"))
 	var char_color = CharacterColorManager.get_character_color(primary)
 
 	# 既存の確定済みパスがある場合、削除して新規パスとして開始
@@ -148,7 +155,8 @@ func start_path_mode_with_existing_path(character: Node, path: Array, char_color
 		return false
 
 	if path.size() < 2:
-		print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
+		if DEBUG_PATH:
+			print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
 		return false
 
 	# 継続モードを有効化（既存パスを維持）
@@ -380,7 +388,7 @@ func _sync_points_to_pending_paths() -> void:
 		data["wait_points_data"].append(wp)
 
 	# メッシュをPathExecutionManagerの親ノードに移動（所有権を移譲）
-	var mesh_parent = path_execution_manager._mesh_parent
+	var mesh_parent = path_execution_manager.get_mesh_parent()
 	if not mesh_parent:
 		return
 
@@ -391,15 +399,10 @@ func _sync_points_to_pending_paths() -> void:
 			if is_instance_valid(m):
 				vision_meshes.append(m)
 
-	# 新しいメッシュを追加
-	for m in path_drawer._vision_handler._meshes:
-		if is_instance_valid(m):
-			m.reparent(mesh_parent)
-			vision_meshes.append(m)
+	# 新しいメッシュを追加（PathDrawer APIを使用して内部状態への直接アクセスを回避）
+	var transferred_vision = path_drawer.transfer_vision_meshes_to(mesh_parent)
+	vision_meshes.append_array(transferred_vision)
 	data["vision_points"] = vision_meshes
-	# メッシュとデータの両方をクリア（同期済みなので一時ポイントロジックが正常に動作する）
-	path_drawer._vision_handler._meshes.clear()
-	path_drawer._vision_handler._points.clear()
 
 	# 既存のメッシュ配列を取得（なければ初期化）
 	var wait_meshes: Array[MeshInstance3D] = []
@@ -408,14 +411,10 @@ func _sync_points_to_pending_paths() -> void:
 			if is_instance_valid(m):
 				wait_meshes.append(m)
 
-	# 新しいメッシュを追加
-	for m in path_drawer._wait_handler._meshes:
-		if is_instance_valid(m):
-			m.reparent(mesh_parent)
-			wait_meshes.append(m)
+	# 新しいメッシュを追加（PathDrawer APIを使用して内部状態への直接アクセスを回避）
+	var transferred_wait = path_drawer.transfer_wait_meshes_to(mesh_parent)
+	wait_meshes.append_array(transferred_wait)
 	data["wait_points"] = wait_meshes
-	path_drawer._wait_handler._meshes.clear()
-	path_drawer._wait_handler._points.clear()  # データもクリア（一時ポイントロジック用）
 
 
 func _on_path_undone() -> void:

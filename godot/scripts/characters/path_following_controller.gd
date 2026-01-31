@@ -117,6 +117,11 @@ func setup(character: CharacterBody3D) -> void:
 	_init_point_checkers()
 
 
+## 対象キャラクターを取得（内部状態を隠蔽するAPI）
+func get_character() -> CharacterBody3D:
+	return _character
+
+
 ## ポイントチェッカーを初期化
 func _init_point_checkers() -> void:
 	_vision_checker = PathPointChecker.new()
