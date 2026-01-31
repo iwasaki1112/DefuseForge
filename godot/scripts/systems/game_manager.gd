@@ -359,7 +359,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 			return false
 		target_ground_pos = intersect as Vector3
 
-	# 確定済みパス上の点を検索（先端は除外）
+	# 確定済みパス上の点を検索（先端は除外 - 先端はパス延長用）
 	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, 1.2)
 	if path_result.is_empty():
 		return false
@@ -386,7 +386,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		if path_drawer._vision_handler:
 			path_drawer._vision_handler._current_anchor = path_result.point
 			path_drawer._vision_handler._current_ratio = path_result.path_ratio
-			path_drawer._vision_handler._is_drawing = true
+			path_drawer._vision_handler._is_active = true
 			path_drawer._longpress_vision_mode = true
 			path_drawer._auto_confirm_after_vision = true  # 確認済みパスからなので自動確定
 
@@ -412,7 +412,7 @@ func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vect
 			return {}
 		target_ground_pos = intersect as Vector3
 
-	# 移動中パス上の点を検索（先端は除外）
+	# 移動中パス上の点を検索（先端は除外 - 先端はパス延長用）
 	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, 1.2)
 	if path_result.is_empty():
 		return {}
@@ -642,6 +642,11 @@ func get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vecto
 ## キャラクターを追加する親ノードを取得
 func get_character_parent() -> Node3D:
 	return _map_container if _map_container else _mesh_parent
+
+
+## UIレイヤーを取得
+func get_ui_layer() -> CanvasLayer:
+	return _ui_layer
 
 
 ## ========================================
@@ -1118,6 +1123,7 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 
 
 func _on_path_drawer_auto_confirm_requested() -> void:
+	print("[PointDebug] _on_path_drawer_auto_confirm_requested: calling confirm_path")
 	confirm_path()
 
 

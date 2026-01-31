@@ -260,14 +260,6 @@ func confirm_path(
 
 ## 全キャラクターのパスを同時実行
 func execute_all_paths(run: bool) -> int:
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
-			char_id,
-			data.get("path", []).size(),
-			data.get("vision_points_data", []),
-			data.get("wait_points_data", [])
-		])
-
 	if pending_paths.is_empty():
 		return 0
 
@@ -436,10 +428,11 @@ func find_path_point_at_position(ground_pos: Vector3, threshold: float = 1.2) ->
 
 		var distance: float = path_result.distance
 		if distance < closest_distance:
-			# 先端（終点）付近は除外
+			# 先端（終点）付近は除外（パス延長用に狭い範囲のみ除外）
 			var endpoint: Vector3 = path[path.size() - 1]
 			endpoint.y = 0.0
-			if path_result.point.distance_to(endpoint) < threshold:
+			const ENDPOINT_EXCLUSION_THRESHOLD := 0.15  # パス延長用の除外範囲
+			if path_result.point.distance_to(endpoint) < ENDPOINT_EXCLUSION_THRESHOLD:
 				continue
 
 			closest_distance = distance
@@ -470,10 +463,13 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
+	print("[PointDebug] find_moving_path_point: controllers=%d, ground=%s" % [_path_controllers.size(), ground_pos])
+
 	for char_id in _path_controllers:
 		var controller = _path_controllers[char_id]
 
 		if not controller.is_following_path():
+			print("[PointDebug] find_moving_path_point: char_id=%d not following path" % char_id)
 			continue
 
 		# キャラクターを取得
@@ -489,6 +485,7 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 
 		# 残りパスと延長パスを結合して取得
 		var full_path: PackedVector3Array = controller.get_full_remaining_path()
+		print("[PointDebug] find_moving_path_point: char_id=%d, full_path_size=%d" % [char_id, full_path.size()])
 		if full_path.size() < 2:
 			continue
 
@@ -497,14 +494,20 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 
 		var path_result := PathCalculator.find_closest_point_on_path(full_path, check_pos)
 		if path_result.is_empty():
+			print("[PointDebug] find_moving_path_point: path_result is empty")
 			continue
 
 		var distance: float = path_result.distance
+		print("[PointDebug] find_moving_path_point: distance=%.3f, threshold=%.3f, ratio=%.3f" % [distance, threshold, path_result.ratio])
 		if distance < closest_distance:
-			# 先端（終点）付近は除外
+			# 先端（終点）付近は除外（パス延長用に狭い範囲のみ除外）
 			var endpoint: Vector3 = full_path[full_path.size() - 1]
 			endpoint.y = 0.0
-			if path_result.point.distance_to(endpoint) < threshold:
+			const ENDPOINT_EXCLUSION_THRESHOLD := 0.15  # パス延長用の除外範囲
+			var endpoint_dist: float = path_result.point.distance_to(endpoint)
+			print("[PointDebug] find_moving_path_point: endpoint_dist=%.3f, exclusion=%.3f" % [endpoint_dist, ENDPOINT_EXCLUSION_THRESHOLD])
+			if endpoint_dist < ENDPOINT_EXCLUSION_THRESHOLD:
+				print("[PointDebug] find_moving_path_point: EXCLUDED (too close to endpoint)")
 				continue
 
 			closest_distance = distance
@@ -547,16 +550,20 @@ func _get_moving_path_points(char_id: int, point_type: int) -> Array:
 ## @return: 成功した場合true
 func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
 	if not is_instance_valid(character):
+		print("[PointDebug] add_vision_point_to_moving_path: invalid character")
 		return false
 
 	var char_id = character.get_instance_id()
 	if not _path_controllers.has(char_id):
+		print("[PointDebug] add_vision_point_to_moving_path: no controller for char_id=%d" % char_id)
 		return false
 
 	var controller = _path_controllers[char_id]
 	if not controller.is_following_path():
+		print("[PointDebug] add_vision_point_to_moving_path: not following path")
 		return false
 
+	print("[PointDebug] add_vision_point_to_moving_path: ratio=%.3f, anchor=%s" % [path_ratio, str(anchor)])
 	controller.add_vision_point_to_extension(path_ratio, anchor, target_point)
 
 	# 視覚的なポイントメッシュを作成
@@ -678,15 +685,24 @@ func get_full_remaining_path_array(character: Node) -> Array[Vector3]:
 ## @return: 設定成功したらtrue
 func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> bool:
 	if not character:
+		print("[PointDebug] set_extension_path: failed (no character)")
 		return false
 
 	var char_id = character.get_instance_id()
 	if not _path_controllers.has(char_id):
+		print("[PointDebug] set_extension_path: failed (no controller)")
 		return false
 
 	var controller = _path_controllers[char_id]
 	if not controller.is_following_path():
+		print("[PointDebug] set_extension_path: failed (not following)")
 		return false
+
+	print("[PointDebug] set_extension_path: path_len=%d, append=%s, markers=%s" % [
+		extension_path.size(),
+		str(append_to_existing),
+		str(markers.keys())
+	])
 
 	# 既存の延長パスに追加する場合、現在のメッシュをアクティブメッシュに移動
 	if append_to_existing and controller.has_extension_path():

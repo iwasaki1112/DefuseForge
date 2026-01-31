@@ -27,6 +27,8 @@ signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
 signal path_point_added(character: Node, point: Vector3)
 ## パス描画開始シグナル（新規パス開始時に発火）
 signal path_started(character: Node, start_point: Vector3)
+## パス先端近くでドラッグが検出されたシグナル（パス延長用）
+signal endpoint_drag_detected(screen_pos: Vector2)
 #endregion
 
 #region エクスポート設定
@@ -38,7 +40,7 @@ signal path_started(character: Node, start_point: Vector3)
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
 @export var path_click_threshold: float = 1.2
-@export var path_endpoint_threshold: float = 0.3
+@export var path_endpoint_threshold: float = 0.15
 @export_flags_3d_physics var wall_collision_mask: int = 2
 @export var enable_wall_sliding: bool = true
 @export var wall_slide_offset: float = 0.5  ## 壁からの距離
@@ -85,8 +87,12 @@ var _path_longpress_timer: float = 0.0     ## 長押しタイマー
 var _path_longpress_threshold: float = 0.5  ## 長押し閾値（秒）
 var _path_longpress_screen_pos: Vector2 = Vector2.ZERO  ## 長押し開始位置
 var _path_longpress_ground_pos: Vector3 = Vector3.ZERO  ## 長押し開始のグラウンド位置
+var _path_longpress_near_endpoint: bool = false  ## 長押し開始位置がパス先端付近か
 var _longpress_vision_mode: bool = false  ## 長押しからVisionモードに入ったか
 var _auto_confirm_after_vision: bool = false  ## Visionポイント配置後に自動確定するか
+
+## 長押しプログレスリング（外部から設定）
+var _progress_ring: LongPressProgressRing = null
 
 ## ポイントハンドラ
 var _vision_handler: VisionPointHandler
@@ -109,10 +115,12 @@ func _process(delta: float) -> void:
 
 	# パス上長押し検出（1フレーム遅延させて入力イベント処理を優先）
 	if _path_longpress_pending:
+		_path_longpress_timer += delta
+		# プログレスリングを更新
+		_update_progress_ring(_path_longpress_screen_pos, _path_longpress_timer, _path_longpress_threshold)
 		if _path_longpress_timer >= _path_longpress_threshold:
+			_hide_progress_ring()
 			_start_vision_mode_from_longpress()
-		else:
-			_path_longpress_timer += delta
 
 
 func _setup_mesh() -> void:
@@ -155,11 +163,15 @@ func _get_handler_for_mode(mode: DrawingMode):
 
 #region シグナルハンドラ
 func _on_vision_point_added(data: Dictionary) -> void:
+	print("[PointDebug] _on_vision_point_added: longpress_mode=%s, auto_confirm=%s" % [
+		str(_longpress_vision_mode), str(_auto_confirm_after_vision)
+	])
 	_point_history.append(PointType.VISION)
 	vision_point_added.emit(data.get("anchor", Vector3.ZERO), data.get("target_point", Vector3.ZERO))
 
 	# 長押しからVisionモードに入った場合、ポイント配置後にMOVEMENTモードに戻る
 	if _longpress_vision_mode:
+		print("[PointDebug] _on_vision_point_added: returning to MOVEMENT mode (longpress)")
 		_longpress_vision_mode = false
 		_drawing_mode = DrawingMode.MOVEMENT
 		mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -167,6 +179,7 @@ func _on_vision_point_added(data: Dictionary) -> void:
 	# 自動確定フラグが立っている場合（確認済みパスからの長押し）は確定をリクエスト
 	# _longpress_vision_modeとは独立してチェック（_unhandled_inputで先にリセットされる場合があるため）
 	if _auto_confirm_after_vision:
+		print("[PointDebug] _on_vision_point_added: auto_confirm_requested")
 		_auto_confirm_after_vision = false
 		_drawing_mode = DrawingMode.MOVEMENT
 		mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -184,6 +197,11 @@ func setup(camera: Camera3D, character: Node3D = null) -> void:
 	_camera = camera
 	_character = character
 	_setup_handlers_with_camera()
+
+
+## 長押しプログレスリングを設定
+func set_progress_ring(ring: LongPressProgressRing) -> void:
+	_progress_ring = ring
 
 
 func enable(character: Node3D) -> void:
@@ -329,6 +347,7 @@ func _handle_movement_input(event: InputEvent) -> void:
 func handle_movement_press(screen_pos: Vector2) -> bool:
 	# 既にプレス中の場合は無視（重複イベント対策）
 	if _path_longpress_pending or _is_drawing:
+		print("[PointDebug] handle_movement_press: already pending/drawing")
 		return true
 
 	var ground_pos = _get_ground_position(screen_pos)
@@ -337,17 +356,25 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 	if has_path() and ground_pos != null:
 		var on_path = is_point_on_path(ground_pos)
 		var near_endpoint = _is_near_path_endpoint(ground_pos)
-		if on_path and not near_endpoint:
-			# パス上での長押し待機を開始
+		print("[PointDebug] handle_movement_press: on_path=%s, near_endpoint=%s, path_pts=%d" % [
+			str(on_path), str(near_endpoint), _path_points.size()
+		])
+		if on_path:
+			# パス上での長押し待機を開始（先端近くでもVisionポイント追加を優先）
+			# ドラッグが検出された場合は _handle_movement_motion でキャンセルされる
 			_path_longpress_pending = true
 			_path_longpress_timer = 0.0
 			_path_longpress_screen_pos = screen_pos
 			_path_longpress_ground_pos = ground_pos
+			_path_longpress_near_endpoint = near_endpoint
+			print("[PointDebug] handle_movement_press: started longpress wait (near_endpoint=%s)" % str(near_endpoint))
 			return true  # handle_clickをスキップ
 		# パス外をタップした場合は何もしない（handle_clickに任せる）
+		print("[PointDebug] handle_movement_press: skipping (off-path)")
 		return false
 
 	# パスがない場合のみ、通常の描画開始
+	print("[PointDebug] handle_movement_press: no path, starting drawing")
 	_handle_drawing_press(screen_pos)
 	return false
 
@@ -426,16 +453,24 @@ func handle_point_touch_input(event: InputEvent) -> bool:
 
 ## 移動モードでのモーション処理
 func _handle_movement_motion(screen_pos: Vector2) -> void:
-	# 長押し待機中の場合、移動が大きければキャンセルして描画開始
+	# 長押し待機中の場合、移動が大きければキャンセル
 	if _path_longpress_pending:
 		var move_dist = screen_pos.distance_to(_path_longpress_screen_pos)
 		if move_dist > 20.0:  # 20ピクセル以上移動したらキャンセル
+			var was_near_endpoint = _path_longpress_near_endpoint
+			var start_pos = _path_longpress_screen_pos
 			_reset_path_longpress()
-			_handle_drawing_press(_path_longpress_screen_pos)
-			# すぐにポイントを追加
-			var ground_pos = _get_ground_position(screen_pos)
-			if ground_pos != null and _is_drawing:
-				_add_point(ground_pos)
+			# パス先端近くの場合はパス延長用シグナルを発火（InputControllerが処理）
+			if was_near_endpoint:
+				print("[PointDebug] _handle_movement_motion: endpoint drag detected")
+				endpoint_drag_detected.emit(start_pos)
+			else:
+				# パス上（先端以外）の場合は描画開始
+				_handle_drawing_press(start_pos)
+				# すぐにポイントを追加
+				var ground_pos = _get_ground_position(screen_pos)
+				if ground_pos != null and _is_drawing:
+					_add_point(ground_pos)
 		return
 
 	if _is_drawing:
@@ -856,7 +891,12 @@ func _get_path_endpoint() -> Vector3:
 
 
 func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
-	return PathCalculator.is_near_path_endpoint(_path_points, ground_pos, path_endpoint_threshold)
+	var result = PathCalculator.is_near_path_endpoint(_path_points, ground_pos, path_endpoint_threshold)
+	if result and _path_points.size() > 0:
+		var endpoint = _path_points[_path_points.size() - 1]
+		var dist = ground_pos.distance_to(endpoint)
+		print("[PointDebug] _is_near_path_endpoint: true (dist=%.2f, threshold=%.2f)" % [dist, path_endpoint_threshold])
+	return result
 
 
 func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
@@ -870,12 +910,16 @@ func _start_vision_mode_from_longpress() -> void:
 	_path_longpress_timer = 0.0
 
 	if _path_points.size() < 2:
+		print("[PointDebug] _start_vision_mode_from_longpress: failed (path_points=%d)" % _path_points.size())
 		return
 
 	# パス上の最も近い点を見つける
 	var result = _find_closest_point_on_path(_path_longpress_ground_pos)
 	if result.is_empty() or result.distance > path_click_threshold:
+		print("[PointDebug] _start_vision_mode_from_longpress: failed (no path point found)")
 		return
+
+	print("[PointDebug] _start_vision_mode_from_longpress: success, ratio=%.3f" % result.ratio)
 
 	# 長押しからVisionモードに入ったことを記録
 	_longpress_vision_mode = true
@@ -897,6 +941,23 @@ func _reset_path_longpress() -> void:
 	_path_longpress_timer = 0.0
 	_path_longpress_screen_pos = Vector2.ZERO
 	_path_longpress_ground_pos = Vector3.ZERO
+	_path_longpress_near_endpoint = false
+	_hide_progress_ring()
+
+
+## プログレスリングを更新（表示・進行率更新）
+func _update_progress_ring(screen_pos: Vector2, elapsed: float, threshold: float) -> void:
+	if not _progress_ring:
+		return
+	if not _progress_ring.is_active():
+		_progress_ring.start_manual(screen_pos)
+	_progress_ring.update_progress(elapsed, threshold)
+
+
+## プログレスリングを非表示
+func _hide_progress_ring() -> void:
+	if _progress_ring:
+		_progress_ring.cancel()
 #endregion
 
 
@@ -906,6 +967,7 @@ func get_drawing_mode() -> DrawingMode:
 
 
 func start_movement_mode() -> void:
+	print("[PointDebug] PathDrawer.start_movement_mode")
 	_drawing_mode = DrawingMode.MOVEMENT
 	_path_points.clear()
 	_longpress_vision_mode = false
@@ -915,7 +977,9 @@ func start_movement_mode() -> void:
 
 func start_vision_mode() -> bool:
 	if _path_points.size() < 2:
+		print("[PointDebug] PathDrawer.start_vision_mode: failed (path_points=%d)" % _path_points.size())
 		return false
+	print("[PointDebug] PathDrawer.start_vision_mode: success")
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
 	_longpress_vision_mode = false  # UIから開始した場合は自動復帰しない
@@ -926,7 +990,9 @@ func start_vision_mode() -> bool:
 
 func start_wait_mode() -> bool:
 	if _path_points.size() < 2:
+		print("[PointDebug] PathDrawer.start_wait_mode: failed (path_points=%d)" % _path_points.size())
 		return false
+	print("[PointDebug] PathDrawer.start_wait_mode: success")
 	_drawing_mode = DrawingMode.WAIT_POINT
 	_is_enabled = true
 	_wait_handler.reset_state()

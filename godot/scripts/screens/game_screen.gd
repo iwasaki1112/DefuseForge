@@ -125,9 +125,10 @@ func _setup_game_manager() -> void:
 		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
 		game_manager.round_timer_updated.connect(_on_round_timer_updated)
 		game_manager.round_ended.connect(_on_round_ended)
-		# 同期待機状態変更シグナル
-		if game_manager.path_execution_manager:
-			game_manager.path_execution_manager.sync_wait_state_changed.connect(_on_sync_wait_state_changed)
+		# 同期待機状態変更シグナル（PCビルドでの型解決問題を回避するため動的アクセス）
+		var pem = game_manager.get("path_execution_manager")
+		if pem:
+			pem.sync_wait_state_changed.connect(_on_sync_wait_state_changed)
 
 
 func _load_map() -> void:

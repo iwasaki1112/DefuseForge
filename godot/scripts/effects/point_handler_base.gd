@@ -204,6 +204,12 @@ func _add_point(point_data: Dictionary, mesh: MeshInstance3D) -> void:
 	_points.insert(insert_idx, point_data)
 	_meshes.insert(insert_idx, mesh)
 
+	print("[PointDebug] _add_point: ratio=%.3f, total=%d, mesh_valid=%s" % [
+		point_data.get("path_ratio", 0.0),
+		_points.size(),
+		str(is_instance_valid(mesh))
+	])
+
 	point_added.emit(point_data)
 
 

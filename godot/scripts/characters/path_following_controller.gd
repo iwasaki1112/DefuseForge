@@ -1675,9 +1675,11 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 		new_vp["path_distance"] = _calculate_anchor_distance_on_path(_extension_path, anchor)
 		_extension_vision_points.append(new_vp)
 		_extension_vision_points.sort_custom(_compare_by_path_distance)
+		print("[PointDebug] PathFollowingCtrl.add_vision_to_ext: added to pending (count=%d)" % _extension_vision_points.size())
 	else:
 		# 延長パスに切り替わっている場合はチェッカーに追加
 		_vision_checker.add_point(new_vp)
+		print("[PointDebug] PathFollowingCtrl.add_vision_to_ext: added to checker")
 
 
 ## Waitポイントを追加（実行中のパスに）
@@ -1733,7 +1735,12 @@ func get_remaining_path_data() -> Dictionary:
 ## @param append_to_existing: 既存の延長パスに追加するか（デフォルトはfalse=置き換え）
 func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> void:
 	if extension_path.size() < 2:
+		print("[PointDebug] PathFollowingCtrl.set_extension_path: path too short (%d)" % extension_path.size())
 		return
+
+	print("[PointDebug] PathFollowingCtrl.set_extension_path: path_len=%d, append=%s, has_ext=%s" % [
+		extension_path.size(), str(append_to_existing), str(_has_extension)
+	])
 
 	if append_to_existing and _has_extension and _extension_path.size() > 0:
 		# 既存の延長パスに新しいパスを追加
@@ -1785,6 +1792,9 @@ func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, app
 		_extension_wait_points.sort_custom(_compare_by_path_distance)
 
 	_has_extension = true
+	print("[PointDebug] PathFollowingCtrl.set_extension_path: done, vision=%d, wait=%d" % [
+		_extension_vision_points.size(), _extension_wait_points.size()
+	])
 
 
 ## 延長パスの長さを計算（新しいパス追加前）

@@ -67,8 +67,15 @@ func start(_character: Node, char_color: Color = Color.WHITE) -> bool:
 ## このメソッドはモードの終了処理のみを行う
 func confirm() -> bool:
 	if not is_active:
+		print("[PointDebug] PathModeController.confirm: not active")
 		return false
 
+	# スタックトレースを出力して呼び出し元を特定
+	var stack = get_stack()
+	print("[PointDebug] PathModeController.confirm: ending mode, called from:")
+	for i in range(min(stack.size(), 5)):
+		var frame = stack[i]
+		print("  [%d] %s:%d in %s" % [i, frame.source, frame.line, frame.function])
 	_cleanup()
 	mode_ended.emit()
 
@@ -81,8 +88,10 @@ func confirm() -> bool:
 ## パスモードをキャンセル
 func cancel() -> void:
 	if not is_active:
+		print("[PointDebug] PathModeController.cancel: not active")
 		return
 
+	print("[PointDebug] PathModeController.cancel: cancelling")
 	_cleanup()
 	mode_cancelled.emit()
 
