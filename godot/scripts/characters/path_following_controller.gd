@@ -590,6 +590,8 @@ func _update_vision_direction() -> void:
 			_forced_look_direction = vp.direction
 			_active_target_point = Vector3.ZERO
 		# シグナル発火（point_dataを直接渡す - WaitPointと統一）
+		var point_dist = vp.get("path_distance", -1)
+		print("[VP-TRIGGER] idx=%d char_dist=%.2f point_dist=%.2f anchor=%s" % [idx, char_distance, point_dist, vp.get("anchor", Vector3.ZERO)])
 		vision_point_reached.emit(idx, vp)
 	)
 
