@@ -1,6 +1,6 @@
 # CharacterColorManager
 
-キャラクター個別色管理システム（Autoload）。味方キャラクターに固有色を割り当て、頭上ラベル・パス線・VisionMarker・RunMarkerで統一的に使用する。
+キャラクター個別色管理システム（Autoload）。味方キャラクターに固有色を割り当て、頭上ラベル・パス線・VisionPoint・RunPointで統一的に使用する。
 
 ## クラス情報
 
@@ -192,9 +192,9 @@ func _on_team_changed():
 ## 関連クラス
 
 - **CharacterLabelManager**: 色を頭上ラベルに反映
-- **PathDrawer**: 色をパス線・VisionMarker・RunMarkerに伝播
-- **VisionMarker**: `set_colors()`で色を設定
-- **RunMarker**: `set_colors()`で色を設定
+- **PathDrawer**: 色をパス線・VisionPoint・RunPointに伝播
+- **VisionPoint**: `set_colors()`で色を設定
+- **RunPoint**: `set_colors()`で色を設定
 
 ## APIリファレンス
 

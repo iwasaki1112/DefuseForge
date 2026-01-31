@@ -16,8 +16,8 @@
 | `COLOR_DOOR` | `Color("#FF4444")` | ドア操作セグメントの色 |
 | `COLOR_VISION` | `Color("#AA66FF")` | ビジョンマーカーの色（紫） |
 | `COLOR_CLEAR` | `Color("#66CCFF")` | クリアマーカーの色（水色） |
-| `COLOR_GRENADE` | `Color("#66FF66")` | グレネードマーカーの色（緑） |
-| `COLOR_SMOKE_GRENADE` | `Color("#AAAAAA")` | スモークグレネードマーカーの色（灰色） |
+| `COLOR_GRENADE` | `Color("#66FF66")` | グレネードポイントの色（緑） |
+| `COLOR_SMOKE_GRENADE` | `Color("#AAAAAA")` | スモークグレネードポイントの色（灰色） |
 | `COLOR_BACKGROUND` | `Color("#333333", 0.5)` | 背景色 |
 
 ### レイアウト

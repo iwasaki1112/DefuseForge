@@ -14,7 +14,7 @@
 
 - **パス確定**: PathDrawerで描画されたパスをキャラクターごとの実行用データに変換して保存。
 - **接続線自動生成**: キャラクターの現在位置からパス開始点までの移動経路を自動補完。
-- **マーカー再計算**: 接続線の長さに応じて、視線やアクションマーカーのパス上の位置（比率）を再計算。
+- **ポイント再計算**: 接続線の長さに応じて、視線やアクションマーカーのパス上の位置（比率）を再計算。
 - **共通パス構築**: ローカル確定とネットワーク受信のパス処理を共通ヘルパーで統一。
 - **パス実行**: 保存されたパスデータに基づき、`PathFollowingController`を生成して移動を開始。
 - **衝突回避優先度**: 実行順序に基づいて各キャラクターに移動優先度を割り当て。
@@ -29,9 +29,9 @@
 | `all_paths_completed` | なし | 全キャラクターの移動が完了した時 |
 | `paths_cleared` | なし | 全ての保留パスがクリアされた時 |
 | `character_path_completed` | `character: Node` | 個別のキャラクターが移動完了した時 |
-| `grenade_marker_reached` | `character: Node, marker_data: Dictionary` | グレネードマーカー到達時 |
-| `smoke_grenade_marker_reached` | `character: Node, marker_data: Dictionary` | スモークマーカー到達時 |
-| `door_marker_reached` | `character: Node, door: Node3D` | ドアマーカー到達時 |
+| `grenade_point_reached` | `character: Node, point_data: Dictionary` | グレネードポイント到達時 |
+| `smoke_grenade_point_reached` | `character: Node, point_data: Dictionary` | スモークマーカー到達時 |
+| `door_point_reached` | `character: Node, door: Node3D` | ドアポイント到達時 |
 
 ## Public API
 
@@ -44,7 +44,7 @@
 
 #### `confirm_path(target_characters: Array[Node], path_drawer: Node, _primary_character: Node) -> bool`
 PathDrawerの描画データを取得し、対象キャラクター（現在はシングルのみサポート）の保留パスとして確定する。
-元のマーカーメッシュは削除され、キャラクターごとの新しいマーカーが生成される。
+元のポイントメッシュは削除され、キャラクターごとの新しいマーカーが生成される。
 
 ### Execution
 
@@ -72,16 +72,16 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
 ### Moving Path Operations
 
 #### `find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
-移動中のパス上で、指定座標に近い点を検索する（Visionマーカー追加用）。
+移動中のパス上で、指定座標に近い点を検索する（Visionポイント追加用）。
 
 #### `find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
 移動中のパスの終点を検索する（パス延長用）。
 
 #### `find_path_point_at_position(ground_pos: Vector3, threshold: float = 0.5) -> Dictionary`
-確定済みパス上で、指定座標に近い点を検索する（Visionマーカー追加用）。
+確定済みパス上で、指定座標に近い点を検索する（Visionポイント追加用）。
 
-#### `add_vision_marker_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool`
-移動中のパスにVisionマーカーを動的に追加する。
+#### `add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool`
+移動中のパスにVisionポイントを動的に追加する。
 
 #### `get_remaining_path_for_character(character: Node, get_extension: bool = false) -> Dictionary`
 移動中のキャラクターの残りパスデータを取得する。
@@ -145,11 +145,11 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
         "vision_points": Array[Dictionary],
         "run_segments": Array[Dictionary],
         "clear_points": Array[Dictionary],
-        "grenade_markers_data": Array[Dictionary],
+        "grenade_points_data": Array[Dictionary],
         # ... 他マーカーデータ
         "path_mesh": MeshInstance3D,
-        "vision_markers": Array[MeshInstance3D],
-        # ... 他マーカーメッシュ
+        "vision_points": Array[MeshInstance3D],
+        # ... 他ポイントメッシュ
     }
 }
 ```

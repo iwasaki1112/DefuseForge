@@ -173,7 +173,7 @@ for i in path.size():
 ```gdscript
 # 送信側
 var msg = NetworkMessages.create_path_confirm(peer_id, char_id, path)
-msg.vision_markers.append({"path_ratio": 0.5, "direction": [1, 0, 0]})
+msg.vision_points.append({"path_ratio": 0.5, "direction": [1, 0, 0]})
 
 # シリアライズ
 var payload = NetworkSerializer.serialize_path_message(msg)

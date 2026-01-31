@@ -849,8 +849,8 @@ func _setup_idle_manager() -> void:
 		add_child(idle_manager)
 		idle_manager.setup(
 			characters,
-			func(c): return path_execution_manager.is_character_following_path(c),
-			func(): return selection_manager.primary_character
+			func(c): return path_execution_manager.is_character_following_path(c) if path_execution_manager else false,
+			func(): return selection_manager.primary_character if selection_manager else null
 		)
 
 
@@ -1157,7 +1157,8 @@ func _on_character_died(character: GameCharacter) -> void:
 ## ドアキック処理（ポイントからの実行用）
 ## ========================================
 
-## ドアキック時のドア方向（キャラクターID -> Vector3）
+## ドアキック時のドア方向（将来の拡張用に予約）
+@warning_ignore("unused_private_class_variable")
 var _door_kick_directions: Dictionary = {}
 
 ## グレネード追跡（爆発位置同期用）

@@ -1,4 +1,4 @@
-# VisionMarker
+# VisionPoint
 
 視線ポイントマーカー。円形背景と矢印で視線方向を示す。ターゲットポイントモードでは、ターゲット地点への線も描画する。
 
@@ -7,7 +7,7 @@
 | 項目 | 値 |
 |------|-----|
 | 継承元 | `MeshInstance3D` |
-| ファイルパス | `scripts/effects/vision_marker.gd` |
+| ファイルパス | `scripts/effects/vision_point.gd` |
 
 ## Export Properties
 
@@ -67,7 +67,7 @@
 ### 固定方向モード（後方互換）
 ```gdscript
 var marker = MeshInstance3D.new()
-marker.set_script(preload("res://scripts/effects/vision_marker.gd"))
+marker.set_script(preload("res://scripts/effects/vision_point.gd"))
 add_child(marker)
 
 # 位置と方向を設定
@@ -83,7 +83,7 @@ marker.set_colors(Color.BLACK, Color.YELLOW)
 ### ターゲットポイントモード
 ```gdscript
 var marker = MeshInstance3D.new()
-marker.set_script(preload("res://scripts/effects/vision_marker.gd"))
+marker.set_script(preload("res://scripts/effects/vision_point.gd"))
 add_child(marker)
 
 # 位置とターゲットを設定
@@ -113,7 +113,7 @@ marker.set_target_line_color(Color.ORANGE)
 
 ## 関連クラス
 
-- `PathDrawer` - 視線ポイント設定モードでVisionMarkerを生成
+- `PathDrawer` - 視線ポイント設定モードでVisionPointを生成
 - `CharacterColorManager` - キャラクター個別色の取得
 - `PathFollowingController` - ターゲットポイントに基づいて動的に視線方向を計算
 

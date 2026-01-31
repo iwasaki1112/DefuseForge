@@ -258,7 +258,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				# 長押しVisionモードでリリース後、描画が終了したらMOVEMENTに戻る
 				if _longpress_vision_mode and _drawing_mode == DrawingMode.VISION_POINT:
-					if not _vision_handler._is_drawing:
+					if not _vision_handler._is_active:
 						_longpress_vision_mode = false
 						_drawing_mode = DrawingMode.MOVEMENT
 						mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -416,7 +416,7 @@ func handle_point_touch_input(event: InputEvent) -> bool:
 	if handler and handler.handle_input(event):
 		# 長押しVisionモードでリリース後、描画が終了したらMOVEMENTに戻る
 		if _longpress_vision_mode and _drawing_mode == DrawingMode.VISION_POINT:
-			if not _vision_handler._is_drawing:
+			if not _vision_handler._is_active:
 				_longpress_vision_mode = false
 				_drawing_mode = DrawingMode.MOVEMENT
 				mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -888,7 +888,7 @@ func _start_vision_mode_from_longpress() -> void:
 	# 内部状態を直接設定
 	_vision_handler._current_anchor = result.point
 	_vision_handler._current_ratio = result.ratio
-	_vision_handler._is_drawing = true
+	_vision_handler._is_active = true
 
 
 ## パス上長押し状態をリセット
@@ -1306,4 +1306,12 @@ func _emit_drawing_finished_after_restore() -> void:
 #region 後方互換
 func is_multi_character_mode() -> bool:
 	return false
+#endregion
+
+
+#region 移動中パス継続用
+## パスメッシュを非表示にする（移動中継続モード用）
+func hide_path_mesh() -> void:
+	if _path_mesh:
+		_path_mesh.visible = false
 #endregion

@@ -101,7 +101,7 @@ func _on_path_context_menu_selected(item_id: String, path_data: Dictionary) -> v
 指を離す（タッチアップ）
   ├─ タイマー < 0.5秒 → タップ判定
   │   └─ show_path_context_menu() 呼び出し
-  └─ タイマー >= 0.5秒 → Visionマーカーモード（従来通り）
+  └─ タイマー >= 0.5秒 → Visionポイントモード（従来通り）
   ↓
 メニュー表示
   ├─ A/B/Cボタン

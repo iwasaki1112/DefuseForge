@@ -5,8 +5,6 @@ extends PointHandlerBase
 ## パス上の待機ポイント（長押しで待機時間を設定）を管理するポイントの入力・管理を担当
 
 
-const WaitPointScript = preload("res://scripts/effects/wait_point.gd")
-
 ## 最小待機時間（秒）
 const WAIT_MIN_DURATION: float = 0.0
 ## 最大待機時間（秒）
@@ -14,149 +12,91 @@ const WAIT_MAX_DURATION: float = 10.0
 ## 最小押下時間（秒）- これ未満はタップとみなしキャンセル
 const MIN_PRESS_DURATION: float = 0.15
 
-
-## Waitポイントデータ配列
-var _wait_points: Array[Dictionary] = []
-
-## Waitポイントメッシュ配列
-var _wait_meshes: Array[MeshInstance3D] = []
-
 ## 長押し開始時刻
 var _press_start_time: float = 0.0
-
-## 長押し中フラグ
-var _is_pressing: bool = false
 
 ## プレビューポイント
 var _preview_point: MeshInstance3D = null
 
-## 保留中アンカー位置
-var _pending_anchor: Vector3 = Vector3.ZERO
 
-## 保留中比率
-var _pending_ratio: float = 0.0
-
-## 最後のタッチ時刻（エミュレートマウスイベント対策）
-var _last_touch_time: int = 0
-
-## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
-const TOUCH_MOUSE_INTERVAL_MS: int = 100
-
-
-## 入力処理
-func handle_input(event: InputEvent) -> bool:
-	# タッチ入力
-	if event is InputEventScreenTouch:
-		_last_touch_time = Time.get_ticks_msec()
-		if event.pressed:
-			return _start_press(event.position)
-		else:
-			if _is_pressing:
-				_finish_press()
-				return true
-		return false
-
-	if event is InputEventScreenDrag:
-		if _is_pressing:
-			update_preview()
-			return true
-		return false
-
-	# マウス入力（タッチ直後のエミュレートイベントはスキップ）
-	if Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS:
-		return false
-
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				return _start_press(mouse_event.position)
-			else:
-				if _is_pressing:
-					_finish_press()
-					return true
-
-	if event is InputEventMouseMotion:
-		if _is_pressing:
-			update_preview()
-			return true
-
-	return false
-
-
-## 長押し開始
-func _start_press(screen_pos: Vector2) -> bool:
-	# 既にプレス中の場合は無視（重複イベント対策）
-	if _is_pressing:
+## 押下処理
+func _handle_press(screen_pos: Vector2) -> bool:
+	# 既に操作中の場合は無視（重複イベント対策）
+	if _is_active:
 		return true
 
-	var ground_pos = _get_ground_position(screen_pos)
-	if ground_pos == null:
+	var click_result = _check_path_click(screen_pos)
+	if not click_result.success:
 		return false
 
-	var result = _find_closest_point_on_path(ground_pos)
-	if result.distance > _get_path_click_threshold():
-		return false
-
-	_pending_anchor = result.point
-	_pending_ratio = result.ratio
+	_current_anchor = click_result.anchor
+	_current_ratio = click_result.ratio
 	_press_start_time = Time.get_ticks_msec() / 1000.0
-	_is_pressing = true
+	_is_active = true
 
 	_create_preview_point()
 	return true
 
 
-## 長押し終了
-func _finish_press() -> void:
-	if not _is_pressing:
-		return
+## 解放処理
+func _handle_release(_screen_pos: Vector2) -> bool:
+	if not _is_active:
+		return false
 
 	var current_time = Time.get_ticks_msec() / 1000.0
 	var duration = current_time - _press_start_time
-	_is_pressing = false
+	_is_active = false
 
 	# 最小押下時間未満はタップとみなしキャンセル
 	if duration < MIN_PRESS_DURATION:
 		_remove_preview_point()
-		return
+		return true
 
 	# 最小待機時間未満はキャンセル
 	if duration < WAIT_MIN_DURATION:
 		_remove_preview_point()
-		return
+		return true
 
 	# 最大時間で制限
 	duration = clampf(duration, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 
 	_remove_preview_point()
 
-	# Waitポイントを追加
+	# Waitポイントデータを作成
 	var new_point = {
-		"path_ratio": _pending_ratio,
-		"anchor": _pending_anchor,
+		"path_ratio": _current_ratio,
+		"anchor": _current_anchor,
 		"wait_duration": duration
 	}
 
-	_wait_points.append(new_point)
+	# ポイントメッシュを作成（親ノードを渡してツリーに追加してから設定）
+	var mesh = PointFactory.create_wait_point(
+		_current_anchor,
+		duration,
+		_character_color,
+		_path_drawer
+	)
 
-	# ポイントメッシュを作成
-	var point = _create_wait_point_node(_pending_anchor, duration)
-	_wait_meshes.append(point)
+	# 共通の追加処理
+	_add_point(new_point, mesh)
+	return true
 
-	point_added.emit(new_point)
+
+## 移動処理（長押し中はプレビュー更新）
+func _handle_motion(_screen_pos: Vector2) -> void:
+	update_preview()
 
 
 ## プレビューポイント作成
 func _create_preview_point() -> void:
 	_remove_preview_point()
 
-	_preview_point = MeshInstance3D.new()
-	_preview_point.set_script(WaitPointScript)
-	_add_child_to_drawer(_preview_point)
-	_preview_point.set_point_position(_pending_anchor)
-	_preview_point.set_colors(Color(_character_color.r, _character_color.g, _character_color.b, 0.6), Color(1.0, 1.0, 1.0, 0.8))
-	_preview_point.set_wait_duration(WAIT_MIN_DURATION)
+	_preview_point = PointFactory.create_wait_point_preview(
+		_current_anchor,
+		WAIT_MIN_DURATION,
+		_character_color,
+		_path_drawer
+	)
 
 
 ## プレビューポイント削除
@@ -168,7 +108,7 @@ func _remove_preview_point() -> void:
 
 ## プレビュー更新
 func update_preview() -> void:
-	if not _is_pressing or not _preview_point:
+	if not _is_active or not _preview_point:
 		return
 
 	var current_time = Time.get_ticks_msec() / 1000.0
@@ -176,20 +116,9 @@ func update_preview() -> void:
 	_preview_point.set_wait_duration(duration)
 
 
-## Waitポイントノード作成
-func _create_wait_point_node(anchor: Vector3, duration: float) -> MeshInstance3D:
-	var point = MeshInstance3D.new()
-	point.set_script(WaitPointScript)
-	_add_child_to_drawer(point)
-	point.set_point_position(anchor)
-	point.set_colors(_character_color, Color(1.0, 1.0, 1.0, 1.0))
-	point.set_wait_duration(duration)
-	return point
-
-
 ## プレビュー中の待機時間を取得
 func get_preview_duration() -> float:
-	if not _is_pressing:
+	if not _is_active:
 		return 0.0
 	var current_time = Time.get_ticks_msec() / 1000.0
 	return clampf(current_time - _press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
@@ -197,62 +126,33 @@ func get_preview_duration() -> float:
 
 ## 長押し中かどうか
 func is_pressing() -> bool:
-	return _is_pressing
+	return _is_active
 
 
-func has_points() -> bool:
-	return _wait_points.size() > 0
-
-
-func get_point_count() -> int:
-	return _wait_points.size()
-
-
+## get_points オーバーライド（プレビュー中のポイントを含める）
 func get_points() -> Array[Dictionary]:
-	var result: Array[Dictionary] = _wait_points.duplicate()
+	var result: Array[Dictionary] = _points.duplicate()
 	# プレビュー中のポイントがあれば追加
-	if _is_pressing and _preview_point:
+	if _is_active and _preview_point:
 		result.append({
-			"path_ratio": _pending_ratio,
-			"anchor": _pending_anchor,
+			"path_ratio": _current_ratio,
+			"anchor": _current_anchor,
 			"wait_duration": get_preview_duration()
 		})
 	return result
 
 
-func take_points() -> Array[MeshInstance3D]:
-	var points = _wait_meshes.duplicate()
-	_wait_meshes.clear()
-	return points
-
-
-func undo_last() -> Dictionary:
-	if _wait_points.size() == 0:
-		return {}
-
-	var removed_data = _wait_points.pop_back()
-	if _wait_meshes.size() > 0:
-		var mesh = _wait_meshes.pop_back()
-		if is_instance_valid(mesh):
-			mesh.queue_free()
-
-	return removed_data
-
-
+## clear_all オーバーライド
 func clear_all() -> void:
-	_wait_points.clear()
-	for mesh in _wait_meshes:
-		if is_instance_valid(mesh):
-			mesh.queue_free()
-	_wait_meshes.clear()
+	super.clear_all()
 	_remove_preview_point()
-	_is_pressing = false
 	_press_start_time = 0.0
 
 
+## 状態リセット（オーバーライド）
 func reset_state() -> void:
+	super.reset_state()
 	_remove_preview_point()
-	_is_pressing = false
 	_press_start_time = 0.0
 
 
@@ -266,20 +166,14 @@ func add_sync_point(path_ratio: float, anchor: Vector3) -> void:
 		"anchor": anchor,
 		"wait_duration": -1.0  # 同期ポイント（無期限待機）
 	}
-	_wait_points.append(new_point)
 
 	# ポイントメッシュを作成（"W"表示）
-	var point = _create_wait_point_node(anchor, -1.0)
-	_wait_meshes.append(point)
+	var mesh = PointFactory.create_wait_point(
+		anchor,
+		-1.0,
+		_character_color,
+		_path_drawer
+	)
 
-	point_added.emit(new_point)
-
-
-## ポイントを復元
-func restore_points(data: Array, meshes: Array) -> void:
-	for d in data:
-		_wait_points.append(d)
-	for m in meshes:
-		if is_instance_valid(m):
-			_add_child_to_drawer(m)
-			_wait_meshes.append(m)
+	# 共通の追加処理
+	_add_point(new_point, mesh)

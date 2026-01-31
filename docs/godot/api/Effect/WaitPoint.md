@@ -1,4 +1,4 @@
-# WaitMarker
+# WaitPoint
 
 パス上の待機位置マーカー。砂時計アイコンで待機位置を示し、待機時間をラベルで表示する。
 
@@ -7,11 +7,11 @@
 | 項目 | 値 |
 |------|-----|
 | 継承元 | `MeshInstance3D` |
-| ファイルパス | `scripts/effects/wait_marker.gd` |
+| ファイルパス | `scripts/effects/wait_point.gd` |
 
 ## 概要
 
-`WaitMarker`は、パス上でキャラクターがアイドル待機する位置を示すマーカー。長押し時間が待機時間として設定される。待機完了後、キャラクターはパス追従を再開する。
+`WaitPoint`は、パス上でキャラクターがアイドル待機する位置を示すマーカー。長押し時間が待機時間として設定される。待機完了後、キャラクターはパス追従を再開する。
 
 ## Export Properties
 
@@ -63,7 +63,7 @@
 ## 使用例
 
 ```gdscript
-var marker = WaitMarker.new()
+var marker = WaitPoint.new()
 add_child(marker)
 
 # 位置と待機時間を設定
@@ -100,14 +100,14 @@ marker.set_colors(Color(0.9, 0.7, 0.2), Color.WHITE)
 
 ## 関連クラス
 
-- `PathDrawer` - Waitマーカー設定モードでWaitMarkerを生成
+- `PathDrawer` - Waitポイント設定モードでWaitPointを生成
 - `PathFollowingController` - マーカー位置到達時に待機を開始、完了後にパス再開
-- `ActionMarker` - アクションマーカーの基底クラス
+- `ActionPoint` - アクションポイントの基底クラス
 
 ## シグナルフロー
 
 ```
-PathDrawer (wait_marker_added)
+PathDrawer (wait_point_added)
     ↓
 PathExecutionManager (confirm_path)
     ↓

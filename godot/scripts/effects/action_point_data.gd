@@ -3,6 +3,15 @@ extends RefCounted
 
 ## アクションポイントデータの基底クラス
 ## 各ポイント種別のデータを統一的に扱うためのデータ構造
+##
+## 到達判定の仕組み:
+## - path_ratio: パス上の位置を0.0〜1.0で表現（旧方式、後方互換用）
+## - path_distance: パス開始点からの累積距離（推奨方式）
+##
+## path_distanceを使う理由:
+## 1. 拡張パスでpath_ratioのスケールが変わる問題を回避
+## 2. ソート後のインデックス再計算が正確にできる
+## 3. 実際の移動距離と直接比較できる
 
 ## ポイントタイプ
 enum Type {
@@ -15,6 +24,10 @@ var type: Type = Type.VISION
 
 ## パス上の位置比率 (0.0 ~ 1.0)
 var path_ratio: float = 0.0
+
+## パス開始点からの累積距離（距離ベース判定用）
+## -1.0は未計算を意味する
+var path_distance: float = -1.0
 
 ## アンカー位置（ポイントの配置位置）
 var anchor: Vector3 = Vector3.ZERO
@@ -30,11 +43,14 @@ func adjust_ratio_for_connection(connect_length: float, base_length: float) -> v
 
 ## Dictionaryに変換（シリアライズ用）
 func to_dict() -> Dictionary:
-	return {
+	var data := {
 		"type": type,
 		"path_ratio": path_ratio,
 		"anchor": anchor
 	}
+	if path_distance >= 0:
+		data["path_distance"] = path_distance
+	return data
 
 
 ## Dictionaryから復元（デシリアライズ用）
@@ -43,8 +59,34 @@ func from_dict(data: Dictionary) -> void:
 		type = data.type
 	if data.has("path_ratio"):
 		path_ratio = data.path_ratio
+	if data.has("path_distance"):
+		path_distance = data.path_distance
 	if data.has("anchor"):
 		anchor = data.anchor
+
+
+## 有効な距離を取得（path_distanceがあればそれを、なければpath_ratioから計算）
+## @param total_length: パス全長（path_ratioから計算する場合に使用）
+## @return: ポイントまでの距離
+func get_effective_distance(total_length: float = 0.0) -> float:
+	if path_distance >= 0:
+		return path_distance
+	return path_ratio * total_length
+
+
+## path_distanceを計算して設定
+## @param calc_distance_callback: アンカー位置から距離を計算するコールバック
+func calculate_path_distance(calc_distance_callback: Callable) -> void:
+	if calc_distance_callback.is_valid():
+		path_distance = calc_distance_callback.call(anchor)
+
+
+## path_distanceでソートするための比較関数（静的）
+## Dictionary同士を比較する場合に使用
+static func compare_by_distance(a: Dictionary, b: Dictionary, total_length: float = 0.0) -> bool:
+	var dist_a: float = a.get("path_distance", a.get("path_ratio", 0.0) * total_length)
+	var dist_b: float = b.get("path_distance", b.get("path_ratio", 0.0) * total_length)
+	return dist_a < dist_b
 
 
 ## ポイントノードを作成（子クラスでオーバーライド）
@@ -85,7 +127,7 @@ func get_reached_result() -> Dictionary:
 ## @param controller: PathFollowingControllerへの参照
 ## @param point_index: 発火したポイントのインデックス
 ## @return: 処理が実行されたらtrue
-func apply_reached_effect(controller: Node, point_index: int) -> bool:
+func apply_reached_effect(_controller: Node, _point_index: int) -> bool:
 	return false
 
 

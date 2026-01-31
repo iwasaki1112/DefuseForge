@@ -123,6 +123,11 @@ func start_path_mode_from_point(character: Node, start_point: Vector3, char_colo
 	path_drawer.set_character_color(char_color)
 	path_drawer.set_active_edit_character(character)
 
+	# 移動中パス継続モードの場合、PathDrawerのメッシュを非表示にする
+	# （PathExecutionManagerのメッシュがリアルタイムで更新されるのでそちらを使う）
+	if is_moving_path and path_drawer:
+		path_drawer.hide_path_mesh()
+
 	path_mode_controller.mode_started.emit(character)
 	return true
 
@@ -252,6 +257,7 @@ func _on_path_mode_started(character: Node) -> void:
 
 
 func _on_path_mode_ended() -> void:
+	_cleanup_moving_continuation()
 	_is_continuation_mode = false
 	_is_moving_path_continuation = false
 	_moving_continuation_character = null
@@ -259,6 +265,7 @@ func _on_path_mode_ended() -> void:
 
 
 func _on_path_mode_cancelled() -> void:
+	_cleanup_moving_continuation(true)  # キャンセル時は元のメッシュを再表示
 	_is_continuation_mode = false
 	_is_moving_path_continuation = false
 	_moving_continuation_character = null
@@ -290,10 +297,82 @@ func _on_path_mode_changed(mode: int) -> void:
 
 func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 	vision_point_added.emit(anchor, direction)
+	# リアルタイム確定：pending_pathsにポイントを追加
+	_sync_points_to_pending_paths()
 
 
 func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
 	wait_point_added.emit(path_ratio, wait_duration)
+	# リアルタイム確定：pending_pathsにポイントを追加
+	_sync_points_to_pending_paths()
+
+
+## PathDrawerのポイントをpending_pathsに同期（メッシュの所有権も移譲）
+func _sync_points_to_pending_paths() -> void:
+	if not path_drawer or not path_execution_manager:
+		return
+
+	var character = path_drawer.get_active_edit_character()
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not path_execution_manager.pending_paths.has(char_id):
+		return
+
+	var data = path_execution_manager.pending_paths[char_id]
+
+	var drawer_vision_points = path_drawer.get_vision_points()
+	var drawer_wait_points = path_drawer.get_wait_points()
+
+	# PathDrawerから新しいポイントデータを追加（上書きではなく追加）
+	if not data.has("vision_points_data"):
+		data["vision_points_data"] = []
+	for vp in drawer_vision_points:
+		data["vision_points_data"].append(vp)
+
+	if not data.has("wait_points_data"):
+		data["wait_points_data"] = []
+	for wp in drawer_wait_points:
+		data["wait_points_data"].append(wp)
+
+	# メッシュをPathExecutionManagerの親ノードに移動（所有権を移譲）
+	var mesh_parent = path_execution_manager._mesh_parent
+	if not mesh_parent:
+		return
+
+	# 既存のメッシュ配列を取得（なければ初期化）
+	var vision_meshes: Array[MeshInstance3D] = []
+	if data.has("vision_points"):
+		for m in data["vision_points"]:
+			if is_instance_valid(m):
+				vision_meshes.append(m)
+
+	# 新しいメッシュを追加
+	for m in path_drawer._vision_handler._meshes:
+		if is_instance_valid(m):
+			m.reparent(mesh_parent)
+			vision_meshes.append(m)
+	data["vision_points"] = vision_meshes
+	# メッシュとデータの両方をクリア（同期済みなので一時ポイントロジックが正常に動作する）
+	path_drawer._vision_handler._meshes.clear()
+	path_drawer._vision_handler._points.clear()
+
+	# 既存のメッシュ配列を取得（なければ初期化）
+	var wait_meshes: Array[MeshInstance3D] = []
+	if data.has("wait_points"):
+		for m in data["wait_points"]:
+			if is_instance_valid(m):
+				wait_meshes.append(m)
+
+	# 新しいメッシュを追加
+	for m in path_drawer._wait_handler._meshes:
+		if is_instance_valid(m):
+			m.reparent(mesh_parent)
+			wait_meshes.append(m)
+	data["wait_points"] = wait_meshes
+	path_drawer._wait_handler._meshes.clear()
+	path_drawer._wait_handler._points.clear()  # データもクリア（一時ポイントロジック用）
 
 
 func _on_path_undone() -> void:
@@ -323,6 +402,12 @@ func _on_path_started(character: Node, start_point: Vector3) -> void:
 	var is_continuation := _is_continuation_mode
 	_is_continuation_mode = false  # フラグをリセット
 	path_execution_manager.start_realtime_path(character, start_point, is_continuation)
+
+
+## 移動中パス継続モードのクリーンアップ
+func _cleanup_moving_continuation(_is_cancel: bool = false) -> void:
+	# 特に何もしない（PathExecutionManagerのメッシュがそのまま使われる）
+	pass
 
 
 ## パスポイント追加シグナルハンドラ（リアルタイム確定）
