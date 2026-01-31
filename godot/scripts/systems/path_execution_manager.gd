@@ -5,9 +5,8 @@ class_name PathExecutionManager
 
 const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
 const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
-const VisionPointScript = preload("res://scripts/effects/vision_point.gd")
-const WaitPointScript = preload("res://scripts/effects/wait_point.gd")
 const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
+const PointFactoryScript = preload("res://scripts/effects/point_factory.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -47,11 +46,9 @@ var _extension_path_meshes: Dictionary = {}
 ## 複数回延長した場合に全てのセグメントを保持
 var _active_path_meshes: Dictionary = {}
 
-## 移動中パスのWaitポイントメッシュ { character_id -> Array[MeshInstance3D] }
-var _moving_path_wait_points: Dictionary = {}
-
-## 移動中パスのVisionポイントメッシュ { character_id -> Array[MeshInstance3D] }
-var _moving_path_vision_points: Dictionary = {}
+## 移動中パスのポイントメッシュ（統合管理）
+## { character_id -> { point_type -> Array[MeshInstance3D] } }
+var _moving_path_points: Dictionary = {}
 
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
@@ -461,6 +458,26 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 	return result
 
 
+## 移動中パスにポイントメッシュを追加（内部ヘルパー）
+func _add_moving_path_point(char_id: int, point_type: int, mesh: MeshInstance3D) -> void:
+	if not mesh:
+		return
+	if not _moving_path_points.has(char_id):
+		_moving_path_points[char_id] = {}
+	if not _moving_path_points[char_id].has(point_type):
+		_moving_path_points[char_id][point_type] = []
+	_moving_path_points[char_id][point_type].append(mesh)
+
+
+## 移動中パスのポイントを取得（内部ヘルパー）
+func _get_moving_path_points(char_id: int, point_type: int) -> Array:
+	if not _moving_path_points.has(char_id):
+		return []
+	if not _moving_path_points[char_id].has(point_type):
+		return []
+	return _moving_path_points[char_id][point_type]
+
+
 ## 移動中パスにVisionポイントを追加
 ## @param character: 対象キャラクター
 ## @param path_ratio: パス上の比率
@@ -482,11 +499,9 @@ func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor:
 	controller.add_vision_point_to_extension(path_ratio, anchor, target_point)
 
 	# 視覚的なポイントメッシュを作成
-	var visual_point = _create_single_vision_point(anchor, target_point, character)
-	if visual_point:
-		if not _moving_path_vision_points.has(char_id):
-			_moving_path_vision_points[char_id] = []
-		_moving_path_vision_points[char_id].append(visual_point)
+	var char_color = CharacterColorManager.get_character_color(character)
+	var visual_point = PointFactory.create_vision_point(anchor, target_point, Vector3.ZERO, char_color, _mesh_parent)
+	_add_moving_path_point(char_id, PointType.VISION, visual_point)
 
 	return true
 
@@ -651,24 +666,28 @@ func _free_active_path_meshes(char_id: int) -> void:
 		_active_path_meshes.erase(char_id)
 
 
-## 移動中パスのWaitポイントメッシュを解放
-func _free_moving_path_wait_points(char_id: int) -> void:
-	if _moving_path_wait_points.has(char_id):
-		var points: Array = _moving_path_wait_points[char_id]
-		for point in points:
-			if is_instance_valid(point):
-				point.queue_free()
-		_moving_path_wait_points.erase(char_id)
+## 移動中パスのポイントメッシュを解放（統合版）
+## @param char_id: キャラクターID
+## @param point_type: ポイントタイプ（-1で全タイプ）
+func _free_moving_path_points(char_id: int, point_type: int = -1) -> void:
+	if not _moving_path_points.has(char_id):
+		return
 
+	var char_points: Dictionary = _moving_path_points[char_id]
 
-## 移動中パスのVisionポイントメッシュを解放
-func _free_moving_path_vision_points(char_id: int) -> void:
-	if _moving_path_vision_points.has(char_id):
-		var points: Array = _moving_path_vision_points[char_id]
-		for point in points:
-			if is_instance_valid(point):
-				point.queue_free()
-		_moving_path_vision_points.erase(char_id)
+	if point_type < 0:
+		# 全タイプを解放
+		for type_key in char_points.keys():
+			PointFactory.free_point_meshes(char_points[type_key])
+		_moving_path_points.erase(char_id)
+	else:
+		# 特定タイプのみ解放
+		if char_points.has(point_type):
+			PointFactory.free_point_meshes(char_points[point_type])
+			char_points.erase(point_type)
+		# 全タイプが空になったらエントリを削除
+		if char_points.is_empty():
+			_moving_path_points.erase(char_id)
 
 
 ## 移動中キャラクターの延長パスをキャンセル
@@ -787,11 +806,9 @@ func add_sync_wait_point_to_path(character: Node, path_ratio: float, anchor: Vec
 			controller.add_wait_point(point_data)
 
 			# 視覚的なポイントメッシュを作成
-			var visual_point = _create_single_wait_point(anchor, -1.0, character)
-			if visual_point:
-				if not _moving_path_wait_points.has(char_id):
-					_moving_path_wait_points[char_id] = []
-				_moving_path_wait_points[char_id].append(visual_point)
+			var char_color = CharacterColorManager.get_character_color(character)
+			var visual_point = PointFactory.create_wait_point(anchor, -1.0, char_color, _mesh_parent)
+			_add_moving_path_point(char_id, PointType.WAIT, visual_point)
 			return
 
 	# 確定済み（未実行）のパスに追加
@@ -897,10 +914,8 @@ func _on_path_completed(character: Node) -> void:
 		_free_extension_mesh(char_id)
 		# アクティブパスメッシュも削除（複数回延長した場合の全セグメント）
 		_free_active_path_meshes(char_id)
-		# 移動中パスのWaitポイントも削除
-		_free_moving_path_wait_points(char_id)
-		# 移動中パスのVisionポイントも削除
-		_free_moving_path_vision_points(char_id)
+		# 移動中パスのポイントも削除（全タイプ）
+		_free_moving_path_points(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -1016,9 +1031,7 @@ func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, m
 		if is_instance_valid(point) and point.visible:
 			var point_pos = point.global_position
 			point_pos.y = 0.0
-			var dist = point_pos.distance_to(anchor_flat)
-			if dist < threshold:
-				print("[HIDE] MOVING: anchor=%s point_pos=%s dist=%.2f -> HIDDEN" % [anchor_flat, point_pos, dist])
+			if point_pos.distance_to(anchor_flat) < threshold:
 				point.visible = false
 				return
 
@@ -1026,63 +1039,48 @@ func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, m
 	if pending_paths.has(char_id):
 		var path_data = pending_paths[char_id]
 		var points = path_data.get(point_key, [])
-		print("[HIDE] checking pending %s: count=%d" % [point_key, points.size()])
 		for point in points:
 			if is_instance_valid(point) and point.visible:
 				var point_pos = point.global_position
 				point_pos.y = 0.0
-				var dist = point_pos.distance_to(anchor_flat)
-				if dist < threshold:
-					print("[HIDE] PENDING: anchor=%s point_pos=%s dist=%.2f -> HIDDEN" % [anchor_flat, point_pos, dist])
+				if point_pos.distance_to(anchor_flat) < threshold:
 					point.visible = false
 					return
-				else:
-					print("[HIDE] PENDING: anchor=%s point_pos=%s dist=%.2f -> TOO FAR" % [anchor_flat, point_pos, dist])
-	else:
-		print("[HIDE] no pending_paths for char_id=%d" % char_id)
 
 
 ## Visionポイント到達時のコールバック
-## 通過したVisionポイントを非表示にする（WaitPointと同じ処理フロー）
+## 通過したVisionポイントを非表示にする
 func _on_vision_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
-	if not character:
-		return
+	_on_point_reached(PointType.VISION, _index, point_data, character)
 
-	var char_id = character.get_instance_id()
+	# Visionポイント専用のシグナルを発行（移動中パスポイント非表示用）
 	var path_ratio: float = point_data.get("path_ratio", 0.0)
-	var anchor: Vector3 = point_data.get("anchor", Vector3.ZERO)
-
-	print("[VP-HIDE] anchor=%s path_ratio=%.3f" % [anchor, path_ratio])
-
-	# シグナルを発行（移動中パスポイント非表示用）
 	vision_point_reached.emit(character, path_ratio)
-
-	# 移動中パスのVisionポイントを取得
-	var moving_points: Array = []
-	if _moving_path_vision_points.has(char_id):
-		moving_points = _moving_path_vision_points[char_id]
-
-	# 共通処理でポイントを非表示（位置ベースマッチング）
-	if anchor != Vector3.ZERO:
-		_hide_point_at_position(char_id, anchor, "vision_points", moving_points)
 
 
 ## Waitポイント到達時のコールバック
 ## 通過したWaitポイントを非表示にする
 func _on_wait_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
+	_on_point_reached(PointType.WAIT, _index, point_data, character)
+
+
+## ポイント到達時の統合コールバック
+func _on_point_reached(point_type: int, _index: int, point_data: Dictionary, character: Node) -> void:
 	if not character:
 		return
 
 	var char_id = character.get_instance_id()
 	var anchor: Vector3 = point_data.get("anchor", Vector3.ZERO)
 
-	# 移動中パスのWaitポイントを取得
-	var moving_points: Array = []
-	if _moving_path_wait_points.has(char_id):
-		moving_points = _moving_path_wait_points[char_id]
+	# 移動中パスのポイントを取得
+	var moving_points: Array = _get_moving_path_points(char_id, point_type)
 
-	# 共通処理でポイントを非表示
-	_hide_point_at_position(char_id, anchor, "wait_points", moving_points)
+	# ポイントタイプに応じたpending_pathsのキー名
+	var point_key: String = "vision_points" if point_type == PointType.VISION else "wait_points"
+
+	# 共通処理でポイントを非表示（位置ベースマッチング）
+	if anchor != Vector3.ZERO:
+		_hide_point_at_position(char_id, anchor, point_key, moving_points)
 
 
 ## 延長ポイントの比率がスケールされた時のコールバック
@@ -1159,12 +1157,9 @@ func _clear_all_path_meshes() -> void:
 	# アクティブパスメッシュも削除
 	for char_id in _active_path_meshes.keys():
 		_free_active_path_meshes(char_id)
-	# 移動中パスのWaitポイントも削除
-	for char_id in _moving_path_wait_points.keys():
-		_free_moving_path_wait_points(char_id)
-	# 移動中パスのVisionポイントも削除
-	for char_id in _moving_path_vision_points.keys():
-		_free_moving_path_vision_points(char_id)
+	# 移動中パスのポイントも削除（全タイプ）
+	for char_id in _moving_path_points.keys():
+		_free_moving_path_points(char_id)
 
 
 ## pending_pathsのデータからメッシュとポイントを解放
@@ -1176,7 +1171,7 @@ func _free_pending_path_data(data: Dictionary) -> void:
 	var mesh_keys = ["vision_points", "wait_points"]
 	for key in mesh_keys:
 		if data.has(key):
-			free_point_meshes(data[key])
+			PointFactory.free_point_meshes(data[key])
 
 
 ## PathDrawerからポイントデータを取得
@@ -1439,13 +1434,14 @@ func _calculate_ratio_from_position(path: Array[Vector3], position: Vector3) -> 
 	return clamp(best_ratio, 0.0, 1.0)
 
 
-## 調整済み視線ポイントから新しいVisionPointを生成（ターゲットポイントモード対応）
+## 調整済み視線ポイントから新しいVisionPointを生成（PointFactory使用）
 func _create_vision_points_for_path(
 	path: Array[Vector3],
 	adjusted_vision_points: Array[Dictionary],
 	character: Node
 ) -> Array[MeshInstance3D]:
 	var points: Array[MeshInstance3D] = []
+	var char_color = CharacterColorManager.get_character_color(character)
 
 	for vp in adjusted_vision_points:
 		var ratio: float = vp.path_ratio
@@ -1457,28 +1453,10 @@ func _create_vision_points_for_path(
 		else:
 			anchor = _calculate_position_on_path(path, ratio)
 
-		# VisionPointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(VisionPointScript)
-		_mesh_parent.add_child(point)
-
-		# キャラクター色を取得
-		var char_color = CharacterColorManager.get_character_color(character)
-		var bg_color = Color(char_color.r * 0.3, char_color.g * 0.3, char_color.b * 0.3, 0.95)
-
-		# ターゲットポイントモードか固定方向モードかをチェック
-		if vp.has("target_point"):
-			# ターゲットポイントモード
-			point.set_position_and_target(anchor, vp.target_point)
-			# ターゲット線の色を設定
-			point.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
-		elif vp.has("direction"):
-			# 後方互換: 固定方向モード
-			point.set_position_and_direction(anchor, vp.direction)
-
-		# 背景は暗い色、矢印はキャラクター色
-		point.set_colors(bg_color, char_color)
-
+		# PointFactoryでVisionPointを作成
+		var target_point = vp.get("target_point", null)
+		var direction: Vector3 = vp.get("direction", Vector3.FORWARD)
+		var point = PointFactory.create_vision_point(anchor, target_point, direction, char_color, _mesh_parent)
 		points.append(point)
 
 	return points
@@ -1501,78 +1479,36 @@ func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_
 	return adjusted
 
 
-## 調整済みWaitポイントから新しいWaitPointを生成
+## 調整済みWaitポイントから新しいWaitPointを生成（PointFactory使用）
 func _create_wait_points_for_path(
 	_path: Array[Vector3],
 	adjusted_wait_points: Array[Dictionary],
 	character: Node
 ) -> Array[MeshInstance3D]:
 	var points: Array[MeshInstance3D] = []
+	var char_color = CharacterColorManager.get_character_color(character)
 
 	for wp in adjusted_wait_points:
-		# 元のanchor位置を使用（パス延長時も位置を維持）
-		var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
-
-		# WaitPointを作成
-		var point = MeshInstance3D.new()
-		point.set_script(WaitPointScript)
-		_mesh_parent.add_child(point)
-
-		# 位置を設定
-		point.set_point_position(anchor)
-
-		# 待機時間を設定
-		var duration = wp.get("wait_duration", 1.0)
-		point.set_wait_duration(duration)
-
-		# キャラクター色を取得して適用（背景色はキャラクター色、アイコン色は白）
-		var char_color = CharacterColorManager.get_character_color(character)
-		point.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
-
+		var point = PointFactory.create_wait_point_from_dict(wp, char_color, _mesh_parent)
 		points.append(point)
 
 	return points
 
 
-## 単一のWaitPointメッシュを作成
+## 単一のWaitPointメッシュを作成（PointFactory使用）
 func _create_single_wait_point(anchor: Vector3, duration: float, character: Node) -> MeshInstance3D:
 	if not _mesh_parent:
 		return null
-
-	var point = MeshInstance3D.new()
-	point.set_script(WaitPointScript)
-	_mesh_parent.add_child(point)
-
-	point.set_point_position(anchor)
-	point.set_wait_duration(duration)
-
 	var char_color = CharacterColorManager.get_character_color(character)
-	point.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
-
-	return point
+	return PointFactory.create_wait_point(anchor, duration, char_color, _mesh_parent)
 
 
-## 単一のVisionPointメッシュを作成
+## 単一のVisionPointメッシュを作成（PointFactory使用）
 func _create_single_vision_point(anchor: Vector3, target_point: Vector3, character: Node) -> MeshInstance3D:
 	if not _mesh_parent:
 		return null
-
-	var point = MeshInstance3D.new()
-	point.set_script(VisionPointScript)
-	_mesh_parent.add_child(point)
-
-	# キャラクター色を取得
 	var char_color = CharacterColorManager.get_character_color(character)
-	var bg_color = Color(char_color.r * 0.3, char_color.g * 0.3, char_color.b * 0.3, 0.95)
-
-	# ターゲットポイントモード
-	point.set_position_and_target(anchor, target_point)
-	point.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
-
-	# 背景は暗い色、矢印はキャラクター色
-	point.set_colors(bg_color, char_color)
-
-	return point
+	return PointFactory.create_vision_point(anchor, target_point, Vector3.ZERO, char_color, _mesh_parent)
 
 
 #region 統一ポイントAPI
@@ -1631,11 +1567,9 @@ func get_all_points_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dicti
 	return result
 
 
-## ポイントメッシュを一括削除
+## ポイントメッシュを一括削除（PointFactory委譲）
 func free_point_meshes(meshes: Array) -> void:
-	for mesh in meshes:
-		if mesh and is_instance_valid(mesh):
-			mesh.queue_free()
+	PointFactory.free_point_meshes(meshes)
 #endregion
 
 

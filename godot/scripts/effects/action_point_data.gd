@@ -127,7 +127,7 @@ func get_reached_result() -> Dictionary:
 ## @param controller: PathFollowingControllerへの参照
 ## @param point_index: 発火したポイントのインデックス
 ## @return: 処理が実行されたらtrue
-func apply_reached_effect(controller: Node, point_index: int) -> bool:
+func apply_reached_effect(_controller: Node, _point_index: int) -> bool:
 	return false
 
 

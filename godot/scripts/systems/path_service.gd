@@ -346,14 +346,14 @@ func _sync_points_to_pending_paths() -> void:
 				vision_meshes.append(m)
 
 	# 新しいメッシュを追加
-	for m in path_drawer._vision_handler._vision_meshes:
+	for m in path_drawer._vision_handler._meshes:
 		if is_instance_valid(m):
 			m.reparent(mesh_parent)
 			vision_meshes.append(m)
 	data["vision_points"] = vision_meshes
 	# メッシュとデータの両方をクリア（同期済みなので一時ポイントロジックが正常に動作する）
-	path_drawer._vision_handler._vision_meshes.clear()
-	path_drawer._vision_handler._vision_points.clear()
+	path_drawer._vision_handler._meshes.clear()
+	path_drawer._vision_handler._points.clear()
 
 	# 既存のメッシュ配列を取得（なければ初期化）
 	var wait_meshes: Array[MeshInstance3D] = []
@@ -363,13 +363,13 @@ func _sync_points_to_pending_paths() -> void:
 				wait_meshes.append(m)
 
 	# 新しいメッシュを追加
-	for m in path_drawer._wait_handler._wait_meshes:
+	for m in path_drawer._wait_handler._meshes:
 		if is_instance_valid(m):
 			m.reparent(mesh_parent)
 			wait_meshes.append(m)
 	data["wait_points"] = wait_meshes
-	path_drawer._wait_handler._wait_meshes.clear()
-	path_drawer._wait_handler._wait_points.clear()  # データもクリア（一時ポイントロジック用）
+	path_drawer._wait_handler._meshes.clear()
+	path_drawer._wait_handler._points.clear()  # データもクリア（一時ポイントロジック用）
 
 
 func _on_path_undone() -> void:

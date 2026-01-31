@@ -104,8 +104,7 @@ const AVOIDANCE_COOLDOWN: float = 0.5  ## 回避後のクールダウン時間�
 var _cached_total_length: float = 0.0
 var _cached_segment_lengths: Array[float] = []  # 各セグメントの累積距離
 
-## 距離ベースのポイント検出用
-var _distance_traveled: float = 0.0  # キャラクターが移動した累積距離
+## 距離ベースのポイント検出用（_calculate_distance_traveled()で動的に計算）
 
 ## キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
@@ -209,13 +208,6 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	# ポイントチェッカーにポイントを設定（自動でpath_distance計算とソート）
 	_vision_checker.set_points(vision_points)
 	_wait_checker.set_points(wait_points)
-
-	# デバッグ: ソート後の状態を表示
-	if _wait_checker.get_count() > 0:
-		var wp_dists = []
-		for wp in _wait_checker.get_all_points():
-			wp_dists.append("%.2f" % wp.get("path_distance", -1))
-		print("[WP-DBG] start_path sorted wait_points: [%s]" % ", ".join(wp_dists))
 
 	# キャラクターの現在位置に最も近いパスポイントから開始
 	# （接続線の最初のポイントはキャラクター位置なのでスキップ）
@@ -590,8 +582,6 @@ func _update_vision_direction() -> void:
 			_forced_look_direction = vp.direction
 			_active_target_point = Vector3.ZERO
 		# シグナル発火（point_dataを直接渡す - WaitPointと統一）
-		var point_dist = vp.get("path_distance", -1)
-		print("[VP-TRIGGER] idx=%d char_dist=%.2f point_dist=%.2f anchor=%s" % [idx, char_distance, point_dist, vp.get("anchor", Vector3.ZERO)])
 		vision_point_reached.emit(idx, vp)
 	)
 
@@ -929,7 +919,6 @@ func _check_wait_points(_progress: float) -> bool:
 	if wp == null:
 		return false
 
-	print("[WP-DBG] TRIGGER: wait_index=%d char_dist=%.2f anchor=%s" % [reached_index, char_distance, wp.get("anchor", Vector3.ZERO)])
 	var duration: float = wp.wait_duration if wp.has("wait_duration") else 1.0
 
 	# ポイント到達シグナルを発火（視覚ポイント非表示用）
@@ -1702,23 +1691,11 @@ func add_wait_point(point_data: Dictionary) -> void:
 		# path_distanceを計算（延長パス上での距離）
 		if point_data.has("anchor") and not point_data.has("path_distance"):
 			point_data["path_distance"] = _calculate_anchor_distance_on_path(_extension_path, point_data.anchor)
-		print("[WP-DBG] add_wait_point EXT: anchor=%s path_distance=%.2f ext_path_size=%d" % [point_data.get("anchor", Vector3.ZERO), point_data.get("path_distance", -1), _extension_path.size()])
 		_extension_wait_points.append(point_data)
 		_extension_wait_points.sort_custom(_compare_by_path_distance)
-		# ソート後のリストをデバッグ表示
-		var sorted_dists = []
-		for wp in _extension_wait_points:
-			sorted_dists.append("%.2f" % wp.get("path_distance", -1))
-		print("[WP-DBG] after sort EXT wait_points: [%s]" % ", ".join(sorted_dists))
 	else:
 		# 延長パスに切り替わっている（または延長がない）場合はチェッカーに追加
-		print("[WP-DBG] add_wait_point MAIN: anchor=%s" % [point_data.get("anchor", Vector3.ZERO)])
 		_wait_checker.add_point(point_data)
-		# ソート後のリストをデバッグ表示
-		var sorted_dists = []
-		for wp in _wait_checker.get_all_points():
-			sorted_dists.append("%.2f" % wp.get("path_distance", -1))
-		print("[WP-DBG] after sort MAIN wait_points: [%s] wait_index=%d" % [", ".join(sorted_dists), _wait_checker.get_current_index()])
 
 
 ## path_distanceでソートするための比較関数（延長ポイント用）
@@ -1948,7 +1925,6 @@ func _recalculate_extension_wait_distances() -> void:
 		if wp.has("anchor"):
 			var new_distance = _calculate_anchor_distance_on_path(_extension_path, wp.anchor)
 			_extension_wait_points[i]["path_distance"] = new_distance
-			print("[WP-DBG] recalc EXT wait[%d]: anchor=%s new_dist=%.2f" % [i, wp.anchor, new_distance])
 
 	# 再計算後にソート
 	_extension_wait_points.sort_custom(_compare_by_path_distance)
@@ -2094,14 +2070,6 @@ func _switch_to_extension_path() -> void:
 		if char_pos.distance_to(first_point) < 0.3:
 			# キャラクターがパスの最初のポイントにいる場合、次のポイントを目指す
 			_path_index = 1
-
-	# デバッグ: 延長パス切り替え時の状態
-	print("[EXT] switched: vp_count=%d path_idx=%d wait_count=%d" % [_vision_checker.get_count(), _path_index, _wait_checker.get_count()])
-	# WaitPointのソート順をデバッグ表示
-	var wp_dists = []
-	for wp in _wait_checker.get_all_points():
-		wp_dists.append("%.2f" % wp.get("path_distance", -1))
-	print("[WP-DBG] after switch wait_points: [%s] wait_index=%d" % [", ".join(wp_dists), _wait_checker.get_current_index()])
 
 	# 延長パスに切り替わったことを通知（メッシュ管理用）
 	extension_path_activated.emit()

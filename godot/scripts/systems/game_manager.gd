@@ -1157,7 +1157,8 @@ func _on_character_died(character: GameCharacter) -> void:
 ## ドアキック処理（ポイントからの実行用）
 ## ========================================
 
-## ドアキック時のドア方向（キャラクターID -> Vector3）
+## ドアキック時のドア方向（将来の拡張用に予約）
+@warning_ignore("unused_private_class_variable")
 var _door_kick_directions: Dictionary = {}
 
 ## グレネード追跡（爆発位置同期用）

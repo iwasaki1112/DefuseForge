@@ -47,6 +47,7 @@ const SIMULATION_TICK_HZ: int = 60
 const NETWORK_SEND_HZ: int = 15
 
 ## 送信間隔（シミュレーションTickごと）
+@warning_ignore("integer_division")
 const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 4
 
 ## 同期レート（Hz）- 後方互換用（NETWORK_SEND_HZを使用推奨）

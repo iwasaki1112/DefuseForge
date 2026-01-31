@@ -10,6 +10,7 @@
 | [PathRaycastHelper](PathRaycastHelper.md) | レイキャスト・壁検出ユーティリティ（静的メソッド） |
 | [PointHandlerBase](PointHandlerBase.md) | ポイントハンドラ基底クラス（共通インターフェース） |
 | [PointHandlers](PointHandlers.md) | 各アクションポイント（Vision/Wait）の入力ハンドラ詳細 |
+| [PointFactory](PointFactory.md) | ポイントメッシュ作成ファクトリ（Vision/Wait作成の一元化） |
 | [PathLineMesh](PathLineMesh.md) | 破線＋終点ドーナツ円のパスメッシュ描画 |
 | [VisionPoint](VisionPoint.md) | 円＋矢印で視線方向を示すポイント（ActionPoint継承） |
 | [WaitPoint](WaitPoint.md) | 待機（Wait）アクションポイント（ActionPoint継承） |
