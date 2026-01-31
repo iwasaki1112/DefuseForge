@@ -849,8 +849,8 @@ func _setup_idle_manager() -> void:
 		add_child(idle_manager)
 		idle_manager.setup(
 			characters,
-			func(c): return path_execution_manager.is_character_following_path(c),
-			func(): return selection_manager.primary_character
+			func(c): return path_execution_manager.is_character_following_path(c) if path_execution_manager else false,
+			func(): return selection_manager.primary_character if selection_manager else null
 		)
 
 

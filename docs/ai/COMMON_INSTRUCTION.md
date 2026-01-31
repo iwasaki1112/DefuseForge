@@ -168,6 +168,36 @@ gcloud run services describe rescueforge-relay --region asia-northeast1
 
 ## 実装時の重要な注意事項
 
+### iOSビルド時の注意事項
+
+> **警告: iOSエクスポートはPCエディタより厳密にスクリプトを検証する**
+
+iOSでは以下の問題がPCでは発生せず、iOSでのみ発生することがある：
+
+| 問題 | 原因 | 対策 |
+|------|------|------|
+| `preload`の失敗 | iOSではスクリプトが一括でAOTコンパイルされ、依存関係の解決順序が厳密 | `preload`の代わりに`load`を`_init()`で使用する |
+| 変数の重複宣言エラー | iOSでは同一スコープ内の`var`重複がParse Errorになる | 同じ関数内で同じ変数名を再宣言しない |
+| スクリプトのロード失敗 | 循環参照や依存関係の問題 | `class_name`を持つクラスは直接参照、それ以外は`load`を使用 |
+
+**推奨パターン:**
+
+```gdscript
+# NG: iOSで失敗する可能性あり
+const SomeScript = preload("res://scripts/some_script.gd")
+
+# OK: 遅延ロードでiOS互換
+var SomeScript: GDScript = null
+
+func _init() -> void:
+    SomeScript = load("res://scripts/some_script.gd")
+
+# OK: class_nameを持つクラスは直接参照可能
+const PointType = ActionPointData.Type  # ActionPointDataはclass_name定義済み
+```
+
+**テスト必須:** PCで動作してもiOSで失敗することがあるため、機能追加後は必ずiOS実機でテストすること。
+
 ### キャラクターの向き制御
 
 > **警告: `CharacterBody3D.look_at()`を直接使用しないこと**

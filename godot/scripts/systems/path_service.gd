@@ -322,15 +322,18 @@ func _sync_points_to_pending_paths() -> void:
 
 	var data = path_execution_manager.pending_paths[char_id]
 
+	var drawer_vision_points = path_drawer.get_vision_points()
+	var drawer_wait_points = path_drawer.get_wait_points()
+
 	# PathDrawerから新しいポイントデータを追加（上書きではなく追加）
 	if not data.has("vision_points_data"):
 		data["vision_points_data"] = []
-	for vp in path_drawer.get_vision_points():
+	for vp in drawer_vision_points:
 		data["vision_points_data"].append(vp)
 
 	if not data.has("wait_points_data"):
 		data["wait_points_data"] = []
-	for wp in path_drawer.get_wait_points():
+	for wp in drawer_wait_points:
 		data["wait_points_data"].append(wp)
 
 	# メッシュをPathExecutionManagerの親ノードに移動（所有権を移譲）

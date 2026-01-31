@@ -3,10 +3,13 @@ class_name PathExecutionManager
 ## パス実行管理
 ## パス確定・実行・pending_paths管理を担当
 
-const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
-const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
-const PointFactoryScript = preload("res://scripts/effects/point_factory.gd")
+## スクリプト参照（iOSビルドでのpreload問題を回避するためloadを使用）
+var PathLineMeshScript: GDScript = null
+var PathFollowingCtrl: GDScript = null
+
+func _init() -> void:
+	PathLineMeshScript = load("res://scripts/effects/path_line_mesh.gd")
+	PathFollowingCtrl = load("res://scripts/characters/path_following_controller.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -121,6 +124,56 @@ func add_realtime_path_point(character: Node, point: Vector3) -> void:
 		path_mesh.update_from_points(packed_path)
 
 
+## Vision Pointを確定済みパスに追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param anchor: アンカー位置
+## @param target_point: ターゲット位置
+## @param path_ratio: パス上の比率
+func add_realtime_vision_point(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return
+
+	var data = pending_paths[char_id]
+	if not data.has("vision_points_data"):
+		data["vision_points_data"] = []
+
+	var point_data = {
+		"anchor": anchor,
+		"target_point": target_point,
+		"path_ratio": path_ratio
+	}
+	data["vision_points_data"].append(point_data)
+
+
+## Wait Pointを確定済みパスに追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param anchor: アンカー位置
+## @param path_ratio: パス上の比率
+## @param wait_duration: 待機時間
+func add_realtime_wait_point(character: Node, anchor: Vector3, path_ratio: float, wait_duration: float) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return
+
+	var data = pending_paths[char_id]
+	if not data.has("wait_points_data"):
+		data["wait_points_data"] = []
+
+	var point_data = {
+		"anchor": anchor,
+		"path_ratio": path_ratio,
+		"wait_duration": wait_duration
+	}
+	data["wait_points_data"].append(point_data)
+
+
 ## 移動中パスにポイントを追加
 ## @param character: 対象キャラクター
 ## @param point: 追加するポイント
@@ -207,6 +260,14 @@ func confirm_path(
 
 ## 全キャラクターのパスを同時実行
 func execute_all_paths(run: bool) -> int:
+	for char_id in pending_paths:
+		var data = pending_paths[char_id]
+			char_id,
+			data.get("path", []).size(),
+			data.get("vision_points_data", []),
+			data.get("wait_points_data", [])
+		])
+
 	if pending_paths.is_empty():
 		return 0
 
@@ -1513,7 +1574,7 @@ func _create_single_vision_point(anchor: Vector3, target_point: Vector3, charact
 
 #region 統一ポイントAPI
 ## ポイントタイプのエイリアス
-const PointType = ActionPointDataScript.Type
+const PointType = ActionPointData.Type
 
 
 ## 指定タイプのポイント比率を一括調整
