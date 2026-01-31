@@ -345,6 +345,19 @@ func take_pending_path_for_editing(character: Node) -> Dictionary:
 	return data
 
 
+## 指定キャラクターの確定済みパスを取得（削除せずに参照のみ）
+## @param character: 対象キャラクター
+## @return: パスのVector3配列。見つからない場合は空配列
+func get_pending_path_for_character(character: Node) -> Array:
+	if not character:
+		return []
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return []
+	var data = pending_paths[char_id]
+	return data.get("path", [])
+
+
 ## 指定位置近くにある確定済みパスの先端を検索
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値

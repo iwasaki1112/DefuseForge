@@ -227,6 +227,24 @@ func enable_from_point(character: Node3D, start_point: Vector3) -> void:
 	path_started.emit(_character, start_point)
 
 
+## 既存パスを読み込んでパス描画を開始（Visionポイント追加用）
+## @param character: 対象キャラクター
+## @param path: 既存のパス（Vector3配列）
+func enable_with_path(character: Node3D, path: Array) -> void:
+	_character = character
+	_is_enabled = true
+	_drawing_mode = DrawingMode.MOVEMENT
+	clear()
+
+	# 既存パスを読み込む
+	for point in path:
+		_path_points.append(point)
+	if _path_mesh and _path_points.size() > 0:
+		_path_mesh.update_from_points(_path_points)
+	if _path_points.size() > 0:
+		path_started.emit(_character, _path_points[0])
+
+
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false

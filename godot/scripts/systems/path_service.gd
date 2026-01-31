@@ -132,6 +132,42 @@ func start_path_mode_from_point(character: Node, start_point: Vector3, char_colo
 	return true
 
 
+## 既存パスを使用してパスモードを開始（Visionポイント追加用）
+## @param character: 対象キャラクター
+## @param path: 既存のパス（Vector3配列）
+## @param char_color: キャラクター色
+func start_path_mode_with_existing_path(character: Node, path: Array, char_color: Color = Color.WHITE) -> bool:
+	if not path_mode_controller or not path_drawer:
+		return false
+
+	if path.size() < 2:
+		print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
+		return false
+
+	# 継続モードを有効化（既存パスを維持）
+	_is_continuation_mode = true
+	_is_moving_path_continuation = false
+	_moving_continuation_character = null
+
+	# キャラクターを選択状態にする
+	if selection_manager:
+		selection_manager.deselect_all()
+		selection_manager.add_to_selection(character)
+		selection_manager.capture_path_targets()
+
+	# パスモードを有効化（既存パスを読み込む）
+	path_mode_controller.is_active = true
+	path_mode_controller.editing_character = character
+	path_drawer.enable_with_path(character as Node3D, path)
+	path_drawer.set_character_color(char_color)
+	path_drawer.set_active_edit_character(character)
+	# 確定済みパスのメッシュは既にあるので、PathDrawerのメッシュは非表示
+	path_drawer.hide_path_mesh()
+
+	path_mode_controller.mode_started.emit(character)
+	return true
+
+
 func confirm_path() -> void:
 	if path_mode_controller:
 		path_mode_controller.confirm()

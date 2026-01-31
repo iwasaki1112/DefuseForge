@@ -371,17 +371,23 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 	# キャラクター色を取得
 	var char_color := CharacterColorManager.get_character_color(character)
 
-	# パス上からVisionポイントを追加するために、キャラクターを選択してパスモードに入る
-	# 注意: パスは既にPathExecutionManagerに確定済みなので、取り出さない
-	var endpoint := path_execution_manager.find_path_endpoint_at_position(target_ground_pos, 100.0)
-	var start_point: Vector3 = endpoint.get("endpoint", character.global_position)
+	# 確定済みパスのデータを取得
+	var existing_path: Array = path_execution_manager.get_pending_path_for_character(character)
+	if existing_path.size() < 2:
+		print("[PointDebug] try_start_vision_point_on_confirmed_path: existing path too short (%d)" % existing_path.size())
+		return false
 
+	# 既存パスを使用してパスモードを開始
 	if path_service:
-		path_service.start_path_mode_from_point(character, start_point, char_color)
+		if not path_service.start_path_mode_with_existing_path(character, existing_path, char_color):
+			print("[PointDebug] try_start_vision_point_on_confirmed_path: failed to start path mode")
+			return false
 
 	# Visionモードを開始して、長押し位置をアンカーとして設定
 	if path_drawer:
-		path_drawer.start_vision_mode()
+		if not path_drawer.start_vision_mode():
+			print("[PointDebug] try_start_vision_point_on_confirmed_path: start_vision_mode failed")
+			return false
 		# Visionハンドラに直接アンカー位置を設定
 		if path_drawer._vision_handler:
 			path_drawer._vision_handler._current_anchor = path_result.point
