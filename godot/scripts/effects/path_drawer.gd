@@ -486,17 +486,14 @@ func _handle_movement_motion(screen_pos: Vector2) -> void:
 			var was_near_endpoint = _path_longpress_near_endpoint
 			var start_pos = _path_longpress_screen_pos
 			_reset_path_longpress()
-			# パス先端近くの場合はパス延長用シグナルを発火（InputControllerが処理）
+			# パス先端近くの場合のみパス延長用シグナルを発火（InputControllerが処理）
 			if was_near_endpoint:
 				print("[PointDebug] _handle_movement_motion: endpoint drag detected")
 				endpoint_drag_detected.emit(start_pos)
 			else:
-				# パス上（先端以外）の場合は描画開始
-				_handle_drawing_press(start_pos)
-				# すぐにポイントを追加
-				var ground_pos = _get_ground_position(screen_pos)
-				if ground_pos != null and _is_drawing:
-					_add_point(ground_pos)
+				# パス上（先端以外）の場合は長押しをキャンセルするだけ
+				# 既存パスを誤って延長しないように、新規描画は開始しない
+				print("[PointDebug] _handle_movement_motion: longpress cancelled (not near endpoint)")
 		return
 
 	if _is_drawing:
