@@ -211,8 +211,8 @@ func _get_facing_direction() -> Vector3:
 	return forward.normalized()
 
 
-## FOVテクスチャのエッジ鮮明度（0.0=シャープ, 1.0=ソフト）
-const FOV_EDGE_FALLOFF := 0.1
+## FOVテクスチャのエッジ鮮明度（0.0=ソフト, 1.0=シャープ）
+const FOV_EDGE_FALLOFF := 0.8
 
 func _update_fov_texture() -> void:
 	if not _light:

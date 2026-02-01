@@ -433,7 +433,7 @@ func process(delta: float) -> void:
 	_last_position = char_pos
 
 	# 目標点に到達したら次へ
-	if distance < 0.15:
+	if distance < 0.25:
 		_path_index += 1
 		path_progress_updated.emit(_path_index)
 		if _path_index >= _current_path.size():

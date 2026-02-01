@@ -36,6 +36,7 @@ var _long_press_threshold: float = 1.0  ## 長押し判定の閾値（秒）
 var _is_rotation_mode: bool = false  ## 回転モード中かどうか
 var _rotation_target_character: Node = null  ## 回転対象のキャラクター
 var _rotation_center_screen_pos: Vector2 = Vector2.ZERO  ## 回転中心のスクリーン座標
+var _min_drag_distance: float = 15.0  ## ドラッグ判定の最小距離（ピクセル）- これ以下の移動は長押し継続
 
 ## 確認済みパス上長押しでVisionポイント配置用
 var _confirmed_path_longpress_pending: bool = false  ## 長押し待機中か
@@ -563,10 +564,12 @@ func _unhandled_input(event: InputEvent) -> void:
 					camera_pan_controller.start_potential_drag(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
-		print("[PointDebug] non-path_mode mouse drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s" % [_immediate_path_mode_started, _immediate_path_drawing_started])
-		if _immediate_path_mode_started and not _immediate_path_drawing_started:
+		# ただし、最小ドラッグ距離を超えるまでは長押し回転を継続（指のブレ対策）
+		var drag_distance = event.position.distance_to(_left_click_start_pos)
+		print("[PointDebug] non-path_mode mouse drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s, drag_distance=%.1f" % [_immediate_path_mode_started, _immediate_path_drawing_started, drag_distance])
+		if _immediate_path_mode_started and not _immediate_path_drawing_started and drag_distance > _min_drag_distance:
 			# 回転長押しをキャンセル（パス描画が優先）
-			print("[PointDebug] non-path_mode mouse drag: starting path mode for character")
+			print("[PointDebug] non-path_mode mouse drag: starting path mode for character (drag_distance=%.1f > %.1f)" % [drag_distance, _min_drag_distance])
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			_hide_progress_ring()
@@ -912,10 +915,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 				camera_pan_controller.start_potential_touch_pan(_left_click_start_pos)
 
 		# 即座パスモードでドラッグが検出された場合、パスモード開始
-		print("[PointDebug] non-path_mode touch drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s" % [_immediate_path_mode_started, _immediate_path_drawing_started])
-		if _immediate_path_mode_started and not _immediate_path_drawing_started:
+		# ただし、最小ドラッグ距離を超えるまでは長押し回転を継続（指のブレ対策）
+		var touch_drag_distance = event.position.distance_to(_left_click_start_pos)
+		print("[PointDebug] non-path_mode touch drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s, drag_distance=%.1f" % [_immediate_path_mode_started, _immediate_path_drawing_started, touch_drag_distance])
+		if _immediate_path_mode_started and not _immediate_path_drawing_started and touch_drag_distance > _min_drag_distance:
 			# 回転長押しをキャンセル（パス描画が優先）
-			print("[PointDebug] non-path_mode touch drag: starting path mode for character")
+			print("[PointDebug] non-path_mode touch drag: starting path mode for character (drag_distance=%.1f > %.1f)" % [touch_drag_distance, _min_drag_distance])
 			_rotation_target_character = null
 			_long_press_timer = 0.0
 			_hide_progress_ring()

@@ -9,7 +9,7 @@ extends Node3D
 enum Quality { LOW, MEDIUM, HIGH }
 const QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 128,
+		"resolution": 256,
 		"shadow_filter": Light2D.SHADOW_FILTER_PCF5,
 		"shadow_smooth": 0.5,
 		"update_hz": 30
@@ -160,12 +160,14 @@ func _setup_occluder_manager() -> void:
 
 
 func _process(delta: float) -> void:
+	# VisionLightの位置は毎フレーム同期（滑らかな追従のため）
+	_sync_vision_lights()
+
 	_time_since_update += delta
 
-	# 一定間隔でVisionLightの位置を同期
+	# テクスチャ更新は一定間隔で行う（パフォーマンス維持）
 	if _time_since_update >= _update_interval:
 		_time_since_update = 0.0
-		_sync_vision_lights()
 
 		# シェーダーにテクスチャを設定
 		if _visibility_viewport and _fog_material:

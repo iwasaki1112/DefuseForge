@@ -18,8 +18,11 @@ static var _texture_cache: Dictionary = {}
 static func generate_fov_texture(fov_degrees: float, size: int = DEFAULT_SIZE, falloff: float = 0.3) -> ImageTexture:
 	# キャッシュキー
 	var cache_key := "%d_%d_%.2f" % [int(fov_degrees), size, falloff]
+	print("[FOV_TEX] generate_fov_texture called: fov=", fov_degrees, ", size=", size, ", falloff=", falloff, ", cache_key=", cache_key)
 	if _texture_cache.has(cache_key):
+		print("[FOV_TEX] Using cached texture for: ", cache_key)
 		return _texture_cache[cache_key]
+	print("[FOV_TEX] Generating new texture for: ", cache_key)
 
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size / 2.0, size / 2.0)
@@ -37,7 +40,19 @@ static func generate_fov_texture(fov_degrees: float, size: int = DEFAULT_SIZE, f
 			var intensity := 0.0
 
 			# 扇形の範囲内かつ距離内
-			if absf(angle) <= half_fov and dist <= 1.0:
+			if falloff >= 0.7:
+				# シャープエッジモード: アンチエイリアス付き
+				# ピクセル単位のアンチエイリアス幅
+				var aa_width := 1.5 / max_dist
+
+				# 距離エッジのアンチエイリアス
+				var dist_aa := 1.0 - smoothstep(1.0 - aa_width, 1.0, dist)
+
+				# 角度エッジのアンチエイリアス
+				var angle_aa := 1.0 - smoothstep(half_fov - aa_width, half_fov, absf(angle))
+
+				intensity = dist_aa * angle_aa
+			elif absf(angle) <= half_fov and dist <= 1.0:
 				# 距離に応じたフェードアウト
 				var distance_fade := 1.0 - pow(dist, 2.0 - falloff)
 

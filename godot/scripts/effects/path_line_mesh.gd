@@ -32,6 +32,7 @@ func _setup_mesh() -> void:
 	_material.emission_energy_multiplier = 1.5
 	_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_material.render_priority = 2  # Fogより上に描画
 	material_override = _material
 
 
