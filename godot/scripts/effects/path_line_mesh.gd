@@ -10,6 +10,7 @@ extends MeshInstance3D
 @export var end_circle_radius: float = 0.15  # 先端円の半径
 @export var end_circle_thickness: float = 0.04  # 先端円の太さ
 @export var circle_segments: int = 24  # 円のセグメント数
+@export var joint_segments: int = 8  # ジョイント円のセグメント数
 
 var _array_mesh: ArrayMesh
 var _material: StandardMaterial3D
@@ -67,7 +68,7 @@ func update_from_points(points: PackedVector3Array) -> void:
 	_array_mesh.surface_set_material(0, _material)
 
 
-## 実線を描画
+## 実線を描画（ジョイント円付き）
 func _add_solid_line(vertices: PackedVector3Array, indices: PackedInt32Array, points: PackedVector3Array) -> void:
 	var half_width = line_width * 0.5
 
@@ -79,6 +80,11 @@ func _add_solid_line(vertices: PackedVector3Array, indices: PackedInt32Array, po
 
 		if dir.length_squared() > 0.001:
 			_add_line_segment(vertices, indices, start_pos, end_pos, dir, half_width)
+
+	# 各ポイントにジョイント円を追加（終点を除く - 終点はリング円がある）
+	for i in range(0, points.size() - 1):
+		var pos = points[i]
+		_add_joint_circle(vertices, indices, Vector3(pos.x, line_height, pos.z), half_width)
 
 
 ## 線分セグメントを追加
@@ -101,6 +107,31 @@ func _add_line_segment(vertices: PackedVector3Array, indices: PackedInt32Array, 
 	indices.append(base_index + 1)
 	indices.append(base_index + 3)
 	indices.append(base_index + 2)
+
+
+## ジョイント円を追加（セグメント間の隙間を埋める）
+func _add_joint_circle(vertices: PackedVector3Array, indices: PackedInt32Array, center: Vector3, radius: float) -> void:
+	var base_index = vertices.size()
+
+	# 中心頂点
+	vertices.append(center)
+
+	# 円周上の頂点
+	for i in range(joint_segments):
+		var angle = TAU * i / joint_segments
+		vertices.append(Vector3(
+			center.x + cos(angle) * radius,
+			center.y,
+			center.z + sin(angle) * radius
+		))
+
+	# 三角形で扇形を描画
+	for i in range(joint_segments):
+		var curr = base_index + 1 + i
+		var next = base_index + 1 + ((i + 1) % joint_segments)
+		indices.append(base_index)  # 中心
+		indices.append(curr)
+		indices.append(next)
 
 
 ## ドーナツ型の円（リング）を追加
