@@ -232,8 +232,8 @@ func _update_peripheral_texture() -> void:
 	if not _peripheral_light:
 		return
 
-	# 周辺視界は常に円形テクスチャ
-	_peripheral_texture = FovTextureGenerator.generate_circular_texture(_texture_resolution, FOV_EDGE_FALLOFF)
+	# 周辺視界は均一な明るさの円形テクスチャ（確実に検出されるため）
+	_peripheral_texture = FovTextureGenerator.generate_peripheral_texture(_texture_resolution)
 	_peripheral_light.texture = _peripheral_texture
 
 

@@ -197,6 +197,17 @@ func _sync_vision_lights() -> void:
 			vision_light.set_enabled(is_alive)
 
 			if is_alive:
+				# VisionComponentからパラメータを同期（動的変更対応）
+				if character.has_method("get_vision_component"):
+					var vision = character.get_vision_component()
+					if vision:
+						if vision_light.fov_degrees != vision.fov_degrees:
+							vision_light.set_fov_degrees(vision.fov_degrees)
+						if vision_light.view_distance != vision.view_distance:
+							vision_light.set_view_distance(vision.view_distance)
+						if vision_light.peripheral_distance != vision.peripheral_distance:
+							vision_light.set_peripheral_distance(vision.peripheral_distance)
+
 				vision_light.sync_transform()
 
 
@@ -286,17 +297,20 @@ func register_character(character: Node3D) -> void:
 	var vision_light := VisionLight.new()
 	vision_light.name = "VisionLight_%s" % character.name
 
-	# キャラクターからFOV設定を取得
+	# キャラクターからFOV設定を取得（VisionComponentが唯一の設定元）
 	var fov := 90.0
 	var view_dist := 15.0
+	var peripheral_dist := 0.8
 	if character.has_method("get_vision_component"):
 		var vision = character.get_vision_component()
 		if vision:
 			fov = vision.fov_degrees
 			view_dist = vision.view_distance
+			peripheral_dist = vision.peripheral_distance
 
 	vision_light.fov_degrees = fov
 	vision_light.view_distance = view_dist
+	vision_light.peripheral_distance = peripheral_dist
 	add_child(vision_light)
 
 	# セットアップ

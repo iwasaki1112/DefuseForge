@@ -86,6 +86,39 @@ static func generate_circular_texture(size: int = DEFAULT_SIZE, falloff: float =
 	return texture
 
 
+## 周辺視界用の均一な円形テクスチャを生成（フォールオフなし）
+## 可視性判定で確実に検出されるよう、エッジまで均一な明るさ
+## @param size: テクスチャサイズ（ピクセル）
+## @return: 生成されたImageTexture
+static func generate_peripheral_texture(size: int = DEFAULT_SIZE) -> ImageTexture:
+	var cache_key := "peripheral_%d" % size
+	if _texture_cache.has(cache_key):
+		return _texture_cache[cache_key]
+
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(size / 2.0, size / 2.0)
+	var max_dist := size / 2.0
+
+	for y in range(size):
+		for x in range(size):
+			var pos := Vector2(x, y) - center
+			var dist := pos.length() / max_dist
+
+			# 円内は均一な明るさ、エッジのみ少しソフト
+			var intensity := 0.0
+			if dist <= 0.9:
+				intensity = 1.0  # 中心部は完全に明るい
+			elif dist <= 1.0:
+				# エッジ部分だけ少しソフトに（0.9-1.0の範囲でフェード）
+				intensity = 1.0 - (dist - 0.9) / 0.1
+
+			image.set_pixel(x, y, Color(intensity, intensity, intensity, 1.0))
+
+	var texture := ImageTexture.create_from_image(image)
+	_texture_cache[cache_key] = texture
+	return texture
+
+
 ## キャッシュをクリア
 static func clear_cache() -> void:
 	_texture_cache.clear()
