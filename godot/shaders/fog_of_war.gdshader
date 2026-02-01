@@ -38,8 +38,8 @@ void fragment() {
 		// テンポラル補間（temporal_blend = 1.0 で即座反映）
 		float visibility = mix(prev_visibility, current_visibility, temporal_blend);
 
-		// ソフトエッジ: smoothstepで滑らかに遷移
-		visibility = smoothstep(0.3, 0.7, visibility);
+		// シャープエッジ: 狭い範囲で急峻に遷移
+		visibility = smoothstep(0.0, 0.8, visibility);
 
 		// 可視性に基づいてフォグの透明度を計算
 		fog_alpha = fog_color.a * (1.0 - visibility);

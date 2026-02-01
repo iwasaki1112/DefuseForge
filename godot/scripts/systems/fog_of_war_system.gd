@@ -9,7 +9,7 @@ extends Node3D
 enum Quality { LOW, MEDIUM, HIGH }
 const QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 128,
+		"resolution": 256,
 		"shadow_filter": Light2D.SHADOW_FILTER_PCF5,
 		"shadow_smooth": 0.5,
 		"update_hz": 30
