@@ -558,6 +558,7 @@ func cancel_all_path_following() -> void:
 
 ## 視界/FoWの有効化切り替え
 func set_vision_enabled(enabled: bool) -> void:
+	print("[FOW] GameManager.set_vision_enabled: ", enabled)
 	is_vision_enabled = enabled
 	if character_setup_service:
 		character_setup_service.is_vision_enabled = enabled
@@ -900,8 +901,8 @@ func _setup_vision_service() -> void:
 		fog_of_war_system = vision_service.fog_of_war_system
 		enemy_visibility_system = vision_service.enemy_visibility_system
 		# スモークエリアマネージャーを接続
-		if enemy_visibility_system and smoke_area_manager:
-			enemy_visibility_system.set_smoke_area_manager(smoke_area_manager)
+		if smoke_area_manager:
+			vision_service.set_smoke_area_manager(smoke_area_manager)
 
 
 func _setup_map_manager() -> void:

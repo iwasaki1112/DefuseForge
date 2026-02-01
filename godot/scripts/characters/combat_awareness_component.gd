@@ -246,8 +246,8 @@ func _scan_for_enemies() -> void:
 			continue
 
 		var enemy_pos: Vector3 = enemy.global_position
-		# Check if enemy is in vision cone
-		if vision.is_position_in_view(enemy_pos):
+		# Check if enemy is visible (FoWテクスチャベースで視覚と同期)
+		if _is_enemy_visible(enemy_pos, vision):
 			var dist: float = char_pos.distance_to(enemy_pos)
 			if dist < closest_distance:
 				closest_distance = dist
@@ -287,6 +287,18 @@ func _handle_no_enemy_in_sight() -> void:
 		_time_since_lost = 0.0
 		enemy_lost.emit(old_target)
 		target_changed.emit(null, old_target)
+
+
+## 敵が視界内にいるかを判定
+## 戦闘ターゲティングでは、このキャラクター自身が見える敵だけを攻撃対象にする
+## （FoWテクスチャは全味方の視界を合成しているため、ここでは使用しない）
+func _is_enemy_visible(enemy_pos: Vector3, vision: VisionComponent) -> bool:
+	# 各キャラクターは自分自身のVisionComponentで判定
+	# これにより、壁越しに敵を攻撃することを防ぐ
+	if vision:
+		return vision.is_position_in_view(enemy_pos)
+
+	return false
 
 
 ## Get all enemy characters

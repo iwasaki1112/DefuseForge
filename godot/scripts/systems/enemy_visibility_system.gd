@@ -1,20 +1,11 @@
 extends Node
 class_name EnemyVisibilitySystem
 ## Enemy visibility management system
-## Controls enemy character visibility based on friendly vision polygons
-## Works with PlayerState, VisionComponent, and FogOfWarSystem
+## Controls enemy character visibility based on friendly vision
+## Works with PlayerState, VisionComponent, and FogOfWarSystem (Light2D方式)
 ##
-## Supports two visibility modes:
-## - FULL_VISION: Uses polygon-based visibility (for FoW ON)
-## - LIGHTWEIGHT: Uses single raycast per enemy (for FoW OFF, 97% less rays)
-
-# ============================================
-# Enums
-# ============================================
-enum VisibilityMode {
-	FULL_VISION,   ## Full polygon-based visibility (FoW ON)
-	LIGHTWEIGHT    ## Lightweight single-raycast visibility (FoW OFF)
-}
+## Light2D方式ではFoWの描画はGPUで行われるが、
+## 敵の可視判定はVisionComponent.is_position_in_view()で行う（単発レイキャスト）
 
 # ============================================
 # Signals
@@ -31,29 +22,27 @@ var _characters: Array[Node] = []
 # State
 # ============================================
 var _visibility_cache: Dictionary = {}  # { instance_id: bool }
-var _polygon_cache: Dictionary = {}  # { instance_id: PackedVector2Array } - キャッシュ済み2Dポリゴン
 var _is_enabled: bool = true
-var _mode: VisibilityMode = VisibilityMode.FULL_VISION
 
 # SmokeAreaManager reference
 var _smoke_area_manager: SmokeAreaManager = null
 
-# Lightweight mode update settings
-const LIGHTWEIGHT_UPDATE_INTERVAL: float = 0.05  # 50ms (20 FPS)
-var _lightweight_update_timer: float = 0.0
+# Update settings
+const UPDATE_INTERVAL: float = 0.033  # 30Hz
+var _update_timer: float = 0.0
 
 # ============================================
 # Lifecycle
 # ============================================
 
 func _physics_process(delta: float) -> void:
-	# In LIGHTWEIGHT mode, periodically update visibility
-	# (since VisionComponent signals are disabled)
-	if _mode == VisibilityMode.LIGHTWEIGHT and _is_enabled:
-		_lightweight_update_timer += delta
-		if _lightweight_update_timer >= LIGHTWEIGHT_UPDATE_INTERVAL:
-			_lightweight_update_timer = 0.0
-			update_visibility()
+	if not _is_enabled:
+		return
+
+	_update_timer += delta
+	if _update_timer >= UPDATE_INTERVAL:
+		_update_timer = 0.0
+		update_visibility()
 
 
 # ============================================
@@ -77,15 +66,7 @@ func register_character(character: Node) -> void:
 		return
 	_characters.append(character)
 
-	# Connect vision signal for friendly characters
-	var game_char := character as GameCharacter
-	if game_char and game_char.vision:
-		if game_char.vision.has_signal("vision_updated"):
-			if not game_char.vision.vision_updated.is_connected(_on_vision_updated):
-				game_char.vision.vision_updated.connect(_on_vision_updated.bind(character))
-
 	# Apply initial visibility
-	_update_single_character_vision(character)
 	update_visibility()
 
 
@@ -94,12 +75,6 @@ func unregister_character(character: Node) -> void:
 	_characters.erase(character)
 	var char_id := character.get_instance_id()
 	_visibility_cache.erase(char_id)
-	_polygon_cache.erase(char_id)
-
-	var game_char := character as GameCharacter
-	if game_char and game_char.vision:
-		if game_char.vision.vision_updated.is_connected(_on_vision_updated):
-			game_char.vision.vision_updated.disconnect(_on_vision_updated)
 
 
 # ============================================
@@ -114,53 +89,27 @@ func enable() -> void:
 ## Disable the system (debug mode - show all)
 func disable() -> void:
 	_is_enabled = false
-	_mode = VisibilityMode.FULL_VISION
 	# Show all characters
 	for character in _characters:
 		character.visible = true
-	# Enable all vision for FoW
-	_show_all_vision()
 
 
-## Enable with full polygon-based visibility (FoW ON)
+## Enable with full visibility checking (FoW ON)
 func enable_full() -> void:
 	_is_enabled = true
-	_mode = VisibilityMode.FULL_VISION
-	_update_all_vision_registration()
-
-	# Force FoW to update after re-registering visions
-	if _fog_of_war_system and _fog_of_war_system.has_method("force_update"):
-		_fog_of_war_system.force_update()
-
 	update_visibility()
 
 
-## Enable with lightweight raycast visibility (FoW OFF)
-## Disables polygon calculation for better performance
+## Enable with lightweight visibility (FoW OFF)
+## Same as enable_full in Light2D mode since we always use is_position_in_view()
 func enable_lightweight() -> void:
 	_is_enabled = true
-	_mode = VisibilityMode.LIGHTWEIGHT
-
-	# In lightweight mode, disable VisionComponent polygon calculation
-	# but keep the component for is_position_in_view() calls
-	for character in _characters:
-		var game_char := character as GameCharacter
-		if game_char and game_char.vision:
-			game_char.vision.disable()
-			if _fog_of_war_system:
-				_fog_of_war_system.unregister_vision(game_char.vision)
-
 	update_visibility()
 
 
 ## Check if system is enabled
 func is_enabled() -> bool:
 	return _is_enabled
-
-
-## Get current visibility mode
-func get_mode() -> VisibilityMode:
-	return _mode
 
 
 # ============================================
@@ -176,18 +125,14 @@ func update_visibility() -> void:
 	for friendly in _get_friendly_characters():
 		friendly.visible = true
 
-	# Check enemy visibility with mode-based dispatch
+	# Check enemy visibility
 	for enemy in _get_enemy_characters():
-		var is_visible: bool
 		var enemy_node3d := enemy as Node3D
 		if not enemy_node3d:
 			continue
-		var enemy_pos: Vector3 = enemy_node3d.global_position
 
-		if _mode == VisibilityMode.FULL_VISION:
-			is_visible = _is_position_visible_to_friendlies(enemy_pos)
-		else:
-			is_visible = _is_position_visible_lightweight(enemy_pos)
+		var enemy_pos: Vector3 = enemy_node3d.global_position
+		var is_visible := _is_position_visible_to_friendlies(enemy_pos)
 
 		var instance_id := enemy.get_instance_id()
 
@@ -212,55 +157,15 @@ func get_visibility(character: Node) -> bool:
 # Internal - Vision Check
 # ============================================
 
+## FoWテクスチャを直接サンプリングして可視判定
+## Light2D方式では視覚的なFoW表示と完全に同期した判定を行う
 func _is_position_visible_to_friendlies(world_pos: Vector3) -> bool:
-	var pos_2d := Vector2(world_pos.x, world_pos.z)
+	# FogOfWarSystemのテクスチャサンプリングを使用
+	# これにより視覚的な可視性と論理的な可視性が完全に一致する
+	if _fog_of_war_system and _fog_of_war_system.has_method("is_position_visible_in_fow"):
+		return _fog_of_war_system.is_position_visible_in_fow(world_pos)
 
-	for friendly in _get_friendly_characters():
-		var game_char := friendly as GameCharacter
-		if not game_char or not game_char.vision or not game_char.is_alive:
-			continue
-
-		var char_id := game_char.get_instance_id()
-
-		# Check if in polygon first
-		var in_polygon := false
-
-		# キャッシュされた2Dポリゴンを使用
-		if _polygon_cache.has(char_id):
-			var polygon_2d: PackedVector2Array = _polygon_cache[char_id]
-			if polygon_2d.size() >= 3 and Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
-				in_polygon = true
-		else:
-			# キャッシュがない場合は構築してキャッシュ
-			var polygon_3d := game_char.vision.get_visible_polygon()
-			if polygon_3d.size() < 3:
-				continue
-
-			var polygon_2d := PackedVector2Array()
-			polygon_2d.resize(polygon_3d.size())
-			for i in range(polygon_3d.size()):
-				polygon_2d[i] = Vector2(polygon_3d[i].x, polygon_3d[i].z)
-
-			_polygon_cache[char_id] = polygon_2d
-
-			if Geometry2D.is_point_in_polygon(pos_2d, polygon_2d):
-				in_polygon = true
-
-		# If in polygon, check smoke occlusion
-		if in_polygon:
-			# Smoke check: is line of sight blocked?
-			if _smoke_area_manager:
-				var char_pos := game_char.global_position + Vector3(0, 1.5, 0)  # Eye height
-				if _smoke_area_manager.is_line_of_sight_blocked(char_pos, world_pos):
-					continue  # Blocked by smoke, try next friendly
-			return true
-
-	return false
-
-
-## Lightweight visibility check using VisionComponent.is_position_in_view()
-## Uses single raycast per enemy instead of polygon calculation
-func _is_position_visible_lightweight(world_pos: Vector3) -> bool:
+	# フォールバック: FoWシステムが利用できない場合はVisionComponentを使用
 	for friendly in _get_friendly_characters():
 		var game_char := friendly as GameCharacter
 		if not game_char or not game_char.vision or not game_char.is_alive:
@@ -285,68 +190,9 @@ func _get_enemy_characters() -> Array[Node]:
 
 
 # ============================================
-# Internal - FoW Vision Registration
-# ============================================
-
-func _update_all_vision_registration() -> void:
-	for character in _characters:
-		_update_single_character_vision(character)
-
-
-func _update_single_character_vision(character: Node) -> void:
-	if not _fog_of_war_system:
-		return
-
-	var game_char := character as GameCharacter
-	if not game_char or not game_char.vision:
-		return
-
-	if PlayerState.is_friendly(character):
-		# Friendly: Register with FoW first, then enable vision
-		# (so the vision_updated signal is received by FoW)
-		if _is_enabled:
-			_fog_of_war_system.register_vision(game_char.vision)
-			game_char.vision.enable()
-	else:
-		# Enemy: Disable vision and unregister from FoW
-		_fog_of_war_system.unregister_vision(game_char.vision)
-		game_char.vision.disable()
-
-
-func _show_all_vision() -> void:
-	if not _fog_of_war_system:
-		return
-
-	for character in _characters:
-		var game_char := character as GameCharacter
-		if game_char and game_char.vision:
-			game_char.vision.enable()
-			_fog_of_war_system.register_vision(game_char.vision)
-
-
-# ============================================
 # Signal Handlers
 # ============================================
 
 func _on_player_team_changed(_new_team: GameCharacter.Team) -> void:
 	_visibility_cache.clear()
-	_polygon_cache.clear()
-	_update_all_vision_registration()
 	update_visibility()
-
-
-func _on_vision_updated(visible_points: PackedVector3Array, character: Node) -> void:
-	# Only update when friendly vision changes
-	if PlayerState.is_friendly(character):
-		# ポリゴンキャッシュを更新
-		var char_id := character.get_instance_id()
-		if visible_points.size() >= 3:
-			var polygon_2d := PackedVector2Array()
-			polygon_2d.resize(visible_points.size())
-			for i in range(visible_points.size()):
-				polygon_2d[i] = Vector2(visible_points[i].x, visible_points[i].z)
-			_polygon_cache[char_id] = polygon_2d
-		else:
-			_polygon_cache.erase(char_id)
-
-		update_visibility()

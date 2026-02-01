@@ -85,8 +85,8 @@ func _initialize_game() -> void:
 	_setup_input_controller()
 	_setup_camera_for_player()
 
-	# 視界システムを初期化（FoW OFF）
-	game_manager.set_vision_enabled(false)
+	# 視界システムを初期化（FoW ON）
+	game_manager.set_vision_enabled(true)
 
 	# ラウンド開始
 	if _mode_provider.can_start_round() and game_manager.round_manager:
@@ -504,6 +504,12 @@ func _on_round_ended(winner: int, reason: int) -> void:
 func get_smoke_area_manager() -> SmokeAreaManager:
 	if game_manager:
 		return game_manager.smoke_area_manager
+	return null
+
+
+func get_vision_service() -> VisionService:
+	if game_manager:
+		return game_manager.vision_service
 	return null
 
 
