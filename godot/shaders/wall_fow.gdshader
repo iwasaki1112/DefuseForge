@@ -10,7 +10,7 @@ uniform vec2 map_min = vec2(-7.5, -7.5);
 uniform vec2 map_max = vec2(7.5, 7.5);
 uniform float fog_darkness : hint_range(0.0, 1.0) = 0.15;  // 見えない部分の明るさ
 uniform bool debug_mode = false;  // デバッグモード
-uniform float wall_offset : hint_range(0.0, 2.0) = 0.5;  // 壁の厚みオフセット
+uniform float wall_offset : hint_range(0.0, 2.0) = 0.0;  // 壁の厚みオフセット（0でfogと一致）
 
 varying vec3 world_position;
 varying vec3 world_normal;

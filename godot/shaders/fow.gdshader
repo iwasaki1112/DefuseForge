@@ -21,10 +21,17 @@ uniform float texture_size = 256.0;
 // Edge softness
 uniform float edge_softness : hint_range(0.0, 0.5) = 0.1;
 
+// World position from vertex shader (camera-independent)
+varying vec3 world_position;
+
+void vertex() {
+	// Calculate world position in vertex shader for consistent coordinates
+	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
 void fragment() {
-	// Reconstruct world position from vertex
-	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec2 world_xz = world_pos.xz;
+	// Use world position from vertex shader (consistent with wall shader)
+	vec2 world_xz = world_position.xz;
 
 	// Convert world XZ to UV coordinates (0-1 range)
 	vec2 uv = (world_xz - map_min) / (map_max - map_min);
@@ -38,8 +45,8 @@ void fragment() {
 		// Clamp to prevent ADD blend artifacts at light overlaps
 		visibility = min(visibility, 1.0);
 
-		// シャープエッジ: 狭い範囲で急峻に遷移
-		visibility = smoothstep(0.4, 0.6, visibility);
+		// シャープエッジ: 壁シェーダーと同じ閾値で統一
+		visibility = smoothstep(0.1, 0.3, visibility);
 	}
 
 	// Apply fog: visible areas are transparent, hidden areas show fog
