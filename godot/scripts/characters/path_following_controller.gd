@@ -86,6 +86,9 @@ var _has_extension: bool = false
 var _last_position: Vector3 = Vector3.ZERO
 var _stuck_time: float = 0.0
 
+## 距離計算の単調増加保証用（自己交差パス対策）
+var _last_distance_traveled: float = 0.0
+
 ## 衝突回避状態
 var _is_avoiding_collision: bool = false  ## 衝突回避中フラグ（待機状態）
 var _is_sidestepping: bool = false  ## 側方回避中フラグ
@@ -211,13 +214,15 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_smoothed_move_direction = Vector3.ZERO  # スムージング状態をリセット
 	_last_position = _character.global_position
 	_stuck_time = 0.0
+	_last_distance_traveled = 0.0  # 距離計算をリセット
 
 	# パス長キャッシュを構築
 	_build_path_length_cache()
 
 	# ポイントチェッカーにポイントを設定（自動でpath_distance計算とソート）
-	_vision_checker.set_points(vision_points)
-	_wait_checker.set_points(wait_points)
+	# パス開始時は char_dist=0 なのでインデックス再計算は不要
+	_vision_checker.set_points(vision_points, false)
+	_wait_checker.set_points(wait_points, false)
 
 	# キャラクターの現在位置に最も近いパスポイントから開始
 	# （接続線の最初のポイントはキャラクター位置なのでスキップ）
@@ -578,8 +583,9 @@ func process(delta: float) -> void:
 	_character.move_and_slide()
 
 
-## 視線方向を更新（距離ベースの検出）
+## 視線方向を更新（距離ベースの検出 + 物理的近接チェック）
 func _update_vision_direction() -> void:
+	var char_distance := _calculate_distance_traveled()
 	if not _vision_checker.has_points():
 		# ターゲットポイントが設定されている場合、動的に方向を計算
 		if _active_target_point.length_squared() > 0.001:
@@ -588,11 +594,37 @@ func _update_vision_direction() -> void:
 			_forced_look_direction = Vector3.ZERO
 		return
 
-	# キャラクターの移動距離を計算
-	var char_distance := _calculate_distance_traveled()
+	# キャラクター位置を取得
+	var char_pos := Vector3.ZERO
+	if _character:
+		char_pos = _character.global_position
+		char_pos.y = 0.0
 
-	# チェッカーで到達判定
-	_vision_checker.check_all_reached(char_distance, func(idx: int, vp: Dictionary):
+	# 物理的近接チェック付きの到達判定
+	# Q字型パスでは、パス距離を超えても物理的に離れている場合がある
+	const PHYSICAL_PROXIMITY_THRESHOLD := 0.3  # 物理的な近接判定しきい値（小さいほど正確）
+
+	while _vision_checker.get_current_index() < _vision_checker.get_count():
+		var idx := _vision_checker.get_current_index()
+		var vp: Dictionary = _vision_checker.get_point_at(idx)
+		var point_distance: float = vp.get("path_distance", 0.0)
+
+		# パス距離チェック
+		if char_distance < point_distance:
+			break  # まだこのポイントに到達していない
+
+		# 物理的近接チェック（Q字型パス対策）
+		var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+		anchor.y = 0.0
+		var physical_dist := char_pos.distance_to(anchor)
+
+		if physical_dist > PHYSICAL_PROXIMITY_THRESHOLD:
+			# パス距離は超えたが物理的に離れている - 待機
+			break
+
+		# 両方の条件を満たした - ポイント到達
+		_vision_checker.set_current_index(idx + 1)
+
 		# ターゲットポイントモードかどうかをチェック
 		if vp.has("target_point"):
 			_active_target_point = vp.target_point
@@ -602,7 +634,6 @@ func _update_vision_direction() -> void:
 			_active_target_point = Vector3.ZERO
 		# シグナル発火（point_dataを直接渡す - WaitPointと統一）
 		vision_point_reached.emit(idx, vp)
-	)
 
 	# ターゲットポイントが設定されている場合、毎フレーム方向を再計算
 	if _active_target_point.length_squared() > 0.001:
@@ -714,6 +745,7 @@ func _calculate_path_progress() -> float:
 
 
 ## キャラクターの移動距離を計算（パス開始点からの累積距離）
+## 自己交差するパス（Q字型など）での距離ジャンプを防ぐため、単調増加を保証
 func _calculate_distance_traveled() -> float:
 	if _current_path.size() < 2 or not _character:
 		return 0.0
@@ -745,6 +777,19 @@ func _calculate_distance_traveled() -> float:
 			var segment_length = sqrt(segment_length_sq)
 			best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
 
+	# 自己交差パス対策: 距離が急激に増加した場合は制限
+	# キャラクターの最大移動速度を考慮（走行速度 ~8 units/sec → 60fpsで ~0.13/frame）
+	# 余裕を持って 0.5 units/frame を最大増加量とする
+	const MAX_DISTANCE_INCREASE := 0.5
+	if best_accumulated_length > _last_distance_traveled + MAX_DISTANCE_INCREASE:
+		# 急激なジャンプを検出 - 前回の位置から少しだけ進める
+		best_accumulated_length = _last_distance_traveled + MAX_DISTANCE_INCREASE
+
+	# 距離は減少しない（後退しない）
+	if best_accumulated_length < _last_distance_traveled:
+		best_accumulated_length = _last_distance_traveled
+
+	_last_distance_traveled = best_accumulated_length
 	return best_accumulated_length
 
 
@@ -2068,6 +2113,7 @@ func _switch_to_extension_path() -> void:
 	_grenade_index = 0
 	_smoke_grenade_index = 0
 	_door_index = 0
+	_last_distance_traveled = 0.0  # 距離計算をリセット（自己交差パス対策）
 
 	# 延長パスの最初の有効セグメント方向を使用して向きを初期化
 	# WaitPointが先頭にある場合や重複点がある場合の180度反転を防ぐ

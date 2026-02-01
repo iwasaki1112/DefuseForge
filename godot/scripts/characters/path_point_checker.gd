@@ -113,6 +113,7 @@ func _compare_by_ratio(a: Dictionary, b: Dictionary) -> bool:
 ## 現在位置に基づいてインデックスを再計算
 func _recalc_index() -> void:
 	if not calculate_distance_callback.is_valid():
+		current_index = 0
 		return
 
 	var char_distance: float = calculate_distance_callback.call()
@@ -212,7 +213,9 @@ func has_points() -> bool:
 
 ## 配列からポイントを設定（start_path用）
 ## path_distanceを計算してソート
-func set_points(new_points: Array) -> void:
+## @param new_points: 新しいポイント配列
+## @param recalc_from_current_pos: キャラクターの現在位置からインデックスを再計算するか（デフォルトtrue）
+func set_points(new_points: Array, recalc_from_current_pos: bool = true) -> void:
 	points = new_points.duplicate()
 	# path_distanceを計算
 	for i in range(points.size()):
@@ -221,7 +224,13 @@ func set_points(new_points: Array) -> void:
 			if calculate_anchor_distance_callback.is_valid():
 				points[i]["path_distance"] = calculate_anchor_distance_callback.call(p.anchor)
 	_sort_points()
-	current_index = 0
+
+	# キャラクターの現在位置に基づいてインデックスを再計算
+	# これにより、既に通過したポイントはスキップされる
+	if recalc_from_current_pos:
+		_recalc_index()
+	else:
+		current_index = 0
 
 
 ## 全ポイントのpath_distanceを再計算してソート

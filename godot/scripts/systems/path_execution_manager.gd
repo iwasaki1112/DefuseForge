@@ -289,6 +289,40 @@ func execute_all_paths(run: bool) -> int:
 		if not is_instance_valid(character):
 			continue
 
+		# 既存マーカーをpoint_dataにリンク（リアルタイム確認フロー対応）
+		# pending_pathsの"vision_points"にマーカーが保存されている
+		var existing_vision_markers: Array = data.get("vision_points", [])
+		var existing_wait_markers: Array = data.get("wait_points", [])
+
+		# position-baseでマーカーとpoint_dataをマッチング
+		for vp in vision_points:
+			if vp.has("marker") and is_instance_valid(vp.get("marker")):
+				continue  # 既にリンク済み
+			var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+			var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+			for marker in existing_vision_markers:
+				if not is_instance_valid(marker):
+					continue
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.1:
+					vp["marker"] = marker
+					break
+
+		for wp in wait_points_data:
+			if wp.has("marker") and is_instance_valid(wp.get("marker")):
+				continue  # 既にリンク済み
+			var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
+			var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+			for marker in existing_wait_markers:
+				if not is_instance_valid(marker):
+					continue
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.1:
+					wp["marker"] = marker
+					break
+
 		# コントローラーを取得または作成
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
@@ -341,6 +375,38 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 
 	if not is_instance_valid(character):
 		return false
+
+	# 既存マーカーをpoint_dataにリンク（リアルタイム確認フロー対応）
+	var existing_vision_markers: Array = data.get("vision_points", [])
+	var existing_wait_markers: Array = data.get("wait_points", [])
+
+	for vp in vision_points:
+		if vp.has("marker") and is_instance_valid(vp.get("marker")):
+			continue
+		var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		for marker in existing_vision_markers:
+			if not is_instance_valid(marker):
+				continue
+			var marker_pos = marker.global_position
+			marker_pos.y = 0.0
+			if marker_pos.distance_to(anchor_flat) < 0.1:
+				vp["marker"] = marker
+				break
+
+	for wp in wait_points_data:
+		if wp.has("marker") and is_instance_valid(wp.get("marker")):
+			continue
+		var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		for marker in existing_wait_markers:
+			if not is_instance_valid(marker):
+				continue
+			var marker_pos = marker.global_position
+			marker_pos.y = 0.0
+			if marker_pos.distance_to(anchor_flat) < 0.1:
+				wp["marker"] = marker
+				break
 
 	# コントローラーを取得または作成
 	var controller = _get_or_create_path_controller(character)
@@ -1245,16 +1311,18 @@ func _on_extension_path_activated(character: Node) -> void:
 ## @param anchor: ポイントのアンカー位置
 ## @param point_key: pending_paths内のポイント配列のキー名
 ## @param moving_points: 移動中パスのポイント配列（オプション）
-## @param threshold: マッチング距離閾値（デフォルト0.8でモバイルの精度問題に対応）
-func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, moving_points: Array = [], threshold: float = 0.8) -> void:
+## @param threshold: マッチング距離閾値（デフォルト0.2で正確なマッチング）
+func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, moving_points: Array = [], threshold: float = 0.2) -> void:
 	var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
 
 	# 移動中パスの動的ポイントを優先チェック
-	for point in moving_points:
+	for i in range(moving_points.size()):
+		var point = moving_points[i]
 		if is_instance_valid(point) and point.visible:
 			var point_pos = point.global_position
 			point_pos.y = 0.0
-			if point_pos.distance_to(anchor_flat) < threshold:
+			var dist = point_pos.distance_to(anchor_flat)
+			if dist < threshold:
 				point.visible = false
 				return
 
@@ -1262,11 +1330,13 @@ func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, m
 	if pending_paths.has(char_id):
 		var path_data = pending_paths[char_id]
 		var points = path_data.get(point_key, [])
-		for point in points:
+		for i in range(points.size()):
+			var point = points[i]
 			if is_instance_valid(point) and point.visible:
 				var point_pos = point.global_position
 				point_pos.y = 0.0
-				if point_pos.distance_to(anchor_flat) < threshold:
+				var dist = point_pos.distance_to(anchor_flat)
+				if dist < threshold:
 					point.visible = false
 					return
 
@@ -1292,6 +1362,14 @@ func _on_point_reached(point_type: int, _index: int, point_data: Dictionary, cha
 	if not character:
 		return
 
+	# マーカー参照が直接保持されている場合はそれを使用（確実なマッチング）
+	if point_data.has("marker"):
+		var marker = point_data.marker
+		if is_instance_valid(marker) and marker.visible:
+			marker.visible = false
+		return
+
+	# フォールバック: 移動中パスの動的ポイント（マーカー参照なし）
 	var char_id = character.get_instance_id()
 	var anchor: Vector3 = point_data.get("anchor", Vector3.ZERO)
 
@@ -1301,7 +1379,7 @@ func _on_point_reached(point_type: int, _index: int, point_data: Dictionary, cha
 	# ポイントタイプに応じたpending_pathsのキー名
 	var point_key: String = "vision_points" if point_type == PointType.VISION else "wait_points"
 
-	# 共通処理でポイントを非表示（位置ベースマッチング）
+	# フォールバック: 位置ベースマッチング（移動中パスなど）
 	if anchor != Vector3.ZERO:
 		_hide_point_at_position(char_id, anchor, point_key, moving_points)
 
@@ -1682,6 +1760,9 @@ func _create_vision_points_for_path(
 		var point = PointFactory.create_vision_point(anchor, target_point, direction, char_color, _mesh_parent)
 		points.append(point)
 
+		# マーカー参照をpoint_dataに直接保持（距離マッチング不要化）
+		vp["marker"] = point
+
 	return points
 
 
@@ -1714,6 +1795,9 @@ func _create_wait_points_for_path(
 	for wp in adjusted_wait_points:
 		var point = PointFactory.create_wait_point_from_dict(wp, char_color, _mesh_parent)
 		points.append(point)
+
+		# マーカー参照をpoint_dataに直接保持（距離マッチング不要化）
+		wp["marker"] = point
 
 	return points
 
