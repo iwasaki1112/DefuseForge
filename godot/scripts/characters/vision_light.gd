@@ -24,6 +24,11 @@ var view_distance: float = 15.0
 ## 周辺視界設定（至近距離の360度視界）
 var peripheral_distance: float = 0.8
 
+## 回転補間用
+var _current_rotation: float = 0.0  ## 現在の補間された回転角度
+var _rotation_initialized: bool = false  ## 初回は即座に設定
+const ROTATION_SMOOTHING: float = 12.0  ## 回転補間速度（大きいほど速く追従）
+
 ## FOVテクスチャ
 var _fov_texture: ImageTexture = null
 ## 周辺視界テクスチャ
@@ -133,8 +138,19 @@ func sync_transform() -> void:
 		# +Z（Mixamo前方）= ビューポート+Y（下）→ rotation=PI必要
 		var facing := _get_facing_direction()
 		# atan2(z, x)で3D角度を取得し、PI/2加算してビューポート座標に変換
-		var angle_2d := atan2(facing.z, facing.x) + PI / 2.0
-		_light.rotation = angle_2d
+		var target_angle := atan2(facing.z, facing.x) + PI / 2.0
+
+		# 回転を補間（滑らかな追従）
+		if not _rotation_initialized:
+			# 初回は即座に設定
+			_current_rotation = target_angle
+			_rotation_initialized = true
+		else:
+			# lerp_angleで最短経路で補間
+			var delta := get_process_delta_time()
+			_current_rotation = lerp_angle(_current_rotation, target_angle, ROTATION_SMOOTHING * delta)
+
+		_light.rotation = _current_rotation
 
 	# 周辺視界ライトの位置を更新（回転は不要、常に円形）
 	if _peripheral_light:
