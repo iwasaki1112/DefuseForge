@@ -44,6 +44,11 @@ void fragment() {
 	// Smooth threshold to reduce seams at light overlaps
 	visibility = smoothstep(0.1, 0.3, visibility);
 
+	// 壁の上面（法線が上向き）は常に暗くする
+	// プレイヤーの視界はXZ平面で計算されるため、上向きの面は見えないはず
+	float top_face_mask = smoothstep(0.3, 0.7, world_normal.y);
+	visibility = visibility * (1.0 - top_face_mask);
+
 	// デバッグモード: visibility値を色で表示
 	if (debug_mode) {
 		// 赤=visibility値（明るいほど見える）、緑=UV.x、青=UV.y
