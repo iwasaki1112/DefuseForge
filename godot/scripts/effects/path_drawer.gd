@@ -32,7 +32,7 @@ signal endpoint_drag_detected(screen_pos: Vector2)
 #endregion
 
 #region エクスポート設定
-@export var min_point_distance: float = 0.2
+@export var min_point_distance: float = 0.35
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)
 @export var vision_line_color: Color = Color(0.7, 0.3, 0.9, 0.9)
 @export var vision_line_length: float = 2.0
