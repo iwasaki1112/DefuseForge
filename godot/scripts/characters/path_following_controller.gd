@@ -25,6 +25,9 @@ signal sync_wait_released()  ## 同期待機解放時
 @export var final_destination_radius: float = 0.1  ## 最終目的地への到達判定半径
 @export var ally_collision_radius: float = 1.0  ## 味方との衝突検出半径
 
+## 移動スムージング設定
+@export var direction_smoothing: float = 8.0  ## 移動方向のスムージング係数（大きいほど追従が速い）
+
 ## 衝突回避設定
 @export var collision_check_radius: float = 0.8  ## 前方衝突検出の半径
 @export var collision_check_distance: float = 1.5  ## 前方衝突検出の距離
@@ -58,6 +61,7 @@ var _wait_timer: float = 0.0  # 現在の待機経過時間
 var _current_wait_duration: float = 0.0  # 現在の待機時間目標
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
+var _smoothed_move_direction: Vector3 = Vector3.ZERO  ## スムージングされた移動方向
 var _combat_awareness: Node = null  # CombatAwarenessComponent
 var _active_target_point: Vector3 = Vector3.ZERO  # ターゲットポイントモード用
 
@@ -204,6 +208,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
 	_last_move_direction = Vector3.ZERO
+	_smoothed_move_direction = Vector3.ZERO  # スムージング状態をリセット
 	_last_position = _character.global_position
 	_stuck_time = 0.0
 
@@ -249,6 +254,7 @@ func cancel() -> void:
 	_avoidance_timer = 0.0
 	_sidestep_direction = Vector3.ZERO
 	_sidestep_timer = 0.0
+	_smoothed_move_direction = Vector3.ZERO
 	_current_path.clear()
 	_vision_checker.clear()
 	_run_segments.clear()
@@ -554,9 +560,17 @@ func process(delta: float) -> void:
 			else:
 				_avoidance_blocker = null  # 高優先度なので進む
 
-	# 物理移動
-	_character.velocity.x = move_dir.x * speed
-	_character.velocity.z = move_dir.z * speed
+	# 物理移動（スムージング適用）
+	# 移動方向をスムーズに補間してカーブ時のカクつきを軽減
+	if _smoothed_move_direction.length_squared() < 0.001:
+		_smoothed_move_direction = move_dir
+	else:
+		_smoothed_move_direction = _smoothed_move_direction.lerp(move_dir, direction_smoothing * delta)
+		if _smoothed_move_direction.length_squared() > 0.001:
+			_smoothed_move_direction = _smoothed_move_direction.normalized()
+
+	_character.velocity.x = _smoothed_move_direction.x * speed
+	_character.velocity.z = _smoothed_move_direction.z * speed
 
 	if not _character.is_on_floor():
 		_character.velocity.y -= 9.8 * delta

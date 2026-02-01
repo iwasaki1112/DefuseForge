@@ -28,6 +28,12 @@ void fragment() {
 	// 視界テクスチャから明るさを取得
 	float visibility = texture(visibility_texture, uv).r;
 
+	// Clamp to prevent ADD blend artifacts at light overlaps
+	visibility = min(visibility, 1.0);
+
+	// Smooth threshold to reduce seams at light overlaps
+	visibility = smoothstep(0.1, 0.3, visibility);
+
 	// 視界外は暗くする
 	float brightness = mix(fog_darkness, 1.0, visibility);
 

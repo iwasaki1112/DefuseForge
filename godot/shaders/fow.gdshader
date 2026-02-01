@@ -60,8 +60,11 @@ void fragment() {
 			visibility = texture(visibility_texture, uv).r;
 		}
 
-		// Smooth transition at edges
-		visibility = smoothstep(0.5 - edge_softness, 0.5 + edge_softness, visibility);
+		// Clamp to prevent ADD blend artifacts at light overlaps
+		visibility = min(visibility, 1.0);
+
+		// Smooth transition at edges (lower threshold to reduce seams at overlaps)
+		visibility = smoothstep(0.15 - edge_softness, 0.15 + edge_softness, visibility);
 	}
 
 	// Apply fog: visible areas are transparent, hidden areas show fog
