@@ -199,9 +199,21 @@ func execute_all_paths(run: bool) -> int:
 	return path_execution_manager.execute_all_paths(run)
 
 
+func execute_path_for_character(character: Node, run: bool) -> bool:
+	if not path_execution_manager:
+		return false
+	return path_execution_manager.execute_path_for_character(character, run)
+
+
 func clear_all_pending_paths() -> void:
 	if path_execution_manager:
 		path_execution_manager.clear_all_pending_paths()
+
+
+func has_pending_path_for_character(character: Node) -> bool:
+	if not path_execution_manager:
+		return false
+	return path_execution_manager.has_pending_path_for_character(character)
 
 
 func cancel_all_path_following() -> void:

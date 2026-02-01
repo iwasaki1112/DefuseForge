@@ -318,6 +318,54 @@ func execute_all_paths(run: bool) -> int:
 	return executed_count
 
 
+## 指定キャラクターのパスを実行
+## @param character: 対象キャラクター
+## @param run: 走るかどうか
+## @return: 成功したらtrue
+func execute_path_for_character(character: Node, run: bool) -> bool:
+	if not character:
+		return false
+
+	var char_id = character.get_instance_id()
+	if not pending_paths.has(char_id):
+		return false
+
+	var data = pending_paths[char_id]
+	# 既に実行済み（characterキーなし）のエントリはスキップ
+	if not data.has("character"):
+		return false
+
+	var path := _copy_vector3_array(data.get("path", []))
+	var vision_points := _copy_dict_array(data.get("vision_points_data", []))
+	var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
+
+	if not is_instance_valid(character):
+		return false
+
+	# コントローラーを取得または作成
+	var controller = _get_or_create_path_controller(character)
+	controller.setup(character)
+
+	# 衝突回避用の優先度を設定
+	controller.set_movement_priority(_execution_order_counter)
+	_execution_order_counter += 1
+
+	var empty_run: Array[Dictionary] = []
+	var empty_clear: Array[Dictionary] = []
+	var empty_grenade: Array[Dictionary] = []
+	var empty_door: Array[Dictionary] = []
+	var success: bool = controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data)
+
+	if success:
+		# ポイントデータのみクリア（パスとメッシュは残す）
+		data.erase("vision_points_data")
+		data.erase("wait_points_data")
+		data.erase("character")
+		paths_execution_started.emit(1)
+
+	return success
+
+
 ## 全ての保留パスをクリア
 func clear_all_pending_paths() -> void:
 	_clear_all_path_meshes()

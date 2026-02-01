@@ -27,6 +27,8 @@ var _immediate_path_drawing_started: bool = false
 var _path_endpoint_extension_pending: bool = false
 ## パス先端延長モードが開始されたかどうか
 var _path_endpoint_extension_started: bool = false
+## 実行中だったキャラクター（新しいパス確定後に自動実行するため）
+var _auto_execute_character: Node = null
 
 ## 長押し回転モード用変数
 var _long_press_timer: float = 0.0
@@ -143,8 +145,14 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 		return false
 	if PlayerState.is_enemy(clicked):
 		return false
+
+	# 実行中のキャラクターでも新しいパスを作成可能にする
+	# （パス先端からの延長は別の処理で行う）
 	if game_manager.path_service and game_manager.path_service.is_character_following_path(clicked):
-		return false
+		# 現在のパス追従をキャンセルして新しいパスを作成
+		game_manager.path_service.cancel_path_following(clicked, true)
+		# パス確定後に自動実行するため記録
+		_auto_execute_character = clicked
 
 	game_manager.selection_manager.deselect_all()
 	game_manager.selection_manager.add_to_selection(clicked)
@@ -333,6 +341,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				if drawer:
 					drawer._handle_drawing_release()
 				game_manager.confirm_path()
+			# 実行中キャラクターに新しいパスを描いた場合、パスを確定して自動実行
+			elif _immediate_path_drawing_started and _auto_execute_character:
+				print("[PointDebug] path_mode mouse release: auto-confirming path for executing character")
+				var drawer = _get_path_drawer()
+				if drawer:
+					drawer._handle_drawing_release()
+				game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -367,21 +382,26 @@ func _unhandled_input(event: InputEvent) -> void:
 				print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
-					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
-						# 長押し回転用にキャラクターを記録
-						_rotation_target_character = clicked
-						# 現在のパスを確定してから切り替え
-						print("[PointDebug] path_mode click: confirming current path and selecting %s" % clicked.name)
-						game_manager.confirm_path()
-						print("[PointDebug] path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
-						game_manager.selection_manager.deselect_all()
-						game_manager.selection_manager.add_to_selection(clicked)
-						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
-						_immediate_path_mode_started = true
-						_immediate_path_drawing_started = false
-						print("[PointDebug] path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
-						get_viewport().set_input_as_handled()
-						return
+					# 実行中のキャラクターでも新しいパスを作成可能にする
+					if is_following:
+						# 現在のパス追従をキャンセルして新しいパスを作成
+						game_manager.path_service.cancel_path_following(clicked, true)
+						# パス確定後に自動実行するため記録
+						_auto_execute_character = clicked
+					# 長押し回転用にキャラクターを記録
+					_rotation_target_character = clicked
+					# 現在のパスを確定してから切り替え
+					print("[PointDebug] path_mode click: confirming current path and selecting %s" % clicked.name)
+					game_manager.confirm_path()
+					print("[PointDebug] path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
+					game_manager.selection_manager.deselect_all()
+					game_manager.selection_manager.add_to_selection(clicked)
+					# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
+					_immediate_path_mode_started = true
+					_immediate_path_drawing_started = false
+					print("[PointDebug] path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
+					get_viewport().set_input_as_handled()
+					return
 				# それ以外はGameManagerに委譲
 			else:
 				# キャラクターがクリックされなかった場合、パス先端延長を試みる
@@ -679,6 +699,12 @@ func _handle_touch_event(event: InputEvent) -> void:
 				if path_drawer:
 					path_drawer._handle_drawing_release()
 				game_manager.confirm_path()
+			# 実行中キャラクターに新しいパスを描いた場合、パスを確定して自動実行
+			elif _immediate_path_drawing_started and _auto_execute_character:
+				print("[PointDebug] touch path_mode release: auto-confirming path for executing character")
+				if path_drawer:
+					path_drawer._handle_drawing_release()
+				game_manager.confirm_path()
 			# 即座パスモードのフラグをリセット
 			_immediate_path_mode_started = false
 			_immediate_path_drawing_started = false
@@ -709,21 +735,26 @@ func _handle_touch_event(event: InputEvent) -> void:
 				print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 				# 味方キャラクターなら選択（パスモードはドラッグ時に開始）
 				if not PlayerState.is_enemy(clicked):
-					if not (game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)):
-						# 長押し回転用にキャラクターを記録
-						_rotation_target_character = clicked
-						# 現在のパスを確定してから切り替え
-						print("[PointDebug] touch path_mode click: confirming current path and selecting %s" % clicked.name)
-						game_manager.confirm_path()
-						print("[PointDebug] touch path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
-						game_manager.selection_manager.deselect_all()
-						game_manager.selection_manager.add_to_selection(clicked)
-						# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
-						_immediate_path_mode_started = true
-						_immediate_path_drawing_started = false
-						print("[PointDebug] touch path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
-						get_viewport().set_input_as_handled()
-						return
+					# 実行中のキャラクターでも新しいパスを作成可能にする
+					if is_following:
+						# 現在のパス追従をキャンセルして新しいパスを作成
+						game_manager.path_service.cancel_path_following(clicked, true)
+						# パス確定後に自動実行するため記録
+						_auto_execute_character = clicked
+					# 長押し回転用にキャラクターを記録
+					_rotation_target_character = clicked
+					# 現在のパスを確定してから切り替え
+					print("[PointDebug] touch path_mode click: confirming current path and selecting %s" % clicked.name)
+					game_manager.confirm_path()
+					print("[PointDebug] touch path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
+					game_manager.selection_manager.deselect_all()
+					game_manager.selection_manager.add_to_selection(clicked)
+					# パスモードはドラッグ時に開始（タップのみの場合は既存パスを保持）
+					_immediate_path_mode_started = true
+					_immediate_path_drawing_started = false
+					print("[PointDebug] touch path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
+					get_viewport().set_input_as_handled()
+					return
 				# それ以外はGameManagerに委譲
 				game_manager.handle_click(event.position, MOUSE_BUTTON_LEFT)
 				get_viewport().set_input_as_handled()
@@ -1215,6 +1246,13 @@ func _on_path_mode_ended() -> void:
 	_hide_progress_ring()
 	# パスモード終了したフレームを記録（同一フレーム内のパス延長を禁止）
 	_path_mode_ended_frame = current_frame
+
+	# 実行中だったキャラクターに新しいパスを描いた場合、自動的に実行を開始
+	if _auto_execute_character and is_instance_valid(_auto_execute_character):
+		if game_manager.path_service and game_manager.path_service.has_pending_path_for_character(_auto_execute_character):
+			print("[PointDebug] _on_path_mode_ended: auto-executing path for %s" % _auto_execute_character.name)
+			game_manager.path_service.execute_path_for_character(_auto_execute_character, false)
+	_auto_execute_character = null
 
 
 ## パス先端近くでドラッグが検出された際のハンドラ（パス延長を開始）
