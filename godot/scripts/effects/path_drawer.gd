@@ -36,10 +36,12 @@ signal endpoint_drag_detected(screen_pos: Vector2)
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)
 @export var vision_line_color: Color = Color(0.7, 0.3, 0.9, 0.9)
 @export var vision_line_length: float = 2.0
-@export var line_width: float = 0.04
+## 線の太さ（GameConstants.PATH_LINE_WIDTH と統一）
+@export var line_width: float = GameConstants.PATH_LINE_WIDTH
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
-@export var path_click_threshold: float = 1.2
+## クリック判定エリア（GameConstants.PATH_CLICK_THRESHOLD と統一）
+@export var path_click_threshold: float = GameConstants.PATH_CLICK_THRESHOLD
 @export var path_endpoint_threshold: float = 0.15
 @export_flags_3d_physics var wall_collision_mask: int = 2
 @export var enable_wall_sliding: bool = true
@@ -407,19 +409,28 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 
 ## 移動モードでのリリース処理（外部から呼び出し可能）
 func handle_movement_release(_screen_pos: Vector2) -> void:
+	print("[PathDebug] handle_movement_release: _path_longpress_pending=%s, has_path=%s, path_pts=%d" % [
+		str(_path_longpress_pending), str(has_path()), _path_points.size()
+	])
 	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
 	if _path_longpress_pending:
 		var screen_pos := _path_longpress_screen_pos
 		var ground_pos := _path_longpress_ground_pos
+		print("[PathDebug] handle_movement_release: longpress pending, ground_pos=%s" % str(ground_pos))
 		_reset_path_longpress()
 		# パス上タップをシグナル発火（コンテキストメニュー表示用）
 		var result := _find_closest_point_on_path(ground_pos)
-		if not result.is_empty():
+		print("[PathDebug] handle_movement_release: closest_dist=%.3f, threshold=%.3f, emitting=%s" % [
+			result.distance, path_click_threshold, str(result.distance <= path_click_threshold)
+		])
+		# 距離チェック：パス上でなければコンテキストメニューを表示しない
+		if result.distance <= path_click_threshold:
 			var path_data := {
 				"point": result.point,
 				"path_ratio": result.ratio,
 				"character": _character
 			}
+			print("[PathDebug] handle_movement_release: EMITTING path_tapped")
 			path_tapped.emit(screen_pos, path_data)
 		return
 
@@ -436,7 +447,8 @@ func handle_point_release(screen_pos: Vector2) -> bool:
 		_reset_path_longpress()
 		# パス上タップをシグナル発火（コンテキストメニュー表示用）
 		var result := _find_closest_point_on_path(tap_ground_pos)
-		if not result.is_empty():
+		# 距離チェック：パス上でなければコンテキストメニューを表示しない
+		if result.distance <= path_click_threshold:
 			var path_data := {
 				"point": result.point,
 				"path_ratio": result.ratio,

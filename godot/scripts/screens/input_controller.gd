@@ -1026,7 +1026,7 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 		return false
 
 	var ground_pos: Vector3 = intersect as Vector3
-	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, 1.2)
+	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
 	return not result.is_empty()
 
 
@@ -1055,8 +1055,8 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 	print("[PointDebug] _try_start_confirmed_path_longpress: ground_pos=%s" % [ground_pos])
 
 	# 確認済みパス上かチェック（先端は除外 - 先端はパス延長用）
-	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, 1.2)
-	print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s" % [result])
+	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
+	print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, GameConstants.PATH_CLICK_THRESHOLD])
 	if not result.is_empty():
 		print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for confirmed path")
 		# 長押し待機を開始（確認済みパス）

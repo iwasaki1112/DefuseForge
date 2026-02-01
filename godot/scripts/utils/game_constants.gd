@@ -78,6 +78,14 @@ const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
 
 # ========================================================
+# Path Settings (パス描画・クリック判定)
+# ========================================================
+## パスの線幅（視覚的な太さ）
+const PATH_LINE_WIDTH: float = 0.15
+## パスのクリック判定エリア（線幅と統一）
+const PATH_CLICK_THRESHOLD: float = 0.15
+
+# ========================================================
 # Round Settings
 # ========================================================
 const ROUND_TIME_LIMIT: float = 90.0      # ラウンド制限時間（秒）

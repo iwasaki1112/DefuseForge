@@ -360,7 +360,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		target_ground_pos = intersect as Vector3
 
 	# 確定済みパス上の点を検索（先端は除外 - 先端はパス延長用）
-	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, 1.2)
+	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
 	if path_result.is_empty():
 		return false
 
@@ -418,7 +418,7 @@ func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vect
 		target_ground_pos = intersect as Vector3
 
 	# 移動中パス上の点を検索（先端は除外 - 先端はパス延長用）
-	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, 1.2)
+	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
 	if path_result.is_empty():
 		return {}
 

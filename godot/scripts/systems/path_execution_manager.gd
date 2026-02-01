@@ -418,7 +418,7 @@ func get_pending_path_for_character(character: Node) -> Array:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, path_data: Dictionary} を返す。見つからない場合は空のDictionary
-func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -462,7 +462,7 @@ func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 1.2)
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
-func find_path_point_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
+func find_path_point_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -565,7 +565,7 @@ func get_all_pending_path_distances(ground_pos: Vector3) -> Dictionary:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
-func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
+func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -697,7 +697,7 @@ func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @param threshold: 検出閾値
 ## @return: {character: Node, endpoint: Vector3, distance: float, is_extending_extension: bool} を返す。見つからない場合は空のDictionary
-func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = 1.2) -> Dictionary:
+func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
 	var closest_distance: float = threshold
 	var result: Dictionary = {}
 
@@ -1557,7 +1557,7 @@ func _create_path_mesh(path: Array[Vector3], character: Node = null) -> MeshInst
 	else:
 		mesh.line_color = Color(0.3, 0.8, 1.0, 0.8)
 
-	mesh.line_width = 0.04
+	mesh.line_width = GameConstants.PATH_LINE_WIDTH
 	_mesh_parent.add_child(mesh)
 
 	# パスを描画
