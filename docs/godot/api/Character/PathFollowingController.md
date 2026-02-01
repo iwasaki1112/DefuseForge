@@ -43,8 +43,12 @@ Door Kickers 2スタイルの協調的衝突回避（Sidestep）ロジックを�
 | `grenade_point_reached` | `index: int, point_data: Dictionary` | グレネードポイント到達時 |
 | `smoke_grenade_point_reached` | `index: int, point_data: Dictionary` | スモークグレネードポイント到達時 |
 | `door_point_reached` | `index: int, door: Node3D` | ドアポイント到達時（パス一時停止） |
+| `wait_point_reached` | `index: int, point_data: Dictionary` | 待機ポイント到達時 |
 | `path_progress_updated` | `index: int, character: Node` | パス進行状況更新時（通過したポイントのインデックス） |
 | `extension_path_activated` | `character: Node` | 延長パスへの切り替え発生時 |
+| `extension_points_scaled` | `scale: float` | 延長ポイントの比率がスケールされた時 |
+| `sync_wait_started` | なし | 同期待機開始時 |
+| `sync_wait_released` | なし | 同期待機解放時 |
 
 ## Public API
 
@@ -78,6 +82,28 @@ CombatAwarenessComponentを設定する（敵自動追跡用）。
 
 #### `is_following_path() -> bool`
 パス追従中か確認する。
+
+#### `is_active() -> bool`
+パス追従中かどうか（is_following_pathと同じ）。
+
+#### `add_wait_point(point_data: Dictionary) -> void`
+実行中のパスにWaitポイントを追加する。
+引数: `{ path_ratio, anchor, wait_duration }`
+
+#### `release_sync_wait() -> void`
+同期待機を解除して移動を再開する。
+
+#### `is_sync_waiting() -> bool`
+同期待機中かどうかを確認する。
+
+#### `append_path_point(point: Vector3) -> void`
+現在のパスの末尾にポイントを追加する（移動中の延長用）。
+
+#### `get_path_endpoint() -> Vector3`
+現在のパスの終点を取得する。
+
+#### `get_current_path_packed() -> PackedVector3Array`
+現在の全パスをPackedVector3Arrayとして取得する（メッシュ更新用）。
 
 ### Extension Path Accessors
 
@@ -136,6 +162,10 @@ CombatAwarenessComponentを設定する（敵自動追跡用）。
 
 3.  **Head-on（対面）判定**:
     *   互いに向かい合って移動している場合（`dot < -0.5`）、または相手が既に回避待機中の場合は、低優先度側が即座に回避行動をとる。
+
+### パス進行
+- **目標点到達判定**: 現在の目標ポイントへの距離が **0.25m** 未満になると、次のポイントへ切り替わる。
+- **最終目的地判定**: 最終目的地への距離が `final_destination_radius` (デフォルト0.1m) 未満になると完了。
 
 ### マーカー処理
 

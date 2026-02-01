@@ -72,6 +72,7 @@ path_mesh.clear()
 - `emission_enabled`: 発光エフェクト（energy 1.5）
 - `TRANSPARENCY_ALPHA`: アルファブレンディング
 - `CULL_DISABLED`: 両面描画
+- `render_priority`: 2 (Fogエフェクトより前面に描画)
 
 ## APIリファレンス
 

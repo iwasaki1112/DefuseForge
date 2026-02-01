@@ -451,12 +451,16 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `raycast_character(screen_pos: Vector2) -> Node`
 - `raycast_door(screen_pos: Vector2) -> Node3D`
 - `start_move_mode() -> bool`
+- `try_start_path_continuation_at_position(screen_pos: Vector2) -> bool`
 - `start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool`
 - `confirm_path() -> void`
 - `cancel_path() -> void`
 - `execute_all_paths(run: bool) -> int`
 - `clear_all_pending_paths() -> void`
 - `cancel_all_path_following() -> void`
+- `show_path_context_menu(screen_pos: Vector2, path_data: Dictionary) -> void`
+- `is_path_context_menu_open() -> bool`
+- `release_all_sync_waiting_characters() -> void`
 - `set_vision_enabled(enabled: bool) -> void`
 - `load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D`
 - `unload_map(cleanup_characters: bool = true) -> void`

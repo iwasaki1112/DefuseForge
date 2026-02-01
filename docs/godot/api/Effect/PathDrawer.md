@@ -21,9 +21,14 @@
 | `smoke_grenade_point_added` | `path_ratio: float, target_pos: Vector3` | スモークグレネードポイント追加時 |
 | `door_point_added` | `path_ratio: float, door: Node3D` | ドアポイント追加時 |
 | `wait_point_added` | `path_ratio: float, wait_duration: float` | Waitポイント追加時 |
+| `path_point_added` | `character: Node, point: Vector3` | パスポイント追加時（リアルタイム確定用） |
+| `path_started` | `character: Node, start_point: Vector3` | パス描画開始時 |
 | `path_undone` | なし | パス描画がUndoされた時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR, 6=WAIT, 7=SMOKE_GRENADE） |
-| `off_path_tapped` | なし | マーカーモード中にパス外をタップした時（パス確定処理に使用） |
+| `mode_changed` | `mode: int` | モード変更時 |
+| `off_path_tapped` | なし | マーカーモード中にパス外をタップした時 |
+| `path_tapped` | `screen_pos: Vector2, path_data: Dictionary` | パス上タップ時（コンテキストメニュー用） |
+| `endpoint_drag_detected` | `screen_pos: Vector2` | パス先端近くでのドラッグ検出時（パス延長用） |
+| `auto_confirm_requested` | なし | 自動確定リクエスト時 |
 
 ## Enums
 
@@ -60,7 +65,7 @@
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `min_point_distance` | `float` | `0.2` | ポイント間の最小距離 |
+| `min_point_distance` | `float` | `0.35` | ポイント間の最小距離 |
 | `line_color` | `Color` | 白(0.9 alpha) | パスライン色 |
 | `vision_line_color` | `Color` | 紫(0.9 alpha) | 視線ライン色 |
 | `vision_line_length` | `float` | `2.0` | 視線ラインの長さ |
@@ -252,8 +257,22 @@ path_drawer.set_character_color(char_color)
 #### remove_last_vision_point() -> void
 最後の視線ポイントを削除する。
 
-#### take_vision_points() -> Array[MeshInstance3D]
+#### `take_vision_points() -> Array[MeshInstance3D]`
 視線ポイントの所有権を移譲する（呼び出し元が管理責任を持つ）。
+
+#### `transfer_vision_meshes_to(parent: Node3D) -> Array[MeshInstance3D]`
+視線ポイントメッシュを指定親ノードに転送し、データもクリアする。
+
+**引数:**
+- `parent` - 転送先の親ノード
+
+#### `start_vision_mode_with_anchor(anchor: Vector3, ratio: float, auto_confirm: bool = false) -> void`
+指定アンカー位置でVisionモードを開始する。
+
+**引数:**
+- `anchor` - アンカー位置
+- `ratio` - パス上の比率
+- `auto_confirm` - ポイント追加後に自動確定するかどうか
 
 ### Run Marker API
 
@@ -436,6 +455,12 @@ Waitポイント数を取得する。
 
 #### take_wait_points() -> Array[MeshInstance3D]
 Waitポイントの所有権を移譲する。
+
+#### `transfer_wait_meshes_to(parent: Node3D) -> Array[MeshInstance3D]`
+Waitポイントメッシュを指定親ノードに転送し、データもクリアする。
+
+#### `add_sync_wait_point(path_ratio: float, anchor: Vector3) -> void`
+同期Waitポイントを追加する（コンテキストメニューから呼ばれる）。
 
 #### get_wait_point_count_for_character(character: Node) -> int
 指定キャラクターのWaitポイント数を取得する。

@@ -17,9 +17,9 @@ Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描�
 
 | 値 | resolution | msaa | ray_count | update_hz | 説明 |
 |----|-----------|------|-----------|-----------|------|
-| `LOW` | 128 | DISABLED | 36 | 15 | モバイル向け |
-| `MEDIUM` | 256 | 2X | 54 | 20 | バランス |
-| `HIGH` | 512 | 4X | 72 | 30 | PC向け |
+| `LOW` | 128 | DISABLED | 36 | 30 | モバイル向け（テクスチャ更新） |
+| `MEDIUM` | 256 | 2X | 54 | 30 | バランス（テクスチャ更新） |
+| `HIGH` | 512 | 4X | 72 | 60 | PC向け（テクスチャ更新） |
 
 ## Export Properties
 
@@ -37,7 +37,48 @@ Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描�
 
 ## Public API
 
-### set_map_size(new_size: Vector2) -> void
+### Character Registration
+
+#### register_character(character: Node3D) -> void
+キャラクターを登録し、VisionLightを作成する。
+
+**引数:**
+- `character` - 登録するキャラクター（GameCharacter）
+
+#### unregister_character(character: Node3D) -> void
+キャラクターの登録を解除する。
+
+**引数:**
+- `character` - 解除するキャラクター
+
+#### register_vision(vision: VisionComponent) -> void
+**互換用**: 内部で`register_character`を呼び出す。
+
+#### unregister_vision(vision: VisionComponent) -> void
+**互換用**: 内部で`unregister_character`を呼び出す。
+
+### Visibility Check
+
+#### is_position_visible_in_fow(world_pos: Vector3) -> bool
+指定したワールド座標がFoW内で可視（明るい）かどうかを判定する。
+キャッシュされたテクスチャを使用するため高速。
+
+**引数:**
+- `world_pos` - 判定するワールド座標
+
+**戻り値:** 可視なら`true`
+
+#### are_positions_visible_in_fow(positions: Array[Vector3]) -> Array[bool]
+複数の座標を一括で可視判定する（バッチ処理で効率化）。
+
+**引数:**
+- `positions` - 判定するワールド座標の配列
+
+**戻り値:** 各座標の可視性（bool）の配列
+
+### Display Control
+
+#### set_map_size(new_size: Vector2) -> void
 マップサイズを動的に変更する。フォグメッシュとシェーダーパラメータを再設定。
 
 **引数:**
@@ -45,42 +86,49 @@ Fog of Warシステム。SubViewportテクスチャ方式で可視領域を描�
 
 **注意:** `map_size`プロパティを直接変更しても反映されない。必ずこのメソッドを使用すること。
 
-### register_vision(vision: VisionComponent) -> void
-VisionComponentを登録する。
-
-**引数:**
-- `vision` - VisionComponentインスタンス
-
-### unregister_vision(vision: VisionComponent) -> void
-VisionComponentを解除する。
-
-**引数:**
-- `vision` - VisionComponentインスタンス
-
-### set_fog_visible(fog_visible: bool) -> void
+#### set_fog_visible(fog_visible: bool) -> void
 フォグの表示/非表示を切り替える。
 
-### set_fog_color(color: Color) -> void
+#### set_fog_color(color: Color) -> void
 フォグの色を設定する。
 
-### get_visibility_texture() -> ViewportTexture
+#### get_visibility_texture() -> ViewportTexture
 可視性テクスチャを取得する（壁の照明などに使用可能）。
 
 **戻り値:** ViewportTextureまたは`null`
 
-### force_update() -> void
-強制的に可視性テクスチャを更新する。VisionComponentの再登録後などに使用。
+#### force_update() -> void
+強制的に可視性テクスチャを更新する。
 
-### set_quality(q: Quality) -> void
+#### set_quality(q: Quality) -> void
 品質プリセットを実行時に変更する。ビューポートサイズとシェーダーパラメータを更新。
 
 **引数:**
 - `q` - 品質レベル（LOW/MEDIUM/HIGH）
 
-### get_quality_settings() -> Dictionary
-現在の品質設定を辞書形式で取得する（VisionComponentとの同期用）。
+#### get_quality_settings() -> Dictionary
+現在の品質設定を辞書形式で取得する。
 
-**戻り値:** `resolution`, `msaa`, `ray_count`, `update_hz`を含む辞書
+### Occluder Management
+
+#### extract_occluders_from_map(map_node: Node3D) -> void
+マップノードからオクルーダー（壁など）を抽出し、FoWの遮蔽物として設定する。
+同時に壁マテリアルへのFoWシェーダー適用も行う。
+
+#### set_door_occluder_enabled(door: Node3D, enabled: bool) -> void
+ドアのオクルーダーの有効/無効を切り替える。
+
+#### add_smoke_occluder(smoke_area: Node3D) -> void
+スモークエリアをオクルーダーとして追加する。
+
+#### remove_smoke_occluder(smoke_area: Node3D) -> void
+スモークエリアのオクルーダーを削除する。
+
+#### update_smoke_radius(smoke_area: Node3D) -> void
+スモークオクルーダーの半径を更新する。
+
+#### get_occluder_manager() -> OccluderManager
+OccluderManagerインスタンスを取得する。
 
 ## 使用例
 
@@ -139,9 +187,14 @@ fow.set_map_size(Vector2(20, 20))
 3. `smoothstep`で自然なグラデーション（edge_softness設定可能）
 4. 可視領域は透明、不可視領域はフォグ色
 
+### 壁用シェーダー（wall_fow.gdshader）
+- 壁のメッシュに適用され、FoWの視界テクスチャと連動
+- **上面の減衰**: ワールド法線が上向き（Y+）の面を検出し、視界内であっても暗く表示することで、壁の上部が見えすぎるのを防ぐ（Fog of Warの没入感向上）
+
 ### 最適化
+- **VisionLight同期**: 位置と回転は`_process`で**毎フレーム同期**され、滑らかな追従を実現
+- **テクスチャ更新**: Quality設定に基づく頻度（update_hz）で間引いて実行（GPU負荷軽減）
 - **シグナル駆動**: `vision_updated`シグナルで変更時のみ更新
-- **更新間隔制御**: 品質設定に基づく更新頻度（LOW: 15Hz, HIGH: 30Hz）
 - **手動レンダリング**: `UPDATE_ONCE`モードで必要時のみ描画
 - **複数視界対応**: 複数のVisionComponentを同時に処理可能
 

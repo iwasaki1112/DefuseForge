@@ -21,9 +21,11 @@ GameScreen (統合されたゲーム画面)
 | クラス | 説明 |
 |--------|------|
 | [GameScreen](./GameScreen.md) | 統合されたゲーム画面 |
+| [GameHUD](./GameHUD.md) | ゲーム画面のUIパネル（タイマー、マーカー等） |
 | [GameModeProvider](./GameModeProvider.md) | モードプロバイダー基底クラス |
 | [TrainingModeProvider](./TrainingModeProvider.md) | Trainingモード用プロバイダー |
 | [MultiplayerModeProvider](./MultiplayerModeProvider.md) | Multiplayerモード用プロバイダー |
+| [LobbyScreen](./LobbyScreen.md) | ルームリスト表示・参加UI |
 
 ## 設計思想
 
