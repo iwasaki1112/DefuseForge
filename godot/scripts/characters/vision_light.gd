@@ -4,8 +4,11 @@ extends Node
 ## 3D位置・回転を2D SubViewport内のライトに同期
 ## Light2D + LightOccluder2Dで壁の影を自動計算（GPU最適化）
 
-## PointLight2Dへの参照
+## メインFOVライト（扇形）
 var _light: PointLight2D = null
+
+## 周辺視界ライト（小さな円形、360度）
+var _peripheral_light: PointLight2D = null
 
 ## キャラクター参照
 var _character: Node3D = null
@@ -18,8 +21,13 @@ var _texture_resolution: int = 256
 var fov_degrees: float = 90.0
 var view_distance: float = 15.0
 
+## 周辺視界設定（至近距離の360度視界）
+var peripheral_distance: float = 0.8
+
 ## FOVテクスチャ
 var _fov_texture: ImageTexture = null
+## 周辺視界テクスチャ
+var _peripheral_texture: ImageTexture = null
 
 ## ライトカラー（白=視界あり）
 const LIGHT_COLOR := Color(1.0, 1.0, 1.0, 1.0)
@@ -47,8 +55,10 @@ func setup(viewport: SubViewport, character: Node3D, map_size: Vector2, resoluti
 	# 既存のライトを削除
 	if _light:
 		_light.queue_free()
+	if _peripheral_light:
+		_peripheral_light.queue_free()
 
-	# PointLight2Dを作成
+	# メインFOVライトを作成（扇形）
 	_light = PointLight2D.new()
 	_light.name = "VisionLight_%s" % character.name if character else "VisionLight"
 	_light.enabled = true
@@ -70,34 +80,65 @@ func setup(viewport: SubViewport, character: Node3D, map_size: Vector2, resoluti
 	# ビューポートに追加
 	viewport.add_child(_light)
 
-	# FOVテクスチャを設定
+	# 周辺視界ライトを作成（小さな円形、360度）
+	_peripheral_light = PointLight2D.new()
+	_peripheral_light.name = "PeripheralLight_%s" % character.name if character else "PeripheralLight"
+	_peripheral_light.enabled = true
+	_peripheral_light.visible = true
+	_peripheral_light.color = LIGHT_COLOR
+	_peripheral_light.energy = LIGHT_ENERGY
+	_peripheral_light.blend_mode = Light2D.BLEND_MODE_ADD
+	_peripheral_light.range_item_cull_mask = 1
+	_peripheral_light.range_z_min = -1024
+	_peripheral_light.range_z_max = 1024
+
+	# シャドウ設定（壁の影を自動計算）
+	_peripheral_light.shadow_enabled = SHADOW_ENABLED
+	_peripheral_light.shadow_filter = SHADOW_FILTER
+	_peripheral_light.shadow_filter_smooth = SHADOW_FILTER_SMOOTH
+	_peripheral_light.shadow_color = Color(0, 0, 0, 1)
+	_peripheral_light.shadow_item_cull_mask = 1
+
+	# ビューポートに追加
+	viewport.add_child(_peripheral_light)
+
+	# テクスチャを設定
 	_update_fov_texture()
+	_update_peripheral_texture()
 	_update_light_scale()
 
 	# 初期位置を設定
 	sync_transform()
 
 	print("[FOW] VisionLight setup: ", character.name if character else "unknown",
-		", fov: ", fov_degrees, ", scale: ", _light.texture_scale)
+		", fov: ", fov_degrees, ", scale: ", _light.texture_scale,
+		", peripheral: ", peripheral_distance)
 
 
 ## 毎フレームの位置・回転同期（_process または _physics_process から呼び出し）
 func sync_transform() -> void:
-	if not _light or not _character:
+	if not _character:
 		return
 
 	# 3D位置 → 2D位置
-	_light.position = _world_to_viewport(_character.global_position)
+	var viewport_pos := _world_to_viewport(_character.global_position)
 
-	# 3D Y軸回転 → 2D回転
-	# Mixamoモデルの前方向は+Z
-	# ビューポート座標系: X=WorldX, Y=WorldZ
-	# FOVテクスチャ: 上方向(-Y)が0度（rotation=0でビューポート上向き）
-	# +Z（Mixamo前方）= ビューポート+Y（下）→ rotation=PI必要
-	var facing := _get_facing_direction()
-	# atan2(z, x)で3D角度を取得し、PI/2加算してビューポート座標に変換
-	var angle_2d := atan2(facing.z, facing.x) + PI / 2.0
-	_light.rotation = angle_2d
+	# メインFOVライトの位置と回転を更新
+	if _light:
+		_light.position = viewport_pos
+		# 3D Y軸回転 → 2D回転
+		# Mixamoモデルの前方向は+Z
+		# ビューポート座標系: X=WorldX, Y=WorldZ
+		# FOVテクスチャ: 上方向(-Y)が0度（rotation=0でビューポート上向き）
+		# +Z（Mixamo前方）= ビューポート+Y（下）→ rotation=PI必要
+		var facing := _get_facing_direction()
+		# atan2(z, x)で3D角度を取得し、PI/2加算してビューポート座標に変換
+		var angle_2d := atan2(facing.z, facing.x) + PI / 2.0
+		_light.rotation = angle_2d
+
+	# 周辺視界ライトの位置を更新（回転は不要、常に円形）
+	if _peripheral_light:
+		_peripheral_light.position = viewport_pos
 
 
 ## 視界距離を設定
@@ -112,15 +153,23 @@ func set_fov_degrees(fov: float) -> void:
 	_update_fov_texture()
 
 
+## 周辺視界距離を設定
+func set_peripheral_distance(distance: float) -> void:
+	peripheral_distance = maxf(distance, 0.0)
+	_update_light_scale()
+
+
 ## ライトの有効/無効
 func set_enabled(enabled: bool) -> void:
 	if _light:
 		_light.visible = enabled
+	if _peripheral_light:
+		_peripheral_light.visible = enabled
 
 
 ## ライトが有効か確認
 func is_enabled() -> bool:
-	return _light and _light.visible
+	return (_light and _light.visible) or (_peripheral_light and _peripheral_light.visible)
 
 
 ## ライトを削除
@@ -128,6 +177,9 @@ func cleanup() -> void:
 	if _light:
 		_light.queue_free()
 		_light = null
+	if _peripheral_light:
+		_peripheral_light.queue_free()
+		_peripheral_light = null
 
 
 # ============================================
@@ -176,16 +228,28 @@ func _update_fov_texture() -> void:
 	_update_light_scale()
 
 
-func _update_light_scale() -> void:
-	if not _light:
+func _update_peripheral_texture() -> void:
+	if not _peripheral_light:
 		return
 
-	# 視界距離に基づいてテクスチャスケールを計算
-	var scale_factor := float(_texture_resolution) / maxf(_map_size.x, _map_size.y)
-	var light_radius := view_distance * scale_factor * 2.0  # 直径
+	# 周辺視界は常に円形テクスチャ
+	_peripheral_texture = FovTextureGenerator.generate_circular_texture(_texture_resolution, FOV_EDGE_FALLOFF)
+	_peripheral_light.texture = _peripheral_texture
 
-	# テクスチャサイズに対するスケール
-	var texture_size := float(_texture_resolution)
-	var scale_value := light_radius / texture_size
 
-	_light.texture_scale = scale_value
+func _update_light_scale() -> void:
+	# メインFOVライトのスケール
+	if _light:
+		var scale_factor := float(_texture_resolution) / maxf(_map_size.x, _map_size.y)
+		var light_radius := view_distance * scale_factor * 2.0  # 直径
+		var texture_size := float(_texture_resolution)
+		var scale_value := light_radius / texture_size
+		_light.texture_scale = scale_value
+
+	# 周辺視界ライトのスケール
+	if _peripheral_light:
+		var scale_factor := float(_texture_resolution) / maxf(_map_size.x, _map_size.y)
+		var peripheral_radius := peripheral_distance * scale_factor * 2.0  # 直径
+		var texture_size := float(_texture_resolution)
+		var peripheral_scale := peripheral_radius / texture_size
+		_peripheral_light.texture_scale = peripheral_scale

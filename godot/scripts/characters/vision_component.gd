@@ -13,6 +13,7 @@ signal vision_updated(visible_points: PackedVector3Array)
 @export_group("Vision Settings")
 @export var fov_degrees: float = 90.0  ## Field of view in degrees
 @export var view_distance: float = 15.0  ## Vision distance in meters
+@export var peripheral_distance: float = 0.8  ## Peripheral vision distance (360 degrees)
 @export var eye_height: float = 1.5  ## Eye height from ground
 
 @export_group("Collision Settings")
@@ -133,6 +134,7 @@ func set_debug_draw(enabled: bool) -> void:
 
 ## Check if a world position is within FOV (lightweight single raycast check)
 ## Used for enemy visibility detection
+## Includes peripheral vision check (360 degrees within peripheral_distance)
 func is_position_in_view(world_pos: Vector3) -> bool:
 	if not _character:
 		return false
@@ -141,21 +143,26 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 	var to_target := world_pos - origin
 	var distance := to_target.length()
 
-	# Distance check
-	if distance > view_distance:
+	# Peripheral vision check (360 degrees, short range)
+	# If within peripheral distance, skip FOV angle check
+	var is_in_peripheral := distance <= peripheral_distance
+
+	# Distance check (only applies to main FOV, not peripheral)
+	if not is_in_peripheral and distance > view_distance:
 		return false
 
-	# FOV check (XZ plane)
-	var look_dir := _get_look_direction()
-	var to_target_xz := Vector3(to_target.x, 0, to_target.z).normalized()
-	var look_dir_xz := Vector3(look_dir.x, 0, look_dir.z).normalized()
+	# FOV check (XZ plane) - skip for peripheral vision
+	if not is_in_peripheral:
+		var look_dir := _get_look_direction()
+		var to_target_xz := Vector3(to_target.x, 0, to_target.z).normalized()
+		var look_dir_xz := Vector3(look_dir.x, 0, look_dir.z).normalized()
 
-	if to_target_xz.length_squared() < 0.001 or look_dir_xz.length_squared() < 0.001:
-		return true  # Target directly above/below or vertical look direction
-
-	var angle := rad_to_deg(look_dir_xz.angle_to(to_target_xz))
-	if angle > fov_degrees / 2.0:
-		return false
+		if to_target_xz.length_squared() < 0.001 or look_dir_xz.length_squared() < 0.001:
+			pass  # Target directly above/below or vertical look direction - allow
+		else:
+			var angle := rad_to_deg(look_dir_xz.angle_to(to_target_xz))
+			if angle > fov_degrees / 2.0:
+				return false
 
 	# Smoke occlusion check
 	var smoke_manager := _get_smoke_area_manager()
