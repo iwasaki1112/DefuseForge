@@ -159,7 +159,7 @@ func _extract_occluders_recursive(node: Node) -> void:
 					if occluder:
 						_occluder_parent.add_child(occluder)
 						if is_door:
-							var door_node := node if node_name_lower.begins_with("door_") else parent
+							var door_node: Node = node if node_name_lower.begins_with("door_") else parent
 							_door_occluders[door_node] = occluder
 						else:
 							_wall_occluders.append(occluder)
@@ -170,7 +170,7 @@ func _extract_occluders_recursive(node: Node) -> void:
 			if occluder:
 				_occluder_parent.add_child(occluder)
 				if is_door:
-					var door_node := node if node_name_lower.begins_with("door_") else parent
+					var door_node: Node = node if node_name_lower.begins_with("door_") else parent
 					_door_occluders[door_node] = occluder
 				else:
 					_wall_occluders.append(occluder)

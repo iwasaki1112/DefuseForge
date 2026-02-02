@@ -461,18 +461,9 @@ func process(delta: float) -> void:
 	var progress = _calculate_path_progress()
 	var in_run_segment = _is_in_run_segment(progress)
 
-	# 速度選択: Run区間内なら走る、そうでなければ既存ロジック
-	var speed: float
-	var is_running_now: bool
-	if in_run_segment:
-		speed = anim_ctrl.run_speed
-		is_running_now = true
-	elif _is_running:
-		speed = anim_ctrl.run_speed
-		is_running_now = true
-	else:
-		speed = anim_ctrl.get_current_speed()
-		is_running_now = false
+	# 速度選択: 常に歩行速度を使用
+	var speed: float = anim_ctrl.get_current_speed()
+	var is_running_now: bool = false
 
 	# 最後の移動方向を保存（完了時の向き保持用）
 	if move_dir.length_squared() > 0.1:

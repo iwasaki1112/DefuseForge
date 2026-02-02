@@ -19,5 +19,7 @@
 | [GameManager](GameManager.md) | コアゲームシステム初期化・更新の一元管理 |
 | [SettingsManager](SettingsManager.md) | 設定管理（プレイヤー名保存・選択マップ保持）（Autoload） |
 | [InputController](InputController.md) | ゲーム画面の入力処理コントローラー |
+| [MouseInputHandler](MouseInputHandler.md) | PC用マウス入力ハンドラ |
+| [TouchInputHandler](TouchInputHandler.md) | モバイル用タッチ入力ハンドラ |
 | [RoundManager](RoundManager.md) | ラウンド状態管理・タイマー・生存者数追跡・勝敗判定 |
 | [SmokeAreaManager](SmokeAreaManager.md) | スモークエリアのグローバル管理・視線判定API |

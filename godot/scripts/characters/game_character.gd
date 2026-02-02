@@ -213,27 +213,6 @@ func get_facing_direction() -> Vector3:
 	return _facing_direction
 
 # ============================================
-# Stance API
-# ============================================
-
-## Check if character is crouching
-func is_crouching() -> bool:
-	if anim_ctrl:
-		return anim_ctrl.get_stance() == CharacterAnimationController.Stance.CROUCH
-	return false
-
-
-## Toggle crouch state
-func toggle_crouch() -> void:
-	if not anim_ctrl:
-		return
-
-	var current = anim_ctrl.get_stance()
-	# Stance.STAND = 0, Stance.CROUCH = 1
-	anim_ctrl.set_stance(CharacterAnimationController.Stance.STAND if current == CharacterAnimationController.Stance.CROUCH else CharacterAnimationController.Stance.CROUCH)
-
-
-# ============================================
 # Vision Component API
 # ============================================
 
@@ -1022,10 +1001,6 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 		# 復活（通常は起こらないが念のため）
 		reset_health()
 
-	# しゃがみ状態を更新（即座に反映）
-	if anim_ctrl and state.is_crouching != is_crouching():
-		toggle_crouch()
-
 
 ## スナップショットをバッファに追加
 func _add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) -> void:
@@ -1034,7 +1009,6 @@ func _add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) ->
 		"position": state.position,
 		"rotation": state.rotation,
 		"velocity": state.velocity,
-		"is_crouching": state.is_crouching,
 		"animation_state": state.animation_state
 	}
 	_snapshot_buffer.append(snapshot)
@@ -1180,7 +1154,6 @@ func to_character_state() -> NetworkMessages.CharacterStateMessage:
 	state.rotation = atan2(_facing_direction.x, _facing_direction.z)
 	state.current_health = int(current_health)
 	state.is_alive = is_alive
-	state.is_crouching = is_crouching()
 	state.velocity = velocity
 	state.timestamp = Time.get_ticks_msec()
 
@@ -1206,7 +1179,6 @@ func to_character_snapshot() -> SyncState.CharacterSnapshot:
 	snapshot.current_health = current_health
 	snapshot.max_health = max_health
 	snapshot.is_alive = is_alive
-	snapshot.is_crouching = is_crouching()
 	snapshot.team = team
 	snapshot.timestamp = Time.get_ticks_msec()
 
@@ -1244,10 +1216,6 @@ func apply_character_snapshot(snapshot: SyncState.CharacterSnapshot) -> void:
 		died.emit(self)
 	elif not is_alive and snapshot.is_alive:
 		reset_health()
-
-	# しゃがみ状態
-	if anim_ctrl and snapshot.is_crouching != is_crouching():
-		toggle_crouch()
 
 
 ## 状態変更を通知（ネットワーク同期用）

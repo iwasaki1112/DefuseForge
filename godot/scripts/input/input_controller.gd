@@ -477,7 +477,7 @@ func _handle_touch_event(event: InputEvent) -> void:
 
 
 ## パスモード中のタッチ入力処理
-func _handle_touch_event_path_mode(event: InputEvent, touch_count_before: int) -> void:
+func _handle_touch_event_path_mode(event: InputEvent, _touch_count_before: int) -> void:
 	var path_drawer = _get_path_drawer()
 
 	# ポイントモード中
@@ -875,42 +875,42 @@ func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
 
 #region ハンドラシグナルコールバック
 
-func _on_mouse_press(position: Vector2) -> void:
+func _on_mouse_press(_position: Vector2) -> void:
 	# マウスプレスはイベント処理内で直接処理
 	pass
 
 
-func _on_mouse_release(position: Vector2, was_dragging: bool) -> void:
+func _on_mouse_release(_position: Vector2, _was_dragging: bool) -> void:
 	# マウスリリースはイベント処理内で直接処理
 	pass
 
 
-func _on_mouse_drag(position: Vector2, distance_from_start: float) -> void:
+func _on_mouse_drag(_position: Vector2, _distance_from_start: float) -> void:
 	# マウスドラッグはイベント処理内で直接処理
 	pass
 
 
-func _on_mouse_tap(position: Vector2) -> void:
+func _on_mouse_tap(_position: Vector2) -> void:
 	# マウスタップはイベント処理内で直接処理
 	pass
 
 
-func _on_touch_press(position: Vector2) -> void:
+func _on_touch_press(_position: Vector2) -> void:
 	# タッチプレスはイベント処理内で直接処理
 	pass
 
 
-func _on_touch_release(position: Vector2, was_dragging: bool) -> void:
+func _on_touch_release(_position: Vector2, _was_dragging: bool) -> void:
 	# タッチリリースはイベント処理内で直接処理
 	pass
 
 
-func _on_touch_drag(position: Vector2, distance_from_start: float) -> void:
+func _on_touch_drag(_position: Vector2, _distance_from_start: float) -> void:
 	# タッチドラッグはイベント処理内で直接処理
 	pass
 
 
-func _on_touch_tap(position: Vector2) -> void:
+func _on_touch_tap(_position: Vector2) -> void:
 	# タッチタップはイベント処理内で直接処理
 	pass
 
@@ -920,7 +920,7 @@ func _on_zoom_requested(amount: float) -> void:
 		camera_pan_controller._zoom_by(amount)
 
 
-func _on_pinch_state_changed(is_pinching: bool) -> void:
+func _on_pinch_state_changed(_is_pinching: bool) -> void:
 	# ピンチ状態変更は必要に応じて処理
 	pass
 

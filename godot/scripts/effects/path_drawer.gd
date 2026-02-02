@@ -21,13 +21,12 @@ signal mode_changed(mode: int)
 signal off_path_tapped()
 ## 自動確定リクエスト（確認済みパスへのVisionポイント配置後など）
 signal auto_confirm_requested()
-## パス上タップ時のシグナル（コンテキストメニュー表示用）
-signal path_tapped(screen_pos: Vector2, path_data: Dictionary)
 ## パスポイント追加シグナル（リアルタイム確定用 - ポイント追加のたびに発火）
 signal path_point_added(character: Node, point: Vector3)
 ## パス描画開始シグナル（新規パス開始時に発火）
 signal path_started(character: Node, start_point: Vector3)
 ## パス先端近くでドラッグが検出されたシグナル（パス延長用）
+@warning_ignore("unused_signal")
 signal endpoint_drag_detected(screen_pos: Vector2)
 #endregion
 

@@ -157,10 +157,6 @@ func _has_significant_change(old_state: NetworkMessages.CharacterStateMessage, n
 	if old_state.is_alive != new_state.is_alive:
 		return true
 
-	# しゃがみ状態の変化
-	if old_state.is_crouching != new_state.is_crouching:
-		return true
-
 	return false
 
 
@@ -619,14 +615,6 @@ func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
 				anim_ctrl.play_grenade_throw()
 				_seek_animation_forward(anim_ctrl, latency_sec)
 
-		NetworkConstants.AnimationEventType.CROUCH_START:
-			if character.has_method("set_crouching"):
-				character.set_crouching(true)
-
-		NetworkConstants.AnimationEventType.CROUCH_END:
-			if character.has_method("set_crouching"):
-				character.set_crouching(false)
-
 
 func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
 	var door_id: int = event.data.get("door_id", 0)
@@ -700,7 +688,6 @@ func _char_snapshot_to_dict(snap: SyncState.CharacterSnapshot) -> Dictionary:
 		"current_health": snap.current_health,
 		"max_health": snap.max_health,
 		"is_alive": snap.is_alive,
-		"is_crouching": snap.is_crouching,
 		"team": snap.team,
 		"weapon_id": snap.weapon_id,
 		"animation_state": snap.animation_state
@@ -723,7 +710,6 @@ func _dict_to_char_snapshot(data: Dictionary) -> SyncState.CharacterSnapshot:
 	snap.current_health = data.get("current_health", 100.0)
 	snap.max_health = data.get("max_health", 100.0)
 	snap.is_alive = data.get("is_alive", true)
-	snap.is_crouching = data.get("is_crouching", false)
 	snap.team = data.get("team", 0)
 	snap.weapon_id = data.get("weapon_id", "")
 	snap.animation_state = data.get("animation_state", "")
@@ -767,7 +753,6 @@ func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictio
 		"velocity": {"x": state.velocity.x, "y": state.velocity.y, "z": state.velocity.z},
 		"current_health": state.current_health,
 		"is_alive": state.is_alive,
-		"is_crouching": state.is_crouching,
 		"animation_state": state.animation_state
 	}
 
@@ -785,7 +770,6 @@ func _dict_to_char_state(data: Dictionary) -> NetworkMessages.CharacterStateMess
 	state.rotation = data.get("rotation", 0.0)
 	state.current_health = data.get("current_health", 100)
 	state.is_alive = data.get("is_alive", true)
-	state.is_crouching = data.get("is_crouching", false)
 	state.animation_state = data.get("animation_state", "")
 
 	return state

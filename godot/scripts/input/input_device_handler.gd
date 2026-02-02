@@ -24,9 +24,11 @@ signal drag_detected(position: Vector2, distance_from_start: float)
 signal tap_detected(position: Vector2)
 
 ## ズーム要求時（ズーム量: 正=ズームイン, 負=ズームアウト）
+@warning_ignore("unused_signal")
 signal zoom_requested(amount: float)
 
 ## ピンチ状態変更時（ピンチ中かどうか）
+@warning_ignore("unused_signal")
 signal pinch_state_changed(is_pinching: bool)
 
 #endregion
@@ -63,9 +65,9 @@ var _is_pending_drag: bool = false
 #region 公開メソッド
 
 ## 入力イベントを処理
-## @param event: 入力イベント
+## @param _event: 入力イベント
 ## @return: イベントを消費した場合true
-func handle_input(event: InputEvent) -> bool:
+func handle_input(_event: InputEvent) -> bool:
 	return false  # 子クラスでオーバーライド
 
 

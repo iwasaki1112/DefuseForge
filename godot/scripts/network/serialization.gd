@@ -182,8 +182,6 @@ static func serialize_character_state_binary(state: NetworkMessages.CharacterSta
 	var flags: int = 0
 	if state.is_alive:
 		flags |= 0x01
-	if state.is_crouching:
-		flags |= 0x02
 	buf.put_u8(flags)
 
 	# アニメーション状態 (16 bytes) - 固定長文字列
@@ -234,7 +232,6 @@ static func deserialize_character_state_binary(data: PackedByteArray) -> Network
 	# フラグ
 	var flags := buf.get_u8()
 	state.is_alive = (flags & 0x01) != 0
-	state.is_crouching = (flags & 0x02) != 0
 
 	# アニメーション状態 (16 bytes)
 	var anim_data := buf.get_data(16)[1] as PackedByteArray

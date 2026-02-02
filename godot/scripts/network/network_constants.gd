@@ -171,10 +171,6 @@ enum AnimationEventType {
 	DEATH = 3,
 	## グレネード投擲アニメーション
 	GRENADE_THROW = 4,
-	## しゃがみ開始
-	CROUCH_START = 5,
-	## しゃがみ終了
-	CROUCH_END = 6,
 }
 
 # ============================================

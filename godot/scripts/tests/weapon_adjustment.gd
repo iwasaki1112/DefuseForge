@@ -141,9 +141,6 @@ func _setup_scene(preset: CharacterPresetScript) -> void:
 
 	character.position = Vector3(0, 0, 0)
 
-	# Initial pose - weapon type will be set by _select_weapon via equip_weapon
-	anim_ctrl.set_stance(CharacterAnimationController.Stance.STAND)
-
 
 ## Load shared animation library from GLB file
 func _load_animation_library() -> AnimationLibrary:

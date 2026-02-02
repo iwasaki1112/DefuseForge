@@ -151,9 +151,6 @@ class CharacterStateMessage extends RefCounted:
 	## 移動速度（m/s）
 	var velocity: Vector3 = Vector3.ZERO
 
-	## しゃがみ状態
-	var is_crouching: bool = false
-
 	## タイムスタンプ
 	var timestamp: int = 0
 
@@ -167,7 +164,6 @@ class CharacterStateMessage extends RefCounted:
 			"is_alive": is_alive,
 			"animation_state": animation_state,
 			"velocity": [velocity.x, velocity.y, velocity.z],
-			"is_crouching": is_crouching,
 			"timestamp": timestamp,
 		}
 
@@ -184,7 +180,6 @@ class CharacterStateMessage extends RefCounted:
 		var vel = data.get("velocity", [0, 0, 0])
 		if vel is Array and vel.size() >= 3:
 			velocity = Vector3(vel[0], vel[1], vel[2])
-		is_crouching = data.get("is_crouching", false)
 		timestamp = data.get("timestamp", 0)
 
 
