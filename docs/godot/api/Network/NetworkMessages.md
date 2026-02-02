@@ -55,14 +55,16 @@ class RoundStateMessage extends RefCounted:
 
 ```gdscript
 class CharacterStateMessage extends RefCounted:
-    var character_id: int       # キャラクターID
-    var position: Vector3       # ワールド座標
-    var rotation: float         # Y軸回転（ラジアン）
-    var current_health: int     # 現在のHP
-    var is_alive: bool          # 生存フラグ
-    var animation_state: String # アニメーション状態
-    var velocity: Vector3       # 移動速度（m/s）
-    var timestamp: int          # タイムスタンプ
+    var character_id: int            # キャラクターID
+    var position: Vector3            # ワールド座標
+    var rotation: float              # Y軸回転（ラジアン）
+    var current_health: int          # 現在のHP
+    var is_alive: bool               # 生存フラグ
+    var animation_state: String      # アニメーション状態
+    var velocity: Vector3            # 移動速度（m/s）
+    var character_preset_id: String  # キャラクタープリセットID（初期同期用）
+    var weapon_id: String            # 武器ID（初期同期用）
+    var timestamp: int               # タイムスタンプ
 
     func to_dict() -> Dictionary
     func from_dict(data: Dictionary) -> void

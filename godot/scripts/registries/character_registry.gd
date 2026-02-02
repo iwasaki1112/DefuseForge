@@ -173,6 +173,7 @@ func create_character_from_preset(preset: CharacterPresetScript, position: Vecto
 	# Create GameCharacter as parent
 	var character := GameCharacterScript.new()
 	character.name = preset.id
+	character.character_preset_id = preset.id
 	character.max_health = preset.max_health
 	character.team = preset.team
 	character.position = position

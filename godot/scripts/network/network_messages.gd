@@ -151,6 +151,12 @@ class CharacterStateMessage extends RefCounted:
 	## 移動速度（m/s）
 	var velocity: Vector3 = Vector3.ZERO
 
+	## キャラクタープリセットID（初期同期用）
+	var character_preset_id: String = ""
+
+	## 武器ID（初期同期用）
+	var weapon_id: String = ""
+
 	## タイムスタンプ
 	var timestamp: int = 0
 
@@ -164,6 +170,8 @@ class CharacterStateMessage extends RefCounted:
 			"is_alive": is_alive,
 			"animation_state": animation_state,
 			"velocity": [velocity.x, velocity.y, velocity.z],
+			"character_preset_id": character_preset_id,
+			"weapon_id": weapon_id,
 			"timestamp": timestamp,
 		}
 
@@ -180,6 +188,8 @@ class CharacterStateMessage extends RefCounted:
 		var vel = data.get("velocity", [0, 0, 0])
 		if vel is Array and vel.size() >= 3:
 			velocity = Vector3(vel[0], vel[1], vel[2])
+		character_preset_id = data.get("character_preset_id", "")
+		weapon_id = data.get("weapon_id", "")
 		timestamp = data.get("timestamp", 0)
 
 

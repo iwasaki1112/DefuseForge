@@ -51,6 +51,9 @@ var network_id: int = 0
 ## 所有者のpeer_id（0はローカル/未割当）
 var owner_peer_id: int = 0
 
+## キャラクタープリセットID（ネットワーク同期用）
+var character_preset_id: String = ""
+
 # ============================================
 # State
 # ============================================
@@ -1001,6 +1004,14 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 		# 復活（通常は起こらないが念のため）
 		reset_health()
 
+	# 武器の同期（初回または変更時のみ）
+	if not state.weapon_id.is_empty():
+		var current_weapon_id := current_weapon.id if current_weapon else ""
+		if current_weapon_id != state.weapon_id:
+			var weapon_preset = WeaponRegistry.get_preset(state.weapon_id)
+			if weapon_preset:
+				equip_weapon(weapon_preset)
+
 
 ## スナップショットをバッファに追加
 func _add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) -> void:
@@ -1155,6 +1166,8 @@ func to_character_state() -> NetworkMessages.CharacterStateMessage:
 	state.current_health = int(current_health)
 	state.is_alive = is_alive
 	state.velocity = velocity
+	state.character_preset_id = character_preset_id
+	state.weapon_id = current_weapon.id if current_weapon else ""
 	state.timestamp = Time.get_ticks_msec()
 
 	# アニメーション状態を取得
