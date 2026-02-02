@@ -792,7 +792,7 @@ func is_path_context_menu_open() -> bool:
 func _on_path_context_menu_selected(item_id: String, path_data: Dictionary) -> void:
 	match item_id:
 		"wait_point":
-			_add_sync_wait_point(path_data)
+			add_sync_wait_point(path_data)
 
 
 ## コンテキストメニュー閉じ時のコールバック
@@ -800,9 +800,9 @@ func _on_path_context_menu_closed() -> void:
 	pass
 
 
-## 同期Waitポイントを追加
+## 同期Waitポイントを追加（InputControllerから直接呼び出し可能）
 ## @param path_data: パス情報（character, path_ratio, point等）
-func _add_sync_wait_point(path_data: Dictionary) -> void:
+func add_sync_wait_point(path_data: Dictionary) -> void:
 	var path_ratio: float = path_data.get("path_ratio", 0.0)
 	var anchor: Vector3 = path_data.get("point", Vector3.ZERO)
 	var character = path_data.get("character", null)

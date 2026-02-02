@@ -58,6 +58,11 @@ var _moving_path_tap_path_data: Dictionary = {}  ## タップした移動中パ�
 ## パスモード終了直後のパス延長を禁止するフラグ（フレーム番号で管理）
 var _path_mode_ended_frame: int = -1
 
+## ダブルタップ検出用（パス上でWait Point追加）
+var _last_path_tap_time: int = 0  ## 最後のパスタップ時刻（ミリ秒）
+var _last_path_tap_path_data: Dictionary = {}  ## 最後のタップのパス情報
+const DOUBLE_TAP_THRESHOLD_MS: int = 300  ## ダブルタップ判定閾値（ミリ秒）
+
 
 func setup(manager: GameManager, pan_controller: CameraPanController) -> void:
 	game_manager = manager
@@ -469,14 +474,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			# 確認済みパス長押し待機中だった場合（タップ判定）
 			if _confirmed_path_longpress_pending:
-				# 長押しにならなかった = タップ → コンテキストメニュー表示
-				_show_path_context_menu_for_confirmed_path()
+				# 長押しにならなかった = タップ → ダブルタップ検出
+				_handle_path_tap_for_confirmed_path()
 				_reset_confirmed_path_longpress()
 				return
 			# 移動中パス長押し待機中だった場合（タップ判定）
 			if _moving_path_longpress_pending:
-				# 長押しにならなかった = タップ → コンテキストメニュー表示
-				_show_path_context_menu_for_moving_path()
+				# 長押しにならなかった = タップ → ダブルタップ検出
+				_handle_path_tap_for_moving_path()
 				_reset_moving_path_longpress()
 				return
 			_rotation_target_character = null
@@ -820,15 +825,15 @@ func _handle_touch_event(event: InputEvent) -> void:
 				return
 			# 確認済みパス長押し待機中だった場合（タップ判定）
 			if _confirmed_path_longpress_pending:
-				# 長押しにならなかった = タップ → コンテキストメニュー表示
-				_show_path_context_menu_for_confirmed_path()
+				# 長押しにならなかった = タップ → ダブルタップ検出
+				_handle_path_tap_for_confirmed_path()
 				_reset_confirmed_path_longpress()
 				get_viewport().set_input_as_handled()
 				return
 			# 移動中パス長押し待機中だった場合（タップ判定）
 			if _moving_path_longpress_pending:
-				# 長押しにならなかった = タップ → コンテキストメニュー表示
-				_show_path_context_menu_for_moving_path()
+				# 長押しにならなかった = タップ → ダブルタップ検出
+				_handle_path_tap_for_moving_path()
 				_reset_moving_path_longpress()
 				get_viewport().set_input_as_handled()
 				return
@@ -1112,17 +1117,27 @@ func _reset_confirmed_path_longpress() -> void:
 	_hide_progress_ring()
 
 
-## 確認済みパス上タップ時にコンテキストメニューを表示
-func _show_path_context_menu_for_confirmed_path() -> void:
+## 確認済みパス上タップ時のダブルタップ検出
+func _handle_path_tap_for_confirmed_path() -> void:
 	if _confirmed_path_tap_path_data.is_empty():
 		return
 	if not game_manager:
 		return
 
-	game_manager.show_path_context_menu(
-		_confirmed_path_longpress_screen_pos,
-		_confirmed_path_tap_path_data
-	)
+	var current_time := Time.get_ticks_msec()
+	var time_diff := current_time - _last_path_tap_time
+	var is_same_path := _is_same_path(_last_path_tap_path_data, _confirmed_path_tap_path_data)
+
+	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
+		# ダブルタップ検出 → Wait Point追加
+		game_manager.add_sync_wait_point(_confirmed_path_tap_path_data)
+		# タップ情報をリセット
+		_last_path_tap_time = 0
+		_last_path_tap_path_data = {}
+	else:
+		# シングルタップ → タップ情報を保存（何もしない）
+		_last_path_tap_time = current_time
+		_last_path_tap_path_data = _confirmed_path_tap_path_data.duplicate()
 
 
 ## 移動中パス上でVisionモードを開始
@@ -1218,17 +1233,36 @@ func _reset_moving_path_longpress() -> void:
 		game_manager.clear_moving_path_vision_preview()
 
 
-## 移動中パス上タップ時にコンテキストメニューを表示
-func _show_path_context_menu_for_moving_path() -> void:
+## 移動中パス上タップ時のダブルタップ検出
+func _handle_path_tap_for_moving_path() -> void:
 	if _moving_path_tap_path_data.is_empty():
 		return
 	if not game_manager:
 		return
 
-	game_manager.show_path_context_menu(
-		_moving_path_longpress_screen_pos,
-		_moving_path_tap_path_data
-	)
+	var current_time := Time.get_ticks_msec()
+	var time_diff := current_time - _last_path_tap_time
+	var is_same_path := _is_same_path(_last_path_tap_path_data, _moving_path_tap_path_data)
+
+	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
+		# ダブルタップ検出 → Wait Point追加
+		game_manager.add_sync_wait_point(_moving_path_tap_path_data)
+		# タップ情報をリセット
+		_last_path_tap_time = 0
+		_last_path_tap_path_data = {}
+	else:
+		# シングルタップ → タップ情報を保存（何もしない）
+		_last_path_tap_time = current_time
+		_last_path_tap_path_data = _moving_path_tap_path_data.duplicate()
+
+
+## 2つのパスデータが同じパス上かどうかを判定
+func _is_same_path(data1: Dictionary, data2: Dictionary) -> bool:
+	if data1.is_empty() or data2.is_empty():
+		return false
+	var char1 = data1.get("character")
+	var char2 = data2.get("character")
+	return char1 == char2 and is_instance_valid(char1)
 
 
 ## パスモード終了時のハンドラ（フラグをリセット）
