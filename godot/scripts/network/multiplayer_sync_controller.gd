@@ -501,10 +501,12 @@ func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
 
 func _apply_damage_event(event: NetworkMessages.GameEventMessage) -> void:
 	var target := game_manager.find_character_by_network_id(event.target_id)
-	if target and not target.is_local():
-		var amount: float = event.data.get("amount", 0.0)
+	# ローカルキャラクターにのみダメージを適用（所有者側で処理）
+	# リモートキャラクターは攻撃側でローカルに処理済み
+	if target and target.is_local():
+		var damage: float = event.data.get("damage", 0.0)
 		var is_headshot: bool = event.data.get("is_headshot", false)
-		target.take_damage(amount, null, is_headshot)
+		target.take_damage(damage, null, is_headshot)
 
 
 func _apply_death_event(event: NetworkMessages.GameEventMessage) -> void:

@@ -61,6 +61,7 @@ func _connect_network_events() -> void:
 	_game_manager.grenade_network_event.connect(_on_grenade_network_event)
 	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
+	_game_manager.damage_network_event.connect(_on_damage_network_event)
 
 	# リモートプレイヤーからのパス確定を処理
 	if sync_controller:
@@ -134,6 +135,8 @@ func cleanup() -> void:
 		_game_manager.grenade_explode_network_event.disconnect(_on_grenade_explode_network_event)
 	if _game_manager and _game_manager.door_kick_network_event.is_connected(_on_door_kick_network_event):
 		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
+	if _game_manager and _game_manager.damage_network_event.is_connected(_on_damage_network_event):
+		_game_manager.damage_network_event.disconnect(_on_damage_network_event)
 
 	if sync_controller and sync_controller.path_confirmed_remote.is_connected(_on_path_confirmed_remote):
 		sync_controller.path_confirmed_remote.disconnect(_on_path_confirmed_remote)
@@ -200,6 +203,21 @@ func _on_door_kick_network_event(door_id: int, character_network_id: int) -> voi
 	event.data = {
 		"door_id": door_id,
 		"character_id": character_network_id,
+	}
+	sync_controller.send_game_event(event)
+
+
+func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool) -> void:
+	if not sync_controller:
+		return
+
+	var event := NetworkMessages.GameEventMessage.new()
+	event.event_type = NetworkConstants.GameEventType.DAMAGE
+	event.source_id = attacker_id
+	event.target_id = target_id
+	event.data = {
+		"damage": damage,
+		"is_headshot": is_headshot,
 	}
 	sync_controller.send_game_event(event)
 

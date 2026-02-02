@@ -30,6 +30,8 @@ signal grenade_thrown(grenade: Node3D, character: Node)
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
 ## ドアキックネットワークイベント（マルチプレイヤー同期用）
 signal door_kick_network_event(door_id: int, character_network_id: int)
+## ダメージネットワークイベント（マルチプレイヤー同期用）
+signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
 ## ラウンド管理シグナル
 signal round_started()
 signal round_ended(winner: int, reason: int)
@@ -128,6 +130,10 @@ func register_character(character: Node) -> void:
 	# 死亡シグナル接続
 	if character.has_signal("died") and not character.died.is_connected(_on_character_died):
 		character.died.connect(_on_character_died)
+
+	# ダメージシグナル接続（マルチプレイヤー同期用）
+	# combat_awarenessは_complete_character_setupで遅延セットアップされるため、call_deferredで接続
+	_connect_damage_signal.call_deferred(character)
 
 
 
@@ -1623,3 +1629,24 @@ func apply_game_state_snapshot(snapshot: SyncState.GameStateSnapshot) -> void:
 		var game_char := find_character_by_network_id(char_state.character_id)
 		if game_char:
 			game_char.apply_remote_state(char_state)
+
+
+## ダメージシグナル接続（遅延実行用）
+func _connect_damage_signal(character: Node) -> void:
+	var game_char := character as GameCharacter
+	if game_char and game_char.combat_awareness:
+		var combat := game_char.combat_awareness
+		if not combat.damage_dealt.is_connected(_on_damage_dealt):
+			combat.damage_dealt.connect(_on_damage_dealt)
+
+
+## ダメージが与えられた時のコールバック（マルチプレイヤー同期用）
+func _on_damage_dealt(attacker: Node, target: Node, damage: float, is_headshot: bool) -> void:
+	var attacker_char := attacker as GameCharacter
+	var target_char := target as GameCharacter
+	if not attacker_char or not target_char:
+		return
+	# ネットワークIDを使用してシグナルを発火
+	var attacker_id := attacker_char.network_id if attacker_char.network_id != 0 else attacker_char.get_instance_id()
+	var target_id := target_char.network_id if target_char.network_id != 0 else target_char.get_instance_id()
+	damage_network_event.emit(attacker_id, target_id, damage, is_headshot)

@@ -12,6 +12,7 @@ signal enemy_lost(enemy: Node)
 signal target_changed(new_target: Node, old_target: Node)
 signal shot_missed(target: Node, miss_offset: Vector3)
 signal critical_hit(target: Node, damage: float)  ## Emitted when a critical hit occurs
+signal damage_dealt(attacker: Node, target: Node, damage: float, is_headshot: bool)  ## ダメージを与えた時（ネットワーク同期用）
 
 # ============================================
 # Configuration
@@ -434,6 +435,8 @@ func _apply_damage_to_target() -> void:
 			final_damage *= 2.0  # Critical hit: 2x damage
 			critical_hit.emit(_current_target, final_damage)
 		_current_target.take_damage(final_damage, _character, _last_critical_hit)
+		# ネットワーク同期用シグナル
+		damage_dealt.emit(_character, _current_target, final_damage, _last_critical_hit)
 	else:
 		# Miss - calculate miss offset and emit signal
 		_last_shot_miss_offset = _calculate_miss_offset()
