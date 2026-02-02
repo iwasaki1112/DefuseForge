@@ -409,29 +409,9 @@ func handle_movement_press(screen_pos: Vector2) -> bool:
 
 ## 移動モードでのリリース処理（外部から呼び出し可能）
 func handle_movement_release(_screen_pos: Vector2) -> void:
-	print("[PathDebug] handle_movement_release: _path_longpress_pending=%s, has_path=%s, path_pts=%d" % [
-		str(_path_longpress_pending), str(has_path()), _path_points.size()
-	])
-	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
+	# 長押し待機中だった場合はリセットのみ（ダブルタップはInputController側で処理）
 	if _path_longpress_pending:
-		var screen_pos := _path_longpress_screen_pos
-		var ground_pos := _path_longpress_ground_pos
-		print("[PathDebug] handle_movement_release: longpress pending, ground_pos=%s" % str(ground_pos))
 		_reset_path_longpress()
-		# パス上タップをシグナル発火（コンテキストメニュー表示用）
-		var result := _find_closest_point_on_path(ground_pos)
-		print("[PathDebug] handle_movement_release: closest_dist=%.3f, threshold=%.3f, emitting=%s" % [
-			result.distance, path_click_threshold, str(result.distance <= path_click_threshold)
-		])
-		# 距離チェック：パス上でなければコンテキストメニューを表示しない
-		if result.distance <= path_click_threshold:
-			var path_data := {
-				"point": result.point,
-				"path_ratio": result.ratio,
-				"character": _character
-			}
-			print("[PathDebug] handle_movement_release: EMITTING path_tapped")
-			path_tapped.emit(screen_pos, path_data)
 		return
 
 	_handle_drawing_release()
@@ -440,21 +420,9 @@ func handle_movement_release(_screen_pos: Vector2) -> void:
 ## ポイントモードでのリリース処理（外部から呼び出し可能）
 ## Visionポイント等のドラッグリリース時に呼ばれる
 func handle_point_release(screen_pos: Vector2) -> bool:
-	# 長押し待機中だった場合はタップ判定 → コンテキストメニュー表示
+	# 長押し待機中だった場合はリセットのみ（ダブルタップはInputController側で処理）
 	if _path_longpress_pending:
-		var tap_screen_pos := _path_longpress_screen_pos
-		var tap_ground_pos := _path_longpress_ground_pos
 		_reset_path_longpress()
-		# パス上タップをシグナル発火（コンテキストメニュー表示用）
-		var result := _find_closest_point_on_path(tap_ground_pos)
-		# 距離チェック：パス上でなければコンテキストメニューを表示しない
-		if result.distance <= path_click_threshold:
-			var path_data := {
-				"point": result.point,
-				"path_ratio": result.ratio,
-				"character": _character
-			}
-			path_tapped.emit(tap_screen_pos, path_data)
 		return true
 
 	if _drawing_mode == DrawingMode.MOVEMENT:

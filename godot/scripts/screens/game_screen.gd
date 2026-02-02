@@ -419,17 +419,9 @@ func _on_character_marker_pressed(character: Node) -> void:
 	if not is_instance_valid(character) or not camera:
 		return
 
-	# キャラクターを選択状態にする
-	if game_manager and game_manager.selection_manager:
-		game_manager.selection_manager.add_to_selection(character)
-
 	# カメラをキャラクター位置に移動
 	var target_pos: Vector3 = character.global_position
 	_pan_camera_to_position(target_pos)
-
-	# パス描画モードを開始
-	if game_manager:
-		game_manager.start_move_mode()
 
 
 func _pan_camera_to_position(target_pos: Vector3) -> void:
