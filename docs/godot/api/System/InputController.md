@@ -4,10 +4,43 @@
 
 ゲーム画面での入力処理を統括するコントローラー。PC（マウス）とモバイル（タッチ）の両方の入力に対応し、カメラ操作、パス描画、キャラクター選択などの機能を適切に振り分ける。
 
+## アーキテクチャ
+
+Strategy + Compositionパターンを採用し、デバイス固有の入力処理をハンドラクラスに分離。
+
+```
+InputController (Node) - 共通ゲームロジック
+├── _mouse_handler: MouseInputHandler  - マウス/トラックパッド入力
+├── _touch_handler: TouchInputHandler  - タッチ入力
+└── camera_pan_controller: CameraPanController - カメラ操作
+
+InputDeviceHandler (RefCounted) - デバイスハンドラ基底クラス
+├── シグナル: press_detected, release_detected, drag_detected, tap_detected, zoom_requested
+└── 共通ヘルパー: _is_tap(), _exceeded_drag_threshold()
+
+MouseInputHandler extends InputDeviceHandler
+├── tap_threshold = 50.0 (PCは精度が高いため大きめ)
+└── 対応: InputEventMouseButton, InputEventMouseMotion, InputEventMagnifyGesture
+
+TouchInputHandler extends InputDeviceHandler
+├── tap_threshold = 20.0 (タッチは精度が低いため小さめ)
+├── ピンチズーム処理
+└── 対応: InputEventScreenTouch, InputEventScreenDrag
+```
+
 ## クラス情報
 
 - **継承**: `Node`
-- **ファイル**: `scripts/screens/input_controller.gd`
+- **ファイル**: `scripts/input/input_controller.gd`
+
+## 関連ファイル
+
+| ファイル | 説明 |
+|---------|------|
+| `scripts/input/input_controller.gd` | メインコントローラー |
+| `scripts/input/input_device_handler.gd` | デバイスハンドラ基底クラス |
+| `scripts/input/handlers/mouse_input_handler.gd` | マウス入力ハンドラ |
+| `scripts/input/handlers/touch_input_handler.gd` | タッチ入力ハンドラ |
 
 ## プロパティ
 
@@ -15,6 +48,8 @@
 |-----------|-----|------|
 | `game_manager` | `GameManager` | 操作対象のGameManager |
 | `camera_pan_controller` | `CameraPanController` | カメラ平行移動・ズームコントローラー |
+| `_mouse_handler` | `MouseInputHandler` | マウス入力ハンドラ |
+| `_touch_handler` | `TouchInputHandler` | タッチ入力ハンドラ |
 
 ## 入力処理フロー
 
@@ -65,22 +100,29 @@
     - ドラッグで視線方向を決定し、リリースで確定。
     - リアルタイムで実行中のパスにVisionポイントが挿入される。
 
+#### ダブルタップでWait Point追加
+パス上を**300ms以内に2回タップ**するとWait Point（待機ポイント）が追加される。
+
 ## PC vs モバイルの挙動
 
-### モバイル (Touch)
+### モバイル (Touch) - TouchInputHandler
+- **タップ閾値**: 20px（指の精度が低いため小さめ）
 - **タップ vs パン**: `CameraPanController` 内で閾値判定を行い、短いタップはクリック（選択）、移動量が大きい場合はパンとして扱う。
-- **Pathモード**: パス上かどうかの判定 (`_get_ground_position`) を行い、パス上なら編集、パス外ならカメラ操作となる。
+- **ピンチズーム**: 2本指のピンチ操作でカメラズーム。
+- **Pathモード**: パス上かどうかの判定を行い、パス上なら編集、パス外ならカメラ操作となる。
 
-### PC (Mouse)
-- **左クリック**: `_handle_left_click` で処理。
-- **ドラッグ**: `_handle_left_drag` で処理。
+### PC (Mouse) - MouseInputHandler
+- **タップ閾値**: 50px（マウスは精度が高いため大きめ）
+- **左クリック**: プレス/リリース検出。
+- **マウスホイール**: カメラズーム。
+- **トラックパッドジェスチャー**: `InputEventMagnifyGesture`でピンチズームをエミュレート。
 - 基本的なロジックはモバイルと同様だが、マウスイベントベースで動作する。
 
 ## メソッド
 
 ### セットアップ
 #### `setup(manager: GameManager, pan_controller: CameraPanController) -> void`
-必要な参照を設定する。
+必要な参照を設定し、入力ハンドラを初期化する。
 
 ### 入力ハンドリング
 #### `_unhandled_input(event: InputEvent) -> void`
@@ -88,15 +130,17 @@
 
 ## 内部ヘルパーメソッド
 
-- `_is_touch_active() -> bool`: タッチ操作中かどうか判定。
-- `_get_ground_position(screen_pos) -> Vector3`: スクリーン座標から地面座標（Y=0平面）へのレイキャストを行う。
 - `_get_path_drawer() -> PathDrawer`: PathDrawerインスタンスを取得。
 - `_try_start_immediate_path_mode(screen_pos) -> bool`: タップ位置のキャラクターで即時パスモードを開始できるか判定。
-- `_try_start_path_extension_from_endpoint(screen_pos) -> bool`: パス終点からの延長モードを開始できるか判定。
+- `_try_start_path_continuation_from_endpoint(screen_pos) -> bool`: パス終点からの延長モードを開始できるか判定。
 - `_is_near_path_endpoint(screen_pos) -> bool`: タップ位置がパス終点付近か判定。
 - `_try_start_confirmed_path_longpress(screen_pos) -> bool`: 確認済みパスまたは移動中パス上での長押し判定。
 - `_start_rotation_mode() -> void`: 長押し回転モードを開始。
 - `_process_rotation_drag(screen_pos) -> void`: 回転モード中のドラッグ処理。
+
+## 拡張性
+
+将来的なゲームパッド対応は、`GamepadInputHandler`クラスを追加することで実現可能。`InputDeviceHandler`を継承し、必要なシグナルを発火するだけでInputControllerとの統合が可能。
 
 ## 関連クラス
 
@@ -104,3 +148,4 @@
 - [GameManager](GameManager.md)
 - [CameraPanController](../Util/CameraPanController.md)
 - [PathDrawer](../Effect/PathDrawer.md)
+- [InputDeviceHandler](InputDeviceHandler.md)
