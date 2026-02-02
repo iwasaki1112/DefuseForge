@@ -70,7 +70,6 @@ class CharacterSnapshot extends RefCounted:
     var current_health: float     # 現在HP
     var max_health: float         # 最大HP
     var is_alive: bool            # 生存フラグ
-    var is_crouching: bool        # しゃがみ状態
     var team: int                 # チーム
     var weapon_id: String         # 装備中の武器ID
     var animation_state: String   # アニメーション状態

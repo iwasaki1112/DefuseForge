@@ -14,25 +14,22 @@
 
 ### PathConfirmMessage
 
-パス確定時に送信するメッセージ。キャラクターの移動パスと全マーカー情報を含む。
+パス確定時に送信するメッセージ。キャラクターの移動パスとマーカー情報を含む。
 
 ```gdscript
 class PathConfirmMessage extends RefCounted:
     var player_id: int              # 送信元プレイヤーID
     var character_id: int           # 対象キャラクターID
     var path: Array[Vector3]        # パス座標配列
-    var vision_points: Array[Dictionary]      # 視線マーカー
-    var run_segments: Array[Dictionary]        # Run区間
-    var clear_points: Array[Dictionary]       # Clearポイント
-    var grenade_points: Array[Dictionary]     # グレネードポイント
-    var door_points: Array[Dictionary]        # ドアポイント
-    var wait_points: Array[Dictionary]        # Waitポイント
-    var smoke_grenade_points: Array[Dictionary] # スモークグレネードポイント
+    var vision_points: Array[Dictionary]   # 視線マーカー { path_ratio, anchor, target_point }
+    var wait_points: Array[Dictionary]     # Waitポイント { path_ratio, anchor, wait_duration }
     var timestamp: int              # タイムスタンプ（msec）
 
     func to_dict() -> Dictionary
     func from_dict(data: Dictionary) -> void
 ```
+
+> **Note**: `run_segments`, `clear_points`, `grenade_points`, `door_points`, `smoke_grenade_points` はPathFollowingControllerが対応可能だが、現在PathServiceでUIからの追加がサポートされていないため、同期対象外。将来UIが実装されればPathConfirmMessageに追加予定。
 
 ### RoundStateMessage
 
@@ -65,7 +62,6 @@ class CharacterStateMessage extends RefCounted:
     var is_alive: bool          # 生存フラグ
     var animation_state: String # アニメーション状態
     var velocity: Vector3       # 移動速度（m/s）
-    var is_crouching: bool      # しゃがみ状態
     var timestamp: int          # タイムスタンプ
 
     func to_dict() -> Dictionary

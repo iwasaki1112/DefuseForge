@@ -142,17 +142,16 @@ UI操作を経ずに、直接指定座標への移動を実行する（ドアキ
     character_id: {
         "character": Node,
         "path": Array[Vector3],
-        "vision_points": Array[Dictionary],
-        "run_segments": Array[Dictionary],
-        "clear_points": Array[Dictionary],
-        "grenade_points_data": Array[Dictionary],
-        # ... 他マーカーデータ
+        "vision_points": Array[Dictionary],   # { path_ratio, anchor, target_point }
+        "wait_points": Array[Dictionary],     # { path_ratio, anchor, wait_duration }
         "path_mesh": MeshInstance3D,
-        "vision_points": Array[MeshInstance3D],
-        # ... 他ポイントメッシュ
+        "vision_points_meshes": Array[MeshInstance3D],
+        "wait_points_meshes": Array[MeshInstance3D],
     }
 }
 ```
+
+> **Note**: `run_segments`, `clear_points`, `grenade_points`, `door_points`, `smoke_grenade_points` はPathFollowingControllerが対応可能だが、現在PathServiceでUIからの追加がサポートされていないため、pending_pathsには含まれない。将来UIが実装されれば追加予定。
 
 ## 関連クラス
 

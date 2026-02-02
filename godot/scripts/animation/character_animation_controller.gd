@@ -47,6 +47,7 @@ var _is_dead := false
 var _is_door_kicking := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
+var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 
 # Animation visual speeds at 1x playback (1-second/30-frame animations at 30fps)
 # Different directions have different stride lengths
@@ -386,13 +387,14 @@ func is_door_kicking() -> bool:
 
 
 ## Get current animation state for network synchronization
-## Returns encoded state: "is_moving,0,blend_x,blend_y"
-## Example: "1,0,-50,100" = moving, blend(-0.5, 1.0)
+## Returns encoded state: "is_moving,is_firing,blend_x,blend_y"
+## Example: "1,1,-50,100" = moving, firing, blend(-0.5, 1.0)
 func get_animation_state() -> String:
 	var is_moving := 1 if _movement_blend > 0.1 else 0
+	var is_firing := 1 if _fire_cooldown > 0 else 0
 	var blend_x := int(_input_dir.x * 100)
 	var blend_y := int(_input_dir.y * 100)
-	return "%d,0,%d,%d" % [is_moving, blend_x, blend_y]
+	return "%d,%d,%d,%d" % [is_moving, is_firing, blend_x, blend_y]
 
 
 ## Apply animation state from network (for remote characters)
@@ -406,8 +408,18 @@ func apply_animation_state(state: String, delta: float) -> void:
 		return
 
 	var is_moving := parts[0].to_int() == 1
+	var is_firing := parts[1].to_int() == 1
 	var blend_x := parts[2].to_int() / 100.0
 	var blend_y := parts[3].to_int() / 100.0
+
+	# リモートキャラクター用のcooldown減算（update_animation()が呼ばれないため）
+	_fire_cooldown -= delta
+
+	# リモートキャラクターの射撃エフェクト再生
+	# is_firing=true が続く間、_fire_cooldownが0になったタイミングでfire()を呼び出す
+	if is_firing and _fire_cooldown <= 0:
+		fire()
+	_remote_last_fire_state = is_firing
 
 	# Smooth interpolation for blend values
 	var target_movement := 1.0 if is_moving else 0.0
