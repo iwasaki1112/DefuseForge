@@ -82,8 +82,10 @@ const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
 # ========================================================
 ## パスの線幅（視覚的な太さ）
 const PATH_LINE_WIDTH: float = 0.15
-## パスのクリック判定エリア（線幅と統一）
+## パスのクリック判定エリア（PC向け、線幅と統一）
 const PATH_CLICK_THRESHOLD: float = 0.15
+## パスのクリック判定エリア（モバイル向け、タッチ精度を考慮して大きめ）
+const PATH_CLICK_THRESHOLD_MOBILE: float = 0.5
 
 # ========================================================
 # Round Settings

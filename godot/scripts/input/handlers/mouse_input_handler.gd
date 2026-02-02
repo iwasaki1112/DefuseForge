@@ -40,6 +40,11 @@ func record_touch_time() -> void:
 	_last_touch_time = Time.get_ticks_msec()
 
 
+## タッチ直後かどうかをチェック（エミュレートマウスイベントを無視するため）
+func is_recent_touch() -> bool:
+	return Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS
+
+
 ## 入力イベントを処理
 ## @param event: 入力イベント
 ## @return: イベントを消費した場合true

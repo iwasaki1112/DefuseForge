@@ -401,8 +401,9 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 ## 指定位置近くにある移動中パス上でVisionポイント配置モードを開始
 ## @param screen_pos: 画面座標
 ## @param ground_pos: 地面座標（既に計算済みの場合）
+## @param threshold: クリック判定閾値（デフォルトはPC向け）
 ## @return: Visionポイント配置モードを開始した場合の情報Dictionary、失敗時は空
-func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> Dictionary:
+func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
 	if not path_execution_manager or not camera:
 		return {}
 
@@ -418,7 +419,7 @@ func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vect
 		target_ground_pos = intersect as Vector3
 
 	# 移動中パス上の点を検索（先端は除外 - 先端はパス延長用）
-	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
+	var path_result := path_execution_manager.find_moving_path_point_at_position(target_ground_pos, threshold)
 	if path_result.is_empty():
 		return {}
 

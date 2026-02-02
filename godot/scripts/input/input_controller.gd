@@ -212,16 +212,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			str(event.pressed), str(game_manager.is_path_mode())
 		])
 
-	# タッチ入力優先：タッチ中またはピンチ中はマウスイベントを無視
-	if _touch_handler.is_touch_active() or _touch_handler.is_pinching():
-		if event is InputEventMouseButton or event is InputEventMouseMotion:
-			get_viewport().set_input_as_handled()
-			return
-
-	# タッチ入力の処理
+	# タッチ入力の処理（最優先 - エミュレートマウスイベントより先に処理）
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		_handle_touch_event(event)
 		return
+
+	# タッチ入力優先：タッチ中、ピンチ中、またはタッチ直後はマウスイベントを無視
+	# （iOSではタッチがマウスイベントとしてもエミュレートされるため）
+	if _touch_handler.is_touch_active() or _touch_handler.is_pinching() or _mouse_handler.is_recent_touch():
+		if event is InputEventMouseButton or event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
+			return
 
 	# マウス/トラックパッド入力の処理
 	if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventMagnifyGesture:
@@ -413,7 +414,7 @@ func _handle_path_mode_mouse_press(position: Vector2) -> void:
 		if drawing_started:
 			_path_endpoint_extension_pending = false
 		else:
-			if _try_start_confirmed_path_longpress(position):
+			if _try_start_confirmed_path_longpress(position, false):  # マウス入力
 				_path_endpoint_extension_pending = false
 			else:
 				_path_endpoint_extension_pending = true
@@ -447,13 +448,15 @@ func _handle_touch_event(event: InputEvent) -> void:
 	if not camera_pan_controller:
 		return
 
+	# タッチ時刻を記録（エミュレートマウスイベント対策 - 最初に記録）
+	_mouse_handler.record_touch_time()
+
+	# タッチカウントを先に取得（リリース前の値が必要）
+	var touch_count_before = _touch_handler.get_touch_count()
+
 	# タッチ開始/終了でフラグを更新
 	if event is InputEventScreenTouch:
 		_touch_handler.handle_input(event)
-		# タッチ時刻を記録（エミュレートマウスイベント対策）
-		_mouse_handler.record_touch_time()
-
-	var touch_count_before = _touch_handler.get_touch_count()
 
 	# CameraPanControllerにもタッチ追跡を通知（ピンチズーム用）
 	camera_pan_controller.track_touch(event)
@@ -621,7 +624,7 @@ func _handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer) -
 		if drawing_started:
 			_path_endpoint_extension_pending = false
 		else:
-			if _try_start_confirmed_path_longpress(position):
+			if _try_start_confirmed_path_longpress(position, true):  # タッチ入力
 				_path_endpoint_extension_pending = false
 			else:
 				_path_endpoint_extension_pending = true
@@ -677,7 +680,7 @@ func _handle_normal_mode_press(position: Vector2, is_touch: bool) -> void:
 		return
 
 	# 確認済みパス上の長押しを検出
-	if _try_start_confirmed_path_longpress(position):
+	if _try_start_confirmed_path_longpress(position, is_touch):
 		get_viewport().set_input_as_handled()
 		return
 
@@ -688,6 +691,7 @@ func _handle_normal_mode_press(position: Vector2, is_touch: bool) -> void:
 
 ## 非パスモードのリリース処理
 func _handle_normal_mode_release(position: Vector2, is_touch: bool) -> void:
+	print("[PointDebug] _handle_normal_mode_release: is_touch=%s, _confirmed_path_longpress_pending=%s" % [str(is_touch), str(_confirmed_path_longpress_pending)])
 	_left_button_pressed = false
 
 	if _is_rotation_mode:
@@ -699,11 +703,13 @@ func _handle_normal_mode_release(position: Vector2, is_touch: bool) -> void:
 		return
 
 	if _confirmed_path_longpress_pending:
+		print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_confirmed_path")
 		_handle_path_tap_for_confirmed_path()
 		_reset_confirmed_path_longpress()
 		return
 
 	if _moving_path_longpress_pending:
+		print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_moving_path")
 		_handle_path_tap_for_moving_path()
 		_reset_moving_path_longpress()
 		return
@@ -1033,8 +1039,8 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 
 #region 確認済みパス上長押し処理
 
-func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
-	print("[PointDebug] _try_start_confirmed_path_longpress: called")
+func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = false) -> bool:
+	print("[PointDebug] _try_start_confirmed_path_longpress: called, is_touch=%s" % str(is_touch))
 	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
 		print("[PointDebug] _try_start_confirmed_path_longpress: no manager")
 		return false
@@ -1049,8 +1055,11 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 	var ground_pos: Vector3 = intersect as Vector3
 	print("[PointDebug] _try_start_confirmed_path_longpress: ground_pos=%s" % [ground_pos])
 
-	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
-	print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, GameConstants.PATH_CLICK_THRESHOLD])
+	# モバイルではタッチ精度が低いため、より大きな閾値を使用
+	var threshold := GameConstants.PATH_CLICK_THRESHOLD_MOBILE if is_touch else GameConstants.PATH_CLICK_THRESHOLD
+
+	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, threshold)
+	print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, threshold])
 	if not result.is_empty():
 		print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for confirmed path")
 		_confirmed_path_longpress_pending = true
@@ -1060,7 +1069,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2) -> bool:
 		_confirmed_path_tap_path_data = result
 		return true
 
-	var moving_result := game_manager.try_start_vision_point_on_moving_path(screen_pos, ground_pos)
+	var moving_result := game_manager.try_start_vision_point_on_moving_path(screen_pos, ground_pos, threshold)
 	print("[PointDebug] _try_start_confirmed_path_longpress: moving_result=%s" % [moving_result])
 	if not moving_result.is_empty():
 		print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for moving path")
@@ -1101,7 +1110,9 @@ func _reset_confirmed_path_longpress() -> void:
 
 
 func _handle_path_tap_for_confirmed_path() -> void:
+	print("[PointDebug] _handle_path_tap_for_confirmed_path: called")
 	if _confirmed_path_tap_path_data.is_empty():
+		print("[PointDebug] _handle_path_tap_for_confirmed_path: data is empty")
 		return
 	if not game_manager:
 		return
@@ -1109,12 +1120,15 @@ func _handle_path_tap_for_confirmed_path() -> void:
 	var current_time := Time.get_ticks_msec()
 	var time_diff := current_time - _last_path_tap_time
 	var is_same_path := _is_same_path(_last_path_tap_path_data, _confirmed_path_tap_path_data)
+	print("[PointDebug] _handle_path_tap_for_confirmed_path: time_diff=%d, is_same_path=%s, threshold=%d" % [time_diff, str(is_same_path), DOUBLE_TAP_THRESHOLD_MS])
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
+		print("[PointDebug] _handle_path_tap_for_confirmed_path: DOUBLE TAP DETECTED - adding wait point")
 		game_manager.add_sync_wait_point(_confirmed_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
+		print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, saving for next")
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _confirmed_path_tap_path_data.duplicate()
 
