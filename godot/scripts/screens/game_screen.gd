@@ -282,8 +282,10 @@ func _setup_camera_for_player() -> void:
 
 	if player_character:
 		var target_pos := player_character.global_position
-		var camera_offset := Vector3(0, 25, 5.5)
+		var camera_offset := Vector3(0, 25, 9.0)
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
+		print("[Camera] Initial setup: character_pos=%s, camera_offset=%s, camera_pos=%s" % [target_pos, camera_offset, camera.global_position])
+		#_create_debug_axis(target_pos)  # デバッグ用軸表示（必要時にコメント解除）
 
 
 ## ========================================
@@ -428,7 +430,9 @@ func _pan_camera_to_position(target_pos: Vector3) -> void:
 	if not camera:
 		return
 
-	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 5.0)
+	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 9.0)
+
+	print("[Camera] Pan to character: target_pos=%s, new_camera_pos=%s, current_camera_pos=%s" % [target_pos, new_camera_pos, camera.global_position])
 
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
@@ -558,3 +562,47 @@ func _unhandled_input(event: InputEvent) -> void:
 			_vision_debug_enabled = not _vision_debug_enabled
 			game_manager.set_vision_debug_draw(_vision_debug_enabled)
 			print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
+
+
+## デバッグ用の軸を作成（X=赤, Y=緑, Z=青）
+func _create_debug_axis(position: Vector3) -> void:
+	var axis_length := 3.0
+	var axis_thickness := 0.05
+
+	# X軸（赤）
+	var x_axis := MeshInstance3D.new()
+	var x_mesh := BoxMesh.new()
+	x_mesh.size = Vector3(axis_length, axis_thickness, axis_thickness)
+	x_axis.mesh = x_mesh
+	var x_mat := StandardMaterial3D.new()
+	x_mat.albedo_color = Color.RED
+	x_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	x_axis.material_override = x_mat
+	x_axis.position = position + Vector3(axis_length / 2, 0.1, 0)
+	add_child(x_axis)
+
+	# Y軸（緑）- 上方向
+	var y_axis := MeshInstance3D.new()
+	var y_mesh := BoxMesh.new()
+	y_mesh.size = Vector3(axis_thickness, axis_length, axis_thickness)
+	y_axis.mesh = y_mesh
+	var y_mat := StandardMaterial3D.new()
+	y_mat.albedo_color = Color.GREEN
+	y_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	y_axis.material_override = y_mat
+	y_axis.position = position + Vector3(0, axis_length / 2 + 0.1, 0)
+	add_child(y_axis)
+
+	# Z軸（青）
+	var z_axis := MeshInstance3D.new()
+	var z_mesh := BoxMesh.new()
+	z_mesh.size = Vector3(axis_thickness, axis_thickness, axis_length)
+	z_axis.mesh = z_mesh
+	var z_mat := StandardMaterial3D.new()
+	z_mat.albedo_color = Color.BLUE
+	z_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	z_axis.material_override = z_mat
+	z_axis.position = position + Vector3(0, 0.1, axis_length / 2)
+	add_child(z_axis)
+
+	print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)
