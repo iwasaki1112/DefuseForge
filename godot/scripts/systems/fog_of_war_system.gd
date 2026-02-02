@@ -9,19 +9,19 @@ extends Node3D
 enum Quality { LOW, MEDIUM, HIGH }
 const QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 256,
-		"shadow_filter": Light2D.SHADOW_FILTER_PCF5,
-		"shadow_smooth": 0.5,
-		"update_hz": 30
-	},
-	Quality.MEDIUM: {
-		"resolution": 256,
-		"shadow_filter": Light2D.SHADOW_FILTER_PCF5,
+		"resolution": 512,
+		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
 		"shadow_smooth": 1.0,
 		"update_hz": 30
 	},
-	Quality.HIGH: {
+	Quality.MEDIUM: {
 		"resolution": 512,
+		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
+		"shadow_smooth": 1.5,
+		"update_hz": 30
+	},
+	Quality.HIGH: {
+		"resolution": 1024,
 		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
 		"shadow_smooth": 2.0,
 		"update_hz": 60

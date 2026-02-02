@@ -1,8 +1,9 @@
 class_name MapBase
 extends Node3D
 ## マップ基底クラス
-## 壁/ドアのコリジョン設定とFoWオクルーダー抽出の共通処理
+## 壁/ドア/床のコリジョン設定とFoWオクルーダー抽出の共通処理
 
+const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
 
 ## マップ名（ログ用、サブクラスでオーバーライド）
@@ -19,18 +20,24 @@ func _setup_collisions(node: Node) -> void:
 	if node is StaticBody3D:
 		var node_name_lower := node.name.to_lower()
 
-		# ノード自体が wall_ または door_ プレフィックスを持つ場合
-		if node_name_lower.begins_with("wall_") or node_name_lower.begins_with("door_"):
+		# ノード自体のプレフィックスをチェック
+		if node_name_lower.begins_with("ground_"):
+			# 床オブジェクトはレイヤー1（床コリジョン）
+			node.collision_layer = GROUND_COLLISION_LAYER
+		elif node_name_lower.begins_with("wall_") or node_name_lower.begins_with("door_"):
+			# 壁/ドアオブジェクトはレイヤー2（壁コリジョン）
 			node.collision_layer = WALL_COLLISION_LAYER
 			if node_name_lower.begins_with("door_"):
 				node.add_to_group(GameConstants.GROUP_DOORS)
 				print("[%s] Added door to group: %s" % [_map_name, node.name])
 		else:
-			# 親ノードが wall_ または door_ プレフィックスを持つ場合
+			# 親ノードのプレフィックスをチェック
 			var parent: Node = node.get_parent()
 			if parent:
 				var parent_name_lower := parent.name.to_lower()
-				if parent_name_lower.begins_with("wall_") or parent_name_lower.begins_with("door_"):
+				if parent_name_lower.begins_with("ground_"):
+					node.collision_layer = GROUND_COLLISION_LAYER
+				elif parent_name_lower.begins_with("wall_") or parent_name_lower.begins_with("door_"):
 					node.collision_layer = WALL_COLLISION_LAYER
 				if parent_name_lower.begins_with("door_"):
 					parent.add_to_group(GameConstants.GROUP_DOORS)

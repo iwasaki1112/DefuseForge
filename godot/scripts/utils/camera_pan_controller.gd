@@ -15,7 +15,7 @@ var mobile_pan_speed: float = 0.02
 ## ズーム設定
 var zoom_speed: float = 1.0
 var zoom_min: float = 12.0
-var zoom_max: float = 20.0
+var zoom_max: float = 25.0
 var zoom_smoothing: float = 10.0
 
 ## ドラッグ判定の閾値（ピクセル）

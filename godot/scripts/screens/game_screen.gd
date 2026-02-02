@@ -81,9 +81,9 @@ func _initialize_game() -> void:
 	_setup_status_ui()
 	_update_team_display()
 	_setup_money()
+	_setup_camera_for_player()
 	_setup_camera_pan()
 	_setup_input_controller()
-	_setup_camera_for_player()
 
 	# 視界システムを初期化（FoW ON）
 	game_manager.set_vision_enabled(true)
@@ -282,7 +282,7 @@ func _setup_camera_for_player() -> void:
 
 	if player_character:
 		var target_pos := player_character.global_position
-		var camera_offset := Vector3(0, 15, 5.5)
+		var camera_offset := Vector3(0, 25, 5.5)
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
 
 
