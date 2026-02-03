@@ -747,6 +747,15 @@ func _process_wall_slide(user_pos: Vector3) -> Dictionary:
 			new_pos.y = ground_plane_height
 			# 壁法線を更新（壁が曲がっている場合に対応）
 			_wall_slide_normal = nearby_wall_normal
+	else:
+		# 壁がない = 穴がある
+		# ユーザーが穴の方向（壁の向こう側）へ向かおうとしているかチェック
+		var toward_gap = user_move_dir.dot(-_wall_slide_normal)
+		if toward_gap > 0.2:
+			# 穴を通過しようとしている -> 壁沿いモード終了
+			result.should_exit = true
+			result.corner_hit = false
+			return result
 
 	result.new_point = new_pos
 	return result
