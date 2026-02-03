@@ -561,7 +561,14 @@ func process(delta: float) -> void:
 	if _smoothed_move_direction.length_squared() < 0.001:
 		_smoothed_move_direction = move_dir
 	else:
-		_smoothed_move_direction = _smoothed_move_direction.lerp(move_dir, direction_smoothing * delta)
+		# 急カーブ検出: 現在方向と目標方向の角度が大きいほど追従を強化
+		var angle_dot = _smoothed_move_direction.dot(move_dir)
+		# angle_dot: 1.0=同方向, 0.0=直角, -1.0=逆方向
+		# 急カーブ（90度以上）では追従を3倍に強化
+		var sharp_turn_factor = 1.0
+		if angle_dot < 0.5:  # 約60度以上の曲がり
+			sharp_turn_factor = lerpf(1.0, 3.0, clampf((0.5 - angle_dot) / 1.5, 0.0, 1.0))
+		_smoothed_move_direction = _smoothed_move_direction.lerp(move_dir, direction_smoothing * sharp_turn_factor * delta)
 		if _smoothed_move_direction.length_squared() > 0.001:
 			_smoothed_move_direction = _smoothed_move_direction.normalized()
 
