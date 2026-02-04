@@ -5,7 +5,7 @@ render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
 // Reference: https://github.com/My0Cents/Fog_Of_War
 
 // Fog appearance
-uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.85);
+uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.3);
 
 // Visibility texture (generated from Image.blend_rect())
 uniform sampler2D visibility_texture : filter_linear, hint_default_black;

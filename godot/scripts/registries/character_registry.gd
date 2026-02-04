@@ -153,16 +153,16 @@ func get_counter_terrorists() -> Array:
 
 ## Create a GameCharacter instance from preset
 ## Returns null if preset not found or model_scene not set
-func create_character(preset_id: String, position: Vector3 = Vector3.ZERO) -> Node:
+func create_character(preset_id: String, spawn_position: Vector3 = Vector3.ZERO) -> Node:
 	var preset := get_preset(preset_id)
 	if not preset:
 		push_error("CharacterRegistry: Preset not found: %s" % preset_id)
 		return null
 
-	return create_character_from_preset(preset, position)
+	return create_character_from_preset(preset, spawn_position)
 
 ## Create a GameCharacter instance from preset object
-func create_character_from_preset(preset: CharacterPresetScript, position: Vector3 = Vector3.ZERO) -> Node:
+func create_character_from_preset(preset: CharacterPresetScript, spawn_position: Vector3 = Vector3.ZERO) -> Node:
 	if not preset.model_scene:
 		push_error("CharacterRegistry: Preset has no model_scene: %s" % preset.id)
 		return null
@@ -176,7 +176,7 @@ func create_character_from_preset(preset: CharacterPresetScript, position: Vecto
 	character.character_preset_id = preset.id
 	character.max_health = preset.max_health
 	character.team = preset.team
-	character.position = position
+	character.position = spawn_position
 
 	# Add model as child
 	model.name = "CharacterModel"

@@ -647,7 +647,7 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 			continue
 
 		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
-		var character: Node = controller.get_character() if controller.has_method("get_character") else null
+		var character = controller.get_character() if controller.has_method("get_character") else null
 		if not is_instance_valid(character):
 			continue
 
@@ -774,7 +774,7 @@ func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float
 			continue
 
 		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
-		var character: Node = controller.get_character() if controller.has_method("get_character") else null
+		var character = controller.get_character() if controller.has_method("get_character") else null
 		if not is_instance_valid(character):
 			continue
 

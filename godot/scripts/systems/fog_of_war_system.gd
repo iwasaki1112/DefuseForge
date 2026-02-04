@@ -34,7 +34,7 @@ const QUALITY_SETTINGS := {
 @export var fog_height: float = 0.02
 
 @export_group("Visual Settings")
-@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.85)
+@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.3)
 @export var quality: Quality = Quality.LOW
 
 ## Internal settings (auto-configured from quality)
@@ -60,11 +60,6 @@ var _time_since_update: float = 0.0
 
 ## Shader reference
 const FOW_SHADER_PATH := "res://shaders/fow.gdshader"
-const WALL_FOW_SHADER_PATH := "res://shaders/wall_fow.gdshader"
-
-## 壁マテリアル管理
-var _wall_materials: Array[ShaderMaterial] = []
-var _wall_shader: Shader = null
 
 
 func _ready() -> void:
@@ -174,11 +169,6 @@ func _process(delta: float) -> void:
 			var vis_tex := _visibility_viewport.get_texture()
 			_fog_material.set_shader_parameter("visibility_texture", vis_tex)
 
-			# 壁マテリアルにも視界テクスチャを更新
-			for wall_mat in _wall_materials:
-				if is_instance_valid(wall_mat):
-					wall_mat.set_shader_parameter("visibility_texture", vis_tex)
-
 		# 可視性キャッシュをダーティにマーク（次の判定で再取得）
 		_mark_visibility_cache_dirty()
 
@@ -211,77 +201,6 @@ func _sync_vision_lights() -> void:
 							vision_light.set_peripheral_distance(vision.peripheral_distance)
 
 				vision_light.sync_transform()
-
-
-## 壁メッシュにFoWシェーダーを適用
-func _apply_wall_fow_shader(map_node: Node3D) -> void:
-	# シェーダーをロード
-	if not _wall_shader:
-		_wall_shader = load(WALL_FOW_SHADER_PATH)
-		if not _wall_shader:
-			push_error("FogOfWarSystem: Failed to load wall shader from " + WALL_FOW_SHADER_PATH)
-			return
-
-	# 既存の壁マテリアルをクリア
-	_wall_materials.clear()
-
-	# 壁メッシュを探索してシェーダーを適用
-	_apply_wall_shader_recursive(map_node)
-
-	print("[FOW] Applied FoW shader to ", _wall_materials.size(), " wall materials")
-
-
-## 再帰的に壁メッシュを探索
-func _apply_wall_shader_recursive(node: Node) -> void:
-	var node_name_lower := node.name.to_lower()
-	var parent: Node = node.get_parent()
-	var parent_name_lower := parent.name.to_lower() if parent else ""
-
-	# 壁/ドアの判定
-	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
-	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
-
-	if (is_wall or is_door) and node is MeshInstance3D:
-		var mesh_instance := node as MeshInstance3D
-		_apply_fow_material_to_mesh(mesh_instance)
-
-	# 子ノードを再帰的に処理
-	for child in node.get_children():
-		_apply_wall_shader_recursive(child)
-
-
-## メッシュにFoWマテリアルを適用
-func _apply_fow_material_to_mesh(mesh_instance: MeshInstance3D) -> void:
-	var mesh := mesh_instance.mesh
-	if not mesh:
-		return
-
-	# 各サーフェスにシェーダーマテリアルを適用
-	for i in range(mesh.get_surface_count()):
-		var original_mat := mesh_instance.get_surface_override_material(i)
-		if not original_mat:
-			original_mat = mesh.surface_get_material(i)
-
-		# 新しいシェーダーマテリアルを作成
-		var fow_mat := ShaderMaterial.new()
-		fow_mat.shader = _wall_shader
-
-		# 元のマテリアルからプロパティをコピー
-		if original_mat is StandardMaterial3D:
-			var std_mat := original_mat as StandardMaterial3D
-			fow_mat.set_shader_parameter("albedo_color", std_mat.albedo_color)
-			if std_mat.albedo_texture:
-				fow_mat.set_shader_parameter("albedo_texture", std_mat.albedo_texture)
-
-		# マップ座標を設定
-		var map_min := Vector2(-map_size.x / 2, -map_size.y / 2)
-		var map_max := Vector2(map_size.x / 2, map_size.y / 2)
-		fow_mat.set_shader_parameter("map_min", map_min)
-		fow_mat.set_shader_parameter("map_max", map_max)
-
-		# メッシュに適用
-		mesh_instance.set_surface_override_material(i, fow_mat)
-		_wall_materials.append(fow_mat)
 
 
 # ============================================
@@ -367,8 +286,50 @@ func unregister_vision(vision) -> void:
 func extract_occluders_from_map(map_node: Node3D) -> void:
 	if _occluder_manager:
 		_occluder_manager.extract_occluders_from_map(map_node)
-	# 壁にFoWシェーダーを適用
-	_apply_wall_fow_shader(map_node)
+	# 壁を常に明るく表示
+	_make_walls_always_lit(map_node)
+
+
+## 壁メッシュを常に明るく表示（ライティングの影響を受けない）
+func _make_walls_always_lit(map_node: Node3D) -> void:
+	_make_walls_always_lit_recursive(map_node)
+
+
+## 再帰的に壁メッシュを探索してunshadedに設定
+func _make_walls_always_lit_recursive(node: Node) -> void:
+	var node_name_lower := node.name.to_lower()
+	var parent: Node = node.get_parent()
+	var parent_name_lower := parent.name.to_lower() if parent else ""
+
+	# 壁/ドアの判定
+	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
+	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
+
+	if (is_wall or is_door) and node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		_set_mesh_unshaded(mesh_instance)
+
+	# 子ノードを再帰的に処理
+	for child in node.get_children():
+		_make_walls_always_lit_recursive(child)
+
+
+## メッシュをunshadedに設定（常に明るく表示）
+func _set_mesh_unshaded(mesh_instance: MeshInstance3D) -> void:
+	var mesh := mesh_instance.mesh
+	if not mesh:
+		return
+
+	for i in range(mesh.get_surface_count()):
+		var original_mat := mesh_instance.get_surface_override_material(i)
+		if not original_mat:
+			original_mat = mesh.surface_get_material(i)
+
+		# StandardMaterial3Dの場合、unshadedモードに設定
+		if original_mat is StandardMaterial3D:
+			var new_mat := original_mat.duplicate() as StandardMaterial3D
+			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mesh_instance.set_surface_override_material(i, new_mat)
 
 
 ## ドアオクルーダーの有効/無効を切り替え
@@ -550,12 +511,6 @@ func set_map_size(new_size: Vector2) -> void:
 		_fog_material.set_shader_parameter("map_min", map_min)
 		_fog_material.set_shader_parameter("map_max", map_max)
 		print("[FOW] Shader params updated - map_min: ", map_min, ", map_max: ", map_max)
-
-	# Update wall materials
-	for wall_mat in _wall_materials:
-		if is_instance_valid(wall_mat):
-			wall_mat.set_shader_parameter("map_min", map_min)
-			wall_mat.set_shader_parameter("map_max", map_max)
 
 	# Update occluder manager
 	if _occluder_manager:
