@@ -50,7 +50,7 @@ func extract_occluders_from_map(map_node: Node3D) -> void:
 		push_error("OccluderManager: setup() must be called before extract_occluders_from_map()")
 		return
 
-	print("[FOW] OccluderManager.extract_occluders_from_map - map: ", map_node.name, ", map_size: ", _map_size, ", scale_factor: ", _scale_factor)
+	if Debug.enabled: print("[FOW] OccluderManager.extract_occluders_from_map - map: ", map_node.name, ", map_size: ", _map_size, ", scale_factor: ", _scale_factor)
 
 	# 既存のオクルーダーをクリア
 	_clear_wall_occluders()
@@ -58,7 +58,7 @@ func extract_occluders_from_map(map_node: Node3D) -> void:
 	# マップを再帰的に探索
 	_extract_occluders_recursive(map_node)
 
-	print("[FOW] Extracted wall occluders: ", _wall_occluders.size(), ", door occluders: ", _door_occluders.size())
+	if Debug.enabled: print("[FOW] Extracted wall occluders: ", _wall_occluders.size(), ", door occluders: ", _door_occluders.size())
 	occluder_updated.emit()
 
 

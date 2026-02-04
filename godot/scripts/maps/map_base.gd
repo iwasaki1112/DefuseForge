@@ -29,7 +29,7 @@ func _setup_collisions(node: Node) -> void:
 			node.collision_layer = WALL_COLLISION_LAYER
 			if node_name_lower.begins_with("door_"):
 				node.add_to_group(GameConstants.GROUP_DOORS)
-				print("[%s] Added door to group: %s" % [_map_name, node.name])
+				if Debug.enabled: print("[%s] Added door to group: %s" % [_map_name, node.name])
 		else:
 			# 親ノードのプレフィックスをチェック
 			var parent: Node = node.get_parent()
@@ -41,7 +41,7 @@ func _setup_collisions(node: Node) -> void:
 					node.collision_layer = WALL_COLLISION_LAYER
 				if parent_name_lower.begins_with("door_"):
 					parent.add_to_group(GameConstants.GROUP_DOORS)
-					print("[%s] Added door to group: %s" % [_map_name, parent.name])
+					if Debug.enabled: print("[%s] Added door to group: %s" % [_map_name, parent.name])
 
 	for child in node.get_children():
 		_setup_collisions(child)
@@ -51,19 +51,19 @@ func _setup_collisions(node: Node) -> void:
 func _notify_fow_system() -> void:
 	# VisionServiceを探す（GameScreen経由）
 	var game_screen := get_tree().get_first_node_in_group("game_screen")
-	print("[%s] _notify_fow_system - game_screen: %s" % [_map_name, game_screen != null])
+	if Debug.enabled: print("[%s] _notify_fow_system - game_screen: %s" % [_map_name, game_screen != null])
 	if game_screen and game_screen.has_method("get_vision_service"):
 		var vision_service = game_screen.get_vision_service()
-		print("[%s] vision_service: %s, fow_system: %s" % [_map_name, vision_service != null, vision_service.fog_of_war_system != null if vision_service else false])
+		if Debug.enabled: print("[%s] vision_service: %s, fow_system: %s" % [_map_name, vision_service != null, vision_service.fog_of_war_system != null if vision_service else false])
 		if vision_service and vision_service.fog_of_war_system:
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
-			print("[%s] Extracted occluders for FoW system" % _map_name)
+			if Debug.enabled: print("[%s] Extracted occluders for FoW system" % _map_name)
 		else:
 			# FoWシステムが準備できていない場合は遅延呼び出し
-			print("[%s] FoW system not ready, scheduling deferred call" % _map_name)
+			if Debug.enabled: print("[%s] FoW system not ready, scheduling deferred call" % _map_name)
 			call_deferred("_notify_fow_system_deferred")
 	else:
-		print("[%s] game_screen not ready, scheduling deferred call" % _map_name)
+		if Debug.enabled: print("[%s] game_screen not ready, scheduling deferred call" % _map_name)
 		call_deferred("_notify_fow_system_deferred")
 
 
@@ -76,4 +76,4 @@ func _notify_fow_system_deferred() -> void:
 		var vision_service = game_screen.get_vision_service()
 		if vision_service and vision_service.fog_of_war_system:
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
-			print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)
+			if Debug.enabled: print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)

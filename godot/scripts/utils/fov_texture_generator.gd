@@ -18,11 +18,11 @@ static var _texture_cache: Dictionary = {}
 static func generate_fov_texture(fov_degrees: float, size: int = DEFAULT_SIZE, falloff: float = 0.3) -> ImageTexture:
 	# キャッシュキー
 	var cache_key := "%d_%d_%.2f" % [int(fov_degrees), size, falloff]
-	print("[FOV_TEX] generate_fov_texture called: fov=", fov_degrees, ", size=", size, ", falloff=", falloff, ", cache_key=", cache_key)
+	if Debug.enabled: print("[FOV_TEX] generate_fov_texture called: fov=", fov_degrees, ", size=", size, ", falloff=", falloff, ", cache_key=", cache_key)
 	if _texture_cache.has(cache_key):
-		print("[FOV_TEX] Using cached texture for: ", cache_key)
+		if Debug.enabled: print("[FOV_TEX] Using cached texture for: ", cache_key)
 		return _texture_cache[cache_key]
-	print("[FOV_TEX] Generating new texture for: ", cache_key)
+	if Debug.enabled: print("[FOV_TEX] Generating new texture for: ", cache_key)
 
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size / 2.0, size / 2.0)

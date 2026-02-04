@@ -63,7 +63,7 @@ const FOW_SHADER_PATH := "res://shaders/fow.gdshader"
 
 
 func _ready() -> void:
-	print("[FOW] FogOfWarSystem._ready() - map_size: ", map_size)
+	if Debug.enabled: print("[FOW] FogOfWarSystem._ready() - map_size: ", map_size)
 	# テクスチャキャッシュをクリア（テクスチャ形式変更時の対策）
 	FovTextureGenerator.clear_cache()
 	_apply_quality_settings()
@@ -110,7 +110,7 @@ func _setup_visibility_viewport() -> void:
 	bg.light_mask = 1
 	_visibility_viewport.add_child(bg)
 
-	print("[FOW] Viewport setup - size: ", _visibility_viewport.size)
+	if Debug.enabled: print("[FOW] Viewport setup - size: ", _visibility_viewport.size)
 
 
 func _setup_fog_mesh() -> void:
@@ -142,9 +142,9 @@ func _setup_fog_mesh() -> void:
 	add_child(_fog_mesh)
 	# グローバル位置は親がシーンツリーに追加された後でないと取得できない
 	_fog_mesh.ready.connect(func():
-		print("[FOW] FogMesh global_position: ", _fog_mesh.global_position, ", FoWSystem global_position: ", global_position)
+		if Debug.enabled: print("[FOW] FogMesh global_position: ", _fog_mesh.global_position, ", FoWSystem global_position: ", global_position)
 	)
-	print("[FOW] FogMesh local position: ", _fog_mesh.position, ", size: ", map_size)
+	if Debug.enabled: print("[FOW] FogMesh local position: ", _fog_mesh.position, ", size: ", map_size)
 
 
 func _setup_occluder_manager() -> void:
@@ -497,7 +497,7 @@ func _mark_visibility_cache_dirty() -> void:
 
 ## Dynamically change map size
 func set_map_size(new_size: Vector2) -> void:
-	print("[FOW] set_map_size called: ", new_size, " (was: ", map_size, ")")
+	if Debug.enabled: print("[FOW] set_map_size called: ", new_size, " (was: ", map_size, ")")
 	map_size = new_size
 
 	# Update fog mesh size
@@ -510,7 +510,7 @@ func set_map_size(new_size: Vector2) -> void:
 	if _fog_material:
 		_fog_material.set_shader_parameter("map_min", map_min)
 		_fog_material.set_shader_parameter("map_max", map_max)
-		print("[FOW] Shader params updated - map_min: ", map_min, ", map_max: ", map_max)
+		if Debug.enabled: print("[FOW] Shader params updated - map_min: ", map_min, ", map_max: ", map_max)
 
 	# Update occluder manager
 	if _occluder_manager:

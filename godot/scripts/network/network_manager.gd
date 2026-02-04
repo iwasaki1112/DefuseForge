@@ -93,7 +93,7 @@ func _process(delta: float) -> void:
 		WebSocketPeer.STATE_CLOSED:
 			var code := _ws.get_close_code()
 			var reason := _ws.get_close_reason()
-			print("NetworkManager: WebSocket closed (code: %d, reason: %s)" % [code, reason])
+			if Debug.enabled: print("NetworkManager: WebSocket closed (code: %d, reason: %s)" % [code, reason])
 			_handle_disconnect()
 
 
@@ -119,7 +119,7 @@ func _connect_to_relay() -> bool:
 		push_error("NetworkManager: Failed to connect to relay: %s" % error_string(error))
 		return false
 
-	print("NetworkManager: Connecting to relay server: %s" % url)
+	if Debug.enabled: print("NetworkManager: Connecting to relay server: %s" % url)
 	return true
 
 
@@ -151,7 +151,7 @@ func create_room(room_name: String = "Room", player_name: String = "Host") -> bo
 		"team": GameCharacter.Team.COUNTER_TERRORIST
 	}
 
-	print("NetworkManager: Creating room: %s" % room_name)
+	if Debug.enabled: print("NetworkManager: Creating room: %s" % room_name)
 	return true
 
 var _pending_action: Dictionary = {}
@@ -198,7 +198,7 @@ func join_room(room_id: String, player_name: String = "Client") -> bool:
 		"team": GameCharacter.Team.NONE
 	}
 
-	print("NetworkManager: Joining room: %s" % room_id)
+	if Debug.enabled: print("NetworkManager: Joining room: %s" % room_id)
 	return true
 
 
@@ -218,7 +218,7 @@ func disconnect_from_game() -> void:
 	_pending_action = {}
 
 	connection_state_changed.emit(_state)
-	print("NetworkManager: Disconnected")
+	if Debug.enabled: print("NetworkManager: Disconnected")
 
 
 func _handle_disconnect() -> void:
@@ -401,7 +401,7 @@ func _process_single_message(json_string: String) -> void:
 		"HEARTBEAT_ACK":
 			pass  # ハートビート応答
 		_:
-			print("NetworkManager: Unknown message type: %s" % msg_type)
+			if Debug.enabled: print("NetworkManager: Unknown message type: %s" % msg_type)
 
 
 ## WebSocket接続完了時の処理（_processから呼び出し）
@@ -412,7 +412,7 @@ func _check_pending_action() -> void:
 	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 
-	print("NetworkManager: Sending pending action: %s" % _pending_action.get("type", "unknown"))
+	if Debug.enabled: print("NetworkManager: Sending pending action: %s" % _pending_action.get("type", "unknown"))
 	_send_to_server(_pending_action)
 
 	# リトライ用に保存
@@ -433,12 +433,12 @@ func _check_pending_action_retry(delta: float) -> void:
 		_pending_action_retries += 1
 
 		if _pending_action_retries > PENDING_ACTION_MAX_RETRIES:
-			print("NetworkManager: Action failed after %d retries: %s" % [PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
+			if Debug.enabled: print("NetworkManager: Action failed after %d retries: %s" % [PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
 			_pending_action_sent = {}
 			_handle_disconnect()
 			return
 
-		print("NetworkManager: Retrying action (%d/%d): %s" % [_pending_action_retries, PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
+		if Debug.enabled: print("NetworkManager: Retrying action (%d/%d): %s" % [_pending_action_retries, PENDING_ACTION_MAX_RETRIES, _pending_action_sent.get("type", "unknown")])
 		_send_to_server(_pending_action_sent)
 		_pending_action_timer = 0.0
 
@@ -469,7 +469,7 @@ func _on_room_created(payload: Dictionary) -> void:
 	connection_state_changed.emit(_state)
 	room_created.emit(_room_id)
 	players_updated.emit()
-	print("NetworkManager: Room created - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+	if Debug.enabled: print("NetworkManager: Room created - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
 
 
 func _on_room_list(payload: Dictionary) -> void:
@@ -507,7 +507,7 @@ func _on_room_joined(payload: Dictionary) -> void:
 	connection_state_changed.emit(_state)
 	room_joined.emit(_room_id)
 	players_updated.emit()
-	print("NetworkManager: Joined room - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+	if Debug.enabled: print("NetworkManager: Joined room - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
 
 
 func _on_peer_connected_relay(payload: Dictionary) -> void:
@@ -528,7 +528,7 @@ func _on_peer_connected_relay(payload: Dictionary) -> void:
 
 	peer_connected.emit(pid)
 	players_updated.emit()
-	print("NetworkManager: Peer connected - ID: %d, Name: %s" % [pid, pname])
+	if Debug.enabled: print("NetworkManager: Peer connected - ID: %d, Name: %s" % [pid, pname])
 
 
 func _on_peer_disconnected_relay(payload: Dictionary) -> void:
@@ -536,7 +536,7 @@ func _on_peer_disconnected_relay(payload: Dictionary) -> void:
 	_players.erase(pid)
 	peer_disconnected.emit(pid)
 	players_updated.emit()
-	print("NetworkManager: Peer disconnected - ID: %d" % pid)
+	if Debug.enabled: print("NetworkManager: Peer disconnected - ID: %d" % pid)
 
 
 func _on_relay_message(payload: Dictionary) -> void:

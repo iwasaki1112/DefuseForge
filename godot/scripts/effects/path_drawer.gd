@@ -149,7 +149,7 @@ func _get_handler_for_mode(mode: DrawingMode):
 
 #region シグナルハンドラ
 func _on_vision_point_added(data: Dictionary) -> void:
-	print("[PointDebug] _on_vision_point_added: longpress_mode=%s, auto_confirm=%s" % [
+	if Debug.enabled: print("[PointDebug] _on_vision_point_added: longpress_mode=%s, auto_confirm=%s" % [
 		str(_external_vision_mode), str(_auto_confirm_after_vision)
 	])
 	_point_history.append(PointType.VISION)
@@ -157,7 +157,7 @@ func _on_vision_point_added(data: Dictionary) -> void:
 
 	# 長押しからVisionモードに入った場合、ポイント配置後にMOVEMENTモードに戻る
 	if _external_vision_mode:
-		print("[PointDebug] _on_vision_point_added: returning to MOVEMENT mode (longpress)")
+		if Debug.enabled: print("[PointDebug] _on_vision_point_added: returning to MOVEMENT mode (longpress)")
 		_external_vision_mode = false
 		_drawing_mode = DrawingMode.MOVEMENT
 		mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -165,7 +165,7 @@ func _on_vision_point_added(data: Dictionary) -> void:
 	# 自動確定フラグが立っている場合（確認済みパスからの長押し）は確定をリクエスト
 	# _external_vision_modeとは独立してチェック（_unhandled_inputで先にリセットされる場合があるため）
 	if _auto_confirm_after_vision:
-		print("[PointDebug] _on_vision_point_added: auto_confirm_requested")
+		if Debug.enabled: print("[PointDebug] _on_vision_point_added: auto_confirm_requested")
 		_auto_confirm_after_vision = false
 		_drawing_mode = DrawingMode.MOVEMENT
 		mode_changed.emit(int(DrawingMode.MOVEMENT))
@@ -844,7 +844,7 @@ func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
 	if result and _path_points.size() > 0:
 		var endpoint = _path_points[_path_points.size() - 1]
 		var dist = ground_pos.distance_to(endpoint)
-		print("[PointDebug] _is_near_path_endpoint: true (dist=%.2f, threshold=%.2f)" % [dist, path_endpoint_threshold])
+		if Debug.enabled: print("[PointDebug] _is_near_path_endpoint: true (dist=%.2f, threshold=%.2f)" % [dist, path_endpoint_threshold])
 	return result
 
 
@@ -861,7 +861,7 @@ func get_drawing_mode() -> DrawingMode:
 
 
 func start_movement_mode() -> void:
-	print("[PointDebug] PathDrawer.start_movement_mode")
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_movement_mode")
 	_drawing_mode = DrawingMode.MOVEMENT
 	_path_points.clear()
 	_external_vision_mode = false
@@ -870,9 +870,9 @@ func start_movement_mode() -> void:
 
 func start_vision_mode() -> bool:
 	if _path_points.size() < 2:
-		print("[PointDebug] PathDrawer.start_vision_mode: failed (path_points=%d)" % _path_points.size())
+		if Debug.enabled: print("[PointDebug] PathDrawer.start_vision_mode: failed (path_points=%d)" % _path_points.size())
 		return false
-	print("[PointDebug] PathDrawer.start_vision_mode: success")
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_vision_mode: success")
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
 	_external_vision_mode = false  # UIから開始した場合は自動復帰しない
@@ -883,9 +883,9 @@ func start_vision_mode() -> bool:
 
 func start_wait_mode() -> bool:
 	if _path_points.size() < 2:
-		print("[PointDebug] PathDrawer.start_wait_mode: failed (path_points=%d)" % _path_points.size())
+		if Debug.enabled: print("[PointDebug] PathDrawer.start_wait_mode: failed (path_points=%d)" % _path_points.size())
 		return false
-	print("[PointDebug] PathDrawer.start_wait_mode: success")
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_wait_mode: success")
 	_drawing_mode = DrawingMode.WAIT_POINT
 	_is_enabled = true
 	_wait_handler.reset_state()
@@ -1093,7 +1093,7 @@ func is_point_on_path(ground_pos: Vector3) -> bool:
 		return false
 	var result = _find_closest_point_on_path(ground_pos)
 	var distance_to_current: float = result.distance
-	print("[PointDebug] is_point_on_path: distance_to_current=%.3f, threshold=%.3f" % [distance_to_current, path_click_threshold])
+	if Debug.enabled: print("[PointDebug] is_point_on_path: distance_to_current=%.3f, threshold=%.3f" % [distance_to_current, path_click_threshold])
 	if distance_to_current > path_click_threshold:
 		return false
 
@@ -1103,13 +1103,13 @@ func is_point_on_path(ground_pos: Vector3) -> bool:
 		# 確定済みパスをチェック
 		if _path_execution_manager.has_method("get_all_pending_path_distances"):
 			var distances: Dictionary = _path_execution_manager.get_all_pending_path_distances(ground_pos)
-			print("[PointDebug] is_point_on_path: checking %d other paths, current_char_id=%d" % [distances.size(), current_char_id])
+			if Debug.enabled: print("[PointDebug] is_point_on_path: checking %d other paths, current_char_id=%d" % [distances.size(), current_char_id])
 			for char_id in distances:
 				if char_id != current_char_id:
 					var other_distance: float = distances[char_id]
-					print("[PointDebug] is_point_on_path: char_id=%d, other_distance=%.3f" % [char_id, other_distance])
+					if Debug.enabled: print("[PointDebug] is_point_on_path: char_id=%d, other_distance=%.3f" % [char_id, other_distance])
 					if other_distance < distance_to_current:
-						print("[PointDebug] is_point_on_path: REJECTED - other path is closer (current=%.3f, other=%.3f)" % [distance_to_current, other_distance])
+						if Debug.enabled: print("[PointDebug] is_point_on_path: REJECTED - other path is closer (current=%.3f, other=%.3f)" % [distance_to_current, other_distance])
 						return false
 
 	return true

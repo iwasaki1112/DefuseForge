@@ -91,7 +91,7 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 			_game_manager.fog_of_war_system.set_map_size(preset.map_size)
 			# マップサイズ変更後にオクルーダーを再抽出
 			_game_manager.fog_of_war_system.extract_occluders_from_map(map_instance)
-			print("[MapManager] Re-extracted occluders with correct map_size: ", preset.map_size)
+			if Debug.enabled: print("[MapManager] Re-extracted occluders with correct map_size: ", preset.map_size)
 
 	# ロード完了シグナル
 	map_loaded.emit(map_id, map_instance)

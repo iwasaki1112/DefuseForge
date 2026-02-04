@@ -17,7 +17,7 @@ var _temp_mesh: MeshInstance3D = null
 func _handle_press(screen_pos: Vector2) -> bool:
 	# 既に操作中の場合は無視（重複イベント対策）
 	if _is_active:
-		print("[PointDebug] Vision._handle_press: already active, ignoring")
+		if Debug.enabled: print("[PointDebug] Vision._handle_press: already active, ignoring")
 		return true
 
 	var click_result = _check_path_click(screen_pos)
@@ -28,14 +28,14 @@ func _handle_press(screen_pos: Vector2) -> bool:
 	_current_ratio = click_result.ratio
 	_drag_start_pos = screen_pos
 	_is_active = true
-	print("[PointDebug] Vision._handle_press: started at ratio=%.3f" % _current_ratio)
+	if Debug.enabled: print("[PointDebug] Vision._handle_press: started at ratio=%.3f" % _current_ratio)
 	return true
 
 
 ## 解放処理
 func _handle_release(screen_pos: Vector2) -> bool:
 	if not _is_active:
-		print("[PointDebug] Vision._handle_release: not active, ignoring")
+		if Debug.enabled: print("[PointDebug] Vision._handle_release: not active, ignoring")
 		return false
 
 	var drag_dist = screen_pos.distance_to(_drag_start_pos)
@@ -43,12 +43,12 @@ func _handle_release(screen_pos: Vector2) -> bool:
 	if not _is_tap(screen_pos, MIN_DRAG_DISTANCE):
 		var ground_pos = _get_ground_position(screen_pos)
 		if ground_pos != null:
-			print("[PointDebug] Vision._handle_release: creating point, drag=%.1f" % drag_dist)
+			if Debug.enabled: print("[PointDebug] Vision._handle_release: creating point, drag=%.1f" % drag_dist)
 			_finish_vision_point(ground_pos)
 		else:
-			print("[PointDebug] Vision._handle_release: no ground pos")
+			if Debug.enabled: print("[PointDebug] Vision._handle_release: no ground pos")
 	else:
-		print("[PointDebug] Vision._handle_release: tap detected (drag=%.1f < %.1f), cancelled" % [drag_dist, MIN_DRAG_DISTANCE])
+		if Debug.enabled: print("[PointDebug] Vision._handle_release: tap detected (drag=%.1f < %.1f), cancelled" % [drag_dist, MIN_DRAG_DISTANCE])
 		_remove_temp_point()
 
 	_is_active = false

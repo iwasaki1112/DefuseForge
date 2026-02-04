@@ -68,25 +68,25 @@ func setup(
 
 func start_move_mode() -> bool:
 	if DEBUG_PATH:
-		print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
+		if Debug.enabled: print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
 			str(selection_manager != null),
 			str(selection_manager.has_selection() if selection_manager else "N/A")
 		])
 	if not selection_manager or not selection_manager.has_selection():
 		if DEBUG_PATH:
-			print("[PointDebug] start_move_mode: returning false - no selection")
+			if Debug.enabled: print("[PointDebug] start_move_mode: returning false - no selection")
 		return false
 
 	if not path_drawer or not path_mode_controller:
 		push_warning("[PathService] PathDrawer or PathModeController not set")
 		if DEBUG_PATH:
-			print("[PointDebug] start_move_mode: returning false - no drawer or controller")
+			if Debug.enabled: print("[PointDebug] start_move_mode: returning false - no drawer or controller")
 		return false
 
 	# プライマリキャラクターの色を取得
 	var primary = selection_manager.primary_character
 	if DEBUG_PATH:
-		print("[PointDebug] start_move_mode: primary=%s" % (primary.name if primary else "null"))
+		if Debug.enabled: print("[PointDebug] start_move_mode: primary=%s" % (primary.name if primary else "null"))
 	var char_color = CharacterColorManager.get_character_color(primary)
 
 	# 既存の確定済みパスがある場合、削除して新規パスとして開始
@@ -156,7 +156,7 @@ func start_path_mode_with_existing_path(character: Node, path: Array, char_color
 
 	if path.size() < 2:
 		if DEBUG_PATH:
-			print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
+			if Debug.enabled: print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
 		return false
 
 	# 継続モードを有効化（既存パスを維持）

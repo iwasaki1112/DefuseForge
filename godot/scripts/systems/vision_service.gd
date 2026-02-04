@@ -19,20 +19,20 @@ var _registered_visions: Array = []  # 登録済みVisionComponentの追跡
 
 
 func setup(map_size: Vector2, vision_enabled: bool) -> void:
-	print("[FOW] setup - map_size: ", map_size, ", vision_enabled: ", vision_enabled)
+	if Debug.enabled: print("[FOW] setup - map_size: ", map_size, ", vision_enabled: ", vision_enabled)
 	is_vision_enabled = vision_enabled
 	_setup_fog_of_war(map_size)
 	_setup_enemy_visibility_system()
 	set_enabled(vision_enabled)
-	print("[FOW] fog_of_war_system: ", fog_of_war_system)
+	if Debug.enabled: print("[FOW] fog_of_war_system: ", fog_of_war_system)
 
 
 func set_enabled(enabled: bool) -> void:
-	print("[FOW] VisionService.set_enabled: ", enabled)
+	if Debug.enabled: print("[FOW] VisionService.set_enabled: ", enabled)
 	is_vision_enabled = enabled
 	if fog_of_war_system:
 		fog_of_war_system.set_fog_visible(enabled)
-		print("[FOW] set_fog_visible called with: ", enabled)
+		if Debug.enabled: print("[FOW] set_fog_visible called with: ", enabled)
 	if enemy_visibility_system:
 		if enabled:
 			enemy_visibility_system.enable_full()
@@ -59,21 +59,21 @@ func set_smoke_area_manager(manager: SmokeAreaManager) -> void:
 ## キャラクターのVisionComponentを登録
 func register_character(character: Node) -> void:
 	if not character:
-		print("[FOW] register_character: character is null")
+		if Debug.enabled: print("[FOW] register_character: character is null")
 		return
 
-	print("[FOW] register_character: ", character.name)
+	if Debug.enabled: print("[FOW] register_character: ", character.name)
 
 	var game_char = character as GameCharacter
 	if game_char and game_char.vision:
-		print("[FOW] Character has vision component")
+		if Debug.enabled: print("[FOW] Character has vision component")
 		# FoWに登録（Light2D方式ではキャラクターを直接登録）
 		var is_friendly := PlayerState.is_friendly(character)
-		print("[FOW] is_friendly: ", is_friendly, ", fog_of_war_system: ", fog_of_war_system)
+		if Debug.enabled: print("[FOW] is_friendly: ", is_friendly, ", fog_of_war_system: ", fog_of_war_system)
 		if fog_of_war_system and is_friendly:
 			fog_of_war_system.register_character(character)
 		else:
-			print("[FOW] Skipping FoW registration - not friendly or no FoW system")
+			if Debug.enabled: print("[FOW] Skipping FoW registration - not friendly or no FoW system")
 
 		# 追跡リストに追加
 		if game_char.vision not in _registered_visions:
@@ -137,14 +137,14 @@ func is_debug_draw_enabled() -> bool:
 
 
 func _setup_fog_of_war(map_size: Vector2) -> void:
-	print("[FOW] Creating FogOfWarSystem with map_size: ", map_size)
+	if Debug.enabled: print("[FOW] Creating FogOfWarSystem with map_size: ", map_size)
 	fog_of_war_system = Node3D.new()
 	fog_of_war_system.set_script(FogOfWarSystemScript)
 	fog_of_war_system.name = "FogOfWarSystem"
 	fog_of_war_system.map_size = map_size
-	print("[FOW] FogOfWarSystem.map_size after set: ", fog_of_war_system.map_size)
+	if Debug.enabled: print("[FOW] FogOfWarSystem.map_size after set: ", fog_of_war_system.map_size)
 	add_child(fog_of_war_system)
-	print("[FOW] FogOfWarSystem added to tree, map_size: ", fog_of_war_system.map_size)
+	if Debug.enabled: print("[FOW] FogOfWarSystem added to tree, map_size: ", fog_of_war_system.map_size)
 
 
 func _setup_enemy_visibility_system() -> void:

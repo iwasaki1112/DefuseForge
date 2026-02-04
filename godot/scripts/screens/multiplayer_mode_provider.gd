@@ -127,7 +127,7 @@ func cleanup() -> void:
 			network_manager.message_received.disconnect(_on_network_message)
 		# WebSocket切断
 		network_manager.disconnect_from_game()
-		print("[MultiplayerModeProvider] WebSocket disconnected")
+		if Debug.enabled: print("[MultiplayerModeProvider] WebSocket disconnected")
 
 	if _game_manager and _game_manager.grenade_network_event.is_connected(_on_grenade_network_event):
 		_game_manager.grenade_network_event.disconnect(_on_grenade_network_event)
@@ -147,7 +147,7 @@ func cleanup() -> void:
 ## ========================================
 
 func _on_peer_disconnected(peer_id: int) -> void:
-	print("[MultiplayerModeProvider] Peer %d disconnected" % peer_id)
+	if Debug.enabled: print("[MultiplayerModeProvider] Peer %d disconnected" % peer_id)
 
 
 func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void:
@@ -234,7 +234,7 @@ func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathCon
 	# キャラクターを検索
 	var character := _game_manager.find_character_by_network_id(path_msg.character_id)
 	if not character:
-		print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
+		if Debug.enabled: print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
 		return
 
 	# リモートプレイヤーのパスを登録

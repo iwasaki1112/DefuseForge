@@ -29,15 +29,15 @@ func setup(
 	is_vision_enabled = vision_enabled
 	default_vision_fov = vision_fov
 	default_vision_range = vision_range
-	print("[FOW] setup - fog_of_war_system: ", fog_of_war_system, ", is_vision_enabled: ", is_vision_enabled)
+	if Debug.enabled: print("[FOW] setup - fog_of_war_system: ", fog_of_war_system, ", is_vision_enabled: ", is_vision_enabled)
 
 
 func setup_character(character: Node) -> void:
 	if not character:
-		print("[FOW] setup_character: character is null")
+		if Debug.enabled: print("[FOW] setup_character: character is null")
 		return
 
-	print("[FOW] setup_character: ", character.name)
+	if Debug.enabled: print("[FOW] setup_character: ", character.name)
 
 	# Setup vision component
 	var vision = character.setup_vision(default_vision_fov, default_vision_range)
@@ -59,7 +59,7 @@ func _complete_character_setup(character: Node) -> void:
 
 	# FogOfWarSystemに登録（味方キャラクターのみ）
 	if fog_of_war_system and PlayerState.is_friendly(character):
-		print("[FOW] Registering to FoW: ", character.name)
+		if Debug.enabled: print("[FOW] Registering to FoW: ", character.name)
 		fog_of_war_system.register_character(character)
 
 	# Combat awarenessセットアップ

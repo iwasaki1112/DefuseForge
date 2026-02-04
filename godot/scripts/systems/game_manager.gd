@@ -380,19 +380,19 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 	# 確定済みパスのデータを取得
 	var existing_path: Array = path_execution_manager.get_pending_path_for_character(character)
 	if existing_path.size() < 2:
-		print("[PointDebug] try_start_vision_point_on_confirmed_path: existing path too short (%d)" % existing_path.size())
+		if Debug.enabled: print("[PointDebug] try_start_vision_point_on_confirmed_path: existing path too short (%d)" % existing_path.size())
 		return false
 
 	# 既存パスを使用してパスモードを開始
 	if path_service:
 		if not path_service.start_path_mode_with_existing_path(character, existing_path, char_color):
-			print("[PointDebug] try_start_vision_point_on_confirmed_path: failed to start path mode")
+			if Debug.enabled: print("[PointDebug] try_start_vision_point_on_confirmed_path: failed to start path mode")
 			return false
 
 	# Visionモードを開始して、長押し位置をアンカーとして設定
 	if path_drawer:
 		if not path_drawer.start_vision_mode():
-			print("[PointDebug] try_start_vision_point_on_confirmed_path: start_vision_mode failed")
+			if Debug.enabled: print("[PointDebug] try_start_vision_point_on_confirmed_path: start_vision_mode failed")
 			return false
 		# 公開APIを使用してアンカー位置でVisionモードを開始
 		path_drawer.start_vision_mode_with_anchor(
@@ -565,7 +565,7 @@ func cancel_all_path_following() -> void:
 
 ## 視界/FoWの有効化切り替え
 func set_vision_enabled(enabled: bool) -> void:
-	print("[FOW] GameManager.set_vision_enabled: ", enabled)
+	if Debug.enabled: print("[FOW] GameManager.set_vision_enabled: ", enabled)
 	is_vision_enabled = enabled
 	if character_setup_service:
 		character_setup_service.is_vision_enabled = enabled
@@ -1136,7 +1136,7 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 
 
 func _on_path_drawer_auto_confirm_requested() -> void:
-	print("[PointDebug] _on_path_drawer_auto_confirm_requested: calling confirm_path")
+	if Debug.enabled: print("[PointDebug] _on_path_drawer_auto_confirm_requested: calling confirm_path")
 	confirm_path()
 
 
@@ -1320,7 +1320,7 @@ func _on_grenade_exploded(position: Vector3, grenade_id: int, is_smoke: bool) ->
 
 ## ネットワークからグレネードをスポーン（リモート用）- 速度を直接使用
 func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
-	print("[GRENADE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	if Debug.enabled: print("[GRENADE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
 	var grenade = GrenadeScene.instantiate() as Grenade
 	if not grenade:
 		return
@@ -1336,13 +1336,13 @@ func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_i
 		_active_grenades[grenade_id] = grenade
 
 	grenade.throw_with_velocity(start_pos, velocity)
-	print("[GRENADE SPAWNED] vel=", velocity)
+	if Debug.enabled: print("[GRENADE SPAWNED] vel=", velocity)
 	grenade_thrown.emit(grenade, null)
 
 
 ## ネットワークからスモークグレネードをスポーン（リモート用）- 速度を直接使用
 func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
-	print("[SMOKE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	if Debug.enabled: print("[SMOKE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
 	var smoke_grenade = SmokeGrenadeScene.instantiate() as SmokeGrenade
 	if not smoke_grenade:
 		return
@@ -1364,7 +1364,7 @@ func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, gre
 
 ## ネットワークからの爆発イベントを処理（リモートグレネード用）
 func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, _is_smoke: bool) -> void:
-	print("[GRENADE EXPLODE] id=", grenade_id, " pos=", position)
+	if Debug.enabled: print("[GRENADE EXPLODE] id=", grenade_id, " pos=", position)
 	if not _active_grenades.has(grenade_id):
 		push_warning("[GameManager] Grenade not found for explosion: ", grenade_id)
 		return

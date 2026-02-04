@@ -23,7 +23,7 @@ var _preview_point: MeshInstance3D = null
 func _handle_press(screen_pos: Vector2) -> bool:
 	# 既に操作中の場合は無視（重複イベント対策）
 	if _is_active:
-		print("[PointDebug] Wait._handle_press: already active, ignoring")
+		if Debug.enabled: print("[PointDebug] Wait._handle_press: already active, ignoring")
 		return true
 
 	var click_result = _check_path_click(screen_pos)
@@ -35,7 +35,7 @@ func _handle_press(screen_pos: Vector2) -> bool:
 	_press_start_time = Time.get_ticks_msec() / 1000.0
 	_is_active = true
 
-	print("[PointDebug] Wait._handle_press: started at ratio=%.3f" % _current_ratio)
+	if Debug.enabled: print("[PointDebug] Wait._handle_press: started at ratio=%.3f" % _current_ratio)
 	_create_preview_point()
 	return true
 
@@ -43,7 +43,7 @@ func _handle_press(screen_pos: Vector2) -> bool:
 ## 解放処理
 func _handle_release(_screen_pos: Vector2) -> bool:
 	if not _is_active:
-		print("[PointDebug] Wait._handle_release: not active, ignoring")
+		if Debug.enabled: print("[PointDebug] Wait._handle_release: not active, ignoring")
 		return false
 
 	var current_time = Time.get_ticks_msec() / 1000.0
@@ -52,20 +52,20 @@ func _handle_release(_screen_pos: Vector2) -> bool:
 
 	# 最小押下時間未満はタップとみなしキャンセル
 	if duration < MIN_PRESS_DURATION:
-		print("[PointDebug] Wait._handle_release: tap (%.2fs < %.2fs), cancelled" % [duration, MIN_PRESS_DURATION])
+		if Debug.enabled: print("[PointDebug] Wait._handle_release: tap (%.2fs < %.2fs), cancelled" % [duration, MIN_PRESS_DURATION])
 		_remove_preview_point()
 		return true
 
 	# 最小待機時間未満はキャンセル
 	if duration < WAIT_MIN_DURATION:
-		print("[PointDebug] Wait._handle_release: too short (%.2fs), cancelled" % duration)
+		if Debug.enabled: print("[PointDebug] Wait._handle_release: too short (%.2fs), cancelled" % duration)
 		_remove_preview_point()
 		return true
 
 	# 最大時間で制限
 	duration = clampf(duration, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 
-	print("[PointDebug] Wait._handle_release: creating point, duration=%.2fs" % duration)
+	if Debug.enabled: print("[PointDebug] Wait._handle_release: creating point, duration=%.2fs" % duration)
 	_remove_preview_point()
 
 	# Waitポイントデータを作成

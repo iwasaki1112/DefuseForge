@@ -208,7 +208,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# デバッグログ
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		print("[PointDebug] _unhandled_input: mouse_left pressed=%s, is_path_mode=%s" % [
+		if Debug.enabled: print("[PointDebug] _unhandled_input: mouse_left pressed=%s, is_path_mode=%s" % [
 			str(event.pressed), str(game_manager.is_path_mode())
 		])
 
@@ -281,12 +281,12 @@ func _handle_mouse_event_path_mode(event: InputEvent) -> void:
 
 	# パス先端延長の待機中にドラッグが開始された場合
 	if event is InputEventMouseMotion and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
-		print("[PointDebug] path_mode: starting path extension from pending (mouse motion)")
+		if Debug.enabled: print("[PointDebug] path_mode: starting path extension from pending (mouse motion)")
 		game_manager.confirm_path()
 		if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 			_path_endpoint_extension_started = true
 			_path_endpoint_extension_pending = false
-			print("[PointDebug] path_mode: ext_started=true (from mouse motion)")
+			if Debug.enabled: print("[PointDebug] path_mode: ext_started=true (from mouse motion)")
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -315,7 +315,7 @@ func _handle_mouse_event_path_mode(event: InputEvent) -> void:
 
 ## パスモード中のマウスリリース処理
 func _handle_path_mode_mouse_release(position: Vector2) -> void:
-	print("[PointDebug] path_mode mouse release: is_path_mode=%s, ext_started=%s, ext_pending=%s, longpress_pending=%s" % [
+	if Debug.enabled: print("[PointDebug] path_mode mouse release: is_path_mode=%s, ext_started=%s, ext_pending=%s, longpress_pending=%s" % [
 		str(game_manager.is_path_mode()), str(_path_endpoint_extension_started), str(_path_endpoint_extension_pending), str(_confirmed_path_longpress_pending)
 	])
 	_left_button_pressed = false
@@ -343,14 +343,14 @@ func _handle_path_mode_mouse_release(position: Vector2) -> void:
 
 	# パス先端継続中だった場合
 	if _path_endpoint_extension_started:
-		print("[PointDebug] path_mode mouse release: confirming path (ext_started=true)")
+		if Debug.enabled: print("[PointDebug] path_mode mouse release: confirming path (ext_started=true)")
 		var drawer = _get_path_drawer()
 		if drawer:
 			drawer._handle_drawing_release()
 		game_manager.confirm_path()
 	# 実行中キャラクターに新しいパスを描いた場合
 	elif _immediate_path_drawing_started and _auto_execute_character:
-		print("[PointDebug] path_mode mouse release: auto-confirming path for executing character")
+		if Debug.enabled: print("[PointDebug] path_mode mouse release: auto-confirming path for executing character")
 		var drawer = _get_path_drawer()
 		if drawer:
 			drawer._handle_drawing_release()
@@ -382,12 +382,12 @@ func _handle_path_mode_mouse_press(position: Vector2) -> void:
 	_long_press_timer = 0.0
 
 	var clicked = game_manager.raycast_character(position)
-	print("[PointDebug] path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
+	if Debug.enabled: print("[PointDebug] path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
 		var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
-		print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 
 		if not is_enemy:
 			if is_following:
@@ -395,14 +395,14 @@ func _handle_path_mode_mouse_press(position: Vector2) -> void:
 				_auto_execute_character = clicked
 
 			_rotation_target_character = clicked
-			print("[PointDebug] path_mode click: confirming current path and selecting %s" % clicked.name)
+			if Debug.enabled: print("[PointDebug] path_mode click: confirming current path and selecting %s" % clicked.name)
 			game_manager.confirm_path()
-			print("[PointDebug] path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
+			if Debug.enabled: print("[PointDebug] path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
 			game_manager.selection_manager.deselect_all()
 			game_manager.selection_manager.add_to_selection(clicked)
 			_immediate_path_mode_started = true
 			_immediate_path_drawing_started = false
-			print("[PointDebug] path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
+			if Debug.enabled: print("[PointDebug] path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
 			get_viewport().set_input_as_handled()
 			return
 	else:
@@ -501,12 +501,12 @@ func _handle_touch_event_path_mode(event: InputEvent, _touch_count_before: int) 
 
 	# パス先端延長の待機中にドラッグが開始された場合
 	if event is InputEventScreenDrag and _path_endpoint_extension_pending and not _path_endpoint_extension_started:
-		print("[PointDebug] path_mode: starting path extension from pending (touch drag)")
+		if Debug.enabled: print("[PointDebug] path_mode: starting path extension from pending (touch drag)")
 		game_manager.confirm_path()
 		if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 			_path_endpoint_extension_started = true
 			_path_endpoint_extension_pending = false
-			print("[PointDebug] path_mode: ext_started=true (from touch drag)")
+			if Debug.enabled: print("[PointDebug] path_mode: ext_started=true (from touch drag)")
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
 			return
@@ -563,7 +563,7 @@ func _handle_path_mode_touch_release(position: Vector2, path_drawer: PathDrawer)
 			path_drawer._handle_drawing_release()
 		game_manager.confirm_path()
 	elif _immediate_path_drawing_started and _auto_execute_character:
-		print("[PointDebug] touch path_mode release: auto-confirming path for executing character")
+		if Debug.enabled: print("[PointDebug] touch path_mode release: auto-confirming path for executing character")
 		if path_drawer:
 			path_drawer._handle_drawing_release()
 		game_manager.confirm_path()
@@ -589,12 +589,12 @@ func _handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer) -
 	_long_press_timer = 0.0
 
 	var clicked = game_manager.raycast_character(position)
-	print("[PointDebug] touch path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
+	if Debug.enabled: print("[PointDebug] touch path_mode click: clicked=%s" % (clicked.name if clicked else "null"))
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
 		var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
-		print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 
 		if not is_enemy:
 			if is_following:
@@ -602,14 +602,14 @@ func _handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer) -
 				_auto_execute_character = clicked
 
 			_rotation_target_character = clicked
-			print("[PointDebug] touch path_mode click: confirming current path and selecting %s" % clicked.name)
+			if Debug.enabled: print("[PointDebug] touch path_mode click: confirming current path and selecting %s" % clicked.name)
 			game_manager.confirm_path()
-			print("[PointDebug] touch path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
+			if Debug.enabled: print("[PointDebug] touch path_mode click: after confirm, is_path_mode=%s" % game_manager.is_path_mode())
 			game_manager.selection_manager.deselect_all()
 			game_manager.selection_manager.add_to_selection(clicked)
 			_immediate_path_mode_started = true
 			_immediate_path_drawing_started = false
-			print("[PointDebug] touch path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
+			if Debug.enabled: print("[PointDebug] touch path_mode click: set _immediate_path_mode_started=true for %s" % clicked.name)
 			get_viewport().set_input_as_handled()
 			return
 
@@ -660,7 +660,7 @@ func _handle_touch_event_normal_mode(event: InputEvent, touch_count_before: int)
 
 ## 非パスモードのプレス処理
 func _handle_normal_mode_press(position: Vector2, is_touch: bool) -> void:
-	print("[PointDebug] non-path_mode press: is_path_mode=%s, is_touch=%s" % [str(game_manager.is_path_mode()), str(is_touch)])
+	if Debug.enabled: print("[PointDebug] non-path_mode press: is_path_mode=%s, is_touch=%s" % [str(game_manager.is_path_mode()), str(is_touch)])
 	_left_button_pressed = true
 	_left_click_start_pos = position
 	_long_press_timer = 0.0
@@ -691,7 +691,7 @@ func _handle_normal_mode_press(position: Vector2, is_touch: bool) -> void:
 
 ## 非パスモードのリリース処理
 func _handle_normal_mode_release(position: Vector2, is_touch: bool) -> void:
-	print("[PointDebug] _handle_normal_mode_release: is_touch=%s, _confirmed_path_longpress_pending=%s" % [str(is_touch), str(_confirmed_path_longpress_pending)])
+	if Debug.enabled: print("[PointDebug] _handle_normal_mode_release: is_touch=%s, _confirmed_path_longpress_pending=%s" % [str(is_touch), str(_confirmed_path_longpress_pending)])
 	_left_button_pressed = false
 
 	if _is_rotation_mode:
@@ -703,13 +703,13 @@ func _handle_normal_mode_release(position: Vector2, is_touch: bool) -> void:
 		return
 
 	if _confirmed_path_longpress_pending:
-		print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_confirmed_path")
+		if Debug.enabled: print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_confirmed_path")
 		_handle_path_tap_for_confirmed_path()
 		_reset_confirmed_path_longpress()
 		return
 
 	if _moving_path_longpress_pending:
-		print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_moving_path")
+		if Debug.enabled: print("[PointDebug] _handle_normal_mode_release: calling _handle_path_tap_for_moving_path")
 		_handle_path_tap_for_moving_path()
 		_reset_moving_path_longpress()
 		return
@@ -764,7 +764,7 @@ func _handle_normal_mode_release(position: Vector2, is_touch: bool) -> void:
 func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
 	var current_frame = Engine.get_process_frames()
 	var just_ended = (current_frame == _path_mode_ended_frame)
-	print("[PointDebug] non-path_mode drag: frame=%d, ended_frame=%d, just_ended=%s, ext_pending=%s" % [
+	if Debug.enabled: print("[PointDebug] non-path_mode drag: frame=%d, ended_frame=%d, just_ended=%s, ext_pending=%s" % [
 		current_frame, _path_mode_ended_frame, str(just_ended), str(_path_endpoint_extension_pending)
 	])
 
@@ -796,11 +796,11 @@ func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
 		if move_dist > 20.0:
 			var path_ratio: float = _moving_path_longpress_data.get("path_ratio", 0.0)
 			if path_ratio >= 0.99:
-				print("[PointDebug] non-path_mode: longpress cancelled, trying path extension")
+				if Debug.enabled: print("[PointDebug] non-path_mode: longpress cancelled, trying path extension")
 				_reset_moving_path_longpress()
 				if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 					_path_endpoint_extension_started = true
-					print("[PointDebug] non-path_mode: ext_started=true (from longpress cancel)")
+					if Debug.enabled: print("[PointDebug] non-path_mode: ext_started=true (from longpress cancel)")
 					var path_drawer = _get_path_drawer()
 					if path_drawer:
 						path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -814,14 +814,14 @@ func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
 
 	# 即座パスモードでドラッグが検出された場合
 	var drag_distance = position.distance_to(_left_click_start_pos)
-	print("[PointDebug] non-path_mode drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s, drag_distance=%.1f" % [_immediate_path_mode_started, _immediate_path_drawing_started, drag_distance])
+	if Debug.enabled: print("[PointDebug] non-path_mode drag: _immediate_path_mode_started=%s, _immediate_path_drawing_started=%s, drag_distance=%.1f" % [_immediate_path_mode_started, _immediate_path_drawing_started, drag_distance])
 	if _immediate_path_mode_started and not _immediate_path_drawing_started and drag_distance > _min_drag_distance:
-		print("[PointDebug] non-path_mode drag: starting path mode for character (drag_distance=%.1f > %.1f)" % [drag_distance, _min_drag_distance])
+		if Debug.enabled: print("[PointDebug] non-path_mode drag: starting path mode for character (drag_distance=%.1f > %.1f)" % [drag_distance, _min_drag_distance])
 		_rotation_target_character = null
 		_long_press_timer = 0.0
 		_hide_progress_ring()
 		var result = game_manager.start_move_mode()
-		print("[PointDebug] non-path_mode drag: start_move_mode result=%s" % result)
+		if Debug.enabled: print("[PointDebug] non-path_mode drag: start_move_mode result=%s" % result)
 		var path_drawer = _get_path_drawer()
 		if path_drawer:
 			path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -830,11 +830,11 @@ func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
 
 	# パス先端延長の待機中にドラッグが開始された場合
 	if _path_endpoint_extension_pending and not _path_endpoint_extension_started and not just_ended:
-		print("[PointDebug] non-path_mode: trying path extension from pending (drag)")
+		if Debug.enabled: print("[PointDebug] non-path_mode: trying path extension from pending (drag)")
 		if _try_start_path_continuation_from_endpoint(_left_click_start_pos):
 			_path_endpoint_extension_started = true
 			_path_endpoint_extension_pending = false
-			print("[PointDebug] non-path_mode: ext_started=true (drag)")
+			if Debug.enabled: print("[PointDebug] non-path_mode: ext_started=true (drag)")
 			var path_drawer = _get_path_drawer()
 			if path_drawer:
 				path_drawer.handle_drawing_press(_left_click_start_pos)
@@ -1040,9 +1040,9 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 #region 確認済みパス上長押し処理
 
 func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = false) -> bool:
-	print("[PointDebug] _try_start_confirmed_path_longpress: called, is_touch=%s" % str(is_touch))
+	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: called, is_touch=%s" % str(is_touch))
 	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
-		print("[PointDebug] _try_start_confirmed_path_longpress: no manager")
+		if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: no manager")
 		return false
 
 	var ground_plane := Plane(Vector3.UP, 0.0)
@@ -1053,15 +1053,15 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 		return false
 
 	var ground_pos: Vector3 = intersect as Vector3
-	print("[PointDebug] _try_start_confirmed_path_longpress: ground_pos=%s" % [ground_pos])
+	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: ground_pos=%s" % [ground_pos])
 
 	# モバイルではタッチ精度が低いため、より大きな閾値を使用
 	var threshold := GameConstants.PATH_CLICK_THRESHOLD_MOBILE if is_touch else GameConstants.PATH_CLICK_THRESHOLD
 
 	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, threshold)
-	print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, threshold])
+	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, threshold])
 	if not result.is_empty():
-		print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for confirmed path")
+		if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for confirmed path")
 		_confirmed_path_longpress_pending = true
 		_confirmed_path_longpress_timer = 0.0
 		_confirmed_path_longpress_screen_pos = screen_pos
@@ -1070,9 +1070,9 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 		return true
 
 	var moving_result := game_manager.try_start_vision_point_on_moving_path(screen_pos, ground_pos, threshold)
-	print("[PointDebug] _try_start_confirmed_path_longpress: moving_result=%s" % [moving_result])
+	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: moving_result=%s" % [moving_result])
 	if not moving_result.is_empty():
-		print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for moving path")
+		if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for moving path")
 		_moving_path_longpress_pending = true
 		_moving_path_longpress_timer = 0.0
 		_moving_path_longpress_screen_pos = screen_pos
@@ -1080,7 +1080,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 		_moving_path_tap_path_data = moving_result
 		return true
 
-	print("[PointDebug] _try_start_confirmed_path_longpress: no path found, returning false")
+	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: no path found, returning false")
 	return false
 
 
@@ -1088,16 +1088,16 @@ func _start_vision_mode_on_confirmed_path() -> void:
 	_confirmed_path_longpress_pending = false
 	_confirmed_path_longpress_timer = 0.0
 
-	print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting")
+	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting")
 	if game_manager.try_start_vision_point_on_confirmed_path(
 		_confirmed_path_longpress_screen_pos,
 		_confirmed_path_longpress_ground_pos
 	):
-		print("[PointDebug] _start_vision_mode_on_confirmed_path: success")
+		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: success")
 		_path_endpoint_extension_pending = false
 		_path_endpoint_extension_started = false
 	else:
-		print("[PointDebug] _start_vision_mode_on_confirmed_path: failed")
+		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: failed")
 
 
 func _reset_confirmed_path_longpress() -> void:
@@ -1110,9 +1110,9 @@ func _reset_confirmed_path_longpress() -> void:
 
 
 func _handle_path_tap_for_confirmed_path() -> void:
-	print("[PointDebug] _handle_path_tap_for_confirmed_path: called")
+	if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: called")
 	if _confirmed_path_tap_path_data.is_empty():
-		print("[PointDebug] _handle_path_tap_for_confirmed_path: data is empty")
+		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: data is empty")
 		return
 	if not game_manager:
 		return
@@ -1120,15 +1120,15 @@ func _handle_path_tap_for_confirmed_path() -> void:
 	var current_time := Time.get_ticks_msec()
 	var time_diff := current_time - _last_path_tap_time
 	var is_same_path := _is_same_path(_last_path_tap_path_data, _confirmed_path_tap_path_data)
-	print("[PointDebug] _handle_path_tap_for_confirmed_path: time_diff=%d, is_same_path=%s, threshold=%d" % [time_diff, str(is_same_path), DOUBLE_TAP_THRESHOLD_MS])
+	if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: time_diff=%d, is_same_path=%s, threshold=%d" % [time_diff, str(is_same_path), DOUBLE_TAP_THRESHOLD_MS])
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
-		print("[PointDebug] _handle_path_tap_for_confirmed_path: DOUBLE TAP DETECTED - adding wait point")
+		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: DOUBLE TAP DETECTED - adding wait point")
 		game_manager.add_sync_wait_point(_confirmed_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
-		print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, saving for next")
+		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, saving for next")
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _confirmed_path_tap_path_data.duplicate()
 
@@ -1142,16 +1142,16 @@ func _start_vision_mode_on_moving_path() -> void:
 	_moving_path_longpress_timer = 0.0
 
 	if _moving_path_longpress_data.is_empty():
-		print("[PointDebug] _start_vision_mode_on_moving_path: no data")
+		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_moving_path: no data")
 		return
 
-	print("[PointDebug] _start_vision_mode_on_moving_path: started, ratio=%.3f" % _moving_path_longpress_data.get("path_ratio", 0.0))
+	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_moving_path: started, ratio=%.3f" % _moving_path_longpress_data.get("path_ratio", 0.0))
 	_moving_path_vision_drawing = true
 
 
 func _finish_moving_path_vision_point(screen_pos: Vector2) -> void:
 	if not _moving_path_vision_drawing or _moving_path_longpress_data.is_empty():
-		print("[PointDebug] _finish_moving_path_vision_point: not drawing or no data")
+		if Debug.enabled: print("[PointDebug] _finish_moving_path_vision_point: not drawing or no data")
 		_reset_moving_path_longpress()
 		return
 
@@ -1160,7 +1160,7 @@ func _finish_moving_path_vision_point(screen_pos: Vector2) -> void:
 	var ray_dir := game_manager.camera.project_ray_normal(screen_pos)
 	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
 	if not intersect:
-		print("[PointDebug] _finish_moving_path_vision_point: no ground intersection")
+		if Debug.enabled: print("[PointDebug] _finish_moving_path_vision_point: no ground intersection")
 		_reset_moving_path_longpress()
 		return
 
@@ -1174,11 +1174,11 @@ func _finish_moving_path_vision_point(screen_pos: Vector2) -> void:
 	var direction = target_point - anchor
 	direction.y = 0.0
 	if direction.length_squared() < 0.001:
-		print("[PointDebug] _finish_moving_path_vision_point: direction too short")
+		if Debug.enabled: print("[PointDebug] _finish_moving_path_vision_point: direction too short")
 		_reset_moving_path_longpress()
 		return
 
-	print("[PointDebug] _finish_moving_path_vision_point: adding point, ratio=%.3f, char_valid=%s" % [
+	if Debug.enabled: print("[PointDebug] _finish_moving_path_vision_point: adding point, ratio=%.3f, char_valid=%s" % [
 		path_ratio, str(is_instance_valid(character))
 	])
 	game_manager.add_vision_point_to_moving_path(character, path_ratio, anchor, target_point)
@@ -1251,10 +1251,10 @@ func _is_same_path(data1: Dictionary, data2: Dictionary) -> bool:
 
 func _on_path_mode_ended() -> void:
 	var current_frame = Engine.get_process_frames()
-	print("[PointDebug] _on_path_mode_ended: frame=%d, _left_button_pressed=%s" % [current_frame, _left_button_pressed])
+	if Debug.enabled: print("[PointDebug] _on_path_mode_ended: frame=%d, _left_button_pressed=%s" % [current_frame, _left_button_pressed])
 
 	if _left_button_pressed:
-		print("[PointDebug] _on_path_mode_ended: skipping reset because left button still pressed (character switch)")
+		if Debug.enabled: print("[PointDebug] _on_path_mode_ended: skipping reset because left button still pressed (character switch)")
 		_path_mode_ended_frame = current_frame
 		return
 
@@ -1270,13 +1270,13 @@ func _on_path_mode_ended() -> void:
 
 	if _auto_execute_character and is_instance_valid(_auto_execute_character):
 		if game_manager.path_service and game_manager.path_service.has_pending_path_for_character(_auto_execute_character):
-			print("[PointDebug] _on_path_mode_ended: auto-executing path for %s" % _auto_execute_character.name)
+			if Debug.enabled: print("[PointDebug] _on_path_mode_ended: auto-executing path for %s" % _auto_execute_character.name)
 			game_manager.path_service.execute_path_for_character(_auto_execute_character, false)
 	_auto_execute_character = null
 
 
 func _on_endpoint_drag_detected(screen_pos: Vector2) -> void:
-	print("[PointDebug] _on_endpoint_drag_detected: screen_pos=%s" % str(screen_pos))
+	if Debug.enabled: print("[PointDebug] _on_endpoint_drag_detected: screen_pos=%s" % str(screen_pos))
 	if not game_manager.is_path_mode():
 		return
 
@@ -1287,6 +1287,6 @@ func _on_endpoint_drag_detected(screen_pos: Vector2) -> void:
 		var path_drawer = _get_path_drawer()
 		if path_drawer:
 			path_drawer.handle_drawing_press(screen_pos)
-		print("[PointDebug] _on_endpoint_drag_detected: path continuation started")
+		if Debug.enabled: print("[PointDebug] _on_endpoint_drag_detected: path continuation started")
 
 #endregion

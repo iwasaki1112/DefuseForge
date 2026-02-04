@@ -141,17 +141,17 @@ func _setup_character_markers() -> void:
 		if point:
 			point.visible = false
 			point.modulate.a = 1.0
-	print("[GameHUD] Character points setup complete")
+	if Debug.enabled: print("[GameHUD] Character points setup complete")
 
 
 ## キャラクターをポイントに登録（marker_nameで指定）
 func register_character_marker(character: GameCharacter) -> void:
 	if not character or character.marker_name.is_empty():
-		print("[GameHUD] register_character_marker: skipped (no character or empty marker_name)")
+		if Debug.enabled: print("[GameHUD] register_character_marker: skipped (no character or empty marker_name)")
 		return
 
 	var point_name := character.marker_name
-	print("[GameHUD] Registering point: %s" % point_name)
+	if Debug.enabled: print("[GameHUD] Registering point: %s" % point_name)
 	if not _name_to_marker.has(point_name):
 		push_warning("[GameHUD] Unknown point name: %s" % point_name)
 		return

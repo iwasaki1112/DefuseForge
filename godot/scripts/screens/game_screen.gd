@@ -284,7 +284,7 @@ func _setup_camera_for_player() -> void:
 		var target_pos := player_character.global_position
 		var camera_offset := Vector3(0, 25, 9.0)
 		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
-		print("[Camera] Initial setup: character_pos=%s, camera_offset=%s, camera_pos=%s" % [target_pos, camera_offset, camera.global_position])
+		if Debug.enabled: print("[Camera] Initial setup: character_pos=%s, camera_offset=%s, camera_pos=%s" % [target_pos, camera_offset, camera.global_position])
 		#_create_debug_axis(target_pos)  # デバッグ用軸表示（必要時にコメント解除）
 
 
@@ -432,7 +432,7 @@ func _pan_camera_to_position(target_pos: Vector3) -> void:
 
 	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 9.0)
 
-	print("[Camera] Pan to character: target_pos=%s, new_camera_pos=%s, current_camera_pos=%s" % [target_pos, new_camera_pos, camera.global_position])
+	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s, new_camera_pos=%s, current_camera_pos=%s" % [target_pos, new_camera_pos, camera.global_position])
 
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
@@ -523,7 +523,7 @@ func _cleanup_before_transition() -> void:
 	# マップとキャラクターのクリーンアップ
 	if game_manager:
 		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
-		print("[GameScreen] Map and characters cleaned up")
+		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
 
 	# PlayerStateのシグナル切断
 	if PlayerState.money_changed.is_connected(_on_money_changed):
@@ -545,7 +545,7 @@ func _cleanup_before_transition() -> void:
 	# Providerのクリーンアップ（WebSocket切断含む）
 	if _mode_provider:
 		_mode_provider.cleanup()
-		print("[GameScreen] Network cleanup completed")
+		if Debug.enabled: print("[GameScreen] Network cleanup completed")
 
 
 func _exit_tree() -> void:
@@ -561,7 +561,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_F3:
 			_vision_debug_enabled = not _vision_debug_enabled
 			game_manager.set_vision_debug_draw(_vision_debug_enabled)
-			print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
+			if Debug.enabled: print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
 
 
 ## デバッグ用の軸を作成（X=赤, Y=緑, Z=青）
@@ -605,4 +605,4 @@ func _create_debug_axis(position: Vector3) -> void:
 	z_axis.position = position + Vector3(0, 0.1, axis_length / 2)
 	add_child(z_axis)
 
-	print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)
+	if Debug.enabled: print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)

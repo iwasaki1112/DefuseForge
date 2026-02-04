@@ -115,7 +115,7 @@ func setup(viewport: SubViewport, character: Node3D, map_size: Vector2, resoluti
 	# 初期位置を設定
 	sync_transform()
 
-	print("[FOW] VisionLight setup: ", character.name if character else "unknown",
+	if Debug.enabled: print("[FOW] VisionLight setup: ", character.name if character else "unknown",
 		", fov: ", fov_degrees, ", scale: ", _light.texture_scale,
 		", peripheral: ", peripheral_distance)
 

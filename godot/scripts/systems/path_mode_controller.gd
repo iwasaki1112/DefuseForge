@@ -71,16 +71,16 @@ func start(_character: Node, char_color: Color = Color.WHITE) -> bool:
 func confirm() -> bool:
 	if not is_active:
 		if DEBUG_PATH:
-			print("[PointDebug] PathModeController.confirm: not active")
+			if Debug.enabled: print("[PointDebug] PathModeController.confirm: not active")
 		return false
 
 	if DEBUG_PATH:
 		# スタックトレースを出力して呼び出し元を特定
 		var stack = get_stack()
-		print("[PointDebug] PathModeController.confirm: ending mode, called from:")
+		if Debug.enabled: print("[PointDebug] PathModeController.confirm: ending mode, called from:")
 		for i in range(min(stack.size(), 5)):
 			var frame = stack[i]
-			print("  [%d] %s:%d in %s" % [i, frame.source, frame.line, frame.function])
+			if Debug.enabled: print("  [%d] %s:%d in %s" % [i, frame.source, frame.line, frame.function])
 	_cleanup()
 	mode_ended.emit()
 
@@ -94,11 +94,11 @@ func confirm() -> bool:
 func cancel() -> void:
 	if not is_active:
 		if DEBUG_PATH:
-			print("[PointDebug] PathModeController.cancel: not active")
+			if Debug.enabled: print("[PointDebug] PathModeController.cancel: not active")
 		return
 
 	if DEBUG_PATH:
-		print("[PointDebug] PathModeController.cancel: cancelling")
+		if Debug.enabled: print("[PointDebug] PathModeController.cancel: cancelling")
 	_cleanup()
 	mode_cancelled.emit()
 
