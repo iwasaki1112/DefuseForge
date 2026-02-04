@@ -281,8 +281,9 @@ func cancel_path() -> void:
 
 
 ## 全パスを実行
-func execute_all_paths(run: bool) -> int:
-	return path_service.execute_all_paths(run) if path_service else 0
+## local_only: trueの場合、ローカルプレイヤーのキャラクターのみ実行
+func execute_all_paths(run: bool, local_only: bool = false) -> int:
+	return path_service.execute_all_paths(run, local_only) if path_service else 0
 
 
 ## 指定位置近くにある確定済みパスまたは移動中パスの先端を検索し、パス継続モードを開始

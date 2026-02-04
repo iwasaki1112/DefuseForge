@@ -267,7 +267,8 @@ func confirm_path(
 
 
 ## 全キャラクターのパスを同時実行
-func execute_all_paths(run: bool) -> int:
+## local_only: trueの場合、ローカルプレイヤーのキャラクターのみ実行
+func execute_all_paths(run: bool, local_only: bool = false) -> int:
 	if pending_paths.is_empty():
 		return 0
 
@@ -281,6 +282,12 @@ func execute_all_paths(run: bool) -> int:
 		if not data.has("character"):
 			continue
 		var character = data["character"] as CharacterBody3D
+
+		# local_onlyモードの場合、リモートキャラクターはスキップ
+		if local_only:
+			var game_char := character as GameCharacter
+			if game_char and not game_char.is_local():
+				continue
 
 		var path := _copy_vector3_array(data.get("path", []))
 		var vision_points := _copy_dict_array(data.get("vision_points_data", []))

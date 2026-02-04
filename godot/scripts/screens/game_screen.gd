@@ -352,7 +352,9 @@ func _on_execute_button_pressed() -> void:
 	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_path():
 		game_manager.path_service.confirm_path()
 
-	var count := game_manager.execute_all_paths(false)
+	# マルチプレイヤーモードでは自分のキャラクターのみ実行
+	var local_only := _mode_provider.get_mode_name() == "multiplayer"
+	var count := game_manager.execute_all_paths(false, local_only)
 	_mode_provider.on_execute_paths(count)
 
 

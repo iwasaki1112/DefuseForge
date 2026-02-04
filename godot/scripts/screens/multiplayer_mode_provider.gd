@@ -189,9 +189,10 @@ func on_path_confirmed() -> void:
 		sync_controller.send_state_sync()
 
 
-func on_execute_paths(count: int) -> void:
-	if count > 0 and sync_controller:
-		sync_controller.send_path_execute(false)
+func on_execute_paths(_count: int) -> void:
+	# 各プレイヤーは自分のキャラクターのみを操作するため、
+	# PATH_EXECUTEの送信は不要（各自がGOを押したときに自分のキャラクターのみ実行）
+	pass
 
 
 func on_round_ended(_winner: int, _reason: int) -> void:
