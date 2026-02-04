@@ -48,6 +48,10 @@ var _debug_immediate_mesh: ImmediateMesh = null
 var _debug_material: StandardMaterial3D = null
 var _debug_line_material: StandardMaterial3D = null
 
+# SmokeAreaManager cache (avoid repeated group lookups)
+var _smoke_area_manager_cache: SmokeAreaManager = null
+var _smoke_area_manager_checked: bool = false
+
 
 # ============================================
 # Lifecycle
@@ -182,12 +186,17 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 	return result.is_empty()
 
 
-## SmokeAreaManagerを取得（GameManager経由）
+## SmokeAreaManagerを取得（キャッシュ版）
 func _get_smoke_area_manager() -> SmokeAreaManager:
+	# 既にチェック済みならキャッシュを返す
+	if _smoke_area_manager_checked:
+		return _smoke_area_manager_cache
+
+	_smoke_area_manager_checked = true
 	var game_screen := get_tree().get_first_node_in_group("game_screen")
 	if game_screen and game_screen.has_method("get_smoke_area_manager"):
-		return game_screen.get_smoke_area_manager()
-	return null
+		_smoke_area_manager_cache = game_screen.get_smoke_area_manager()
+	return _smoke_area_manager_cache
 
 
 # ============================================

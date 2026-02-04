@@ -169,8 +169,10 @@ func _process(delta: float) -> void:
 			var vis_tex := _visibility_viewport.get_texture()
 			_fog_material.set_shader_parameter("visibility_texture", vis_tex)
 
-		# 可視性キャッシュをダーティにマーク（次の判定で再取得）
-		_mark_visibility_cache_dirty()
+		# 可視性キャッシュを更新（GPU→CPU転送はここで1回だけ行う）
+		# _physics_processより後に実行されるため、次フレームの判定で使用される
+		_visibility_image_dirty = true
+		_update_visibility_image_cache()
 
 
 ## VisionLightの位置・回転を同期
@@ -484,10 +486,14 @@ func _update_visibility_image_cache() -> void:
 
 	# フレームごとに1回だけ更新（コスト削減）
 	if _visibility_image_dirty:
+		var start_time := Time.get_ticks_usec()
 		var viewport_texture := _visibility_viewport.get_texture()
 		if viewport_texture:
 			_visibility_image = viewport_texture.get_image()
 		_visibility_image_dirty = false
+		var elapsed := Time.get_ticks_usec() - start_time
+		if Debug.enabled and elapsed > 5000:  # 5ms以上かかった場合のみログ
+			print("[FOW] get_image() took ", elapsed / 1000.0, "ms")
 
 
 ## フレーム終了時にキャッシュをダーティにする（次フレームで再取得）

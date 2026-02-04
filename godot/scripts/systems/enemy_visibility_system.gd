@@ -138,9 +138,13 @@ func update_visibility() -> void:
 
 		# Update only if changed
 		if _visibility_cache.get(instance_id) != is_visible:
+			var start_time := Time.get_ticks_usec()
 			_visibility_cache[instance_id] = is_visible
 			enemy.visible = is_visible
 			visibility_changed.emit(enemy, is_visible)
+			var elapsed := Time.get_ticks_usec() - start_time
+			if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
+				print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
 
 
 ## Check if a world position is visible to any friendly character

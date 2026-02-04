@@ -225,7 +225,7 @@ func _scan_for_enemies() -> void:
 			clear_target()
 			return
 
-	# Get all enemy characters
+	# Get all enemy characters (uses cache, updated every 200ms)
 	var enemies := _get_enemy_characters()
 	if enemies.is_empty():
 		_handle_no_enemy_in_sight()
@@ -237,6 +237,9 @@ func _scan_for_enemies() -> void:
 
 	var char_pos: Vector3 = _character.global_position
 
+	# 可視性チェックの計測
+	var start_time := Time.get_ticks_usec() if Debug.enabled else 0
+
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
 		if enemy in _ignored_enemies:
@@ -247,12 +250,17 @@ func _scan_for_enemies() -> void:
 			continue
 
 		var enemy_pos: Vector3 = enemy.global_position
-		# Check if enemy is visible (FoWテクスチャベースで視覚と同期)
+		# Check if enemy is visible (uses single raycast per enemy)
 		if _is_enemy_visible(enemy_pos, vision):
 			var dist: float = char_pos.distance_to(enemy_pos)
 			if dist < closest_distance:
 				closest_distance = dist
 				closest_enemy = enemy
+
+	if Debug.enabled:
+		var elapsed := Time.get_ticks_usec() - start_time
+		if elapsed > 2000:  # 2ms以上かかった場合のみログ
+			print("[CAC] Enemy scan took ", elapsed / 1000.0, "ms for ", enemies.size(), " enemies")
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)
