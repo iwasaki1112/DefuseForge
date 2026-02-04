@@ -24,6 +24,12 @@ func register_character(_game_manager: GameManager, _character: GameCharacter, _
 	pass
 
 
+## キャラクタースポーン（モードごとにオーバーライド可能）
+## 戻り値: スポーンを処理した場合はtrue、GameScreenのデフォルト処理を使う場合はfalse
+func spawn_characters(_game_screen: Node, _game_manager: GameManager) -> bool:
+	return false  # デフォルトはGameScreenの処理を使用
+
+
 ## パス確定時のコールバック
 func on_path_confirmed() -> void:
 	pass

@@ -142,6 +142,11 @@ func _load_map() -> void:
 
 
 func _spawn_characters() -> void:
+	# モードプロバイダーがキャラクタースポーンを処理する場合はスキップ
+	if _mode_provider.spawn_characters(self, game_manager):
+		return
+
+	# デフォルトのスポーン処理（Trainingモード用）
 	if not game_manager.has_map():
 		push_warning("[GameScreen] Cannot spawn characters - no map loaded yet")
 		return
