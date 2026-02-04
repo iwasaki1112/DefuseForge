@@ -193,10 +193,10 @@ func cancel_path() -> void:
 		path_mode_controller.cancel()
 
 
-func execute_all_paths(run: bool) -> int:
+func execute_all_paths(run: bool, local_only: bool = false) -> int:
 	if not path_execution_manager:
 		return 0
-	return path_execution_manager.execute_all_paths(run)
+	return path_execution_manager.execute_all_paths(run, local_only)
 
 
 func execute_path_for_character(character: Node, run: bool) -> bool:
