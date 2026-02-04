@@ -142,9 +142,9 @@ func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
 
 ## プレイヤー用のチームキャラクターをスポーン
 func _spawn_team_characters_for_player(
-	game_screen: Node,
+	_screen: Node,
 	game_manager: GameManager,
-	map_preset,
+	_preset,
 	owner_peer_id: int,
 	team: int,
 	spawn_points: Array,

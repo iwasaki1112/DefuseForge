@@ -68,9 +68,10 @@ func setup(
 
 func start_move_mode() -> bool:
 	if DEBUG_PATH:
+		var has_sel_str := str(selection_manager.has_selection()) if selection_manager else "N/A"
 		if Debug.enabled: print("[PointDebug] start_move_mode: selection_manager=%s, has_selection=%s" % [
 			str(selection_manager != null),
-			str(selection_manager.has_selection() if selection_manager else "N/A")
+			has_sel_str
 		])
 	if not selection_manager or not selection_manager.has_selection():
 		if DEBUG_PATH:

@@ -1126,7 +1126,8 @@ func process_controllers(delta: float) -> void:
 ## パス追従完了時のコールバック（外部から呼ばれる）
 func on_path_following_completed(_character: Node) -> void:
 	if DEBUG_PATH:
-		if Debug.enabled: print("[PointDebug] on_path_following_completed: character=%s" % (_character.name if _character else "null"))
+		var char_name := str(_character.name) if _character else "null"
+		if Debug.enabled: print("[PointDebug] on_path_following_completed: character=%s" % char_name)
 	# 全てのコントローラーが完了したかチェック
 	var any_active = false
 	for controller in _path_controllers.values():

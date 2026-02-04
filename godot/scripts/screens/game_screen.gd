@@ -572,7 +572,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## デバッグ用の軸を作成（X=赤, Y=緑, Z=青）
-func _create_debug_axis(position: Vector3) -> void:
+func _create_debug_axis(axis_position: Vector3) -> void:
 	var axis_length := 3.0
 	var axis_thickness := 0.05
 
@@ -585,7 +585,7 @@ func _create_debug_axis(position: Vector3) -> void:
 	x_mat.albedo_color = Color.RED
 	x_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	x_axis.material_override = x_mat
-	x_axis.position = position + Vector3(axis_length / 2, 0.1, 0)
+	x_axis.position = axis_position + Vector3(axis_length / 2, 0.1, 0)
 	add_child(x_axis)
 
 	# Y軸（緑）- 上方向
@@ -597,7 +597,7 @@ func _create_debug_axis(position: Vector3) -> void:
 	y_mat.albedo_color = Color.GREEN
 	y_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	y_axis.material_override = y_mat
-	y_axis.position = position + Vector3(0, axis_length / 2 + 0.1, 0)
+	y_axis.position = axis_position + Vector3(0, axis_length / 2 + 0.1, 0)
 	add_child(y_axis)
 
 	# Z軸（青）
@@ -609,7 +609,7 @@ func _create_debug_axis(position: Vector3) -> void:
 	z_mat.albedo_color = Color.BLUE
 	z_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	z_axis.material_override = z_mat
-	z_axis.position = position + Vector3(0, 0.1, axis_length / 2)
+	z_axis.position = axis_position + Vector3(0, 0.1, axis_length / 2)
 	add_child(z_axis)
 
 	if Debug.enabled: print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)
