@@ -54,8 +54,14 @@ func _notify_fow_system() -> void:
 	if Debug.enabled: print("[%s] _notify_fow_system - game_screen: %s" % [_map_name, game_screen != null])
 	if game_screen and game_screen.has_method("get_vision_service"):
 		var vision_service = game_screen.get_vision_service()
-		if Debug.enabled: print("[%s] vision_service: %s, fow_system: %s" % [_map_name, vision_service != null, vision_service.fog_of_war_system != null if vision_service else false])
+		var fow_str := str(vision_service.fog_of_war_system != null) if vision_service else "false"
+		if Debug.enabled: print("[%s] vision_service: %s, fow_system: %s" % [_map_name, vision_service != null, fow_str])
 		if vision_service and vision_service.fog_of_war_system:
+			# ground_ノードからマップサイズを計算してFoWに設定
+			var ground_size := _calculate_ground_bounds()
+			if ground_size != Vector2.ZERO:
+				vision_service.fog_of_war_system.set_map_size(ground_size)
+				if Debug.enabled: print("[%s] Set FoW map_size from ground bounds: %s" % [_map_name, ground_size])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system" % _map_name)
 		else:
@@ -75,5 +81,66 @@ func _notify_fow_system_deferred() -> void:
 	if game_screen and game_screen.has_method("get_vision_service"):
 		var vision_service = game_screen.get_vision_service()
 		if vision_service and vision_service.fog_of_war_system:
+			# ground_ノードからマップサイズを計算してFoWに設定
+			var ground_size := _calculate_ground_bounds()
+			if ground_size != Vector2.ZERO:
+				vision_service.fog_of_war_system.set_map_size(ground_size)
+				if Debug.enabled: print("[%s] Set FoW map_size from ground bounds (deferred): %s" % [_map_name, ground_size])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)
+
+
+## ground_プレフィックスノードからマップの床サイズを計算
+func _calculate_ground_bounds() -> Vector2:
+	var bounds := {
+		"min": Vector3(INF, INF, INF),
+		"max": Vector3(-INF, -INF, -INF),
+		"found": false
+	}
+
+	_collect_ground_bounds(self, bounds)
+
+	if not bounds["found"]:
+		if Debug.enabled: print("[%s] No ground_ nodes found for bounds calculation" % _map_name)
+		return Vector2.ZERO
+
+	# X-Z平面でのサイズを返す（Yは高さなので無視）
+	var size_x: float = bounds["max"].x - bounds["min"].x
+	var size_z: float = bounds["max"].z - bounds["min"].z
+	if Debug.enabled: print("[%s] Ground bounds: min=%s, max=%s, size=(%s, %s)" % [_map_name, bounds["min"], bounds["max"], size_x, size_z])
+	return Vector2(size_x, size_z)
+
+
+## 再帰的にground_ノードを探索してバウンディングボックスを収集
+func _collect_ground_bounds(node: Node, bounds: Dictionary) -> void:
+	var node_name_lower := node.name.to_lower()
+	var is_ground := node_name_lower.begins_with("ground_")
+
+	# 親がground_の場合も対象
+	if not is_ground and node.get_parent():
+		var parent_name_lower := node.get_parent().name.to_lower()
+		is_ground = parent_name_lower.begins_with("ground_")
+
+	if is_ground and node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		var aabb := mesh_instance.get_aabb()
+		var gtransform := mesh_instance.global_transform
+
+		# AABBの8頂点をグローバル座標に変換してmin/maxを更新
+		for i in range(8):
+			var corner := aabb.position
+			if i & 1: corner.x += aabb.size.x
+			if i & 2: corner.y += aabb.size.y
+			if i & 4: corner.z += aabb.size.z
+			var global_corner: Vector3 = gtransform * corner
+
+			bounds["min"].x = minf(bounds["min"].x, global_corner.x)
+			bounds["min"].y = minf(bounds["min"].y, global_corner.y)
+			bounds["min"].z = minf(bounds["min"].z, global_corner.z)
+			bounds["max"].x = maxf(bounds["max"].x, global_corner.x)
+			bounds["max"].y = maxf(bounds["max"].y, global_corner.y)
+			bounds["max"].z = maxf(bounds["max"].z, global_corner.z)
+		bounds["found"] = true
+
+	for child in node.get_children():
+		_collect_ground_bounds(child, bounds)

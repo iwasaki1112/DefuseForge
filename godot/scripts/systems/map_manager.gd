@@ -84,14 +84,10 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 	current_preset = preset
 	current_map_id = map_id
 
-	# FoWマップサイズ更新
+	# FoWマップサイズ更新（ground_ノードから自動計算されるため、ここでは設定しない）
+	# MapBase._notify_fow_system() がground_ノードのAABBからサイズを計算してFoWに設定する
 	if _game_manager:
-		_game_manager.fow_map_size = preset.map_size
-		if _game_manager.fog_of_war_system:
-			_game_manager.fog_of_war_system.set_map_size(preset.map_size)
-			# マップサイズ変更後にオクルーダーを再抽出
-			_game_manager.fog_of_war_system.extract_occluders_from_map(map_instance)
-			if Debug.enabled: print("[MapManager] Re-extracted occluders with correct map_size: ", preset.map_size)
+		_game_manager.fow_map_size = preset.map_size  # フォールバック値として保持
 
 	# ロード完了シグナル
 	map_loaded.emit(map_id, map_instance)
