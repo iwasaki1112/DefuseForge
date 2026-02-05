@@ -54,6 +54,7 @@ var _name_to_marker: Dictionary = {}
 func setup() -> void:
 	_setup_character_markers()
 	_setup_point_edit_buttons()
+	_setup_button_animations()
 
 
 func set_pending_paths(count: int) -> void:
@@ -97,29 +98,8 @@ func update_timer(remaining: float) -> void:
 
 
 func _on_execute_pressed() -> void:
-	_play_button_press_animation()
+	ButtonAnimator.play(_execute_button)
 	execute_all_requested.emit()
-
-
-## ボタン押下時のアニメーション演出
-func _play_button_press_animation() -> void:
-	if not _execute_button:
-		return
-
-	# 既存のTweenをキャンセル
-	var tween := create_tween()
-	tween.set_parallel(true)
-
-	# 拡大→縮小アニメーション
-	_execute_button.pivot_offset = _execute_button.size / 2
-	tween.tween_property(_execute_button, "scale", Vector2(1.15, 1.15), 0.08).set_ease(Tween.EASE_OUT)
-
-	# 透明度アニメーション（少し透明→不透明）
-	_execute_button.modulate.a = 0.7
-	tween.tween_property(_execute_button, "modulate:a", 1.0, 0.08).set_ease(Tween.EASE_OUT)
-
-	# 縮小アニメーション（元に戻る）
-	tween.chain().tween_property(_execute_button, "scale", Vector2(1.0, 1.0), 0.1).set_ease(Tween.EASE_IN_OUT)
 
 
 func _on_clear_pressed() -> void:
@@ -244,6 +224,9 @@ func is_point_edit_panel_visible() -> bool:
 
 ## ポイントエディットボタン押下時のコールバック
 func _on_point_edit_pressed(action: String) -> void:
+	# アニメーション再生
+	if _action_to_button.has(action):
+		ButtonAnimator.play(_action_to_button[action])
 	_set_active_point_edit_button(action)
 	point_edit_requested.emit(action)
 
@@ -288,6 +271,7 @@ func _on_point_cancel_pressed() -> void:
 
 ## W解放ボタン押下時のコールバック
 func _on_sync_go_pressed() -> void:
+	ButtonAnimator.play(_sync_go_button)
 	sync_go_requested.emit()
 
 
@@ -316,6 +300,7 @@ func update_sync_go_button_visibility(has_waiting: bool) -> void:
 
 ## グローバルUndoボタン押下時のコールバック
 func _on_global_undo_pressed() -> void:
+	ButtonAnimator.play(_global_undo_button)
 	global_undo_requested.emit()
 
 
@@ -325,3 +310,16 @@ func set_undo_enabled(enabled: bool) -> void:
 	if _global_undo_button:
 		_global_undo_button.disabled = not enabled
 		_global_undo_button.modulate.a = 1.0 if enabled else 0.5
+
+
+## ========================================
+## ボタンアニメーション設定
+## ========================================
+
+## 全ボタンにアニメーションを設定
+func _setup_button_animations() -> void:
+	# キャラクターマーカーにアニメーションを設定
+	var markers: Array[Control] = [_point_alpha, _point_bravo, _point_ares, _point_brim]
+	for marker in markers:
+		if marker:
+			ButtonAnimator.setup(marker, 1.1)  # マーカーは少し控えめな拡大
