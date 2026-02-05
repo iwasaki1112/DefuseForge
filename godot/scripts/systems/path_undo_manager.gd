@@ -46,7 +46,9 @@ func push(operation: OperationType, character: Node, data: Dictionary) -> void:
 		"data": data.duplicate()
 	}
 
+	print("[UndoDebug] PathUndoManager.push: type=%d, stack_size=%d" % [operation, _undo_stack.size()])
 	_undo_stack.push_back(entry)
+	print("[UndoDebug] PathUndoManager.push: after push, stack_size=%d" % _undo_stack.size())
 
 	# 最大履歴数を超えたら古いものを削除
 	while _undo_stack.size() > MAX_HISTORY:
@@ -58,10 +60,13 @@ func push(operation: OperationType, character: Node, data: Dictionary) -> void:
 ## 最後の操作をUndo
 ## @return: Undoが成功した場合true
 func undo() -> bool:
+	print("[UndoDebug] PathUndoManager.undo: stack_size=%d" % _undo_stack.size())
 	if _undo_stack.is_empty():
+		print("[UndoDebug] PathUndoManager.undo: stack is empty")
 		return false
 
 	var entry: Dictionary = _undo_stack.pop_back()
+	print("[UndoDebug] PathUndoManager.undo: popped type=%d, remaining=%d" % [entry.type, _undo_stack.size()])
 	var character: Node = entry.get("character")
 	var char_id: int = entry.get("char_id", 0)
 

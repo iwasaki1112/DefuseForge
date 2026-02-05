@@ -373,6 +373,7 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 
 
 func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
+	print("[UndoDebug] PathService._on_wait_point_added called")
 	wait_point_added.emit(path_ratio, wait_duration)
 	# リアルタイム確定：pending_pathsにポイントを追加
 	_sync_points_to_pending_paths()
