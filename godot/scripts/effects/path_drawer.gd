@@ -269,6 +269,13 @@ func set_active_edit_character(character: Node) -> void:
 
 func get_active_edit_character() -> Node:
 	return _active_edit_character
+
+
+## 継続モードの状態を設定（PathServiceから呼ばれる）
+## @param points_before: 既存パスのポイント数
+func set_continuation_state(points_before: int) -> void:
+	_is_continuing = true
+	_points_before_extension = points_before
 #endregion
 
 
@@ -1052,6 +1059,9 @@ func clear() -> void:
 	_drawing_mode = DrawingMode.MOVEMENT
 	_point_history.clear()
 	_active_edit_character = null
+	# 継続状態もリセット
+	_is_continuing = false
+	_points_before_extension = 0
 
 	for handler in _get_all_handlers():
 		handler.clear_all()

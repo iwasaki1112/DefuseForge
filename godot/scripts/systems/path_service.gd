@@ -132,6 +132,15 @@ func start_path_mode_from_point(character: Node, start_point: Vector3, char_colo
 	_is_moving_path_continuation = is_moving_path
 	_moving_continuation_character = character if is_moving_path else null
 
+	# 既存パスのポイント数を取得（Undo用）
+	var points_before: int = 0
+	if path_execution_manager and character:
+		var char_id = character.get_instance_id()
+		if path_execution_manager.pending_paths.has(char_id):
+			var path_data = path_execution_manager.pending_paths[char_id]
+			var existing_path = path_data.get("path", [])
+			points_before = existing_path.size()
+
 	# キャラクターを選択状態にする
 	if selection_manager:
 		selection_manager.deselect_all()
@@ -144,6 +153,10 @@ func start_path_mode_from_point(character: Node, start_point: Vector3, char_colo
 	path_drawer.enable_from_point(character as Node3D, start_point)
 	path_drawer.set_character_color(char_color)
 	path_drawer.set_active_edit_character(character)
+
+	# 継続状態をPathDrawerに設定（Undo用）
+	if points_before > 0:
+		path_drawer.set_continuation_state(points_before)
 
 	# 移動中パス継続モードの場合、PathDrawerのメッシュを非表示にする
 	# （PathExecutionManagerのメッシュがリアルタイムで更新されるのでそちらを使う）
@@ -167,6 +180,9 @@ func start_path_mode_with_existing_path(character: Node, path: Array, char_color
 			if Debug.enabled: print("[PointDebug] start_path_mode_with_existing_path: path too short (%d points)" % path.size())
 		return false
 
+	# 既存パスのポイント数を保存（Undo用）
+	var points_before: int = path.size()
+
 	# 継続モードを有効化（既存パスを維持）
 	_is_continuation_mode = true
 	_is_moving_path_continuation = false
@@ -184,6 +200,11 @@ func start_path_mode_with_existing_path(character: Node, path: Array, char_color
 	path_drawer.enable_with_path(character as Node3D, path)
 	path_drawer.set_character_color(char_color)
 	path_drawer.set_active_edit_character(character)
+
+	# 継続状態をPathDrawerに設定（Undo用）
+	if points_before > 0:
+		path_drawer.set_continuation_state(points_before)
+
 	# 確定済みパスのメッシュは既にあるので、PathDrawerのメッシュは非表示
 	path_drawer.hide_path_mesh()
 
