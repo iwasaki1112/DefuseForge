@@ -178,7 +178,7 @@ func update(delta: float) -> void:
 		_update_animation(interpolated, delta)
 
 
-## 初回スナップショット受信時の初期化
+## 初回スナップショット受信時またはテレポート時の初期化
 func initialize_position(state: NetworkMessages.CharacterStateMessage) -> void:
 	if not _character:
 		return
@@ -188,6 +188,12 @@ func initialize_position(state: NetworkMessages.CharacterStateMessage) -> void:
 	# スムージング位置も初期化
 	_smoothed_position = state.position
 	_smoothing_initialized = true
+	# スナップショットバッファをクリア（テレポート時の引き戻し防止）
+	_snapshot_buffer.clear()
+	# ターゲット値も更新
+	_target_position = state.position
+	_target_rotation = state.rotation
+	_target_velocity = state.velocity
 
 # ============================================
 # State Getters

@@ -189,8 +189,8 @@ func _create_trail(start: Vector3, end: Vector3) -> void:
 		_bullet_trail_quad2.material_override = _bullet_trail_mat
 		_bullet_trail.add_child(_bullet_trail_quad2)
 
-		# ワールド空間に追加
-		if _character:
+		# ワールド空間に追加（キャラクターがツリー内の場合のみ）
+		if _character and _character.is_inside_tree():
 			_character.get_tree().root.add_child(_bullet_trail)
 
 	# Quadサイズを更新
