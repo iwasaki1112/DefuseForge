@@ -30,6 +30,10 @@ var _is_extrapolating: bool = false
 var _last_velocity: Vector3 = Vector3.ZERO
 ## 初回スナップショット受信フラグ
 var _first_snapshot_received: bool = false
+## 補間位置のスムージング用（ジャーク防止）
+var _smoothed_position: Vector3 = Vector3.ZERO
+## スムージング初期化フラグ
+var _smoothing_initialized: bool = false
 
 # ============================================
 # Fallback (Legacy Compatibility)
@@ -96,6 +100,24 @@ func clear() -> void:
 	_active = false
 	_first_snapshot_received = false
 	_render_time_base = 0.0
+	_smoothing_initialized = false
+
+
+## レンダリング時刻のドリフト補正
+## スナップショット到着時刻との同期を維持
+func _correct_time_drift() -> void:
+	if _snapshot_buffer.size() < 2:
+		return
+
+	# 理想的なレンダリング時刻は最新スナップショット - INTERPOLATION_DELAY
+	var ideal_render_time := _last_snapshot_time - NetworkConstants.INTERPOLATION_DELAY
+	var drift := _render_time_base - ideal_render_time
+
+	# ドリフトが大きすぎる場合は補正（±50ms以上）
+	if absf(drift) > 0.05:
+		# 急激な補正ではなく、徐々に補正（1秒あたり最大20ms）
+		var correction := clampf(drift, -0.02, 0.02)
+		_render_time_base -= correction * 0.5
 
 
 ## 初回スナップショットが受信済みか
@@ -122,8 +144,9 @@ func update(delta: float) -> void:
 	if not _active or not _character or not _character.is_alive:
 		return
 
-	# レンダリング時刻を進める
+	# レンダリング時刻を進める（ドリフト補正付き）
 	_render_time_base += delta
+	_correct_time_drift()
 
 	# バッファベースの補間を試行
 	var interpolated := _get_interpolated_state()
@@ -132,8 +155,16 @@ func update(delta: float) -> void:
 		# バッファが不十分な場合はフォールバック（旧実装）
 		_apply_fallback_interpolation(delta)
 	else:
-		# バッファベースの補間を適用
-		_character.global_position = interpolated.position
+		# スムージング初期化
+		if not _smoothing_initialized:
+			_smoothed_position = _character.global_position
+			_smoothing_initialized = true
+
+		# 補間位置をスムージング（ジャーク防止）
+		var target_pos: Vector3 = interpolated.position
+		var smooth_factor := minf(20.0 * delta, 1.0)
+		_smoothed_position = _smoothed_position.lerp(target_pos, smooth_factor)
+		_character.global_position = _smoothed_position
 		_character.set_facing_direction(interpolated.rotation)
 
 		# 回転は四元数SLERPで滑らかに補間
@@ -151,6 +182,9 @@ func initialize_position(state: NetworkMessages.CharacterStateMessage) -> void:
 	_character.global_position = state.position
 	_character.set_facing_direction(state.rotation)
 	_render_time_base = Time.get_ticks_msec() / 1000.0 - NetworkConstants.INTERPOLATION_DELAY
+	# スムージング位置も初期化
+	_smoothed_position = state.position
+	_smoothing_initialized = true
 
 # ============================================
 # State Getters
@@ -236,11 +270,15 @@ func _apply_fallback_interpolation(delta: float) -> void:
 	if not _character:
 		return
 
-	const FALLBACK_SPEED := 25.0
+	const FALLBACK_SPEED := 20.0
 
 	# 位置の補間（低FPS時のオーバーシュート防止）
 	var lerp_factor := minf(FALLBACK_SPEED * delta, 1.0)
-	_character.global_position = _character.global_position.lerp(_target_position, lerp_factor)
+	var new_pos := _character.global_position.lerp(_target_position, lerp_factor)
+	_character.global_position = new_pos
+	# スムージング位置も同期（モード切替時のジャーク防止）
+	_smoothed_position = new_pos
+	_smoothing_initialized = true
 
 	# 回転の補間（低FPS時のオーバーシュート防止）
 	var facing := _character.get_facing_direction()
