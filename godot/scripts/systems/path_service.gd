@@ -59,6 +59,8 @@ func setup(
 		# リアルタイム確定：パス開始時とポイント追加時に即座に反映
 		path_drawer.path_started.connect(_on_path_started)
 		path_drawer.path_point_added.connect(_on_path_point_added)
+		# パス延長終了時の履歴追加
+		path_drawer.path_extension_finished.connect(_on_path_extension_finished)
 
 	if path_mode_controller:
 		path_mode_controller.mode_started.connect(_on_path_mode_started)
@@ -491,8 +493,20 @@ func _on_path_point_added(character: Node, point: Vector3) -> void:
 	else:
 		path_execution_manager.add_realtime_path_point(character, point)
 
-	# NOTE: パスポイントは履歴に追加しない
-	# パス全体を1回のUndoで消せるようにするため、PATH_STARTのみを履歴に残す
+	# NOTE: 個別のパスポイントは履歴に追加しない
+	# パス延長セグメント単位でUndoするため、延長終了時にPATH_POINTを履歴に追加する
+
+
+## パス延長終了シグナルハンドラ（ドラッグリリースごとの履歴追加）
+func _on_path_extension_finished(character: Node, points_before: int, points_after: int) -> void:
+	if not path_undo_manager:
+		return
+
+	# 延長セグメントを履歴に追加
+	path_undo_manager.push(PathUndoManager.OperationType.PATH_POINT, character, {
+		"points_before": points_before,
+		"points_after": points_after
+	})
 
 
 ## ========================================

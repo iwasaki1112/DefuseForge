@@ -28,6 +28,8 @@ signal path_started(character: Node, start_point: Vector3)
 ## パス先端近くでドラッグが検出されたシグナル（パス延長用）
 @warning_ignore("unused_signal")
 signal endpoint_drag_detected(screen_pos: Vector2)
+## パス延長終了シグナル（ドラッグリリースごとの履歴追加用）
+signal path_extension_finished(character: Node, points_before: int, points_after: int)
 #endregion
 
 #region エクスポート設定
@@ -95,6 +97,11 @@ var _path_execution_manager: Node = null
 
 ## 実行中のキャラクター（パス完了シグナル接続用）
 var _executing_character: Node = null
+
+## パス延長モードフラグ
+var _is_continuing: bool = false
+## 延長開始前のポイント数
+var _points_before_extension: int = 0
 #endregion
 
 
@@ -566,6 +573,12 @@ func _finish_drawing() -> void:
 	if _path_points.size() >= 2 and _character:
 		_point_history.append(PointType.PATH)
 
+		# パス延長モードの場合、延長終了シグナルを発火
+		if _is_continuing:
+			path_extension_finished.emit(_character, _points_before_extension, _path_points.size())
+			_is_continuing = false
+			_points_before_extension = 0
+
 	# パスは既にリアルタイムで確定済み - 描画終了を通知
 	drawing_finished.emit(_path_points)
 
@@ -579,6 +592,8 @@ func can_continue_path() -> bool:
 func start_continue_from_endpoint() -> bool:
 	if not can_continue_path():
 		return false
+	_is_continuing = true
+	_points_before_extension = _path_points.size()
 	_is_drawing = true
 	return true
 #endregion

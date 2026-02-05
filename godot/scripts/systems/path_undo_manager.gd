@@ -138,9 +138,10 @@ func _undo_path_start(character: Node, char_id: int, _data: Dictionary) -> bool:
 	return false
 
 
-## パスポイントのUndo
-## 最後のポイントを削除
-func _undo_path_point(character: Node, char_id: int, _data: Dictionary) -> bool:
+## パスポイントのUndo（延長セグメント単位）
+## data.points_before が指定されている場合、その数までポイントを削除
+## 指定がない場合は最後のポイント1つを削除
+func _undo_path_point(character: Node, char_id: int, data: Dictionary) -> bool:
 	if not _path_execution_manager:
 		return false
 
@@ -150,12 +151,17 @@ func _undo_path_point(character: Node, char_id: int, _data: Dictionary) -> bool:
 	var path_data: Dictionary = _path_execution_manager.pending_paths[char_id]
 	var path: Array = path_data.get("path", [])
 
-	if path.size() <= 1:
-		# パスが1ポイント以下になる場合はパス全体を削除
-		return _undo_path_start(character, char_id, _data)
+	# 延長セグメントのUndo: points_beforeまで戻す
+	var target_size: int = data.get("points_before", path.size() - 1)
+	if target_size < 1:
+		target_size = 1  # 最低1ポイントは残す
 
-	# 最後のポイントを削除
-	path.pop_back()
+	if path.size() <= target_size:
+		# 削除するポイントがない
+		return true
+
+	# パスをtarget_sizeまで縮小
+	path.resize(target_size)
 	path_data["path"] = path
 
 	# パスメッシュを更新
@@ -170,10 +176,16 @@ func _undo_path_point(character: Node, char_id: int, _data: Dictionary) -> bool:
 			path_mesh.clear()
 
 	# PathDrawerの内部状態も更新（描画中の場合）
-	if _path_drawer and _path_drawer._path_points.size() > 1:
-		_path_drawer._path_points.resize(_path_drawer._path_points.size() - 1)
-		if _path_drawer._path_mesh:
-			_path_drawer._path_mesh.update_from_points(_path_drawer._path_points)
+	if _path_drawer:
+		if _path_drawer._path_points.size() > target_size:
+			_path_drawer._path_points.resize(target_size)
+			if _path_drawer._path_mesh:
+				_path_drawer._path_mesh.update_from_points(_path_drawer._path_points)
+		# PathDrawerの履歴からもPATHエントリを削除
+		if not _path_drawer._point_history.is_empty():
+			var last_type = _path_drawer._point_history[_path_drawer._point_history.size() - 1]
+			if last_type == _path_drawer.PointType.PATH:
+				_path_drawer._point_history.pop_back()
 
 	return true
 
