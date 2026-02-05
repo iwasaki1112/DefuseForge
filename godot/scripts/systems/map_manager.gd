@@ -84,12 +84,11 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 	current_preset = preset
 	current_map_id = map_id
 
-	# FoWマップサイズ更新（ground_ノードから自動計算されるため、ここでは設定しない）
-	# MapBase._notify_fow_system() がground_ノードのAABBからサイズを計算してFoWに設定する
-	if _game_manager:
-		_game_manager.fow_map_size = preset.map_size  # フォールバック値として保持
+	# FoWマップサイズ更新はMapBase._notify_fow_system()で自動計算される
+	# GameManagerのfow_map_sizeフォールバック値は_on_map_loaded経由で設定される
+	# （循環参照を避けるため、ここでは直接GameManagerを参照しない）
 
-	# ロード完了シグナル
+	# ロード完了シグナル（map_sizeも通知）
 	map_loaded.emit(map_id, map_instance)
 
 	return map_instance

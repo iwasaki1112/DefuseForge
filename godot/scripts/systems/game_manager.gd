@@ -1322,6 +1322,10 @@ func register_all_doors_in_map() -> void:
 
 ## マップロード完了時
 func _on_map_loaded(_map_id: String, _map_instance: Node3D) -> void:
+	# FoWマップサイズのフォールバック値を更新（循環参照回避のためここで設定）
+	if map_manager and map_manager.current_preset:
+		fow_map_size = map_manager.current_preset.map_size
+
 	# ドアを登録
 	register_all_doors_in_map()
 
