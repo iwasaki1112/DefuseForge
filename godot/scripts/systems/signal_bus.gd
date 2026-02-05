@@ -1,5 +1,5 @@
 extends Node
-class_name SignalBus
+## NOTE: class_name removed - this script is registered as Autoload "SignalBus"
 
 ## グローバルシグナルバス
 ## システム間のイベント通知を一元管理
@@ -97,21 +97,7 @@ signal map_loaded(map_id: String, map_instance: Node3D)
 signal map_will_unload(map_id: String)
 
 # ============================================
-# Singleton Instance
+# Autoload Note
 # ============================================
-
-static var _instance: SignalBus = null
-
-
-static func get_instance() -> SignalBus:
-	if _instance == null:
-		_instance = SignalBus.new()
-		_instance.name = "SignalBus"
-	return _instance
-
-
-## インスタンスをリセット（テスト用）
-static func reset() -> void:
-	if _instance:
-		_instance.queue_free()
-		_instance = null
+# This script is registered as an Autoload in project.godot
+# Access via: SignalBus.signal_name.emit(...) or SignalBus.signal_name.connect(...)

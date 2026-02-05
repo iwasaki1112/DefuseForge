@@ -25,6 +25,7 @@ MapRegistry="*res://scripts/registries/map_registry.gd"
 PlayerState="*res://scripts/systems/player_state.gd"
 CharacterColorManager="*res://scripts/systems/character_color_manager.gd"
 SettingsManager="*res://scripts/systems/settings_manager.gd"
+SignalBus="*res://scripts/systems/signal_bus.gd"
 
 [display]
 

@@ -63,22 +63,7 @@ var is_alive: bool = true
 # ============================================
 # Remote Interpolation (リモートキャラクター用補間)
 # ============================================
-## スナップショットバッファ（時系列順に格納）
-var _snapshot_buffer: Array[Dictionary] = []
-## 補間処理がアクティブかどうか
-var _remote_interpolation_active: bool = false
-## レンダリング用タイムベース（サーバー時刻との同期）
-var _render_time_base: float = 0.0
-## 最後に受信したスナップショットの時刻
-var _last_snapshot_time: float = 0.0
-## 外挿中フラグ
-var _is_extrapolating: bool = false
-## 直近の速度（外挿用）
-var _last_velocity: Vector3 = Vector3.ZERO
-## 旧実装との互換用（段階的移行）
-var _remote_target_position: Vector3 = Vector3.ZERO
-var _remote_target_rotation: float = 0.0
-var _remote_target_velocity: Vector3 = Vector3.ZERO
+## 旧実装との互換用（to_character_state()で使用）
 var _remote_target_animation_state: String = ""
 
 # ============================================
@@ -94,6 +79,7 @@ var _facing_direction: Vector3 = Vector3.FORWARD
 var anim_ctrl: CharacterAnimationController = null  # CharacterAnimationController
 var vision: VisionComponent = null  # VisionComponent for FoW
 var combat_awareness: CombatAwarenessComponent = null  # CombatAwarenessComponent for enemy tracking
+var remote_interpolation: RemoteInterpolationComponent = null  # Remote interpolation for multiplayer
 var current_weapon: WeaponPreset = null  # WeaponPreset
 var _weapon_attachment: BoneAttachment3D = null  # 武器アタッチメントノード
 var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
@@ -120,6 +106,15 @@ func _ready() -> void:
 	current_health = max_health
 	is_alive = true
 	add_to_group(GameConstants.GROUP_CHARACTERS)
+	# リモート補間コンポーネントをセットアップ
+	_setup_remote_interpolation()
+
+
+## リモート補間コンポーネントをセットアップ
+func _setup_remote_interpolation() -> void:
+	if remote_interpolation == null:
+		remote_interpolation = RemoteInterpolationComponent.new()
+		remote_interpolation.setup(self)
 
 # ============================================
 # HP API
@@ -962,26 +957,18 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 	if is_local():
 		return  # ローカルキャラクターは自分で状態を管理
 
-	# 補間を有効化
-	_remote_interpolation_active = true
+	# リモート補間コンポーネントに委譲
+	if remote_interpolation:
+		remote_interpolation.activate()
+		var current_time := Time.get_ticks_msec() / 1000.0
+		remote_interpolation.add_snapshot(state, current_time)
 
-	# スナップショットをバッファに追加
-	var current_time := Time.get_ticks_msec() / 1000.0
-	_add_snapshot(state, current_time)
+		# 初回受信時は即座に位置を設定（テレポート防止）
+		if not remote_interpolation.is_active() or global_position.distance_to(state.position) > 5.0:
+			remote_interpolation.initialize_position(state)
 
-	# 旧実装との互換（徐々に削除予定）
-	_remote_target_position = state.position
-	_remote_target_rotation = state.rotation
-	_remote_target_velocity = state.velocity
+	# 旧実装との互換（段階的に削除予定）
 	_remote_target_animation_state = state.animation_state
-	_last_velocity = state.velocity
-
-
-	# 初回受信時は即座に位置を設定（テレポート防止）
-	if _snapshot_buffer.size() <= 1 or global_position.distance_to(state.position) > 5.0:
-		global_position = state.position
-		set_facing_direction(state.rotation)
-		_render_time_base = current_time - NetworkConstants.INTERPOLATION_DELAY
 
 	# HPを更新（即座に反映）
 	current_health = state.current_health
@@ -990,8 +977,8 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 	if is_alive and not state.is_alive:
 		# 死亡 - アニメーションを再生
 		is_alive = false
-		_remote_interpolation_active = false  # 死亡時は補間停止
-		_clear_snapshot_buffer()
+		if remote_interpolation:
+			remote_interpolation.deactivate()
 		if anim_ctrl and anim_ctrl.has_method("play_death"):
 			# リモート死亡の場合はデフォルト方向で再生
 			anim_ctrl.play_death(CharacterAnimationController.HitDirection.FRONT, false)
@@ -1013,148 +1000,13 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 				equip_weapon(weapon_preset)
 
 
-## スナップショットをバッファに追加
-func _add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) -> void:
-	var snapshot := {
-		"time": time,
-		"position": state.position,
-		"rotation": state.rotation,
-		"velocity": state.velocity,
-		"animation_state": state.animation_state
-	}
-	_snapshot_buffer.append(snapshot)
-	_last_snapshot_time = time
-	_is_extrapolating = false
-
-	# バッファサイズ制限
-	while _snapshot_buffer.size() > NetworkConstants.SNAPSHOT_BUFFER_SIZE:
-		_snapshot_buffer.pop_front()
-
-
-## スナップショットバッファをクリア
-func _clear_snapshot_buffer() -> void:
-	_snapshot_buffer.clear()
-	_is_extrapolating = false
-
-
 ## リモートキャラクターの補間更新（毎フレーム呼び出し）
 func update_remote_interpolation(delta: float) -> void:
-	if not _remote_interpolation_active or is_local() or not is_alive:
+	if is_local() or not is_alive:
 		return
-
-	# レンダリング時刻を進める
-	_render_time_base += delta
-
-	# バッファベースの補間を試行
-	var interpolated := _get_interpolated_state()
-
-	if interpolated.is_empty():
-		# バッファが不十分な場合はフォールバック（旧実装）
-		_apply_fallback_interpolation(delta)
-	else:
-		# バッファベースの補間を適用
-		global_position = interpolated.position
-		set_facing_direction(interpolated.rotation)  # _facing_direction を更新
-
-		# 回転は四元数SLERPで滑らかに補間（ローカルと同じ方式）
-		if anim_ctrl and anim_ctrl.has_method("update_model_rotation_smooth"):
-			anim_ctrl.update_model_rotation_smooth(_facing_direction, delta)
-
-		# アニメーション更新（明示的な状態を使用）
-		if anim_ctrl:
-			var anim_state: String = interpolated.get("animation_state", "")
-			if not anim_state.is_empty() and anim_ctrl.has_method("apply_animation_state"):
-				anim_ctrl.apply_animation_state(anim_state, delta)
-			else:
-				# フォールバック: velocity から推論
-				var vel: Vector3 = interpolated.get("velocity", Vector3.ZERO)
-				var move_dir := vel.normalized() if vel.length_squared() > 0.01 else Vector3.ZERO
-				var is_running := vel.length() > 3.0
-				anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
-
-
-## バッファから補間された状態を取得
-func _get_interpolated_state() -> Dictionary:
-	if _snapshot_buffer.size() < 2:
-		return {}
-
-	var target_time := _render_time_base
-
-	# 補間可能な2点を探す
-	for i in range(_snapshot_buffer.size() - 1):
-		var before: Dictionary = _snapshot_buffer[i]
-		var after: Dictionary = _snapshot_buffer[i + 1]
-
-		var before_time: float = before.time
-		var after_time: float = after.time
-		if before_time <= target_time and target_time <= after_time:
-			var t: float = (target_time - before_time) / (after_time - before_time)
-			t = clampf(t, 0.0, 1.0)
-			_is_extrapolating = false
-			# アニメーション状態は補間せず、近い方を使用
-			var anim_state: String = after.get("animation_state", "") if t > 0.5 else before.get("animation_state", "")
-			return {
-				"position": (before.position as Vector3).lerp(after.position, t),
-				"rotation": lerp_angle(before.rotation as float, after.rotation as float, t),
-				"velocity": (before.velocity as Vector3).lerp(after.velocity, t),
-				"animation_state": anim_state
-			}
-
-	# 最新のスナップショットより未来の場合は外挿
-	var latest: Dictionary = _snapshot_buffer.back()
-	var latest_time: float = latest.time
-	var time_since_latest: float = target_time - latest_time
-
-	if time_since_latest > 0.0 and time_since_latest < NetworkConstants.MAX_EXTRAPOLATION_TIME:
-		_is_extrapolating = true
-		var extrapolated_pos: Vector3 = latest.position + latest.velocity * time_since_latest
-		return {
-			"position": extrapolated_pos,
-			"rotation": latest.rotation,
-			"velocity": latest.velocity,
-			"animation_state": latest.get("animation_state", "")
-		}
-
-	# 外挿限界を超えた場合は最新値を返す
-	if not _snapshot_buffer.is_empty():
-		_is_extrapolating = true
-		return {
-			"position": latest.position,
-			"rotation": latest.rotation,
-			"velocity": Vector3.ZERO,
-			"animation_state": latest.get("animation_state", "")
-		}
-
-	return {}
-
-
-## フォールバック補間（旧実装との互換）
-func _apply_fallback_interpolation(delta: float) -> void:
-	const FALLBACK_SPEED := 25.0
-
-	# 位置の補間
-	global_position = global_position.lerp(_remote_target_position, FALLBACK_SPEED * delta)
-
-	# 回転の補間（_facing_direction を更新）
-	var current_rot := atan2(_facing_direction.x, _facing_direction.z)
-	var target_rot := _remote_target_rotation
-	var rot_diff := fmod(target_rot - current_rot + PI, TAU) - PI
-	var new_rot := current_rot + rot_diff * FALLBACK_SPEED * delta
-	set_facing_direction(new_rot)
-
-	# 回転は四元数SLERPで滑らかに補間（ローカルと同じ方式）
-	if anim_ctrl and anim_ctrl.has_method("update_model_rotation_smooth"):
-		anim_ctrl.update_model_rotation_smooth(_facing_direction, delta)
-
-	# アニメーション更新（明示的な状態を使用）
-	if anim_ctrl:
-		if not _remote_target_animation_state.is_empty() and anim_ctrl.has_method("apply_animation_state"):
-			anim_ctrl.apply_animation_state(_remote_target_animation_state, delta)
-		else:
-			# フォールバック: velocity から推論
-			var move_dir := _remote_target_velocity.normalized() if _remote_target_velocity.length_squared() > 0.01 else Vector3.ZERO
-			var is_running := _remote_target_velocity.length() > 3.0
-			anim_ctrl.update_animation(move_dir, _facing_direction, is_running, delta)
+	# コンポーネントに委譲
+	if remote_interpolation:
+		remote_interpolation.update(delta)
 
 
 ## 現在の状態をCharacterStateMessageに変換
