@@ -1283,6 +1283,12 @@ func _on_path_progress_updated(path_index: int, character: Node) -> void:
 			path_mesh.clear()
 			return
 
+		# 通過した距離を計算（アニメーション連続性用）
+		var passed_distance: float = 0.0
+		for i in range(1, path_index + 1):
+			if i < full_path.size():
+				passed_distance += full_path[i - 1].distance_to(full_path[i])
+
 		# path_index以降のポイントで新しいパスを作成
 		var remaining_path = PackedVector3Array()
 		for i in range(path_index, full_path.size()):
@@ -1290,6 +1296,9 @@ func _on_path_progress_updated(path_index: int, character: Node) -> void:
 
 		# パスメッシュを更新
 		if remaining_path.size() >= 2:
+			# 通過距離をオフセットとして設定（ドットアニメーション連続性用）
+			if path_mesh.has_method("set_path_offset"):
+				path_mesh.set_path_offset(passed_distance)
 			path_mesh.update_from_points(remaining_path)
 		else:
 			path_mesh.clear()

@@ -58,8 +58,12 @@ func _acquire(parent: Node3D, color: Color, width: float) -> PathLineMesh:
 
 		# 状態をリセット
 		mesh.visible = true
-		mesh.set_line_color(color)
-		mesh.line_width = width
+		mesh.line_color = color
+		mesh.set_line_width(width)
+		# オフセットをリセット（新しいパス用）
+		mesh.reset_path_offset()
+		# シェーダーパラメータを再設定（ドットアニメーション用）
+		mesh.refresh_shader_parameters()
 	else:
 		# 新規作成
 		mesh = PathLineMesh.new()
