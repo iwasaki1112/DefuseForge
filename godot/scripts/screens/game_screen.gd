@@ -445,18 +445,13 @@ func _on_character_marker_pressed(character: Node) -> void:
 
 
 func _pan_camera_to_position(target_pos: Vector3) -> void:
-	if not camera:
+	if not camera or not _camera_pan_controller:
 		return
 
-	var z_offset := _calculate_camera_z_offset()
-	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + z_offset)
+	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s" % [target_pos])
 
-	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s, new_camera_pos=%s, current_camera_pos=%s" % [target_pos, new_camera_pos, camera.global_position])
-
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
+	# CameraPanControllerのターゲット位置を設定
+	_camera_pan_controller.set_ground_target(target_pos)
 
 
 ## ========================================

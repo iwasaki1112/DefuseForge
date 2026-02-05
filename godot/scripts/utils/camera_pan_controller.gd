@@ -24,13 +24,21 @@ const DRAG_THRESHOLD: float = 5.0
 ## 内部状態（PCマウスドラッグ用）
 var _drag_active: bool = false
 var _drag_start: Vector2 = Vector2.ZERO
-var _camera_start_pos: Vector3 = Vector3.ZERO
+var _drag_start_target: Vector2 = Vector2.ZERO  # ドラッグ開始時のターゲット位置
 var _pending_drag: bool = false
 var _pending_start: Vector2 = Vector2.ZERO
 
 ## 内部状態（ズーム）
 var _target_zoom: float = 0.0
 var _current_zoom: float = 0.0
+
+## カメラが見ている地上のターゲット位置（XZ平面）
+var _ground_target: Vector2 = Vector2.ZERO  # 現在位置
+var _target_ground: Vector2 = Vector2.ZERO  # 目標位置
+var _is_animating_to_target: bool = false   # アニメーション中フラグ
+
+## パンアニメーション設定
+var pan_smoothing: float = 8.0  # パンのスムージング速度
 
 ## 内部状態（マルチタッチ）
 var _touch_points: Dictionary = {}  # touch_index -> position
@@ -53,6 +61,9 @@ func setup(target_camera: Camera3D, speed: float = 0.05) -> void:
 	if camera:
 		_current_zoom = camera.global_position.y
 		_target_zoom = _current_zoom
+		# 初期ターゲット位置を計算
+		_ground_target = _calculate_ground_target_from_camera()
+		_target_ground = _ground_target
 
 
 ## ピンチ中かどうかを取得
@@ -118,7 +129,9 @@ func handle_input(event: InputEvent) -> bool:
 		var adjusted_speed = _get_adjusted_pan_speed(pan_speed)
 		var move_x = -delta.x * adjusted_speed
 		var move_z = -delta.y * adjusted_speed
-		camera.global_position = _camera_start_pos + Vector3(move_x, 0, move_z)
+		# ターゲット位置を更新（開始位置からの差分、アニメーションなし）
+		_ground_target = _drag_start_target + Vector2(move_x, move_z)
+		_target_ground = _ground_target
 		return true
 
 	# マウスホイールでズーム
@@ -150,7 +163,8 @@ func check_and_start_drag(current_pos: Vector2) -> bool:
 	if distance >= DRAG_THRESHOLD:
 		_drag_active = true
 		_drag_start = _pending_start
-		_camera_start_pos = camera.global_position
+		_drag_start_target = _ground_target  # ドラッグ開始時のターゲット位置を保存
+		_is_animating_to_target = false  # アニメーションをキャンセル
 		_pending_drag = false
 		return true
 
@@ -253,6 +267,7 @@ func check_and_start_touch_pan(current_pos: Vector2) -> bool:
 	if distance >= DRAG_THRESHOLD:
 		_is_touch_panning = true
 		_prev_touch_pos = current_pos
+		_is_animating_to_target = false  # アニメーションをキャンセル
 		_pending_touch_pan = false
 		return true
 
@@ -273,6 +288,7 @@ func cancel_potential_touch_pan() -> void:
 func start_touch_pan(pos: Vector2) -> void:
 	_prev_touch_pos = pos
 	_is_touch_panning = true
+	_is_animating_to_target = false  # アニメーションをキャンセル
 	_pending_touch_pan = false
 
 
@@ -287,7 +303,9 @@ func update_touch_pan(current_pos: Vector2) -> bool:
 	var adjusted_speed = _get_adjusted_pan_speed(mobile_pan_speed)
 	var move_x = -relative_drag.x * adjusted_speed
 	var move_z = -relative_drag.y * adjusted_speed
-	camera.global_position += Vector3(move_x, 0, move_z)
+	# ターゲット位置を更新（アニメーションなし）
+	_ground_target += Vector2(move_x, move_z)
+	_target_ground = _ground_target
 
 	return true
 
@@ -304,15 +322,69 @@ func is_touch_panning() -> bool:
 	return _is_touch_panning
 
 
-## 毎フレーム呼び出してズームを滑らかに適用
+## 毎フレーム呼び出してズームとパンを滑らかに適用
 func process(delta: float) -> void:
 	if not camera:
 		return
 
+	# ズームのスムージング
 	if not is_equal_approx(_current_zoom, _target_zoom):
 		_current_zoom = lerpf(_current_zoom, _target_zoom, zoom_smoothing * delta)
 
 		if absf(_current_zoom - _target_zoom) < 0.01:
 			_current_zoom = _target_zoom
 
-		camera.global_position.y = _current_zoom
+	# パンのスムージング（アニメーション中のみ）
+	if _is_animating_to_target:
+		_ground_target = _ground_target.lerp(_target_ground, pan_smoothing * delta)
+
+		if _ground_target.distance_to(_target_ground) < 0.01:
+			_ground_target = _target_ground
+			_is_animating_to_target = false
+
+	# ターゲット位置を基準にカメラ位置を更新
+	_update_camera_position_from_target()
+
+
+## ターゲット位置を基準にカメラ位置を更新
+func _update_camera_position_from_target() -> void:
+	if not camera:
+		return
+	var z_offset := _calculate_z_offset(_current_zoom)
+	camera.global_position = Vector3(_ground_target.x, _current_zoom, _ground_target.y + z_offset)
+
+
+## 現在のカメラ位置から地上のターゲット位置を計算
+func _calculate_ground_target_from_camera() -> Vector2:
+	if not camera:
+		return Vector2.ZERO
+	var z_offset := _calculate_z_offset(camera.global_position.y)
+	return Vector2(camera.global_position.x, camera.global_position.z - z_offset)
+
+
+## ターゲット位置を設定（アニメーション付き）
+func set_ground_target(target: Vector3) -> void:
+	_target_ground = Vector2(target.x, target.z)
+	_is_animating_to_target = true
+
+
+## ターゲット位置を即座に設定（アニメーションなし）
+func set_ground_target_immediate(target: Vector3) -> void:
+	_ground_target = Vector2(target.x, target.z)
+	_target_ground = _ground_target
+	_is_animating_to_target = false
+
+
+## ターゲット位置を移動（パン用）- アニメーションをキャンセル
+func move_ground_target(delta_x: float, delta_z: float) -> void:
+	_is_animating_to_target = false
+	_ground_target.x += delta_x
+	_ground_target.y += delta_z
+	_target_ground = _ground_target
+
+
+## カメラ高さからZオフセットを計算（角度に基づく）
+func _calculate_z_offset(height: float) -> float:
+	if not camera:
+		return 0.0
+	return height * tan(PI / 2.0 + camera.rotation.x)
