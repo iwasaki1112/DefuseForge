@@ -914,22 +914,22 @@ func set_extension_path_for_character(character: Node, extension_path: Array[Vec
 	return true
 
 
-## 延長パスのメッシュを解放
+## 延長パスのメッシュを解放（プールに返却）
 func _free_extension_mesh(char_id: int) -> void:
 	if _extension_path_meshes.has(char_id):
 		var mesh = _extension_path_meshes[char_id]
 		if is_instance_valid(mesh):
-			mesh.queue_free()
+			PathLineMeshPool.release(mesh)
 		_extension_path_meshes.erase(char_id)
 
 
-## アクティブパスメッシュを解放（複数回延長した場合の全セグメント）
+## アクティブパスメッシュを解放（プールに返却、複数回延長した場合の全セグメント）
 func _free_active_path_meshes(char_id: int) -> void:
 	if _active_path_meshes.has(char_id):
 		var meshes: Array = _active_path_meshes[char_id]
 		for mesh in meshes:
 			if is_instance_valid(mesh):
-				mesh.queue_free()
+				PathLineMeshPool.release(mesh)
 		_active_path_meshes.erase(char_id)
 
 
@@ -1471,12 +1471,12 @@ func _clear_all_path_meshes() -> void:
 		_free_moving_path_points(char_id)
 
 
-## pending_pathsのデータからメッシュとポイントを解放
+## pending_pathsのデータからメッシュとポイントを解放（プールに返却）
 func _free_pending_path_data(data: Dictionary) -> void:
 	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
-		data["path_mesh"].queue_free()
+		PathLineMeshPool.release(data["path_mesh"])
 
-	# ポイントメッシュを解放
+	# ポイントメッシュを解放（プールに返却）
 	var mesh_keys = ["vision_points", "wait_points"]
 	for key in mesh_keys:
 		if data.has(key):
@@ -1631,20 +1631,18 @@ func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_len
 	return adjusted
 
 
-## パスメッシュを作成（キャラクター色対応）
+## パスメッシュを作成（キャラクター色対応、プール使用）
 func _create_path_mesh(path: Array[Vector3], character: Node = null) -> MeshInstance3D:
-	var mesh = MeshInstance3D.new()
-	mesh.set_script(PathLineMeshScript)
-
 	# キャラクター色を適用（ない場合はデフォルト水色）
+	var line_color: Color
 	if character:
 		var char_color = CharacterColorManager.get_character_color(character)
-		mesh.line_color = Color(char_color.r, char_color.g, char_color.b, 0.8)
+		line_color = Color(char_color.r, char_color.g, char_color.b, 0.8)
 	else:
-		mesh.line_color = Color(0.3, 0.8, 1.0, 0.8)
+		line_color = Color(0.3, 0.8, 1.0, 0.8)
 
-	mesh.line_width = GameConstants.PATH_LINE_WIDTH
-	_mesh_parent.add_child(mesh)
+	# プールからメッシュを取得
+	var mesh = PathLineMeshPool.acquire(_mesh_parent, line_color, GameConstants.PATH_LINE_WIDTH)
 
 	# パスを描画
 	var packed_path = PackedVector3Array()

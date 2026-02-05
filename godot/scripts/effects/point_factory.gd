@@ -4,6 +4,7 @@ extends RefCounted
 ## ポイントメッシュ作成ファクトリ
 ## VisionPoint/WaitPointの作成を一元化し、重複コードを削減
 ## NOTE: iOSビルド互換のためpreloadを使用せず、class_name参照を使用
+## NOTE: オブジェクトプールを使用してGC圧力を軽減
 
 ## ポイントタイプのエイリアス（ActionPointDataはclass_name定義済み）
 const PointType = ActionPointData.Type
@@ -23,7 +24,8 @@ static func create_vision_point(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = VisionPoint.new()
+	# プールから取得
+	var point = ActionPointPool.acquire_vision_point()
 
 	if parent:
 		parent.add_child(point)
@@ -74,7 +76,8 @@ static func create_wait_point(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = WaitPoint.new()
+	# プールから取得
+	var point = ActionPointPool.acquire_wait_point()
 
 	if parent:
 		parent.add_child(point)
@@ -124,12 +127,10 @@ static func create_point_by_type(
 			return null
 
 
-## ポイントメッシュのリストを解放
+## ポイントメッシュのリストを解放（プールに返却）
 ## @param meshes: 解放するメッシュの配列
 static func free_point_meshes(meshes: Array) -> void:
-	for mesh in meshes:
-		if mesh and is_instance_valid(mesh):
-			mesh.queue_free()
+	ActionPointPool.release_all(meshes)
 
 
 ## プレビュー用VisionPointを作成（半透明）
@@ -160,7 +161,8 @@ static func create_wait_point_preview(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var point = WaitPoint.new()
+	# プールから取得
+	var point = ActionPointPool.acquire_wait_point()
 
 	if parent:
 		parent.add_child(point)
