@@ -173,9 +173,7 @@ func _on_vision_point_added(data: Dictionary) -> void:
 
 
 func _on_wait_point_added(data: Dictionary) -> void:
-	print("[UndoDebug] _on_wait_point_added: before append, history=%s" % str(_point_history))
 	_point_history.append(PointType.WAIT)
-	print("[UndoDebug] _on_wait_point_added: after append, history=%s" % str(_point_history))
 	wait_point_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
 #endregion
 
@@ -566,9 +564,7 @@ func _finish_drawing() -> void:
 	_reset_wall_slide_state()
 
 	if _path_points.size() >= 2 and _character:
-		print("[UndoDebug] _finish_drawing: before append PATH, history=%s" % str(_point_history))
 		_point_history.append(PointType.PATH)
-		print("[UndoDebug] _finish_drawing: after append PATH, history=%s" % str(_point_history))
 
 	# パスは既にリアルタイムで確定済み - 描画終了を通知
 	drawing_finished.emit(_path_points)
@@ -995,23 +991,17 @@ func take_all_wait_points() -> Dictionary:
 
 #region Undo API
 func undo_last_point() -> int:
-	print("[UndoDebug] undo_last_point: history=%s" % str(_point_history))
 	if _point_history.is_empty():
-		print("[UndoDebug] undo_last_point: history is empty")
 		return -1
 
 	var last_type = _point_history.pop_back()
-	print("[UndoDebug] undo_last_point: popped type=%d, remaining=%s" % [last_type, str(_point_history)])
 
 	match last_type:
 		PointType.VISION:
-			print("[UndoDebug] undo_last_point: calling _vision_handler.undo_last()")
 			_vision_handler.undo_last()
 		PointType.WAIT:
-			print("[UndoDebug] undo_last_point: calling _wait_handler.undo_last()")
 			_wait_handler.undo_last()
 		PointType.PATH:
-			print("[UndoDebug] undo_last_point: calling _undo_path()")
 			_undo_path()
 
 	return last_type
