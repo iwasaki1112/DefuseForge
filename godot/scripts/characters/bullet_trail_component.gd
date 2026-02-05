@@ -90,7 +90,7 @@ func _get_muzzle_world_position(current_weapon: Resource, weapon_model: Node3D) 
 	return _weapon_socket.to_global(muzzle_offset)
 
 
-func _get_muzzle_offset(current_weapon: Resource, weapon_model: Node3D) -> Vector3:
+func _get_muzzle_offset(current_weapon: Resource, _weapon_model: Node3D) -> Vector3:
 	if current_weapon and current_weapon.has_method("get"):
 		var offset = current_weapon.get("muzzle_flash_offset")
 		if offset != null and offset != Vector3.ZERO:
