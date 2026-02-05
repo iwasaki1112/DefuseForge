@@ -62,6 +62,10 @@ var _remote_target_animation_state: String = ""
 ## すべてのコンポーネント（Animation, Vision）はこれを参照する
 var _facing_direction: Vector3 = Vector3.FORWARD
 
+## 手動回転中フラグ（長押しによるユーザー操作中）
+## このフラグがtrueの間は、敵の自動追跡を一時停止する
+var _is_manual_rotating: bool = false
+
 # ============================================
 # References
 # ============================================
@@ -199,6 +203,16 @@ func face_towards(target_pos: Vector3) -> void:
 ## 現在の向きを取得（すべてのコンポーネントはこれを参照すべき）
 func get_facing_direction() -> Vector3:
 	return _facing_direction
+
+
+## 手動回転モードを設定（長押し回転中に呼ばれる）
+func set_manual_rotating(rotating: bool) -> void:
+	_is_manual_rotating = rotating
+
+
+## 手動回転中かどうかを取得
+func is_manual_rotating() -> bool:
+	return _is_manual_rotating
 
 # ============================================
 # Vision Component API

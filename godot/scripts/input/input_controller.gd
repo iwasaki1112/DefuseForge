@@ -964,8 +964,21 @@ func _start_rotation_mode() -> void:
 	var char_pos = _rotation_target_character.global_position
 	_rotation_center_screen_pos = game_manager.camera.unproject_position(char_pos)
 
+	# 手動回転フラグを設定し、現在の敵ターゲットを無視
+	if _rotation_target_character.has_method("set_manual_rotating"):
+		_rotation_target_character.set_manual_rotating(true)
+	if _rotation_target_character.has_method("get_combat_awareness"):
+		var combat = _rotation_target_character.get_combat_awareness()
+		if combat and combat.has_method("dismiss_current_target"):
+			combat.dismiss_current_target()
+
 
 func _end_rotation_mode() -> void:
+	# 手動回転フラグを解除（nullにする前に）
+	if _rotation_target_character and is_instance_valid(_rotation_target_character):
+		if _rotation_target_character.has_method("set_manual_rotating"):
+			_rotation_target_character.set_manual_rotating(false)
+
 	_is_rotation_mode = false
 	_rotation_target_character = null
 	_long_press_timer = 0.0

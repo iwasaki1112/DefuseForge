@@ -80,8 +80,11 @@ func _update_idle_character(character: Node, delta: float) -> void:
 
 	var look_dir: Vector3 = Vector3.ZERO
 
-	# 敵視認チェック（最優先）
-	if character.combat_awareness and character.combat_awareness.has_method("is_tracking_enemy"):
+	# 敵視認チェック（最優先、ただし手動回転中はスキップ）
+	var is_manual_rotating: bool = false
+	if character.has_method("is_manual_rotating"):
+		is_manual_rotating = character.is_manual_rotating()
+	if not is_manual_rotating and character.combat_awareness and character.combat_awareness.has_method("is_tracking_enemy"):
 		if character.combat_awareness.is_tracking_enemy():
 			look_dir = character.combat_awareness.get_override_look_direction()
 
@@ -112,8 +115,11 @@ func process_primary_idle(character: Node, delta: float) -> void:
 
 	var look_dir: Vector3 = Vector3.ZERO
 
-	# 敵視認チェック（最優先）
-	if character.combat_awareness and character.combat_awareness.has_method("is_tracking_enemy"):
+	# 敵視認チェック（最優先、ただし手動回転中はスキップ）
+	var is_manual_rotating: bool = false
+	if character.has_method("is_manual_rotating"):
+		is_manual_rotating = character.is_manual_rotating()
+	if not is_manual_rotating and character.combat_awareness and character.combat_awareness.has_method("is_tracking_enemy"):
 		if character.combat_awareness.is_tracking_enemy():
 			look_dir = character.combat_awareness.get_override_look_direction()
 

@@ -502,8 +502,9 @@ func process(delta: float) -> void:
 			look_dir = move_dir
 		else:
 			# 優先順位: 敵視認 > 視線ポイント > 移動方向
-			# 1. 敵視認チェック（最優先）
-			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+			# 1. 敵視認チェック（最優先、ただし手動回転中はスキップ）
+			var is_manual_rotating: bool = _character.is_manual_rotating() if _character.has_method("is_manual_rotating") else false
+			if not is_manual_rotating and _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
 				if _combat_awareness.is_tracking_enemy():
 					look_dir = _combat_awareness.get_override_look_direction()
 
@@ -1108,8 +1109,9 @@ func _finish() -> void:
 		if anim_ctrl:
 			var final_dir: Vector3 = Vector3.ZERO
 
-			# 1. 敵を追跡中なら敵方向を維持（最優先）
-			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+			# 1. 敵を追跡中なら敵方向を維持（最優先、ただし手動回転中はスキップ）
+			var is_manual_rotating: bool = _character.is_manual_rotating() if _character.has_method("is_manual_rotating") else false
+			if not is_manual_rotating and _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
 				if _combat_awareness.is_tracking_enemy():
 					final_dir = _combat_awareness.get_override_look_direction()
 
