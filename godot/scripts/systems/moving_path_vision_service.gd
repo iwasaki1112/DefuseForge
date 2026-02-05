@@ -5,6 +5,9 @@ class_name MovingPathVisionService
 ## パス実行中のVisionポイントの追加・表示・非表示を管理
 ## GameManagerから抽出されたコンポーネント
 
+## ポイント到達判定距離閾値（ユニット）
+const POINT_REACHED_DISTANCE: float = 1.0
+
 ## VisionPointスクリプト（遅延ロード）
 var VisionPointScript = null
 
@@ -55,6 +58,10 @@ func add_vision_point(character: Node, path_ratio: float, anchor: Vector3, targe
 func update_preview(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float = 0.0) -> void:
 	var char_color := CharacterColorManager.get_character_color(character) if character else Color.WHITE
 
+	# プレビューが無効な場合は参照をクリアして再生成
+	if _preview and not is_instance_valid(_preview):
+		_preview = null
+
 	if not _preview:
 		if not VisionPointScript:
 			VisionPointScript = load("res://scripts/effects/vision_point.gd")
@@ -71,8 +78,9 @@ func update_preview(character: Node, anchor: Vector3, target_point: Vector3, pat
 
 ## プレビューをクリア
 func clear_preview() -> void:
-	if _preview and is_instance_valid(_preview):
-		_preview.queue_free()
+	if _preview:
+		if is_instance_valid(_preview):
+			_preview.queue_free()
 		_preview = null
 
 
@@ -128,8 +136,8 @@ func hide_passed_points(character: Node, _current_ratio: float) -> void:
 		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
 		var distance = char_pos.distance_to(anchor_flat)
 
-		# キャラクターがポイント位置に十分近い（1.0ユニット以内）なら非表示
-		if distance < 1.0:
+		# キャラクターがポイント位置に十分近いなら非表示
+		if distance < POINT_REACHED_DISTANCE:
 			point.visible = false
 
 
