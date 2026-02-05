@@ -31,6 +31,10 @@ var _smoke_area_manager: SmokeAreaManager = null
 const UPDATE_INTERVAL: float = 0.033  # 30Hz
 var _update_timer: float = 0.0
 
+# 分散更新設定（CPU負荷均等化）
+const ENEMIES_PER_FRAME: int = 2  # 1フレームあたりの最大チェック数
+var _enemy_check_index: int = 0   # 次にチェックする敵のインデックス
+
 # ============================================
 # Lifecycle
 # ============================================
@@ -117,6 +121,7 @@ func is_enabled() -> bool:
 # ============================================
 
 ## Update visibility of all enemy characters
+## 分散更新: 1フレームあたりENEMIES_PER_FRAME体ずつチェック（CPU負荷均等化）
 func update_visibility() -> void:
 	if not _is_enabled:
 		return
@@ -125,26 +130,49 @@ func update_visibility() -> void:
 	for friendly in _get_friendly_characters():
 		friendly.visible = true
 
-	# Check enemy visibility
-	for enemy in _get_enemy_characters():
-		var enemy_node3d := enemy as Node3D
-		if not enemy_node3d:
-			continue
+	# 敵リストを取得
+	var enemies := _get_enemy_characters()
+	if enemies.is_empty():
+		_enemy_check_index = 0
+		return
 
-		var enemy_pos: Vector3 = enemy_node3d.global_position
-		var is_visible := _is_position_visible_to_friendlies(enemy_pos)
+	# インデックスが範囲外の場合はリセット
+	if _enemy_check_index >= enemies.size():
+		_enemy_check_index = 0
 
-		var instance_id := enemy.get_instance_id()
+	# ENEMIES_PER_FRAME体ずつチェック（分散処理）
+	var checked_count := 0
+	while checked_count < ENEMIES_PER_FRAME and checked_count < enemies.size():
+		var enemy := enemies[_enemy_check_index]
+		_check_enemy_visibility(enemy)
 
-		# Update only if changed
-		if _visibility_cache.get(instance_id) != is_visible:
-			var start_time := Time.get_ticks_usec()
-			_visibility_cache[instance_id] = is_visible
-			enemy.visible = is_visible
-			visibility_changed.emit(enemy, is_visible)
-			var elapsed := Time.get_ticks_usec() - start_time
-			if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
-				print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
+		_enemy_check_index += 1
+		if _enemy_check_index >= enemies.size():
+			_enemy_check_index = 0
+
+		checked_count += 1
+
+
+## 単一の敵の可視性をチェック
+func _check_enemy_visibility(enemy: Node) -> void:
+	var enemy_node3d := enemy as Node3D
+	if not enemy_node3d:
+		return
+
+	var enemy_pos: Vector3 = enemy_node3d.global_position
+	var is_visible := _is_position_visible_to_friendlies(enemy_pos)
+
+	var instance_id := enemy.get_instance_id()
+
+	# Update only if changed
+	if _visibility_cache.get(instance_id) != is_visible:
+		var start_time := Time.get_ticks_usec()
+		_visibility_cache[instance_id] = is_visible
+		enemy.visible = is_visible
+		visibility_changed.emit(enemy, is_visible)
+		var elapsed := Time.get_ticks_usec() - start_time
+		if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
+			print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
 
 
 ## Check if a world position is visible to any friendly character

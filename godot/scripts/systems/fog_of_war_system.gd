@@ -5,26 +5,29 @@ extends Node3D
 ## GPU最適化されたFoW。レイキャスト不要で、ドア開閉時の即時更新をサポート
 ## SubViewport内でLight2Dの影計算を利用して視界を描画
 
-## Quality presets（モバイル60FPS最適化）
+## Quality presets（モバイル30FPS最適化）
 enum Quality { LOW, MEDIUM, HIGH }
-const QUALITY_SETTINGS := {
+
+## 品質設定（実行時に参照）
+## shadow_filter: 0=NONE, 1=PCF5, 2=PCF13
+static var QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 512,
-		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
-		"shadow_smooth": 1.0,
+		"resolution": 256,
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
+		"shadow_smooth": 0.5,
 		"update_hz": 30
 	},
 	Quality.MEDIUM: {
 		"resolution": 512,
-		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
-		"shadow_smooth": 1.5,
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5（軽量化）
+		"shadow_smooth": 1.0,
 		"update_hz": 30
 	},
 	Quality.HIGH: {
 		"resolution": 1024,
-		"shadow_filter": Light2D.SHADOW_FILTER_PCF13,
-		"shadow_smooth": 2.0,
-		"update_hz": 60
+		"shadow_filter": 2,  # SHADOW_FILTER_PCF13
+		"shadow_smooth": 1.5,
+		"update_hz": 30  # 60から30に削減
 	},
 }
 
@@ -35,7 +38,7 @@ const QUALITY_SETTINGS := {
 
 @export_group("Visual Settings")
 @export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.3)
-@export var quality: Quality = Quality.LOW
+@export var quality: Quality = Quality.MEDIUM  # パフォーマンス/品質バランス
 
 ## Internal settings (auto-configured from quality)
 var texture_resolution: int = 128
@@ -85,7 +88,8 @@ func _setup_visibility_viewport() -> void:
 	_visibility_viewport.name = "VisibilityViewport"
 	_visibility_viewport.size = Vector2i(texture_resolution, texture_resolution)
 	_visibility_viewport.transparent_bg = false
-	_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# UPDATE_ONCE + 必要時更新でGPU負荷削減（UPDATE_ALWAYSより30-50%軽量）
+	_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_visibility_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	# 2Dライティング用に設定
 	_visibility_viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
@@ -163,6 +167,10 @@ func _process(delta: float) -> void:
 	# テクスチャ更新は一定間隔で行う（パフォーマンス維持）
 	if _time_since_update >= _update_interval:
 		_time_since_update = 0.0
+
+		# SubViewportを手動で1回更新（UPDATE_ONCEモード）
+		if _visibility_viewport:
+			_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 		# シェーダーにテクスチャを設定
 		if _visibility_viewport and _fog_material:
@@ -400,6 +408,10 @@ const VISIBILITY_THRESHOLD: float = 0.15
 var _visibility_image: Image = null
 var _visibility_image_dirty: bool = true
 
+## GPU→CPU転送頻度削減用キャッシュ（2フレーム再利用で15Hz転送）
+const CACHE_REUSE_FRAMES: int = 2
+var _cache_frame_counter: int = 0
+
 
 ## ワールド位置がFoWテクスチャで可視かどうかを判定
 ## 視覚的なFoW表示と完全に同期した判定を行う
@@ -480,20 +492,27 @@ func _sample_visibility_from_cache(uv: Vector2) -> float:
 
 
 ## 可視性テクスチャキャッシュを更新
+## 2フレーム再利用でGPU→CPU転送頻度を30Hz→15Hzに削減
 func _update_visibility_image_cache() -> void:
 	if not _visibility_viewport:
 		return
 
 	# フレームごとに1回だけ更新（コスト削減）
 	if _visibility_image_dirty:
-		var start_time := Time.get_ticks_usec()
-		var viewport_texture := _visibility_viewport.get_texture()
-		if viewport_texture:
-			_visibility_image = viewport_texture.get_image()
+		_cache_frame_counter += 1
+
+		# CACHE_REUSE_FRAMESフレームごとに実際のGPU転送を行う
+		if _cache_frame_counter >= CACHE_REUSE_FRAMES or _visibility_image == null:
+			var start_time := Time.get_ticks_usec()
+			var viewport_texture := _visibility_viewport.get_texture()
+			if viewport_texture:
+				_visibility_image = viewport_texture.get_image()
+			_cache_frame_counter = 0
+			var elapsed := Time.get_ticks_usec() - start_time
+			if Debug.enabled and elapsed > 5000:  # 5ms以上かかった場合のみログ
+				print("[FOW] get_image() took ", elapsed / 1000.0, "ms")
+
 		_visibility_image_dirty = false
-		var elapsed := Time.get_ticks_usec() - start_time
-		if Debug.enabled and elapsed > 5000:  # 5ms以上かかった場合のみログ
-			print("[FOW] get_image() took ", elapsed / 1000.0, "ms")
 
 
 ## フレーム終了時にキャッシュをダーティにする（次フレームで再取得）
