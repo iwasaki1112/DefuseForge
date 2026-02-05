@@ -250,6 +250,7 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 
 
 ## レイキャストでキャラクターを検出
+## タップ用Area3D（大きめ）を優先し、物理ボディも検出する
 func raycast_character(screen_pos: Vector2) -> Node:
 	if not camera:
 		return null
@@ -259,19 +260,31 @@ func raycast_character(screen_pos: Vector2) -> Node:
 	var ray_end := ray_origin + ray_dir * 100.0
 
 	var space_state := _mesh_parent.get_world_3d().direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
 
-	var result := space_state.intersect_ray(query)
-	if result.is_empty():
-		return null
+	# まずArea3D（タップエリア）を検出
+	var area_query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	area_query.collide_with_areas = true
+	area_query.collide_with_bodies = false
 
-	# キャラクターを探す（衝突したコライダーの親を辿る）
-	var collider = result.collider
-	for character in characters:
-		if _is_child_of(collider, character):
-			return character
+	var area_result := space_state.intersect_ray(area_query)
+	if not area_result.is_empty():
+		var collider = area_result.collider
+		for character in characters:
+			if _is_child_of(collider, character):
+				return character
+
+	# Area3Dにヒットしなかった場合、物理ボディも検出
+	var body_query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	body_query.collide_with_areas = false
+	body_query.collide_with_bodies = true
+
+	var body_result := space_state.intersect_ray(body_query)
+	if not body_result.is_empty():
+		var collider = body_result.collider
+		for character in characters:
+			if _is_child_of(collider, character):
+				return character
+
 	return null
 
 

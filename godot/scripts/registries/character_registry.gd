@@ -182,7 +182,7 @@ func create_character_from_preset(preset: CharacterPresetScript, spawn_position:
 	model.name = "CharacterModel"
 	character.add_child(model)
 
-	# Setup collision shape
+	# Setup collision shape (物理衝突用 - 小さめ)
 	var collision := CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
 	var capsule := CapsuleShape3D.new()
@@ -191,6 +191,19 @@ func create_character_from_preset(preset: CharacterPresetScript, spawn_position:
 	collision.shape = capsule
 	collision.position.y = 0.9
 	character.add_child(collision)
+
+	# Setup tap area (タップ検出用 - 大きめ)
+	var tap_area := Area3D.new()
+	tap_area.name = "TapArea"
+	var tap_collision := CollisionShape3D.new()
+	tap_collision.name = "TapCollision"
+	var tap_capsule := CapsuleShape3D.new()
+	tap_capsule.radius = 0.7  # 物理コライダーの2倍（モバイルでタップしやすく）
+	tap_capsule.height = 1.8
+	tap_collision.shape = tap_capsule
+	tap_collision.position.y = 0.9
+	tap_area.add_child(tap_collision)
+	character.add_child(tap_area)
 
 	# Setup AnimationPlayer with shared animation library
 	var anim_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
