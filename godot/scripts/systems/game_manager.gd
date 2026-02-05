@@ -170,8 +170,9 @@ func unregister_character(character: Node) -> void:
 	if vision_service:
 		vision_service.unregister_character(character)
 
-	# 移動中パスVisionポイントをクリア
+	# 移動中パスVisionポイントとプレビューをクリア
 	clear_moving_path_vision_points_for_character(character)
+	clear_moving_path_vision_preview()
 
 	# ラベル削除・色解放
 	if label_manager:
@@ -1255,8 +1256,9 @@ func _on_map_loaded(_map_id: String, _map_instance: Node3D) -> void:
 
 ## マップアンロード前
 func _on_map_will_unload(_map_id: String) -> void:
-	# 移動中パスVisionポイントをすべてクリア
+	# 移動中パスVisionポイントとプレビューをすべてクリア
 	clear_all_moving_path_vision_points()
+	clear_moving_path_vision_preview()
 	# ドア登録をクリア
 	clear_door_registry()
 
