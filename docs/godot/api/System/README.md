@@ -14,6 +14,7 @@
 | [PathService](PathService.md) | パス描画・編集・実行の調整サービス |
 | [VisionService](VisionService.md) | 視界関連の更新・同期サービス |
 | [MapManager](MapManager.md) | マップライフサイクル管理・クリーンアップ |
+| [MovingPathVisionService](MovingPathVisionService.md) | 移動中パスVisionポイント管理サービス |
 | [OccluderManager](OccluderManager.md) | 3DマップからFoW用2Dオクルーダーを生成・管理 |
 | [EnvironmentSetup](EnvironmentSetup.md) | 環境設定コンポーネント（ライティング・レンダリング品質・ポストプロセス） |
 | [GameManager](GameManager.md) | コアゲームシステム初期化・更新の一元管理 |
