@@ -1200,6 +1200,27 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	return controller
 
 
+## キャラクターのPathFollowingControllerをクリーンアップ
+func cleanup_controller_for_character(character: Node) -> void:
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if is_instance_valid(controller):
+			controller.queue_free()
+		_path_controllers.erase(char_id)
+
+
+## 全PathFollowingControllerをクリーンアップ
+func cleanup_all_controllers() -> void:
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+		if is_instance_valid(controller):
+			controller.queue_free()
+	_path_controllers.clear()
+
+
 func _on_path_completed(character: Node) -> void:
 	# 到着したキャラクターのパスメッシュを即座に削除
 	if character:

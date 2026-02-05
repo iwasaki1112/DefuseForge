@@ -3,13 +3,10 @@ class_name GameManager
 ## コアゲームシステム管理
 ## システムの初期化・更新・入力処理・UI管理を一元管理
 
-const MapManagerScript = preload("res://scripts/systems/map_manager.gd")
-const PathDrawerScript = preload("res://scripts/effects/path_drawer.gd")
-const CharacterSetupServiceScript = preload("res://scripts/systems/character_setup_service.gd")
-const PathServiceScript = preload("res://scripts/systems/path_service.gd")
-const VisionServiceScript = preload("res://scripts/systems/vision_service.gd")
-const GrenadeScene = preload("res://scenes/weapons/grenade.tscn")
-const SmokeGrenadeScene = preload("res://scenes/weapons/smoke_grenade.tscn")
+## iOS互換性のため preload は使用しない
+## class_name を持つスクリプトは直接クラス名を使用
+## PathDrawerのみスクリプト参照が必要（RefCounted継承のため）
+var PathDrawerScript: GDScript = null
 
 ## UI接続用シグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -97,8 +94,15 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_ui_layer = ui_layer
 	fow_map_size = map_size
 
+	# iOS互換性のため遅延ロード（preloadは使用しない）
+	if PathDrawerScript == null:
+		PathDrawerScript = load("res://scripts/effects/path_drawer.gd")
+
 	# 初期化順序が重要
-	# 抽出されたサービスを先に初期化
+	# SmokeAreaManagerはGrenadeServiceより先に初期化（依存関係）
+	_setup_smoke_area_manager()
+
+	# 抽出されたサービスを初期化
 	_setup_character_manager_service()
 	_setup_grenade_service(mesh_parent)
 	_setup_door_service()
@@ -107,7 +111,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_path_execution_manager(mesh_parent)
 	_setup_moving_path_vision_service(mesh_parent)
 	_setup_idle_manager()
-	_setup_smoke_area_manager()
 	_setup_path_drawer()
 	_setup_path_mode_controller()
 	_setup_vision_service()
@@ -173,6 +176,10 @@ func unregister_character(character: Node) -> void:
 	# 移動中パスVisionポイントとプレビューをクリア
 	clear_moving_path_vision_points_for_character(character)
 	clear_moving_path_vision_preview()
+
+	# PathFollowingControllerをクリーンアップ
+	if path_execution_manager:
+		path_execution_manager.cleanup_controller_for_character(character)
 
 	# ラベル削除・色解放
 	if label_manager:
@@ -852,7 +859,7 @@ func _setup_path_mode_controller() -> void:
 
 func _setup_vision_service() -> void:
 	if vision_service == null:
-		vision_service = VisionServiceScript.new()
+		vision_service = VisionService.new()
 		vision_service.name = GameConstants.NODE_VISION_SERVICE
 		add_child(vision_service)
 		vision_service.setup(fow_map_size, is_vision_enabled)
@@ -902,7 +909,7 @@ func _setup_path_context_menu() -> void:
 
 func _setup_path_service() -> void:
 	if path_service == null:
-		path_service = PathServiceScript.new()
+		path_service = PathService.new()
 		path_service.name = GameConstants.NODE_PATH_SERVICE
 		add_child(path_service)
 		path_service.setup(
@@ -936,7 +943,7 @@ func _setup_round_manager() -> void:
 
 func _setup_character_setup_service() -> void:
 	if character_setup_service == null:
-		character_setup_service = CharacterSetupServiceScript.new()
+		character_setup_service = CharacterSetupService.new()
 		character_setup_service.setup(
 			vision_service.enemy_visibility_system,
 			vision_service.fog_of_war_system,
@@ -1259,6 +1266,9 @@ func _on_map_will_unload(_map_id: String) -> void:
 	# 移動中パスVisionポイントとプレビューをすべてクリア
 	clear_all_moving_path_vision_points()
 	clear_moving_path_vision_preview()
+	# PathFollowingControllerをすべてクリーンアップ
+	if path_execution_manager:
+		path_execution_manager.cleanup_all_controllers()
 	# ドア登録をクリア
 	clear_door_registry()
 
