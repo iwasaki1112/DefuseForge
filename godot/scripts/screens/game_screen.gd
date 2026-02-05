@@ -10,6 +10,9 @@ const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
 const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
 
+## カメラ設定
+const CAMERA_HEIGHT := 25.0
+
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
 @onready var map_container: Node3D = $MapContainer
@@ -287,10 +290,18 @@ func _setup_camera_for_player() -> void:
 
 	if player_character:
 		var target_pos := player_character.global_position
-		var camera_offset := Vector3(0, 25, 9.0)
-		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
-		if Debug.enabled: print("[Camera] Initial setup: character_pos=%s, camera_offset=%s, camera_pos=%s" % [target_pos, camera_offset, camera.global_position])
+		var z_offset := _calculate_camera_z_offset()
+		camera.global_position = Vector3(target_pos.x, CAMERA_HEIGHT, target_pos.z + z_offset)
+		if Debug.enabled: print("[Camera] Initial setup: character_pos=%s, height=%s, z_offset=%s, camera_pos=%s" % [target_pos, CAMERA_HEIGHT, z_offset, camera.global_position])
 		#_create_debug_axis(target_pos)  # デバッグ用軸表示（必要時にコメント解除）
+
+
+## カメラの角度からZオフセットを計算
+## Z_offset = height * tan(90° + rotation.x)
+func _calculate_camera_z_offset() -> float:
+	if not camera:
+		return 0.0
+	return CAMERA_HEIGHT * tan(PI / 2.0 + camera.rotation.x)
 
 
 ## ========================================
@@ -437,7 +448,8 @@ func _pan_camera_to_position(target_pos: Vector3) -> void:
 	if not camera:
 		return
 
-	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 9.0)
+	var z_offset := _calculate_camera_z_offset()
+	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + z_offset)
 
 	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s, new_camera_pos=%s, current_camera_pos=%s" % [target_pos, new_camera_pos, camera.global_position])
 
