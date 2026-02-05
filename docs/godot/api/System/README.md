@@ -23,3 +23,4 @@
 | [TouchInputHandler](TouchInputHandler.md) | モバイル用タッチ入力ハンドラ |
 | [RoundManager](RoundManager.md) | ラウンド状態管理・タイマー・生存者数追跡・勝敗判定 |
 | [SmokeAreaManager](SmokeAreaManager.md) | スモークエリアのグローバル管理・視線判定API |
+| [SignalBus](SignalBus.md) | グローバルシグナルバス・イベント通知一元管理（Autoload） |
