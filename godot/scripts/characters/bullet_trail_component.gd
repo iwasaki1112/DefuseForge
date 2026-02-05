@@ -56,8 +56,9 @@ func _on_character_tree_exited() -> void:
 
 ## トレイルノードをクリーンアップ
 func cleanup() -> void:
-	if _bullet_trail_tween and _bullet_trail_tween.is_running():
+	if _bullet_trail_tween and is_instance_valid(_bullet_trail_tween) and _bullet_trail_tween.is_running():
 		_bullet_trail_tween.kill()
+	_bullet_trail_tween = null
 	if _bullet_trail and is_instance_valid(_bullet_trail):
 		_bullet_trail.queue_free()
 		_bullet_trail = null
@@ -137,8 +138,12 @@ func _get_bullet_target_position() -> Vector3:
 			return target_pos
 
 	# 2. フォールバック: キャラクターの視線方向に延長
-	# Godotの前方は-Z、GameCharacterのfacing_directionと一致させる
-	var forward = -_character.global_transform.basis.z
+	# facing_directionを使用（リモートキャラではノード回転と一致しない場合がある）
+	var forward: Vector3
+	if _character.has_method("get_facing_direction"):
+		forward = _character.get_facing_direction()
+	else:
+		forward = -_character.global_transform.basis.z
 	return _character.global_position + Vector3(0, 1.5, 0) + forward * BULLET_TRAIL_MAX_DISTANCE
 
 

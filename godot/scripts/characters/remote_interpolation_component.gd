@@ -105,7 +105,8 @@ func clear() -> void:
 
 ## レンダリング時刻のドリフト補正
 ## スナップショット到着時刻との同期を維持
-func _correct_time_drift() -> void:
+## @param delta: フレーム時間（フレームレート非依存の補正に使用）
+func _correct_time_drift(delta: float) -> void:
 	if _snapshot_buffer.size() < 2:
 		return
 
@@ -115,9 +116,11 @@ func _correct_time_drift() -> void:
 
 	# ドリフトが大きすぎる場合は補正（±50ms以上）
 	if absf(drift) > 0.05:
-		# 急激な補正ではなく、徐々に補正（1秒あたり最大20ms）
-		var correction := clampf(drift, -0.02, 0.02)
-		_render_time_base -= correction * 0.5
+		# フレームレート非依存の補正（1秒あたり最大50ms補正）
+		const MAX_CORRECTION_PER_SEC := 0.05
+		var max_correction := MAX_CORRECTION_PER_SEC * delta
+		var correction := clampf(drift, -max_correction, max_correction)
+		_render_time_base -= correction
 
 
 ## 初回スナップショットが受信済みか
@@ -146,7 +149,7 @@ func update(delta: float) -> void:
 
 	# レンダリング時刻を進める（ドリフト補正付き）
 	_render_time_base += delta
-	_correct_time_drift()
+	_correct_time_drift(delta)
 
 	# バッファベースの補間を試行
 	var interpolated := _get_interpolated_state()

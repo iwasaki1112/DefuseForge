@@ -310,9 +310,11 @@ func _calculate_offset_from_model(weapon_model: Node3D) -> Vector3:
 
 
 func _collect_mesh_instances(node: Node, results: Array[MeshInstance3D]) -> void:
+	# ノード自体がMeshInstance3Dの場合も追加（単体メッシュ武器対応）
+	if node is MeshInstance3D:
+		results.append(node as MeshInstance3D)
+	# 子ノードを再帰的に処理
 	for child in node.get_children():
-		if child is MeshInstance3D:
-			results.append(child)
 		_collect_mesh_instances(child, results)
 
 
