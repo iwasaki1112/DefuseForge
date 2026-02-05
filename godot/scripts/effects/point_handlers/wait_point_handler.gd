@@ -15,8 +15,7 @@ const MIN_PRESS_DURATION: float = 0.15
 ## 長押し開始時刻
 var _press_start_time: float = 0.0
 
-## プレビューポイント
-var _preview_point: MeshInstance3D = null
+## NOTE: プレビューメッシュは基底クラスの _preview_mesh を使用
 
 
 ## 押下処理
@@ -53,20 +52,20 @@ func _handle_release(_screen_pos: Vector2) -> bool:
 	# 最小押下時間未満はタップとみなしキャンセル
 	if duration < MIN_PRESS_DURATION:
 		if Debug.enabled: print("[PointDebug] Wait._handle_release: tap (%.2fs < %.2fs), cancelled" % [duration, MIN_PRESS_DURATION])
-		_remove_preview_point()
+		_remove_preview()
 		return true
 
 	# 最小待機時間未満はキャンセル
 	if duration < WAIT_MIN_DURATION:
 		if Debug.enabled: print("[PointDebug] Wait._handle_release: too short (%.2fs), cancelled" % duration)
-		_remove_preview_point()
+		_remove_preview()
 		return true
 
 	# 最大時間で制限
 	duration = clampf(duration, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
 
 	if Debug.enabled: print("[PointDebug] Wait._handle_release: creating point, duration=%.2fs" % duration)
-	_remove_preview_point()
+	_remove_preview()
 
 	# Waitポイントデータを作成
 	var new_point = {
@@ -95,31 +94,22 @@ func _handle_motion(_screen_pos: Vector2) -> void:
 
 ## プレビューポイント作成
 func _create_preview_point() -> void:
-	_remove_preview_point()
-
-	_preview_point = PointFactory.create_wait_point_preview(
+	_set_preview(PointFactory.create_wait_point_preview(
 		_current_anchor,
 		WAIT_MIN_DURATION,
 		_character_color,
 		_path_drawer
-	)
-
-
-## プレビューポイント削除
-func _remove_preview_point() -> void:
-	if _preview_point:
-		_preview_point.queue_free()
-		_preview_point = null
+	))
 
 
 ## プレビュー更新
 func update_preview() -> void:
-	if not _is_active or not _preview_point:
+	if not _is_active or not _has_preview():
 		return
 
 	var current_time = Time.get_ticks_msec() / 1000.0
 	var duration = clampf(current_time - _press_start_time, WAIT_MIN_DURATION, WAIT_MAX_DURATION)
-	_preview_point.set_wait_duration(duration)
+	_preview_mesh.set_wait_duration(duration)
 
 
 ## プレビュー中の待機時間を取得
@@ -139,7 +129,7 @@ func is_pressing() -> bool:
 func get_points() -> Array[Dictionary]:
 	var result: Array[Dictionary] = _points.duplicate()
 	# プレビュー中のポイントがあれば追加
-	if _is_active and _preview_point:
+	if _is_active and _has_preview():
 		result.append({
 			"path_ratio": _current_ratio,
 			"anchor": _current_anchor,
@@ -151,14 +141,12 @@ func get_points() -> Array[Dictionary]:
 ## clear_all オーバーライド
 func clear_all() -> void:
 	super.clear_all()
-	_remove_preview_point()
 	_press_start_time = 0.0
 
 
 ## 状態リセット（オーバーライド）
 func reset_state() -> void:
 	super.reset_state()
-	_remove_preview_point()
 	_press_start_time = 0.0
 
 

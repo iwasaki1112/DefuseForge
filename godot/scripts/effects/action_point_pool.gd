@@ -1,20 +1,20 @@
 class_name ActionPointPool
 extends RefCounted
 
-## ActionPoint (VisionPoint/WaitPoint)のオブジェクトプール
+## ActionPointの汎用オブジェクトプール
 ## ポイント作成/破棄を削減し、GC圧力を軽減する
 ## NOTE: iOSビルド互換のためpreloadを使用せず、class_name参照を使用
+## NOTE: PointRegistryと連携して動的にタイプを管理
 
-## プールの最大サイズ（タイプごと）
-const MAX_POOL_SIZE_PER_TYPE: int = 30
+## デフォルトのプール最大サイズ（タイプごと）
+const DEFAULT_MAX_POOL_SIZE: int = 30
 
 ## プール状態監視用
-var _total_created: Dictionary = {}  # { type: int }
-var _total_recycled: Dictionary = {}  # { type: int }
+var _total_created: Dictionary = {}  # { type_id: int }
+var _total_recycled: Dictionary = {}  # { type_id: int }
 
-## タイプ別の利用可能ポイントプール
-var _available_vision_points: Array[VisionPoint] = []
-var _available_wait_points: Array[WaitPoint] = []
+## タイプ別の利用可能ポイントプール { type_id: Array[ActionPoint] }
+var _pools: Dictionary = {}
 
 ## シングルトンインスタンス
 static var _instance: ActionPointPool = null
@@ -27,14 +27,19 @@ static func get_instance() -> ActionPointPool:
 	return _instance
 
 
-## VisionPointをプールから取得
+## 汎用: ポイントをプールから取得
+static func acquire(type_id: int) -> ActionPoint:
+	return get_instance()._acquire(type_id)
+
+
+## VisionPointをプールから取得（後方互換）
 static func acquire_vision_point() -> VisionPoint:
-	return get_instance()._acquire_vision_point()
+	return get_instance()._acquire(ActionPointData.Type.VISION) as VisionPoint
 
 
-## WaitPointをプールから取得
+## WaitPointをプールから取得（後方互換）
 static func acquire_wait_point() -> WaitPoint:
-	return get_instance()._acquire_wait_point()
+	return get_instance()._acquire(ActionPointData.Type.WAIT) as WaitPoint
 
 
 ## ポイントをプールに返却
@@ -51,34 +56,27 @@ static func release_all(points: Array) -> void:
 			pool._release(point)
 
 
-## VisionPointを取得（内部実装）
-func _acquire_vision_point() -> VisionPoint:
-	var point: VisionPoint
+## 汎用ポイント取得（内部実装）
+func _acquire(type_id: int) -> ActionPoint:
+	# プールが存在しなければ初期化
+	if not _pools.has(type_id):
+		_pools[type_id] = []
 
-	if _available_vision_points.size() > 0:
-		point = _available_vision_points.pop_back()
-		_increment_recycled("vision")
+	var pool: Array = _pools[type_id]
+	var point: ActionPoint
+
+	if pool.size() > 0:
+		point = pool.pop_back()
+		_increment_recycled(type_id)
 		# 状態リセット
-		_reset_vision_point(point)
+		_reset_point(point, type_id)
 	else:
-		point = VisionPoint.new()
-		_increment_created("vision")
-
-	return point
-
-
-## WaitPointを取得（内部実装）
-func _acquire_wait_point() -> WaitPoint:
-	var point: WaitPoint
-
-	if _available_wait_points.size() > 0:
-		point = _available_wait_points.pop_back()
-		_increment_recycled("wait")
-		# 状態リセット
-		_reset_wait_point(point)
-	else:
-		point = WaitPoint.new()
-		_increment_created("wait")
+		# PointRegistryから新規作成
+		point = PointRegistry.create_point(type_id)
+		if point == null:
+			push_error("[ActionPointPool] Failed to create point for type_id: %d" % type_id)
+			return null
+		_increment_created(type_id)
 
 	return point
 
@@ -88,6 +86,14 @@ func _release(point: MeshInstance3D) -> void:
 	if not is_instance_valid(point):
 		return
 
+	# ActionPointでなければ破棄
+	if not point is ActionPoint:
+		point.queue_free()
+		return
+
+	var action_point := point as ActionPoint
+	var type_id: int = action_point.get_action_point_type()
+
 	# 親から削除
 	if point.get_parent():
 		point.get_parent().remove_child(point)
@@ -95,48 +101,55 @@ func _release(point: MeshInstance3D) -> void:
 	# 非表示に
 	point.visible = false
 
-	# タイプに応じてプールに追加
-	if point is VisionPoint:
-		if _available_vision_points.size() < MAX_POOL_SIZE_PER_TYPE:
-			_available_vision_points.append(point as VisionPoint)
-		else:
-			point.queue_free()
-	elif point is WaitPoint:
-		if _available_wait_points.size() < MAX_POOL_SIZE_PER_TYPE:
-			_available_wait_points.append(point as WaitPoint)
-		else:
-			point.queue_free()
+	# プールが存在しなければ初期化
+	if not _pools.has(type_id):
+		_pools[type_id] = []
+
+	# プールサイズ制限を取得
+	var max_size := _get_max_pool_size(type_id)
+
+	# プールに追加または破棄
+	if _pools[type_id].size() < max_size:
+		_pools[type_id].append(action_point)
 	else:
-		# 不明なタイプは破棄
 		point.queue_free()
 
 
-## VisionPointの状態リセット
-func _reset_vision_point(point: VisionPoint) -> void:
+## ポイントの状態リセット
+func _reset_point(point: ActionPoint, type_id: int) -> void:
 	point.visible = true
 	point.rotation = Vector3.ZERO
-	# ターゲット線とターゲットポイントをクリア
-	point.reset_for_pool()
+
+	# タイプ固有のリセット処理
+	match type_id:
+		ActionPointData.Type.VISION:
+			if point is VisionPoint:
+				(point as VisionPoint).reset_for_pool()
+		ActionPointData.Type.WAIT:
+			# WaitPointには特別なリセットは不要
+			pass
 
 
-## WaitPointの状態リセット
-func _reset_wait_point(point: WaitPoint) -> void:
-	point.visible = true
-	point.rotation = Vector3.ZERO
+## プールの最大サイズを取得
+func _get_max_pool_size(type_id: int) -> int:
+	var definition := PointRegistry.get_definition(type_id)
+	if definition:
+		return definition.max_pool_size
+	return DEFAULT_MAX_POOL_SIZE
 
 
 ## 作成数インクリメント
-func _increment_created(point_type: String) -> void:
-	if not _total_created.has(point_type):
-		_total_created[point_type] = 0
-	_total_created[point_type] += 1
+func _increment_created(type_id: int) -> void:
+	if not _total_created.has(type_id):
+		_total_created[type_id] = 0
+	_total_created[type_id] += 1
 
 
 ## リサイクル数インクリメント
-func _increment_recycled(point_type: String) -> void:
-	if not _total_recycled.has(point_type):
-		_total_recycled[point_type] = 0
-	_total_recycled[point_type] += 1
+func _increment_recycled(type_id: int) -> void:
+	if not _total_recycled.has(type_id):
+		_total_recycled[type_id] = 0
+	_total_recycled[type_id] += 1
 
 
 ## プール統計を取得（デバッグ用）
@@ -148,9 +161,12 @@ func get_stats() -> Dictionary:
 	for v in _total_recycled.values():
 		total_recycled += v
 
+	var pool_sizes := {}
+	for type_id in _pools:
+		pool_sizes[type_id] = _pools[type_id].size()
+
 	return {
-		"vision_pool_size": _available_vision_points.size(),
-		"wait_pool_size": _available_wait_points.size(),
+		"pool_sizes": pool_sizes,
 		"total_created": total_created,
 		"total_recycled": total_recycled,
 		"created_by_type": _total_created.duplicate(),
@@ -161,15 +177,12 @@ func get_stats() -> Dictionary:
 
 ## プールをクリア
 func clear() -> void:
-	for point in _available_vision_points:
-		if is_instance_valid(point):
-			point.queue_free()
-	_available_vision_points.clear()
-
-	for point in _available_wait_points:
-		if is_instance_valid(point):
-			point.queue_free()
-	_available_wait_points.clear()
+	for type_id in _pools:
+		for point in _pools[type_id]:
+			if is_instance_valid(point):
+				point.queue_free()
+		_pools[type_id].clear()
+	_pools.clear()
 
 
 ## デストラクタ

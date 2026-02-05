@@ -50,6 +50,10 @@ var _last_touch_time: int = 0
 ## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
 const TOUCH_MOUSE_INTERVAL_MS: int = 100
 
+## プレビューメッシュ（共通）
+## 各ハンドラーで一時的に表示するプレビュー用メッシュ
+var _preview_mesh: MeshInstance3D = null
+
 #endregion
 
 
@@ -193,6 +197,30 @@ func reset_state() -> void:
 	_drag_start_pos = Vector2.ZERO
 	_current_anchor = Vector3.ZERO
 	_current_ratio = 0.0
+	_remove_preview()
+
+
+#region プレビュー管理（共通）
+
+## プレビューメッシュを削除
+func _remove_preview() -> void:
+	if _preview_mesh:
+		_preview_mesh.queue_free()
+		_preview_mesh = null
+
+
+## プレビューメッシュを設定
+## @param mesh: 新しいプレビューメッシュ
+func _set_preview(mesh: MeshInstance3D) -> void:
+	_remove_preview()
+	_preview_mesh = mesh
+
+
+## プレビューが存在するか
+func _has_preview() -> bool:
+	return _preview_mesh != null and is_instance_valid(_preview_mesh)
+
+#endregion
 
 
 ## ポイントを復元

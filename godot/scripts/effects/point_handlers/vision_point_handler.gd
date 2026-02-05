@@ -9,8 +9,7 @@ extends PointHandlerBase
 ## モバイルでの誤検出を防ぐため大きめの値を設定
 const MIN_DRAG_DISTANCE: float = 40.0
 
-## 一時プレビューポイント
-var _temp_mesh: MeshInstance3D = null
+## NOTE: プレビューメッシュは基底クラスの _preview_mesh を使用
 
 
 ## 押下処理
@@ -49,7 +48,7 @@ func _handle_release(screen_pos: Vector2) -> bool:
 			if Debug.enabled: print("[PointDebug] Vision._handle_release: no ground pos")
 	else:
 		if Debug.enabled: print("[PointDebug] Vision._handle_release: tap detected (drag=%.1f < %.1f), cancelled" % [drag_dist, MIN_DRAG_DISTANCE])
-		_remove_temp_point()
+		_remove_preview()
 
 	_is_active = false
 	return true
@@ -71,10 +70,10 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 	direction.y = 0
 
 	if direction.length_squared() < 0.001:
-		_remove_temp_point()
+		_remove_preview()
 		return
 
-	_remove_temp_point()
+	_remove_preview()
 
 	# 視線ポイントデータを作成
 	var new_point = {
@@ -98,28 +97,15 @@ func _finish_vision_point(end_pos: Vector3) -> void:
 
 ## 一時ポイント更新
 func _update_temp_point(anchor: Vector3, target_point: Vector3) -> void:
-	if _temp_mesh:
-		_temp_mesh.set_position_and_target(anchor, target_point)
+	if _has_preview():
+		_preview_mesh.set_position_and_target(anchor, target_point)
 	else:
-		_temp_mesh = PointFactory.create_vision_point_preview(
+		_set_preview(PointFactory.create_vision_point_preview(
 			anchor,
 			target_point,
 			_character_color,
 			_path_drawer
-		)
-
-
-## 一時ポイント削除
-func _remove_temp_point() -> void:
-	if _temp_mesh:
-		_temp_mesh.queue_free()
-		_temp_mesh = null
-
-
-## 状態リセット（オーバーライド）
-func reset_state() -> void:
-	super.reset_state()
-	_remove_temp_point()
+		))
 
 
 ## 指定したアンカー位置でVisionモードを開始（外部からの呼び出し用）

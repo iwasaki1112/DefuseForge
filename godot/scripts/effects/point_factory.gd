@@ -5,9 +5,37 @@ extends RefCounted
 ## VisionPoint/WaitPointの作成を一元化し、重複コードを削減
 ## NOTE: iOSビルド互換のためpreloadを使用せず、class_name参照を使用
 ## NOTE: オブジェクトプールを使用してGC圧力を軽減
+## NOTE: PointRegistryと連携してカラー計算を共通化
 
 ## ポイントタイプのエイリアス（ActionPointDataはclass_name定義済み）
 const PointType = ActionPointData.Type
+
+
+#region カラー計算ヘルパー
+
+## 背景色を計算（キャラクター色から暗めの背景色を生成）
+## @param char_color: キャラクター色
+## @param type_id: ポイントタイプ（省略時はVISION）
+## @return: 計算された背景色
+static func calculate_bg_color(char_color: Color, type_id: int = PointType.VISION) -> Color:
+	return PointRegistry.calculate_bg_color(type_id, char_color)
+
+
+## プレビュー用の半透明色を計算
+## @param char_color: キャラクター色
+## @param alpha: アルファ値（デフォルト0.6）
+## @return: 計算されたプレビュー色
+static func calculate_preview_color(char_color: Color, alpha: float = 0.6) -> Color:
+	return Color(char_color.r, char_color.g, char_color.b, alpha)
+
+
+## ターゲットライン色を計算
+## @param char_color: キャラクター色
+## @return: ターゲットライン色
+static func calculate_target_line_color(char_color: Color) -> Color:
+	return Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8)
+
+#endregion
 
 
 ## VisionPointを作成
@@ -30,15 +58,15 @@ static func create_vision_point(
 	if parent:
 		parent.add_child(point)
 
-	# 背景色を計算（暗めのキャラクター色）
-	var bg_color = Color(char_color.r * 0.3, char_color.g * 0.3, char_color.b * 0.3, 0.95)
+	# 背景色を計算（ヘルパー使用）
+	var bg_color = calculate_bg_color(char_color, PointType.VISION)
 
 	# ターゲットポイントモードか固定方向モードか判定
 	var has_target = target_point != null and target_point is Vector3 and (target_point as Vector3).length_squared() > 0.001
 
 	if has_target:
 		point.set_position_and_target(anchor, target_point as Vector3)
-		point.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
+		point.set_target_line_color(calculate_target_line_color(char_color))
 	else:
 		point.set_position_and_direction(anchor, direction)
 
@@ -145,7 +173,7 @@ static func create_vision_point_preview(
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:
-	var preview_color = Color(char_color.r, char_color.g, char_color.b, 0.6)
+	var preview_color = calculate_preview_color(char_color)
 	return create_vision_point(anchor, target_point, Vector3.ZERO, preview_color, parent)
 
 
@@ -170,8 +198,8 @@ static func create_wait_point_preview(
 	point.set_point_position(anchor)
 	point.set_wait_duration(duration)
 
-	# プレビュー用の半透明色
-	var bg_color = Color(char_color.r, char_color.g, char_color.b, 0.6)
+	# プレビュー用の半透明色（ヘルパー使用）
+	var bg_color = calculate_preview_color(char_color)
 	var fg_color = Color(1.0, 1.0, 1.0, 0.8)
 	point.set_colors(bg_color, fg_color)
 
