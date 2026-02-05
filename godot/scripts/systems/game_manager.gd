@@ -28,6 +28,10 @@ signal vision_point_added(anchor: Vector3, direction: Vector3)
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
+## グレネードネットワークイベント（マルチプレイヤー同期用）
+signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
+## グレネード爆発ネットワークイベント（マルチプレイヤー同期用）
+signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
 ## ドアキックネットワークイベント（マルチプレイヤー同期用）
 signal door_kick_network_event(door_id: int, character_network_id: int)
 ## ダメージネットワークイベント（マルチプレイヤー同期用）
@@ -52,6 +56,11 @@ var character_setup_service: CharacterSetupService = null
 var path_service: PathService = null
 var vision_service: VisionService = null
 var round_manager: RoundManager = null
+
+## 抽出されたサービス
+var character_manager: CharacterManagerService = null
+var grenade_service: GrenadeService = null
+var door_service: DoorService = null
 
 ## UIコンポーネント
 var label_manager: CharacterLabelManager = null
@@ -94,6 +103,11 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	fow_map_size = map_size
 
 	# 初期化順序が重要
+	# 抽出されたサービスを先に初期化
+	_setup_character_manager_service()
+	_setup_grenade_service(mesh_parent)
+	_setup_door_service()
+
 	_setup_selection_manager()
 	_setup_path_execution_manager(mesh_parent)
 	_setup_idle_manager()
@@ -116,6 +130,11 @@ func register_character(character: Node) -> void:
 		return
 
 	characters.append(character)
+
+	# CharacterManagerServiceにも登録
+	if character_manager:
+		character_manager.register_character(character)
+
 	if idle_manager:
 		idle_manager.add_character(character)
 
@@ -143,6 +162,11 @@ func unregister_character(character: Node) -> void:
 		return
 
 	characters.erase(character)
+
+	# CharacterManagerServiceからも解除
+	if character_manager:
+		character_manager.unregister_character(character)
+
 	if idle_manager:
 		idle_manager.remove_character(character)
 
@@ -997,6 +1021,37 @@ func _setup_character_setup_service() -> void:
 		)
 
 
+func _setup_character_manager_service() -> void:
+	if character_manager == null:
+		character_manager = CharacterManagerService.new()
+		character_manager.name = "CharacterManagerService"
+		add_child(character_manager)
+
+
+func _setup_grenade_service(mesh_parent: Node3D) -> void:
+	if grenade_service == null:
+		grenade_service = GrenadeService.new()
+		grenade_service.name = "GrenadeService"
+		add_child(grenade_service)
+		grenade_service.setup(mesh_parent, smoke_area_manager)
+		# シグナル転送
+		grenade_service.grenade_thrown.connect(func(g, c): grenade_thrown.emit(g, c))
+		grenade_service.smoke_grenade_thrown.connect(func(g, c): smoke_grenade_thrown.emit(g, c))
+		grenade_service.grenade_network_event.connect(func(p, v, s, i): grenade_network_event.emit(p, v, s, i))
+		grenade_service.grenade_explode_network_event.connect(func(i, p, s): grenade_explode_network_event.emit(i, p, s))
+
+
+func _setup_door_service() -> void:
+	if door_service == null:
+		door_service = DoorService.new()
+		door_service.name = "DoorService"
+		add_child(door_service)
+		door_service.setup(character_manager)
+		door_service.set_vision_update_callback(_force_update_all_vision)
+		# シグナル転送
+		door_service.door_kick_network_event.connect(func(d, c): door_kick_network_event.emit(d, c))
+
+
 ## ========================================
 ## 内部：シグナルハンドラ
 ## ========================================
@@ -1177,256 +1232,92 @@ func _on_character_died(character: GameCharacter) -> void:
 ## ドアキック処理（ポイントからの実行用）
 ## ========================================
 
-## ドアキック時のドア方向（将来の拡張用に予約）
-@warning_ignore("unused_private_class_variable")
-var _door_kick_directions: Dictionary = {}
-
-## グレネード追跡（爆発位置同期用）
-var _active_grenades: Dictionary = {}  ## grenade_id -> Grenade/SmokeGrenade
-var _next_grenade_id: int = 1
-
-## ドアID管理（マルチプレイヤー同期用）
-var _next_door_id: int = 1
-var _door_id_map: Dictionary = {}  ## door_node -> door_id
-var _id_to_door: Dictionary = {}   ## door_id -> door_node
-
-
-## ドアキックインパクト時（フレーム36/66）
+## ドアキックインパクト時（フレーム36/66）（DoorServiceに委譲）
 ## character: ドアをキックしたキャラクター（位置から回転方向を計算）
 func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
-	if not is_instance_valid(door) or not is_instance_valid(character):
-		return
-
-	# ローカルキャラクターのキックのみネットワークイベントを送信
-	var game_char := character as GameCharacter
-	if game_char and game_char.is_local() and _is_multiplayer_mode:
-		var door_id := get_door_id(door)
-		if door_id > 0:
-			door_kick_network_event.emit(door_id, game_char.network_id)
-
-	# ドアを開く処理を実行
-	_open_door(door, character)
-
-
-## ドアを開く処理（ローカル・リモート共通）
-func _open_door(door: Node3D, character: CharacterBody3D) -> void:
-	if not is_instance_valid(door) or not is_instance_valid(character):
-		return
-
-	# ドアからキャラクターへの方向ベクトル
-	var door_to_char := (character.global_position - door.global_position)
-	door_to_char.y = 0.0
-	door_to_char = door_to_char.normalized()
-
-	# ドアのローカルX軸（ドア表面に垂直、蝶番回転の基準）
-	var door_right := door.global_transform.basis.x.normalized()
-	door_right.y = 0.0
-	door_right = door_right.normalized()
-
-	# キャラクターがドアのどちら側にいるかを判定
-	var side_dot := door_right.dot(door_to_char)
-
-	# ドアはキャラクターから離れる方向に開く
-	# side_dot > 0: キャラクターはドアの右側 → ドアは左に開く（-方向）
-	# side_dot < 0: キャラクターはドアの左側 → ドアは右に開く（+方向）
-	var rotation_amount := -170.0 if side_dot > 0 else 170.0
-
-	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
-	if not door.is_in_group("open_doors"):
-		door.add_to_group("open_doors")
-
-	# TweenでドアをY軸で回転（蝶番を軸に横開き）
-	var tween := create_tween()
-	var current_y := door.rotation_degrees.y
-	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.4) \
-		.set_ease(Tween.EASE_OUT) \
-		.set_trans(Tween.TRANS_BACK)
-
-	# ドアが開いた後に視界を強制更新
-	tween.tween_callback(_force_update_all_vision)
+	if door_service:
+		door_service.on_door_kick_done(door, character)
 
 
 ## ========================================
-## グレネード関連
+## グレネード関連（GrenadeServiceに委譲）
 ## ========================================
 
 ## グレネードを生成して投擲（内部ヘルパー）
 ## 戻り値: [grenade, velocity, grenade_id] のトリプル
 func _spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
-	var grenade = GrenadeScene.instantiate() as Grenade
-	if not grenade:
-		return [null, Vector3.ZERO, 0]
-
-	_mesh_parent.add_child(grenade)
-
-	# グレネードIDを割り当てて追跡
-	var grenade_id: int = _next_grenade_id
-	_next_grenade_id += 1
-	grenade.network_grenade_id = grenade_id
-	_active_grenades[grenade_id] = grenade
-
-	# 爆発シグナルを接続
-	grenade.exploded.connect(_on_grenade_exploded.bind(grenade_id, false))
-
-	# ターゲット位置に直接投擲
-	grenade.throw(start_pos, target_pos, thrower)
-
-	return [grenade, grenade.initial_velocity, grenade_id]
+	if grenade_service:
+		return grenade_service.spawn_and_throw_grenade(start_pos, target_pos, thrower)
+	return [null, Vector3.ZERO, 0]
 
 
 ## スモークグレネードを生成して投擲（内部ヘルパー）
 ## 戻り値: [smoke_grenade, velocity, grenade_id] のトリプル
 func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
-	var smoke_grenade = SmokeGrenadeScene.instantiate() as SmokeGrenade
-	if not smoke_grenade:
-		return [null, Vector3.ZERO, 0]
+	if grenade_service:
+		return grenade_service.spawn_and_throw_smoke_grenade(start_pos, target_pos, thrower)
+	return [null, Vector3.ZERO, 0]
 
-	smoke_grenade.set_smoke_manager(smoke_area_manager)
-	_mesh_parent.add_child(smoke_grenade)
-
-	# グレネードIDを割り当てて追跡
-	var grenade_id: int = _next_grenade_id
-	_next_grenade_id += 1
-	smoke_grenade.network_grenade_id = grenade_id
-	_active_grenades[grenade_id] = smoke_grenade
-
-	# 爆発シグナルを接続（スモークはis_smoke=true）
-	smoke_grenade.exploded.connect(_on_grenade_exploded.bind(grenade_id, true))
-
-	# ターゲット位置に直接投擲
-	smoke_grenade.throw(start_pos, target_pos, thrower)
-
-	return [smoke_grenade, smoke_grenade.initial_velocity, grenade_id]
-
-
-## ネットワークイベントを発火（グレネード投擲）- velocityとIDも含む
-signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
-
-## ネットワークイベントを発火（グレネード爆発/スモーク展開）
-signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
 
 func _emit_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int = 0) -> void:
-	grenade_network_event.emit(start_pos, velocity, is_smoke, grenade_id)
-
-
-## グレネード爆発時のコールバック（ネットワーク送信用）
-func _on_grenade_exploded(position: Vector3, grenade_id: int, is_smoke: bool) -> void:
-	# 追跡から削除
-	if _active_grenades.has(grenade_id):
-		_active_grenades.erase(grenade_id)
-
-	# ネットワークイベントを発火（リモート側で同じ位置で爆発させる）
-	grenade_explode_network_event.emit(grenade_id, position, is_smoke)
+	if grenade_service:
+		grenade_service.emit_grenade_network_event(start_pos, velocity, is_smoke, grenade_id)
 
 
 ## ネットワークからグレネードをスポーン（リモート用）- 速度を直接使用
 func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
-	if Debug.enabled: print("[GRENADE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	var grenade = GrenadeScene.instantiate() as Grenade
-	if not grenade:
-		return
-
-	_mesh_parent.add_child(grenade)
-
-	# リモートグレネードとしてマーク
-	grenade.is_remote = true
-	grenade.network_grenade_id = grenade_id
-
-	# 追跡（爆発イベント受信用）
-	if grenade_id > 0:
-		_active_grenades[grenade_id] = grenade
-
-	grenade.throw_with_velocity(start_pos, velocity)
-	if Debug.enabled: print("[GRENADE SPAWNED] vel=", velocity)
-	grenade_thrown.emit(grenade, null)
+	if grenade_service:
+		grenade_service.spawn_grenade_from_network(start_pos, velocity, grenade_id)
 
 
 ## ネットワークからスモークグレネードをスポーン（リモート用）- 速度を直接使用
 func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
-	if Debug.enabled: print("[SMOKE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	var smoke_grenade = SmokeGrenadeScene.instantiate() as SmokeGrenade
-	if not smoke_grenade:
-		return
-
-	smoke_grenade.set_smoke_manager(smoke_area_manager)
-	_mesh_parent.add_child(smoke_grenade)
-
-	# リモートグレネードとしてマーク
-	smoke_grenade.is_remote = true
-	smoke_grenade.network_grenade_id = grenade_id
-
-	# 追跡（爆発イベント受信用）
-	if grenade_id > 0:
-		_active_grenades[grenade_id] = smoke_grenade
-
-	smoke_grenade.throw_with_velocity(start_pos, velocity)
-	smoke_grenade_thrown.emit(smoke_grenade, null)
+	if grenade_service:
+		grenade_service.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id)
 
 
 ## ネットワークからの爆発イベントを処理（リモートグレネード用）
-func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, _is_smoke: bool) -> void:
-	if Debug.enabled: print("[GRENADE EXPLODE] id=", grenade_id, " pos=", position)
-	if not _active_grenades.has(grenade_id):
-		push_warning("[GameManager] Grenade not found for explosion: ", grenade_id)
-		return
-
-	var grenade: Grenade = _active_grenades[grenade_id] as Grenade
-	_active_grenades.erase(grenade_id)
-
-	if is_instance_valid(grenade):
-		grenade.explode_at_position(position)
+func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, is_smoke: bool) -> void:
+	if grenade_service:
+		grenade_service.handle_grenade_explode_from_network(grenade_id, position, is_smoke)
 
 
 ## ========================================
 ## ドアID管理（マルチプレイヤー同期用）
 ## ========================================
 
-## ドアを登録し、一意のIDを割り当て
+## ドアを登録し、一意のIDを割り当て（DoorServiceに委譲）
 ## Returns: 割り当てられたドアID
 func register_door(door: Node3D) -> int:
-	if _door_id_map.has(door):
-		return _door_id_map[door]
-
-	var door_id := _next_door_id
-	_next_door_id += 1
-
-	_door_id_map[door] = door_id
-	_id_to_door[door_id] = door
-
-	return door_id
-
-
-## ドアIDからドアノードを取得
-func get_door_by_id(door_id: int) -> Node3D:
-	if _id_to_door.has(door_id):
-		var door: Node3D = _id_to_door[door_id]
-		if is_instance_valid(door):
-			return door
-		else:
-			_id_to_door.erase(door_id)
-	return null
-
-
-## ドアノードからドアIDを取得
-func get_door_id(door: Node3D) -> int:
-	if _door_id_map.has(door):
-		return _door_id_map[door]
+	if door_service:
+		return door_service.register_door(door)
 	return 0
 
 
-## 全ドアを登録解除（マップアンロード時に呼ぶ）
+## ドアIDからドアノードを取得（DoorServiceに委譲）
+func get_door_by_id(door_id: int) -> Node3D:
+	if door_service:
+		return door_service.get_door_by_id(door_id)
+	return null
+
+
+## ドアノードからドアIDを取得（DoorServiceに委譲）
+func get_door_id(door: Node3D) -> int:
+	if door_service:
+		return door_service.get_door_id(door)
+	return 0
+
+
+## 全ドアを登録解除（マップアンロード時に呼ぶ）（DoorServiceに委譲）
 func clear_door_registry() -> void:
-	_door_id_map.clear()
-	_id_to_door.clear()
-	_next_door_id = 1
+	if door_service:
+		door_service.clear_door_registry()
 
 
-## マップ内の全ドアを登録（"doors"グループから取得）
+## マップ内の全ドアを登録（"doors"グループから取得）（DoorServiceに委譲）
 func register_all_doors_in_map() -> void:
-	var doors := get_tree().get_nodes_in_group("doors")
-	for door in doors:
-		if door is Node3D:
-			register_door(door)
+	if door_service:
+		door_service.register_all_doors_in_map()
 
 
 ## マップロード完了時
@@ -1441,28 +1332,10 @@ func _on_map_will_unload(_map_id: String) -> void:
 	clear_door_registry()
 
 
-## ネットワークからのドアキックイベントを適用（リモート側用）
+## ネットワークからのドアキックイベントを適用（リモート側用）（DoorServiceに委譲）
 func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void:
-	var door := get_door_by_id(door_id)
-	if not door:
-		push_warning("[GameManager] Door not found for network kick: ", door_id)
-		return
-
-	# 既に開いているドアは無視
-	if door.is_in_group("open_doors"):
-		return
-
-	var character := find_character_by_network_id(character_network_id)
-	if not character:
-		push_warning("[GameManager] Character not found for door kick: ", character_network_id)
-		return
-
-	# ローカルキャラクターのイベントは無視（二重処理防止）
-	if character.is_local():
-		return
-
-	# ドアを開く処理を実行
-	_open_door(door, character)
+	if door_service:
+		door_service.apply_door_kick_from_network(door_id, character_network_id)
 
 
 # ============================================
@@ -1474,6 +1347,11 @@ func enable_multiplayer_mode(local_peer_id: int) -> void:
 	_is_multiplayer_mode = true
 	_local_peer_id = local_peer_id
 	PlayerState.set_local_peer_id(local_peer_id)
+	# サービスにモード設定を反映
+	if door_service:
+		door_service.set_multiplayer_mode(true)
+	if character_manager:
+		character_manager.set_multiplayer_mode(true, local_peer_id)
 
 
 ## マルチプレイヤーモードを無効化（シングルプレイヤーに戻す）
@@ -1481,6 +1359,11 @@ func disable_multiplayer_mode() -> void:
 	_is_multiplayer_mode = false
 	_local_peer_id = 0
 	PlayerState.clear_multiplayer_session()
+	# サービスにモード設定を反映
+	if door_service:
+		door_service.set_multiplayer_mode(false)
+	if character_manager:
+		character_manager.set_multiplayer_mode(false, 0)
 
 
 ## マルチプレイヤーモードかどうか
