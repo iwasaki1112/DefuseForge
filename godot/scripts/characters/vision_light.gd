@@ -29,6 +29,11 @@ var _current_rotation: float = 0.0  ## 現在の補間された回転角度
 var _rotation_initialized: bool = false  ## 初回は即座に設定
 const ROTATION_SMOOTHING: float = 12.0  ## 回転補間速度（大きいほど速く追従）
 
+## 位置補間用
+var _current_position: Vector2 = Vector2.ZERO  ## 現在の補間されたビューポート位置
+var _position_initialized: bool = false  ## 初回は即座に設定
+const POSITION_SMOOTHING: float = 15.0  ## 位置補間速度（大きいほど速く追従）
+
 ## FOVテクスチャ
 var _fov_texture: ImageTexture = null
 ## 周辺視界テクスチャ
@@ -127,11 +132,21 @@ func sync_transform() -> void:
 		return
 
 	# 3D位置 → 2D位置
-	var viewport_pos := _world_to_viewport(_character.global_position)
+	var target_pos := _world_to_viewport(_character.global_position)
+
+	# 位置を補間（滑らかな追従）
+	var delta := get_process_delta_time()
+	if not _position_initialized:
+		# 初回は即座に設定
+		_current_position = target_pos
+		_position_initialized = true
+	else:
+		# lerpで滑らかに追従
+		_current_position = _current_position.lerp(target_pos, POSITION_SMOOTHING * delta)
 
 	# メインFOVライトの位置と回転を更新
 	if _light:
-		_light.position = viewport_pos
+		_light.position = _current_position
 		# 3D Y軸回転 → 2D回転
 		# Mixamoモデルの前方向は+Z
 		# ビューポート座標系: X=WorldX, Y=WorldZ
@@ -148,14 +163,13 @@ func sync_transform() -> void:
 			_rotation_initialized = true
 		else:
 			# lerp_angleで最短経路で補間
-			var delta := get_process_delta_time()
 			_current_rotation = lerp_angle(_current_rotation, target_angle, ROTATION_SMOOTHING * delta)
 
 		_light.rotation = _current_rotation
 
 	# 周辺視界ライトの位置を更新（回転は不要、常に円形）
 	if _peripheral_light:
-		_peripheral_light.position = viewport_pos
+		_peripheral_light.position = _current_position
 
 
 ## 視界距離を設定

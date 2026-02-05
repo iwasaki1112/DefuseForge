@@ -162,15 +162,15 @@ func _process(delta: float) -> void:
 	# VisionLightの位置は毎フレーム同期（滑らかな追従のため）
 	_sync_vision_lights()
 
+	# SubViewportは毎フレーム更新（視界の滑らかな追従のため）
+	if _visibility_viewport:
+		_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
 	_time_since_update += delta
 
-	# テクスチャ更新は一定間隔で行う（パフォーマンス維持）
+	# 可視性キャッシュ更新は一定間隔で行う（GPU→CPU転送のコスト削減）
 	if _time_since_update >= _update_interval:
 		_time_since_update = 0.0
-
-		# SubViewportを手動で1回更新（UPDATE_ONCEモード）
-		if _visibility_viewport:
-			_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 		# シェーダーにテクスチャを設定
 		if _visibility_viewport and _fog_material:
