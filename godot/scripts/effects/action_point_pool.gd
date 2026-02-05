@@ -115,7 +115,8 @@ func _release(point: MeshInstance3D) -> void:
 func _reset_vision_point(point: VisionPoint) -> void:
 	point.visible = true
 	point.rotation = Vector3.ZERO
-	# ターゲット線のクリーンアップはset_position_and_*で行われる
+	# ターゲット線とターゲットポイントをクリア
+	point.reset_for_pool()
 
 
 ## WaitPointの状態リセット

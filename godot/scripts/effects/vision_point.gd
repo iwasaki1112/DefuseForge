@@ -219,3 +219,11 @@ func set_target_line_color(color: Color) -> void:
 	target_line_color = color
 	if _target_line_material:
 		_target_line_material.albedo_color = color
+
+
+## プールリセット用：ターゲットポイントと線をクリア
+func reset_for_pool() -> void:
+	_target_point = Vector3.ZERO
+	if _target_line_mesh:
+		_target_line_mesh.queue_free()
+		_target_line_mesh = null

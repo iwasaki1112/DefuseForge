@@ -1376,61 +1376,46 @@ func get_local_peer_id() -> int:
 	return _local_peer_id
 
 
-## キャラクターがローカルプレイヤーのものか判定
+## キャラクターがローカルプレイヤーのものか判定（CharacterManagerServiceに委譲）
 func is_local_character(character: Node) -> bool:
-	if not _is_multiplayer_mode:
-		return true  # シングルプレイヤーモードでは全てローカル
-
-	var game_char := character as GameCharacter
-	if game_char:
-		return game_char.is_local()
-
-	return true  # GameCharacterでない場合はローカル扱い
+	if character_manager:
+		return character_manager.is_local_character(character)
+	return true  # フォールバック
 
 
-## キャラクターに対する操作権限があるか判定
+## キャラクターに対する操作権限があるか判定（CharacterManagerServiceに委譲）
 func has_control_permission(character: Node) -> bool:
-	# ローカルキャラクターでなければ操作不可
-	if not is_local_character(character):
-		return false
-
-	# 敵キャラクターは操作不可
-	if PlayerState.is_enemy(character):
-		return false
-
-	return true
+	if character_manager:
+		return character_manager.has_control_permission(character)
+	return false  # フォールバック
 
 
-## ローカルキャラクターのみをフィルタリング
+## ローカルキャラクターのみをフィルタリング（CharacterManagerServiceに委譲）
 func filter_local_characters(chars: Array) -> Array[Node]:
-	var result: Array[Node] = []
-	for character in chars:
-		if is_local_character(character):
-			result.append(character)
-	return result
+	if character_manager:
+		return character_manager.filter_local_characters(chars)
+	return []
 
 
-## リモートキャラクターのみをフィルタリング
+## リモートキャラクターのみをフィルタリング（CharacterManagerServiceに委譲）
 func filter_remote_characters(chars: Array) -> Array[Node]:
-	var result: Array[Node] = []
-	for character in chars:
-		if not is_local_character(character):
-			result.append(character)
-	return result
+	if character_manager:
+		return character_manager.filter_remote_characters(chars)
+	return []
 
 
-## ローカルプレイヤーの味方キャラクター一覧を取得
+## ローカルプレイヤーの味方キャラクター一覧を取得（CharacterManagerServiceに委譲）
 func get_local_friendly_characters() -> Array[Node]:
-	var result: Array[Node] = []
-	for character in characters:
-		if is_local_character(character) and PlayerState.is_friendly(character):
-			result.append(character)
-	return result
+	if character_manager:
+		return character_manager.get_local_friendly_characters()
+	return []
 
 
-## リモートプレイヤーのキャラクター一覧を取得
+## リモートプレイヤーのキャラクター一覧を取得（CharacterManagerServiceに委譲）
 func get_remote_characters() -> Array[Node]:
-	return filter_remote_characters(characters)
+	if character_manager:
+		return character_manager.get_remote_characters()
+	return []
 
 
 ## キャラクターを登録（マルチプレイヤー対応）
@@ -1448,33 +1433,25 @@ func register_character_with_network(
 	register_character(character)
 
 
-## ネットワークIDからキャラクターを検索
+## ネットワークIDからキャラクターを検索（CharacterManagerServiceに委譲）
 func find_character_by_network_id(network_id: int) -> GameCharacter:
-	for character in characters:
-		var game_char := character as GameCharacter
-		if game_char and game_char.network_id == network_id:
-			return game_char
+	if character_manager:
+		return character_manager.find_character_by_network_id(network_id)
 	return null
 
 
-## peer_idからキャラクターを検索（複数可）
+## peer_idからキャラクターを検索（複数可）（CharacterManagerServiceに委譲）
 func find_characters_by_owner(owner_peer_id: int) -> Array[GameCharacter]:
-	var result: Array[GameCharacter] = []
-	for character in characters:
-		var game_char := character as GameCharacter
-		if game_char and game_char.owner_peer_id == owner_peer_id:
-			result.append(game_char)
-	return result
+	if character_manager:
+		return character_manager.find_characters_by_owner(owner_peer_id)
+	return []
 
 
-## 全キャラクターの状態をスナップショットとして取得
+## 全キャラクターの状態をスナップショットとして取得（CharacterManagerServiceに委譲）
 func get_all_character_snapshots() -> Array[SyncState.CharacterSnapshot]:
-	var result: Array[SyncState.CharacterSnapshot] = []
-	for character in characters:
-		var game_char := character as GameCharacter
-		if game_char:
-			result.append(game_char.to_character_snapshot())
-	return result
+	if character_manager:
+		return character_manager.get_all_character_snapshots()
+	return []
 
 
 ## ゲーム状態全体のスナップショットを取得
