@@ -300,8 +300,8 @@ func unregister_vision(vision) -> void:
 func extract_occluders_from_map(map_node: Node3D) -> void:
 	if _occluder_manager:
 		_occluder_manager.extract_occluders_from_map(map_node)
-	# 壁を明るく表示（emissionで底上げ）
-	_boost_wall_brightness(map_node)
+	# 壁の明るさ調整は無効（環境光と同じにする）
+	# _boost_wall_brightness(map_node)
 
 
 ## 壁メッシュを常に明るく表示（ライティングの影響を受けない）
