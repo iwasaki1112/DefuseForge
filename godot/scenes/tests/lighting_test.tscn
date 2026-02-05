@@ -1,0 +1,199 @@
+[gd_scene load_steps=3 format=3 uid="uid://kblfokh10je5"]
+
+[ext_resource type="Script" path="res://scripts/tests/lighting_test.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/tests/free_camera.gd" id="2_camera"]
+
+[node name="LightingTest" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.342, 0.94, 0, -0.94, 0.342, 0, 25, 9)
+current = true
+fov = 30.0
+script = ExtResource("2_camera")
+target = Vector3(0, 0, 0)
+max_distance = 50.0
+
+[node name="MapContainer" type="Node3D" parent="."]
+
+[node name="CharacterContainer" type="Node3D" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="UI"]
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Lighting Adjustment"
+horizontal_alignment = 1
+
+[node name="HSeparator0" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelMap" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Map"
+
+[node name="MapOption" type="OptionButton" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelDirectional" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Directional Light (Sun)"
+
+[node name="LabelLightEnergy" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Energy"
+
+[node name="LightEnergy" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/LightEnergy"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 2.0
+step = 0.01
+value = 0.3
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/LightEnergy"]
+layout_mode = 2
+min_value = 0.0
+max_value = 2.0
+step = 0.01
+value = 0.3
+
+[node name="LabelLightPitch" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Pitch (degrees)"
+
+[node name="LightPitch" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/LightPitch"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -90.0
+max_value = 0.0
+step = 1.0
+value = -77.0
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/LightPitch"]
+layout_mode = 2
+min_value = -90.0
+max_value = 0.0
+step = 1.0
+value = -77.0
+
+[node name="LabelLightYaw" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Yaw (degrees)"
+
+[node name="LightYaw" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/LightYaw"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -180.0
+max_value = 180.0
+step = 1.0
+value = -33.0
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/LightYaw"]
+layout_mode = 2
+min_value = -180.0
+max_value = 180.0
+step = 1.0
+value = -33.0
+
+[node name="LabelLightColor" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Light Color"
+
+[node name="LightColor" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ColorPicker" type="ColorPickerButton" parent="UI/Panel/VBox/LightColor"]
+layout_mode = 2
+size_flags_horizontal = 3
+color = Color(1, 0.98, 0.95, 1)
+
+[node name="HSeparator2" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelAmbient" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Ambient Light"
+
+[node name="LabelAmbientEnergy" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Energy"
+
+[node name="AmbientEnergy" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="HSlider" type="HSlider" parent="UI/Panel/VBox/AmbientEnergy"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 0.1
+
+[node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/AmbientEnergy"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 0.1
+
+[node name="LabelAmbientColor" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Ambient Color"
+
+[node name="AmbientColor" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ColorPicker" type="ColorPickerButton" parent="UI/Panel/VBox/AmbientColor"]
+layout_mode = 2
+size_flags_horizontal = 3
+color = Color(0.6, 0.65, 0.7, 1)
+
+[node name="LabelBackgroundColor" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Background Color"
+
+[node name="BackgroundColor" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ColorPicker" type="ColorPickerButton" parent="UI/Panel/VBox/BackgroundColor"]
+layout_mode = 2
+size_flags_horizontal = 3
+color = Color(0.3, 0.35, 0.4, 1)
+
+[node name="HSeparator3" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LabelPreset" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Preset Values"
+
+[node name="PresetValues" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "# Current Values"

@@ -22,7 +22,7 @@ var fov_degrees: float = 90.0
 var view_distance: float = 15.0
 
 ## 周辺視界設定（至近距離の360度視界）
-var peripheral_distance: float = 0.8
+var peripheral_distance: float = 0.5
 
 ## 回転補間用
 var _current_rotation: float = 0.0  ## 現在の補間された回転角度
@@ -255,18 +255,31 @@ func _update_peripheral_texture() -> void:
 
 
 func _update_light_scale() -> void:
+	# アスペクト比補正のためのスケール計算
+	# ビューポート座標系ではX/Zがmap_sizeで正規化されるため、
+	# 非正方形マップでは円が楕円になる。これをノードのscaleで補正する。
+	var aspect_scale := Vector2(1.0, 1.0)
+	if _map_size.x > _map_size.y:
+		# X方向がより広い -> Y方向のスケールを増やす
+		aspect_scale.y = _map_size.x / _map_size.y
+	elif _map_size.y > _map_size.x:
+		# Y(Z)方向がより広い -> X方向のスケールを増やす
+		aspect_scale.x = _map_size.y / _map_size.x
+
+	var max_dimension := maxf(_map_size.x, _map_size.y)
+	var scale_factor := float(_texture_resolution) / max_dimension
+	var texture_size := float(_texture_resolution)
+
 	# メインFOVライトのスケール
 	if _light:
-		var scale_factor := float(_texture_resolution) / maxf(_map_size.x, _map_size.y)
 		var light_radius := view_distance * scale_factor * 2.0  # 直径
-		var texture_size := float(_texture_resolution)
 		var scale_value := light_radius / texture_size
 		_light.texture_scale = scale_value
+		_light.scale = aspect_scale
 
 	# 周辺視界ライトのスケール
 	if _peripheral_light:
-		var scale_factor := float(_texture_resolution) / maxf(_map_size.x, _map_size.y)
 		var peripheral_radius := peripheral_distance * scale_factor * 2.0  # 直径
-		var texture_size := float(_texture_resolution)
 		var peripheral_scale := peripheral_radius / texture_size
 		_peripheral_light.texture_scale = peripheral_scale
+		_peripheral_light.scale = aspect_scale
