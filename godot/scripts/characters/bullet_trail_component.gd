@@ -44,6 +44,24 @@ func setup(character: Node3D, weapon_socket: Node3D, muzzle_flash: MuzzleFlashCo
 	_muzzle_flash_component = muzzle_flash
 	_combat_awareness = combat_awareness
 
+	# キャラクター破棄時にトレイルノードをクリーンアップ
+	if _character and not _character.tree_exited.is_connected(_on_character_tree_exited):
+		_character.tree_exited.connect(_on_character_tree_exited)
+
+
+## キャラクターがシーンから削除された時のクリーンアップ
+func _on_character_tree_exited() -> void:
+	cleanup()
+
+
+## トレイルノードをクリーンアップ
+func cleanup() -> void:
+	if _bullet_trail_tween and _bullet_trail_tween.is_running():
+		_bullet_trail_tween.kill()
+	if _bullet_trail and is_instance_valid(_bullet_trail):
+		_bullet_trail.queue_free()
+		_bullet_trail = null
+
 
 ## 武器ソケットを更新
 func set_weapon_socket(socket: Node3D) -> void:
@@ -119,7 +137,8 @@ func _get_bullet_target_position() -> Vector3:
 			return target_pos
 
 	# 2. フォールバック: キャラクターの視線方向に延長
-	var forward = _character.global_transform.basis.z
+	# Godotの前方は-Z、GameCharacterのfacing_directionと一致させる
+	var forward = -_character.global_transform.basis.z
 	return _character.global_position + Vector3(0, 1.5, 0) + forward * BULLET_TRAIL_MAX_DISTANCE
 
 

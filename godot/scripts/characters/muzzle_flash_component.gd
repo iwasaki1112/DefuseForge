@@ -246,14 +246,18 @@ func _create() -> void:
 
 
 func _get_scale(current_weapon: Resource) -> float:
-	if current_weapon and current_weapon.has_method("get") and current_weapon.get("muzzle_flash_scale") != null:
-		return maxf(0.01, current_weapon.muzzle_flash_scale) * MUZZLE_FLASH_SCALE_MULTIPLIER
+	if current_weapon:
+		var scale_val = current_weapon.get("muzzle_flash_scale")
+		if scale_val != null:
+			return maxf(0.01, scale_val) * MUZZLE_FLASH_SCALE_MULTIPLIER
 	return MUZZLE_FLASH_SCALE_MULTIPLIER
 
 
 func _get_rotation(current_weapon: Resource) -> Vector3:
-	if current_weapon and current_weapon.has_method("get") and current_weapon.get("muzzle_flash_rotation") != null:
-		return current_weapon.muzzle_flash_rotation
+	if current_weapon:
+		var rotation_val = current_weapon.get("muzzle_flash_rotation")
+		if rotation_val != null:
+			return rotation_val
 	return Vector3.ZERO
 
 
@@ -269,7 +273,7 @@ func _get_offset(current_weapon: Resource, weapon_model: Node3D) -> Vector3:
 
 
 func _calculate_offset_from_model(weapon_model: Node3D) -> Vector3:
-	if not weapon_model:
+	if not weapon_model or not weapon_model.is_inside_tree():
 		return Vector3.ZERO
 
 	var meshes: Array[MeshInstance3D] = []
@@ -277,11 +281,18 @@ func _calculate_offset_from_model(weapon_model: Node3D) -> Vector3:
 	if meshes.is_empty():
 		return Vector3.ZERO
 
+	# weapon_modelのグローバル逆変換を取得（ネスト対応）
+	var model_inverse := weapon_model.global_transform.affine_inverse()
+
 	var combined := AABB()
 	var has_aabb := false
 	for mesh in meshes:
+		if not mesh.is_inside_tree():
+			continue
 		var local_aabb = mesh.get_aabb()
-		var transformed = _transform_aabb(local_aabb, mesh.transform)
+		# メッシュのグローバル変換をweapon_modelのローカル空間に変換
+		var mesh_to_model := model_inverse * mesh.global_transform
+		var transformed = _transform_aabb(local_aabb, mesh_to_model)
 		if not has_aabb:
 			combined = transformed
 			has_aabb = true
@@ -295,9 +306,7 @@ func _calculate_offset_from_model(weapon_model: Node3D) -> Vector3:
 	var min_z = combined.position.z
 	var max_z = combined.position.z + combined.size.z
 	var muzzle_z = min_z if absf(min_z) >= absf(max_z) else max_z
-	var muzzle_local = Vector3(center.x, center.y, muzzle_z)
-	var model_scale = weapon_model.scale
-	return Vector3(muzzle_local.x * model_scale.x, muzzle_local.y * model_scale.y, muzzle_local.z * model_scale.z)
+	return Vector3(center.x, center.y, muzzle_z)
 
 
 func _collect_mesh_instances(node: Node, results: Array[MeshInstance3D]) -> void:

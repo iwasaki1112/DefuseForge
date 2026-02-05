@@ -28,6 +28,8 @@ var _last_snapshot_time: float = 0.0
 var _is_extrapolating: bool = false
 ## 直近の速度（外挿用）
 var _last_velocity: Vector3 = Vector3.ZERO
+## 初回スナップショット受信フラグ
+var _first_snapshot_received: bool = false
 
 # ============================================
 # Fallback (Legacy Compatibility)
@@ -59,6 +61,11 @@ func set_anim_controller(ctrl: CharacterAnimationController) -> void:
 
 ## スナップショットを追加
 func add_snapshot(state: NetworkMessages.CharacterStateMessage, time: float) -> void:
+	# 初回スナップショット時に時刻基準を初期化
+	if not _first_snapshot_received:
+		_first_snapshot_received = true
+		_render_time_base = time - NetworkConstants.INTERPOLATION_DELAY
+
 	var snapshot := {
 		"time": time,
 		"position": state.position,
@@ -87,6 +94,13 @@ func clear() -> void:
 	_snapshot_buffer.clear()
 	_is_extrapolating = false
 	_active = false
+	_first_snapshot_received = false
+	_render_time_base = 0.0
+
+
+## 初回スナップショットが受信済みか
+func has_received_first_snapshot() -> bool:
+	return _first_snapshot_received
 
 
 ## 補間を有効化
@@ -175,7 +189,9 @@ func _get_interpolated_state() -> Dictionary:
 		var before_time: float = before.time
 		var after_time: float = after.time
 		if before_time <= target_time and target_time <= after_time:
-			var t: float = (target_time - before_time) / (after_time - before_time)
+			# ゼロ割を防止
+			var time_diff := after_time - before_time
+			var t: float = (target_time - before_time) / time_diff if time_diff > 0.0001 else 0.5
 			t = clampf(t, 0.0, 1.0)
 			_is_extrapolating = false
 			# アニメーション状態は補間せず、近い方を使用
@@ -222,14 +238,15 @@ func _apply_fallback_interpolation(delta: float) -> void:
 
 	const FALLBACK_SPEED := 25.0
 
-	# 位置の補間
-	_character.global_position = _character.global_position.lerp(_target_position, FALLBACK_SPEED * delta)
+	# 位置の補間（低FPS時のオーバーシュート防止）
+	var lerp_factor := minf(FALLBACK_SPEED * delta, 1.0)
+	_character.global_position = _character.global_position.lerp(_target_position, lerp_factor)
 
-	# 回転の補間
+	# 回転の補間（低FPS時のオーバーシュート防止）
 	var facing := _character.get_facing_direction()
 	var current_rot := atan2(facing.x, facing.z)
 	var rot_diff := fmod(_target_rotation - current_rot + PI, TAU) - PI
-	var new_rot := current_rot + rot_diff * FALLBACK_SPEED * delta
+	var new_rot := current_rot + rot_diff * minf(FALLBACK_SPEED * delta, 1.0)
 	_character.set_facing_direction(new_rot)
 
 	# 回転は四元数SLERPで滑らかに補間

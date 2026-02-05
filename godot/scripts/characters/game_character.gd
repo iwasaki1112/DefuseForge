@@ -234,6 +234,9 @@ func setup_combat_awareness() -> CombatAwarenessComponent:
 		combat_awareness.name = GameConstants.NODE_COMBAT_AWARENESS
 		add_child(combat_awareness)
 		combat_awareness.setup(self)
+		# BulletTrailComponentにもCombatAwarenessを伝播
+		if bullet_trail:
+			bullet_trail.set_combat_awareness(combat_awareness)
 	return combat_awareness
 
 
@@ -616,12 +619,15 @@ func apply_remote_state(state: NetworkMessages.CharacterStateMessage) -> void:
 
 	# リモート補間コンポーネントに委譲
 	if remote_interpolation:
+		# 初回受信判定（activate前に確認）
+		var is_first_snapshot := not remote_interpolation.has_received_first_snapshot()
+
 		remote_interpolation.activate()
 		var current_time := Time.get_ticks_msec() / 1000.0
 		remote_interpolation.add_snapshot(state, current_time)
 
-		# 初回受信時は即座に位置を設定（テレポート防止）
-		if not remote_interpolation.is_active() or global_position.distance_to(state.position) > 5.0:
+		# 初回受信時またはテレポート防止で即座に位置を設定
+		if is_first_snapshot or global_position.distance_to(state.position) > 5.0:
 			remote_interpolation.initialize_position(state)
 
 	# 旧実装との互換（段階的に削除予定）
