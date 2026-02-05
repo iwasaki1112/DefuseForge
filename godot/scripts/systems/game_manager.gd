@@ -789,11 +789,17 @@ func add_sync_wait_point(path_data: Dictionary) -> void:
 	# パスモード中（pending path）の場合、PathDrawerにポイントを追加
 	if is_path_mode() and path_drawer:
 		path_drawer.add_sync_wait_point(path_ratio, anchor)
+		# Undo履歴に追加（PathServiceの共通API使用）
+		if path_service:
+			path_service.push_wait_point_to_history(character, path_ratio, -1.0)
 		return
 
 	# 確認済みパスの場合、PathExecutionManagerにポイントを追加
 	if character and path_execution_manager:
 		path_execution_manager.add_sync_wait_point_to_path(character, path_ratio, anchor)
+		# Undo履歴に追加（PathServiceの共通API使用）
+		if path_service:
+			path_service.push_wait_point_to_history(character, path_ratio, -1.0)
 
 
 ## 全キャラクターの同期待機を解除

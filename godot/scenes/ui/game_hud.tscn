@@ -15,6 +15,7 @@
 [ext_resource type="Texture2D" uid="uid://cy0e6dkaxktoa" path="res://assets/ui/game/controller-somoke-granade-button.png" id="13_smoke"]
 [ext_resource type="Texture2D" uid="uid://tume5xbjh5ts" path="res://assets/ui/game/controller-door-button.png" id="14_door"]
 [ext_resource type="Texture2D" uid="uid://bp2ptj2kd3hbf" path="res://assets/ui/game/controller-wait-button.png" id="15_wait"]
+[ext_resource type="Texture2D" uid="uid://oj3d8jrkwjbr" path="res://assets/ui/game/controller-undo-button.png" id="16_undo"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_money"]
 bg_color = Color(0.957, 0.918, 0.192, 1)
@@ -65,6 +66,21 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 14
 text = "Right-drag: Move camera"
+
+[node name="GlobalUndoButton" type="TextureButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 90.0
+offset_top = -340.0
+offset_right = 170.0
+offset_bottom = -260.0
+grow_vertical = 0
+texture_normal = ExtResource("16_undo")
+ignore_texture_size = true
+stretch_mode = 5
 
 [node name="ExecuteButton" type="TextureButton" parent="."]
 unique_name_in_owner = true
@@ -301,6 +317,7 @@ offset_bottom = 279.0
 text = "Cancel"
 
 [connection signal="pressed" from="ControlPanel/ClearButton" to="." method="_on_clear_pressed"]
+[connection signal="pressed" from="GlobalUndoButton" to="." method="_on_global_undo_pressed"]
 [connection signal="pressed" from="ExecuteButton" to="." method="_on_execute_pressed"]
 [connection signal="pressed" from="SyncGoButton" to="." method="_on_sync_go_pressed"]
 [connection signal="pressed" from="GameTimer/CharacterMarkers/MarkerAlpha" to="." method="_on_marker_pressed" binds= ["alpha"]]

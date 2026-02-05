@@ -217,6 +217,14 @@ func _setup_hud() -> void:
 		_hud.point_undo_requested.connect(_on_point_undo_requested)
 		_hud.point_cancel_requested.connect(_on_point_cancel_requested)
 		_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
+		_hud.global_undo_requested.connect(_on_global_undo_requested)
+
+		# Undo状態の初期化
+		_hud.set_undo_enabled(false)
+
+		# PathUndoManagerのシグナル接続（Undo状態変更時にHUD更新）
+		if game_manager and game_manager.path_service and game_manager.path_service.path_undo_manager:
+			game_manager.path_service.path_undo_manager.undo_state_changed.connect(_on_undo_state_changed)
 
 
 func _setup_round_hud() -> void:
@@ -368,6 +376,10 @@ func _on_execute_button_pressed() -> void:
 	var count := game_manager.execute_all_paths(false, local_only)
 	_mode_provider.on_execute_paths(count)
 
+	# パス実行後はUndo履歴をクリア
+	if game_manager.path_service:
+		game_manager.path_service.clear_undo_history()
+
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
@@ -418,6 +430,16 @@ func _on_point_undo_requested() -> void:
 func _on_point_cancel_requested() -> void:
 	if game_manager and game_manager.path_service:
 		game_manager.path_service.cancel_path()
+
+
+func _on_global_undo_requested() -> void:
+	if game_manager and game_manager.path_service:
+		game_manager.path_service.global_undo()
+
+
+func _on_undo_state_changed(can_undo: bool) -> void:
+	if _hud:
+		_hud.set_undo_enabled(can_undo)
 
 
 func _on_path_ready() -> void:

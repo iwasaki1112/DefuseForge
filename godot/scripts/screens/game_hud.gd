@@ -11,6 +11,7 @@ signal point_edit_requested(action: String)
 signal point_undo_requested()
 signal point_cancel_requested()
 signal sync_go_requested()  ## W解放ボタン押下
+signal global_undo_requested()  ## グローバルUndoボタン押下
 
 const TIMER_WARNING_THRESHOLD := 10.0
 const TIMER_WARNING_COLOR := Color(1.0, 0.3, 0.3)
@@ -22,6 +23,7 @@ const POINT_DEAD_ALPHA := 0.3
 @onready var _money_label: Label = %MoneyLabel
 @onready var _execute_button: TextureButton = %ExecuteButton
 @onready var _sync_go_button: Button = %SyncGoButton
+@onready var _global_undo_button: TextureButton = %GlobalUndoButton
 @warning_ignore("unused_private_class_variable")
 @onready var _character_markers: HBoxContainer = %CharacterMarkers
 @onready var _point_alpha: TextureButton = %MarkerAlpha
@@ -306,3 +308,20 @@ func hide_sync_go_button() -> void:
 func update_sync_go_button_visibility(has_waiting: bool) -> void:
 	if _sync_go_button:
 		_sync_go_button.visible = has_waiting
+
+
+## ========================================
+## グローバルUndoボタンAPI
+## ========================================
+
+## グローバルUndoボタン押下時のコールバック
+func _on_global_undo_pressed() -> void:
+	global_undo_requested.emit()
+
+
+## Undoボタンの有効/無効を設定
+## @param enabled: 有効にするかどうか
+func set_undo_enabled(enabled: bool) -> void:
+	if _global_undo_button:
+		_global_undo_button.disabled = not enabled
+		_global_undo_button.modulate.a = 1.0 if enabled else 0.5

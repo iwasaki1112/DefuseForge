@@ -20,6 +20,7 @@ var path_drawer: PathDrawer = null
 var selection_manager: CharacterSelectionManager = null
 var path_execution_manager: PathExecutionManager = null
 var path_mode_controller: PathModeController = null
+var path_undo_manager: PathUndoManager = null
 
 ## 継続モードフラグ（既存パスの終点からパスを継続する場合にtrue）
 var _is_continuation_mode: bool = false
@@ -39,6 +40,10 @@ func setup(
 	selection_manager = sel_manager
 	path_execution_manager = exec_manager
 	path_mode_controller = mode_controller
+
+	# PathUndoManagerを初期化
+	path_undo_manager = PathUndoManager.new()
+	path_undo_manager.setup(path_execution_manager, path_drawer)
 
 	if path_execution_manager:
 		path_execution_manager.path_confirmed.connect(_on_path_confirmed)
@@ -363,12 +368,16 @@ func _on_vision_point_added(anchor: Vector3, direction: Vector3) -> void:
 	vision_point_added.emit(anchor, direction)
 	# リアルタイム確定：pending_pathsにポイントを追加
 	_sync_points_to_pending_paths()
+	# 履歴に追加（共通API使用）
+	push_vision_point_to_history(null, anchor, direction)
 
 
 func _on_wait_point_added(path_ratio: float, wait_duration: float) -> void:
 	wait_point_added.emit(path_ratio, wait_duration)
 	# リアルタイム確定：pending_pathsにポイントを追加
 	_sync_points_to_pending_paths()
+	# 履歴に追加（共通API使用）
+	push_wait_point_to_history(null, path_ratio, wait_duration)
 
 
 ## PathDrawerのポイントをpending_pathsに同期（メッシュの所有権も移譲）
@@ -458,6 +467,12 @@ func _on_path_started(character: Node, start_point: Vector3) -> void:
 	_is_continuation_mode = false  # フラグをリセット
 	path_execution_manager.start_realtime_path(character, start_point, is_continuation)
 
+	# 履歴に追加（継続モードでない場合のみ）
+	if path_undo_manager and not is_continuation:
+		path_undo_manager.push(PathUndoManager.OperationType.PATH_START, character, {
+			"start_point": start_point
+		})
+
 
 ## 移動中パス継続モードのクリーンアップ
 func _cleanup_moving_continuation(_is_cancel: bool = false) -> void:
@@ -475,3 +490,77 @@ func _on_path_point_added(character: Node, point: Vector3) -> void:
 		path_execution_manager.add_point_to_moving_path(character, point)
 	else:
 		path_execution_manager.add_realtime_path_point(character, point)
+
+	# NOTE: パスポイントは履歴に追加しない
+	# パス全体を1回のUndoで消せるようにするため、PATH_STARTのみを履歴に残す
+
+
+## ========================================
+## グローバルUndo API
+## ========================================
+
+## グローバルUndo実行
+## @return: Undo成功した場合true
+func global_undo() -> bool:
+	if not path_undo_manager or not path_undo_manager.can_undo():
+		return false
+	return path_undo_manager.undo()
+
+
+## Undo可能かどうか
+func can_global_undo() -> bool:
+	return path_undo_manager and path_undo_manager.can_undo()
+
+
+## Undo履歴をクリア（パス実行開始時に呼ぶ）
+func clear_undo_history() -> void:
+	if path_undo_manager:
+		path_undo_manager.clear()
+
+
+## ========================================
+## 履歴追加API（共通化）
+## ========================================
+
+## Waitポイントを履歴に追加
+## @param character: 対象キャラクター（nullの場合は編集中キャラクターを使用）
+## @param path_ratio: パス上の位置
+## @param wait_duration: 待機時間（-1.0 = 同期ポイント）
+func push_wait_point_to_history(character: Node, path_ratio: float, wait_duration: float = -1.0) -> void:
+	if not path_undo_manager:
+		return
+
+	# characterがnullの場合、編集中のキャラクターを取得
+	if not character:
+		if path_mode_controller and path_mode_controller.editing_character:
+			character = path_mode_controller.editing_character
+		elif path_drawer:
+			character = path_drawer.get_active_edit_character()
+
+	if character:
+		path_undo_manager.push(PathUndoManager.OperationType.WAIT_POINT, character, {
+			"path_ratio": path_ratio,
+			"wait_duration": wait_duration
+		})
+
+
+## Visionポイントを履歴に追加
+## @param character: 対象キャラクター（nullの場合は編集中キャラクターを使用）
+## @param anchor: アンカー位置
+## @param direction: 方向
+func push_vision_point_to_history(character: Node, anchor: Vector3, direction: Vector3) -> void:
+	if not path_undo_manager:
+		return
+
+	# characterがnullの場合、編集中のキャラクターを取得
+	if not character:
+		if path_mode_controller and path_mode_controller.editing_character:
+			character = path_mode_controller.editing_character
+		elif path_drawer:
+			character = path_drawer.get_active_edit_character()
+
+	if character:
+		path_undo_manager.push(PathUndoManager.OperationType.VISION_POINT, character, {
+			"anchor": anchor,
+			"direction": direction
+		})
