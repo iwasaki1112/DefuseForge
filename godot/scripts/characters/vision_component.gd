@@ -13,7 +13,7 @@ signal vision_updated(visible_points: PackedVector3Array)
 @export_group("Vision Settings")
 @export var fov_degrees: float = 90.0  ## Field of view in degrees
 @export var view_distance: float = 15.0  ## Vision distance in meters
-@export var peripheral_distance: float = 0.5  ## Peripheral vision distance (360 degrees)
+@export var peripheral_distance: float = 0.75  ## Peripheral vision distance (360 degrees, must be > 2x collider radius=0.35)
 @export var eye_height: float = 1.5  ## Eye height from ground
 
 @export_group("Collision Settings")
@@ -139,20 +139,35 @@ func set_debug_draw(enabled: bool) -> void:
 ## Check if a world position is within FOV (lightweight single raycast check)
 ## Used for enemy visibility detection
 ## Includes peripheral vision check (360 degrees within peripheral_distance)
+## Set debug_visibility_check to true for detailed logging (or use Debug.enabled)
+var debug_visibility_check: bool = false
+
 func is_position_in_view(world_pos: Vector3) -> bool:
+	var should_log := debug_visibility_check or Debug.enabled
 	if not _character:
+		if should_log: print("[Vision] No character")
 		return false
 
 	var origin := _get_eye_position_raw()
 	var to_target := world_pos - origin
-	var distance := to_target.length()
+
+	# 水平距離（XZ平面）を計算 - 周辺視界と主視界の距離判定に使用
+	# 3D距離を使うと、目線の高さの差で近接した敵を検知できない問題がある
+	var distance_xz := Vector2(to_target.x, to_target.z).length()
+
+	if should_log:
+		print("[Vision] origin=", origin, " target=", world_pos, " dist_xz=", distance_xz, " peripheral=", peripheral_distance)
 
 	# Peripheral vision check (360 degrees, short range)
 	# If within peripheral distance, skip FOV angle check
-	var is_in_peripheral := distance <= peripheral_distance
+	var is_in_peripheral := distance_xz <= peripheral_distance
+
+	if should_log and is_in_peripheral:
+		print("[Vision] IN PERIPHERAL RANGE")
 
 	# Distance check (only applies to main FOV, not peripheral)
-	if not is_in_peripheral and distance > view_distance:
+	if not is_in_peripheral and distance_xz > view_distance:
+		if should_log: print("[Vision] FAIL: distance ", distance_xz, " > view_distance ", view_distance)
 		return false
 
 	# FOV check (XZ plane) - skip for peripheral vision
@@ -165,17 +180,21 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 			pass  # Target directly above/below or vertical look direction - allow
 		else:
 			var angle := rad_to_deg(look_dir_xz.angle_to(to_target_xz))
+			if should_log: print("[Vision] angle=", angle, " fov_half=", fov_degrees / 2.0)
 			if angle > fov_degrees / 2.0:
+				if should_log: print("[Vision] FAIL: angle outside FOV")
 				return false
 
 	# Smoke occlusion check
 	var smoke_manager := _get_smoke_area_manager()
 	if smoke_manager and smoke_manager.is_line_of_sight_blocked(origin, world_pos):
+		if should_log: print("[Vision] FAIL: smoke blocking")
 		return false
 
 	# Wall occlusion check (single raycast)
 	var space_state := get_world_3d().direct_space_state
 	if not space_state:
+		if should_log: print("[Vision] FAIL: no space_state")
 		return false
 
 	var query := PhysicsRayQueryParameters3D.create(origin, world_pos, wall_collision_mask)
@@ -183,6 +202,11 @@ func is_position_in_view(world_pos: Vector3) -> bool:
 		query.exclude = [_character_rid]
 
 	var result := space_state.intersect_ray(query)
+	if should_log:
+		if result.is_empty():
+			print("[Vision] SUCCESS: visible")
+		else:
+			print("[Vision] FAIL: wall hit at ", result.position, " collider=", result.collider)
 	return result.is_empty()
 
 

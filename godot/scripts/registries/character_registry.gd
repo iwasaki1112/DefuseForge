@@ -186,7 +186,7 @@ func create_character_from_preset(preset: CharacterPresetScript, spawn_position:
 	var collision := CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.5
+	capsule.radius = 0.35  # 小さめに設定（キャラクター同士が近づきやすくする）
 	capsule.height = 1.8
 	collision.shape = capsule
 	collision.position.y = 0.9

@@ -243,15 +243,25 @@ func _scan_for_enemies() -> void:
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
 		if enemy in _ignored_enemies:
+			if Debug.enabled: print("[CAC] Skip ignored enemy: ", enemy.name)
 			continue
 
 		# Skip dead enemies
 		if "is_alive" in enemy and not enemy.is_alive:
+			if Debug.enabled: print("[CAC] Skip dead enemy: ", enemy.name)
 			continue
 
-		var enemy_pos: Vector3 = enemy.global_position
+		# 敵の胴体中心の位置を使用（足元ではなく）
+		# レイキャストが目線から敵の足元に向かうと、近距離で検知できない問題がある
+		var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+		var dist_to_enemy: float = char_pos.distance_to(enemy.global_position)
+
 		# Check if enemy is visible (uses single raycast per enemy)
-		if _is_enemy_visible(enemy_pos, vision):
+		var is_visible := _is_enemy_visible(enemy_pos, vision)
+		if Debug.enabled:
+			print("[CAC] Check enemy: ", enemy.name, " dist=", "%.2f" % dist_to_enemy, "m visible=", is_visible)
+
+		if is_visible:
 			var dist: float = char_pos.distance_to(enemy_pos)
 			if dist < closest_distance:
 				closest_distance = dist
@@ -261,6 +271,10 @@ func _scan_for_enemies() -> void:
 		var elapsed := Time.get_ticks_usec() - start_time
 		if elapsed > 2000:  # 2ms以上かかった場合のみログ
 			print("[CAC] Enemy scan took ", elapsed / 1000.0, "ms for ", enemies.size(), " enemies")
+		if closest_enemy:
+			print("[CAC] Closest enemy: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
+		else:
+			print("[CAC] No visible enemy found (checked ", enemies.size(), " enemies)")
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)

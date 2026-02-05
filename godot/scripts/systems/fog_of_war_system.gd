@@ -208,6 +208,8 @@ func _sync_vision_lights() -> void:
 						if vision_light.view_distance != vision.view_distance:
 							vision_light.set_view_distance(vision.view_distance)
 						if vision_light.peripheral_distance != vision.peripheral_distance:
+							if Debug.enabled:
+								print("[FOW] Sync peripheral: VisionLight=", vision_light.peripheral_distance, " -> VisionComponent=", vision.peripheral_distance)
 							vision_light.set_peripheral_distance(vision.peripheral_distance)
 
 				vision_light.sync_transform()
@@ -242,6 +244,8 @@ func register_character(character: Node3D) -> void:
 	vision_light.fov_degrees = fov
 	vision_light.view_distance = view_dist
 	vision_light.peripheral_distance = peripheral_dist
+	if Debug.enabled:
+		print("[FOW] register_character: ", character.name, " peripheral=", peripheral_dist)
 	add_child(vision_light)
 
 	# セットアップ
