@@ -61,6 +61,7 @@ var round_manager: RoundManager = null
 var character_manager: CharacterManagerService = null
 var grenade_service: GrenadeService = null
 var door_service: DoorService = null
+var moving_path_vision_service: MovingPathVisionService = null
 
 ## UIコンポーネント
 var label_manager: CharacterLabelManager = null
@@ -84,13 +85,7 @@ var default_vision_range: float = 15.0
 var default_weapon_id: String = "glock"
 var is_vision_enabled: bool = false
 
-## 移動中パスVisionプレビュー用
-var _moving_path_vision_preview: MeshInstance3D = null
-## 現在プレビュー中のpath_ratio
-var _moving_path_preview_ratio: float = 0.0
-## 移動中パスに追加されたVisionポイント（キャラクターIDをキーとした配列）
-## { char_id: Array[{ "point": MeshInstance3D, "path_ratio": float }] }
-var _moving_path_vision_points: Dictionary = {}
+## 移動中パスVisionポイントはMovingPathVisionServiceに委譲
 
 
 ## セットアップ（カメラ、メッシュ親、UIレイヤーを指定）
@@ -110,6 +105,7 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 
 	_setup_selection_manager()
 	_setup_path_execution_manager(mesh_parent)
+	_setup_moving_path_vision_service(mesh_parent)
 	_setup_idle_manager()
 	_setup_smoke_area_manager()
 	_setup_path_drawer()
@@ -464,112 +460,39 @@ func try_start_vision_point_on_moving_path(screen_pos: Vector2, ground_pos: Vect
 ## @param target_point: 視線方向の目標点
 ## @return: 成功した場合true
 func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
-	if not path_execution_manager:
-		return false
-	var result = path_execution_manager.add_vision_point_to_moving_path(character, path_ratio, anchor, target_point)
-	if result and _moving_path_vision_preview:
-		# プレビューを永続ポイントとして保持（path_ratio, anchor, target_pointも保存）
-		var char_id = character.get_instance_id()
-		if not _moving_path_vision_points.has(char_id):
-			_moving_path_vision_points[char_id] = []
-		_moving_path_vision_points[char_id].append({
-			"point": _moving_path_vision_preview,
-			"path_ratio": path_ratio,  # 渡されたpath_ratioを使用
-			"anchor": anchor,  # 元のワールド位置を保存
-			"target_point": target_point  # ターゲット位置も保存
-		})
-		# プレビュー参照をクリア（ノードは保持）
-		_moving_path_vision_preview = null
-		_moving_path_preview_ratio = 0.0
-	return result
+	if moving_path_vision_service:
+		return moving_path_vision_service.add_vision_point(character, path_ratio, anchor, target_point)
+	return false
 
 
-## 移動中パスVisionポイントのプレビューを更新
-## @param character: 対象キャラクター（色取得用）
-## @param anchor: アンカー位置
-## @param target_point: 視線方向の目標点
-## @param path_ratio: パス上の比率（ポイント非表示判定用）
+## 移動中パスVisionポイントのプレビューを更新（MovingPathVisionServiceに委譲）
 func update_moving_path_vision_preview(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float = 0.0) -> void:
-	var char_color := CharacterColorManager.get_character_color(character) if character else Color.WHITE
-
-	if not _moving_path_vision_preview:
-		# プレビューポイントを作成
-		var VisionPointScript = preload("res://scripts/effects/vision_point.gd")
-		_moving_path_vision_preview = MeshInstance3D.new()
-		_moving_path_vision_preview.set_script(VisionPointScript)
-		_mesh_parent.add_child(_moving_path_vision_preview)
-
-	_moving_path_vision_preview.set_position_and_target(anchor, target_point)
-	_moving_path_vision_preview.set_colors(char_color, Color.WHITE)
-	_moving_path_vision_preview.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
-	_moving_path_preview_ratio = path_ratio
+	if moving_path_vision_service:
+		moving_path_vision_service.update_preview(character, anchor, target_point, path_ratio)
 
 
-## 移動中パスVisionポイントのプレビューをクリア
+## 移動中パスVisionポイントのプレビューをクリア（MovingPathVisionServiceに委譲）
 func clear_moving_path_vision_preview() -> void:
-	if _moving_path_vision_preview and is_instance_valid(_moving_path_vision_preview):
-		_moving_path_vision_preview.queue_free()
-		_moving_path_vision_preview = null
+	if moving_path_vision_service:
+		moving_path_vision_service.clear_preview()
 
 
-## 移動中パスVisionポイントをクリア（キャラクター指定）
-## @param character: 対象キャラクター
+## 移動中パスVisionポイントをクリア（MovingPathVisionServiceに委譲）
 func clear_moving_path_vision_points_for_character(character: Node) -> void:
-	if not character:
-		return
-	var char_id = character.get_instance_id()
-	if _moving_path_vision_points.has(char_id):
-		for point_data in _moving_path_vision_points[char_id]:
-			var point = point_data.get("point")
-			if is_instance_valid(point):
-				point.queue_free()
-		_moving_path_vision_points.erase(char_id)
+	if moving_path_vision_service:
+		moving_path_vision_service.clear_for_character(character)
 
 
-## 全ての移動中パスVisionポイントをクリア
+## 全ての移動中パスVisionポイントをクリア（MovingPathVisionServiceに委譲）
 func clear_all_moving_path_vision_points() -> void:
-	for char_id in _moving_path_vision_points:
-		for point_data in _moving_path_vision_points[char_id]:
-			var point = point_data.get("point")
-			if is_instance_valid(point):
-				point.queue_free()
-	_moving_path_vision_points.clear()
+	if moving_path_vision_service:
+		moving_path_vision_service.clear_all()
 
 
-## 移動中パスVisionポイントを進行状況に応じて非表示
-## @param character: 対象キャラクター
-## @param current_ratio: 現在のパス進行率
-func hide_passed_moving_path_vision_points(character: Node, _current_ratio: float) -> void:
-	if not character:
-		return
-	var char_id = character.get_instance_id()
-	if not _moving_path_vision_points.has(char_id):
-		return
-
-	# キャラクターの現在位置を取得（Y座標は無視）
-	var char_pos = character.global_position
-	char_pos.y = 0.0
-
-	for point_data in _moving_path_vision_points[char_id]:
-		var point = point_data.get("point")
-		if not is_instance_valid(point):
-			continue
-
-		# 既に非表示なら処理しない
-		if not point.visible:
-			continue
-
-		var anchor = point_data.get("anchor", Vector3.ZERO)
-		if anchor == Vector3.ZERO:
-			continue
-
-		# ポイント位置との距離で判定（Y座標は無視）
-		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
-		var distance = char_pos.distance_to(anchor_flat)
-
-		# キャラクターがポイント位置に十分近い（1.0ユニット以内）なら非表示
-		if distance < 1.0:
-			point.visible = false
+## 移動中パスVisionポイントを進行状況に応じて非表示（MovingPathVisionServiceに委譲）
+func hide_passed_moving_path_vision_points(character: Node, current_ratio: float) -> void:
+	if moving_path_vision_service:
+		moving_path_vision_service.hide_passed_points(character, current_ratio)
 
 
 ## 全保留パスをクリア
@@ -1052,6 +975,12 @@ func _setup_door_service() -> void:
 		door_service.door_kick_network_event.connect(func(d, c): door_kick_network_event.emit(d, c))
 
 
+func _setup_moving_path_vision_service(mesh_parent: Node3D) -> void:
+	if moving_path_vision_service == null:
+		moving_path_vision_service = MovingPathVisionService.new()
+		moving_path_vision_service.setup(mesh_parent, path_execution_manager)
+
+
 ## ========================================
 ## 内部：シグナルハンドラ
 ## ========================================
@@ -1104,11 +1033,8 @@ func _on_path_progress_updated(character: Node) -> void:
 
 
 func _on_extension_points_scaled(character: Node, _scale: float) -> void:
-	# 移動中パスVisionポイントの比率をアンカー位置から再計算
-	if not character or not path_execution_manager:
-		return
-	var char_id = character.get_instance_id()
-	if not _moving_path_vision_points.has(char_id):
+	# 移動中パスVisionポイントの比率をアンカー位置から再計算（サービスに委譲）
+	if not character or not path_execution_manager or not moving_path_vision_service:
 		return
 
 	# 現在の完全な残りパスを取得
@@ -1116,18 +1042,12 @@ func _on_extension_points_scaled(character: Node, _scale: float) -> void:
 	if full_path.size() < 2:
 		return
 
-	for point_data in _moving_path_vision_points[char_id]:
-		var anchor = point_data.get("anchor", Vector3.ZERO)
-		if anchor != Vector3.ZERO:
-			# アンカー位置からパス上の比率を再計算
-			var new_ratio = _calculate_ratio_from_position_on_path(full_path, anchor)
-			point_data["path_ratio"] = new_ratio
-
-		# 視覚的なポイント位置を維持
-		var point = point_data.get("point")
-		var target_point = point_data.get("target_point", Vector3.ZERO)
-		if is_instance_valid(point) and anchor != Vector3.ZERO:
-			point.set_position_and_target(anchor, target_point)
+	# サービスに比率再計算を委譲
+	moving_path_vision_service.recalculate_ratios_on_scale(
+		character,
+		full_path,
+		_calculate_ratio_from_position_on_path
+	)
 
 
 ## ワールド座標からパス上の比率を計算（最近点を使用）
