@@ -15,6 +15,7 @@ enum PointType { VISION, PATH, WAIT }
 signal drawing_finished(points: PackedVector3Array)
 signal vision_point_added(anchor: Vector3, target_point: Vector3)
 signal wait_point_added(path_ratio: float, wait_duration: float)
+@warning_ignore("unused_signal")
 signal path_undone()
 signal mode_changed(mode: int)
 ## パス外タップ時のシグナル（モード終了用）
@@ -93,7 +94,8 @@ var _wait_handler: WaitPointHandler
 ## 他パスとの比較用（PathExecutionManagerへの参照）
 var _path_execution_manager: Node = null
 
-## 実行中のキャラクター（パス完了シグナル接続用）
+## 実行中のキャラクター（パス完了シグナル接続用 - PathDrawerDataManagerから参照）
+@warning_ignore("unused_private_class_variable")
 var _executing_character: Node = null
 
 ## パス延長モードフラグ

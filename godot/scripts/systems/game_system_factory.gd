@@ -48,7 +48,7 @@ func create_smoke_area_manager() -> SmokeAreaManager:
 
 
 ## PathDrawerを生成・初期化
-func create_path_drawer(cam: Camera3D, path_execution_manager: PathExecutionManager) -> Node3D:
+func create_path_drawer(_cam: Camera3D, _path_execution_manager: PathExecutionManager) -> Node3D:
 	var drawer := Node3D.new()
 	drawer.set_script(PathDrawerScript)
 	drawer.name = GameConstants.NODE_PATH_DRAWER

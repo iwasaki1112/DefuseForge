@@ -9,14 +9,22 @@ signal path_started()
 signal path_completed()
 signal path_cancelled()
 signal vision_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
 signal grenade_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
 signal smoke_grenade_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
 signal door_point_reached(index: int, door: Node3D)
+@warning_ignore("unused_signal")
 signal wait_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
 signal extension_path_activated()  ## 延長パスに切り替わった時
 signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
+@warning_ignore("unused_signal")
 signal extension_points_scaled(scale: float)  ## 延長ポイントの比率がスケールされた時
+@warning_ignore("unused_signal")
 signal sync_wait_started()  ## 同期待機開始時
+@warning_ignore("unused_signal")
 signal sync_wait_released()  ## 同期待機解放時
 
 ## スタック検出設定
