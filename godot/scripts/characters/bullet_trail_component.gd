@@ -11,7 +11,7 @@ extends RefCounted
 
 var BULLET_TRAIL_SHADER: Shader = null
 const BULLET_TRAIL_DURATION: float = 0.15
-const BULLET_TRAIL_WIDTH: float = 0.01
+const BULLET_TRAIL_WIDTH: float = 0.04
 const BULLET_TRAIL_MAX_DISTANCE: float = 50.0
 
 # ============================================
@@ -167,7 +167,7 @@ func _create_trail(start: Vector3, end: Vector3) -> void:
 		_bullet_trail_mat = ShaderMaterial.new()
 		_bullet_trail_mat.shader = BULLET_TRAIL_SHADER
 		_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.95, 0.85, 1.0))
-		_bullet_trail_mat.set_shader_parameter("edge_softness", 1.5)
+		_bullet_trail_mat.set_shader_parameter("edge_softness", 0.3)
 		_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.12)
 		_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
 		_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)

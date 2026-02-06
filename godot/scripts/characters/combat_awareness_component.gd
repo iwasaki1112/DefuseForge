@@ -358,10 +358,12 @@ func _get_enemy_characters() -> Array[Node]:
 func _try_fire() -> void:
 	if not _character:
 		return
+	# ダメージ計算を先に行い、命中/外れ結果をセットしてからシグナルを発火
+	# これによりBulletTrailComponentが正しい射撃結果を取得できる
+	_apply_damage_to_target()
 	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl and anim_ctrl.has_method("fire"):
-		anim_ctrl.fire()  # Trigger recoil animation
-		_apply_damage_to_target()
+		anim_ctrl.fire()  # Trigger recoil animation + fired signal
 
 
 ## Calculate hit chance based on weapon stats, distance, and movement
