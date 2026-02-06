@@ -118,6 +118,11 @@ func _setup_game_manager() -> void:
 		game_manager = GameManager.new()
 		game_manager.name = "GameManager"
 		add_child(game_manager)
+
+		# UIコンポーネントをGameScreenが作成してGameManagerに注入
+		_setup_label_manager()
+		_setup_path_context_menu()
+
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
 		# シグナル接続（SignalBus経由）
@@ -227,8 +232,9 @@ func _setup_hud() -> void:
 		_hud.set_undo_enabled(false)
 
 		# PathUndoManagerのシグナル接続（Undo状態変更時にHUD更新）
-		if game_manager and game_manager.path_service and game_manager.path_service.path_undo_manager:
-			game_manager.path_service.path_undo_manager.undo_state_changed.connect(_on_undo_state_changed)
+		var undo_manager = game_manager.get_path_undo_manager() if game_manager else null
+		if undo_manager:
+			undo_manager.undo_state_changed.connect(_on_undo_state_changed)
 
 
 func _setup_round_hud() -> void:
@@ -267,6 +273,23 @@ func _setup_input_controller() -> void:
 		_input_controller.name = "InputController"
 		add_child(_input_controller)
 		_input_controller.setup(game_manager, _camera_pan_controller)
+
+
+func _setup_label_manager() -> void:
+	var lm := CharacterLabelManager.new()
+	lm.name = GameConstants.NODE_LABEL_MANAGER
+	game_manager.add_child(lm)
+	game_manager.set_label_manager(lm)
+
+
+func _setup_path_context_menu() -> void:
+	var menu := PathContextMenu.new()
+	menu.name = "PathContextMenu"
+	if ui_layer:
+		ui_layer.add_child(menu)
+	else:
+		game_manager.add_child(menu)
+	game_manager.set_path_context_menu(menu)
 
 
 func _setup_money() -> void:
@@ -372,8 +395,8 @@ func _process(_delta: float) -> void:
 
 func _on_execute_button_pressed() -> void:
 	# パスモード中でパスがあればモードを終了する
-	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_path():
-		game_manager.path_service.confirm_path()
+	if game_manager.is_path_mode() and game_manager.has_path():
+		game_manager.confirm_path()
 
 	# マルチプレイヤーモードでは自分のキャラクターのみ実行
 	var local_only := _mode_provider.get_mode_name() == "multiplayer"
@@ -381,8 +404,7 @@ func _on_execute_button_pressed() -> void:
 	_mode_provider.on_execute_paths(count)
 
 	# パス実行後はUndo履歴をクリア
-	if game_manager.path_service:
-		game_manager.path_service.clear_undo_history()
+	game_manager.clear_undo_history()
 
 
 func _on_clear_paths_button_pressed() -> void:
@@ -402,43 +424,44 @@ func _on_sync_wait_state_changed(has_waiting: bool) -> void:
 
 
 func _on_point_edit_requested(action: String) -> void:
-	if not game_manager or not game_manager.path_service:
+	if not game_manager or not game_manager.has_path():
 		return
 
-	var path_service = game_manager.path_service
-	if not path_service.has_path():
+	# PathServiceにはpath_service経由でアクセスする必要があるモード切替メソッド
+	var ps = game_manager.path_service
+	if not ps:
 		return
 
 	match action:
 		"vision":
-			path_service.start_vision_mode()
+			ps.start_vision_mode()
 		"run":
-			path_service.start_run_mode()
+			ps.start_run_mode()
 		"clear":
-			path_service.start_clear_mode()
+			ps.start_clear_mode()
 		"grenade":
-			path_service.start_grenade_mode()
+			ps.start_grenade_mode()
 		"smoke":
-			path_service.start_smoke_grenade_mode()
+			ps.start_smoke_grenade_mode()
 		"door":
-			path_service.start_door_mode()
+			ps.start_door_mode()
 		"wait":
-			path_service.start_wait_mode()
+			ps.start_wait_mode()
 
 
 func _on_point_undo_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.undo_last_point()
+	if game_manager:
+		game_manager.undo_last_point()
 
 
 func _on_point_cancel_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.cancel_path()
+	if game_manager:
+		game_manager.cancel_path()
 
 
 func _on_global_undo_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.global_undo()
+	if game_manager:
+		game_manager.global_undo()
 
 
 func _on_undo_state_changed(can_undo: bool) -> void:

@@ -157,9 +157,9 @@ func _setup_progress_ring() -> void:
 
 ## パスモード終了シグナルを接続
 func _connect_path_mode_signals() -> void:
-	if not game_manager or not game_manager.path_service:
+	if not game_manager:
 		return
-	var path_mode_controller = game_manager.path_service.path_mode_controller
+	var path_mode_controller = game_manager.get_path_mode_controller()
 	if path_mode_controller:
 		if not path_mode_controller.mode_ended.is_connected(_on_path_mode_ended):
 			path_mode_controller.mode_ended.connect(_on_path_mode_ended)
@@ -386,12 +386,12 @@ func _handle_path_mode_mouse_press(position: Vector2) -> void:
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
-		var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
+		var is_following = game_manager.is_character_following_path(clicked)
 		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 
 		if not is_enemy:
 			if is_following:
-				game_manager.path_service.cancel_path_following(clicked, true)
+				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
 
 			_rotation_target_character = clicked
@@ -593,12 +593,12 @@ func _handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer) -
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
-		var is_following = game_manager.path_service and game_manager.path_service.is_character_following_path(clicked)
+		var is_following = game_manager.is_character_following_path(clicked)
 		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
 
 		if not is_enemy:
 			if is_following:
-				game_manager.path_service.cancel_path_following(clicked, true)
+				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
 
 			_rotation_target_character = clicked
@@ -937,8 +937,8 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	if PlayerState.is_enemy(clicked):
 		return false
 
-	if game_manager.path_service and game_manager.path_service.is_character_following_path(clicked):
-		game_manager.path_service.cancel_path_following(clicked, true)
+	if game_manager.is_character_following_path(clicked):
+		game_manager.cancel_path_following(clicked, true)
 		_auto_execute_character = clicked
 
 	game_manager.selection_manager.deselect_all()
@@ -1033,7 +1033,7 @@ func _get_path_drawer() -> PathDrawer:
 
 
 func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
-	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
+	if not game_manager or not game_manager.camera:
 		return false
 
 	var ground_plane := Plane(Vector3.UP, 0.0)
@@ -1044,7 +1044,7 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 		return false
 
 	var ground_pos: Vector3 = intersect as Vector3
-	var result := game_manager.path_execution_manager.find_path_endpoint_at_position(ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
+	var result := game_manager.find_path_endpoint_at_position(ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
 	return not result.is_empty()
 
 #endregion
@@ -1054,7 +1054,7 @@ func _is_near_path_endpoint(screen_pos: Vector2) -> bool:
 
 func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = false) -> bool:
 	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: called, is_touch=%s" % str(is_touch))
-	if not game_manager or not game_manager.path_execution_manager or not game_manager.camera:
+	if not game_manager or not game_manager.camera:
 		if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: no manager")
 		return false
 
@@ -1071,7 +1071,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 	# モバイルではタッチ精度が低いため、より大きな閾値を使用
 	var threshold := GameConstants.PATH_CLICK_THRESHOLD_MOBILE if is_touch else GameConstants.PATH_CLICK_THRESHOLD
 
-	var result := game_manager.path_execution_manager.find_path_point_at_position(ground_pos, threshold)
+	var result := game_manager.find_path_point_at_position(ground_pos, threshold)
 	if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: find_path_point result=%s, threshold=%.2f" % [result, threshold])
 	if not result.is_empty():
 		if Debug.enabled: print("[PointDebug] _try_start_confirmed_path_longpress: starting longpress for confirmed path")
@@ -1282,9 +1282,9 @@ func _on_path_mode_ended() -> void:
 	_path_mode_ended_frame = current_frame
 
 	if _auto_execute_character and is_instance_valid(_auto_execute_character):
-		if game_manager.path_service and game_manager.path_service.has_pending_path_for_character(_auto_execute_character):
+		if game_manager.has_pending_path_for_character(_auto_execute_character):
 			if Debug.enabled: print("[PointDebug] _on_path_mode_ended: auto-executing path for %s" % _auto_execute_character.name)
-			game_manager.path_service.execute_path_for_character(_auto_execute_character, false)
+			game_manager.execute_path_for_character(_auto_execute_character, false)
 	_auto_execute_character = null
 
 

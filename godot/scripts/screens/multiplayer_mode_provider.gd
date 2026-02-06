@@ -320,7 +320,7 @@ func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, i
 
 ## リモートプレイヤーからのパス確定を処理
 func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	if not _game_manager or not _game_manager.path_execution_manager:
+	if not _game_manager:
 		return
 
 	# 自分のパスはすでにローカルで登録済みなのでスキップ
@@ -334,6 +334,4 @@ func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathCon
 		return
 
 	# リモートプレイヤーのパスを登録
-	_game_manager.path_execution_manager.confirm_path_for_player(
-		player_id, path_msg, character
-	)
+	_game_manager.confirm_path_for_player(player_id, path_msg, character)

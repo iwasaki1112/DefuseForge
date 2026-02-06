@@ -1,34 +1,44 @@
 # GameManager
 
 ## 概要
-コアゲームシステムの初期化・更新・入力処理・UI管理を一元管理するマネージャークラス。テストシーンとゲームロジックを完全に分離し、14個のサブシステムを統合制御する。
+コアゲームシステムの初期化・更新・入力処理を一元管理するマネージャークラス。テストシーンとゲームロジックを完全に分離し、14個のサブシステムを統合制御する。
+
+システム生成ロジックは`GameSystemFactory`に委譲し、UIコンポーネント（`label_manager`、`path_context_menu`）はGameScreenから注入される。
 
 ## ファイル
 `scripts/systems/game_manager.gd`
 
 ## 責務
-- システムの初期化を正しい順序で実行
+- GameSystemFactoryを使用してシステムを正しい順序で初期化
 - 入力処理（レイキャスト、クリック）
-- UI管理（ラベル）
 - キャラクター登録時の自動セットアップ（視界、武器、色、ラベル）はCharacterSetupServiceに委譲
 - シグナルの中継（サブシステム→外部）
 - 毎フレーム処理の統合
+- ファサードAPI（深いネスト回避: path_service.xxx, path_execution_manager.xxx）
 
 ## 管理するシステム
 
-| # | システム | 責務 |
-|---|---------|------|
-| 1 | CharacterSelectionManager | 選択状態・アウトライン |
-| 2 | PathExecutionManager | パス確定・実行 |
-| 3 | IdleCharacterManager | アイドル状態更新 |
-| 4 | PathDrawer | パス描画入力 |
-| 5 | PathModeController | パスモード制御 |
-| 6 | FogOfWarSystem | 戦場の霧 |
-| 7 | EnemyVisibilitySystem | 敵可視性 |
-| 8 | CharacterLabelManager | キャラクターラベル |
-| 9 | CharacterSetupService | キャラクター初期セットアップ |
-| 10 | PathService | パス描画/編集/実行の統合制御 |
-| 11 | VisionService | 視界/FoW/敵可視性の統合制御 |
+| # | システム | 責務 | 生成 |
+|---|---------|------|------|
+| 1 | CharacterSelectionManager | 選択状態・アウトライン | Factory |
+| 2 | PathExecutionManager | パス確定・実行 | Factory |
+| 3 | IdleCharacterManager | アイドル状態更新 | Factory |
+| 4 | PathDrawer | パス描画入力 | Factory |
+| 5 | PathModeController | パスモード制御 | Factory |
+| 6 | FogOfWarSystem | 戦場の霧 | 直接 |
+| 7 | EnemyVisibilitySystem | 敵可視性 | 直接 |
+| 8 | CharacterLabelManager | キャラクターラベル | **GameScreenから注入** |
+| 9 | CharacterSetupService | キャラクター初期セットアップ | Factory |
+| 10 | PathService | パス描画/編集/実行の統合制御 | Factory |
+| 11 | VisionService | 視界/FoW/敵可視性の統合制御 | Factory |
+| 12 | SmokeAreaManager | スモークエリア管理 | Factory |
+| 13 | MapManager | マップロード/アンロード | Factory |
+| 14 | RoundManager | ラウンド制御 | Factory |
+| 15 | CharacterManagerService | キャラクター管理 | Factory |
+| 16 | GrenadeService | グレネード生成 | Factory |
+| 17 | DoorService | ドアキック処理 | Factory |
+| 18 | MovingPathVisionService | 移動中パスの視線管理 | Factory |
+| 19 | PathContextMenu | パスコンテキストメニュー | **GameScreenから注入** |
 
 ## シグナル
 
@@ -69,6 +79,9 @@ signal survivor_count_changed(ct_count: int, t_count: int)
 ## プロパティ
 
 ```gdscript
+# システム生成ファクトリ（内部）
+var _factory: GameSystemFactory = null
+
 # コアシステム
 var selection_manager: CharacterSelectionManager
 var path_execution_manager: PathExecutionManager
@@ -76,13 +89,23 @@ var idle_manager: IdleCharacterManager
 var path_mode_controller: PathModeController
 var fog_of_war_system: Node3D
 var enemy_visibility_system: Node
+var smoke_area_manager: SmokeAreaManager
+var map_manager: MapManager
 var path_drawer: Node3D
 var character_setup_service: CharacterSetupService
 var path_service: PathService
 var vision_service: VisionService
+var round_manager: RoundManager
 
-# UIコンポーネント
+# 抽出されたサービス
+var character_manager: CharacterManagerService
+var grenade_service: GrenadeService
+var door_service: DoorService
+var moving_path_vision_service: MovingPathVisionService
+
+# UIコンポーネント（GameScreenから注入される）
 var label_manager: CharacterLabelManager
+var path_context_menu: PathContextMenu
 
 # 外部参照
 var camera: Camera3D
@@ -297,6 +320,81 @@ func get_primary_character() -> Node
 func get_selection_count() -> int
 ```
 
+### ファサードAPI（深いネスト回避用）
+
+外部クラスが`game_manager.path_service.path_undo_manager`のような深いプロパティチェーンでアクセスするのを避けるための便利メソッド群。
+
+#### PathService系
+
+```gdscript
+func undo_last_point() -> void
+```
+最後のポイントをUndo。PathServiceに委譲。
+
+```gdscript
+func global_undo() -> bool
+```
+グローバルUndo。PathServiceに委譲。
+
+```gdscript
+func clear_undo_history() -> void
+```
+Undo履歴をクリア。PathServiceに委譲。
+
+```gdscript
+func cancel_path_following(character: Node, clear_pending: bool = true) -> void
+```
+キャラクターのパス追従をキャンセル。PathServiceに委譲。
+
+```gdscript
+func has_pending_path_for_character(character: Node) -> bool
+```
+キャラクターの保留パスがあるか。PathServiceに委譲。
+
+```gdscript
+func execute_path_for_character(character: Node, run: bool) -> bool
+```
+指定キャラクターのパスを実行。PathServiceに委譲。
+
+```gdscript
+func get_path_undo_manager() -> PathUndoManager
+```
+PathUndoManagerへのアクセサ。シグナル接続用。
+
+```gdscript
+func get_path_mode_controller() -> PathModeController
+```
+PathModeControllerへのアクセサ。
+
+#### PathExecutionManager系
+
+```gdscript
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float) -> Dictionary
+```
+確定済みパスの先端位置を検索。PathExecutionManagerに委譲。
+
+```gdscript
+func find_path_point_at_position(ground_pos: Vector3, threshold: float) -> Dictionary
+```
+確定済みパス上の点を検索。PathExecutionManagerに委譲。
+
+```gdscript
+func confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool
+```
+プレイヤーのパスを確定（マルチプレイヤー用）。PathExecutionManagerに委譲。
+
+### UI注入（GameScreenから呼び出し）
+
+```gdscript
+func set_label_manager(mgr: CharacterLabelManager) -> void
+```
+CharacterLabelManagerを設定。GameScreenから`setup()`前に呼び出される。
+
+```gdscript
+func set_path_context_menu(menu: PathContextMenu) -> void
+```
+PathContextMenuを設定。シグナル接続も自動で行われる。GameScreenから`setup()`前に呼び出される。
+
 ## 使用例
 
 ### 基本的な使用
@@ -404,16 +502,21 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 ゲーム状態スナップショットを適用する（クライアント用）。
 
 ## 関連クラス
+- [GameSystemFactory](GameSystemFactory.md) - システム生成ファクトリ
 - [CharacterSelectionManager](CharacterSelectionManager.md)
 - [PathExecutionManager](PathExecutionManager.md)
 - [IdleCharacterManager](IdleCharacterManager.md)
 - [PathModeController](PathModeController.md)
-- [PathDrawer](PathDrawer.md)
+- [PathDrawer](../Effect/PathDrawer.md)
 - [FogOfWarSystem](FogOfWarSystem.md)
 - [EnemyVisibilitySystem](EnemyVisibilitySystem.md)
-- [CharacterLabelManager](CharacterLabelManager.md)
-- [NetworkMessages](NetworkMessages.md)
-- [SyncState](SyncState.md)
+- [CharacterLabelManager](../UI/CharacterLabelManager.md)
+- [PathContextMenu](../UI/PathContextMenu.md)
+- [PathService](PathService.md)
+- [VisionService](VisionService.md)
+- [NetworkMessages](../Network/NetworkMessages.md)
+- [SyncState](../Network/SyncState.md)
+- [GameScreen](../Screen/GameScreen.md) - UIコンポーネント注入元
 
 ## APIリファレンス
 
@@ -444,12 +547,22 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 | `survivor_count_changed` | `ct_count: int, t_count: int` | 生存者数変更時 |
 
 ### メソッド
+
+#### セットアップ
 - `setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: Vector2 = Vector2(50, 50), map_container: Node3D = null) -> void`
+
+#### キャラクター管理
 - `register_character(character: Node) -> void`
 - `unregister_character(character: Node) -> void`
+- `refresh_character_colors() -> void`
+- `get_character_parent() -> Node3D`
+
+#### 入力処理
 - `handle_click(screen_pos: Vector2, button_index: int) -> bool`
 - `raycast_character(screen_pos: Vector2) -> Node`
 - `raycast_door(screen_pos: Vector2) -> Node3D`
+
+#### パスモード操作
 - `start_move_mode() -> bool`
 - `try_start_path_continuation_at_position(screen_pos: Vector2) -> bool`
 - `start_path_mode(primary: Node, char_color: Color = Color.WHITE) -> bool`
@@ -461,7 +574,40 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `show_path_context_menu(screen_pos: Vector2, path_data: Dictionary) -> void`
 - `is_path_context_menu_open() -> bool`
 - `release_all_sync_waiting_characters() -> void`
+- `start_vision_mode() -> bool`
+- `remove_last_vision_point() -> void`
+- `start_run_mode() -> void`
+- `remove_last_run_segment() -> void`
+- `has_pending_path() -> bool`
+- `is_multi_character_mode() -> bool`
+- `start_multi_character_mode(selected_chars: Array[Node]) -> void`
+- `set_active_edit_character(character: Node) -> void`
+- `set_path_drawer_color(color: Color) -> void`
+
+#### ファサードAPI（深いネスト回避用）
+- `undo_last_point() -> void`
+- `global_undo() -> bool`
+- `clear_undo_history() -> void`
+- `cancel_path_following(character: Node, clear_pending: bool = true) -> void`
+- `has_pending_path_for_character(character: Node) -> bool`
+- `execute_path_for_character(character: Node, run: bool) -> bool`
+- `get_path_undo_manager() -> PathUndoManager`
+- `get_path_mode_controller() -> PathModeController`
+- `find_path_endpoint_at_position(ground_pos: Vector3, threshold: float) -> Dictionary`
+- `find_path_point_at_position(ground_pos: Vector3, threshold: float) -> Dictionary`
+- `confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool`
+
+#### UI注入
+- `set_label_manager(mgr: CharacterLabelManager) -> void`
+- `set_path_context_menu(menu: PathContextMenu) -> void`
+
+#### 視界/FoW制御
 - `set_vision_enabled(enabled: bool) -> void`
+- `get_vision_point_count() -> int`
+- `get_run_segment_count() -> int`
+- `has_incomplete_run_start() -> bool`
+
+#### マップ管理
 - `load_map(map_preset_id: String, auto_cleanup: bool = true) -> Node3D`
 - `unload_map(cleanup_characters: bool = true) -> void`
 - `switch_map(new_map_id: String) -> Node3D`
@@ -471,8 +617,11 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `get_map_size() -> Vector2`
 - `get_spawn_points(is_ct: bool) -> Array[Vector3]`
 - `get_spawn_points_for_map(map_preset_id: String, is_ct: bool) -> Array[Vector3]`
-- `get_character_parent() -> Node3D`
+
+#### 毎フレーム処理
 - `process_frame(delta: float) -> void`
+
+#### 状態取得
 - `is_path_mode() -> bool`
 - `is_any_path_following_active() -> bool`
 - `is_character_following_path(character: Node) -> bool`
@@ -480,16 +629,3 @@ game_manager.register_character_with_network(character, peer_id, net_id)
 - `get_path_target_count() -> int`
 - `get_primary_character() -> Node`
 - `get_selection_count() -> int`
-- `has_pending_path() -> bool`
-- `start_vision_mode() -> bool`
-- `remove_last_vision_point() -> void`
-- `start_run_mode() -> void`
-- `remove_last_run_segment() -> void`
-- `get_vision_point_count() -> int`
-- `get_run_segment_count() -> int`
-- `has_incomplete_run_start() -> bool`
-- `is_multi_character_mode() -> bool`
-- `start_multi_character_mode(selected_chars: Array[Node]) -> void`
-- `set_active_edit_character(character: Node) -> void`
-- `set_path_drawer_color(color: Color) -> void`
-- `refresh_character_colors() -> void`
