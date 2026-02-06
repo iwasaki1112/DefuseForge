@@ -187,7 +187,7 @@ func switch_to_extension_path() -> bool:
 		_controller._point_handler.reset()
 
 	# 延長パスの最初の有効セグメント方向を使用して向きを初期化
-	var first_dir := _controller._get_first_segment_direction(_controller._current_path, 0)
+	var first_dir: Vector3 = _controller._get_first_segment_direction(_controller._current_path, 0)
 	if first_dir.length_squared() > 0.001:
 		_controller._last_move_direction = first_dir
 
