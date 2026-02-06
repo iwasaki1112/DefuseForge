@@ -120,17 +120,18 @@ func _setup_game_manager() -> void:
 		add_child(game_manager)
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-		# シグナル接続
-		game_manager.selection_changed.connect(_on_selection_changed)
-		game_manager.path_confirmed.connect(_on_path_confirmed)
-		game_manager.paths_execution_started.connect(_on_paths_execution_started)
-		game_manager.all_paths_completed.connect(_on_all_paths_completed)
-		game_manager.paths_cleared.connect(_on_paths_cleared)
+		# シグナル接続（SignalBus経由）
+		SignalBus.selection_changed.connect(_on_selection_changed)
+		SignalBus.path_confirmed.connect(_on_path_confirmed)
+		SignalBus.paths_execution_started.connect(_on_paths_execution_started)
+		SignalBus.all_paths_completed.connect(_on_all_paths_completed)
+		SignalBus.paths_cleared.connect(_on_paths_cleared)
+		SignalBus.path_mode_ended.connect(_on_path_mode_ended)
+		SignalBus.path_mode_cancelled.connect(_on_path_mode_cancelled)
+		SignalBus.round_timer_updated.connect(_on_round_timer_updated)
+		SignalBus.round_ended.connect(_on_round_ended)
+		# 内部シグナル（GameManager直接）
 		game_manager.path_ready.connect(_on_path_ready)
-		game_manager.path_mode_ended.connect(_on_path_mode_ended)
-		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
-		game_manager.round_timer_updated.connect(_on_round_timer_updated)
-		game_manager.round_ended.connect(_on_round_ended)
 		# 同期待機状態変更シグナル（PCビルドでの型解決問題を回避するため動的アクセス）
 		var pem = game_manager.get("path_execution_manager")
 		if pem:
@@ -236,8 +237,8 @@ func _setup_round_hud() -> void:
 		_round_hud.name = GameConstants.NODE_ROUND_HUD
 		ui_layer.add_child(_round_hud)
 
-		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
-		game_manager.round_ended.connect(_round_hud.show_result)
+		SignalBus.survivor_count_changed.connect(_round_hud.update_survivor_counts)
+		SignalBus.round_ended.connect(_round_hud.show_result)
 
 
 func _setup_status_ui() -> void:
@@ -563,6 +564,31 @@ func _cleanup_before_transition() -> void:
 	if game_manager:
 		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
 		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
+
+	# SignalBusのシグナル切断
+	if SignalBus.selection_changed.is_connected(_on_selection_changed):
+		SignalBus.selection_changed.disconnect(_on_selection_changed)
+	if SignalBus.path_confirmed.is_connected(_on_path_confirmed):
+		SignalBus.path_confirmed.disconnect(_on_path_confirmed)
+	if SignalBus.paths_execution_started.is_connected(_on_paths_execution_started):
+		SignalBus.paths_execution_started.disconnect(_on_paths_execution_started)
+	if SignalBus.all_paths_completed.is_connected(_on_all_paths_completed):
+		SignalBus.all_paths_completed.disconnect(_on_all_paths_completed)
+	if SignalBus.paths_cleared.is_connected(_on_paths_cleared):
+		SignalBus.paths_cleared.disconnect(_on_paths_cleared)
+	if SignalBus.path_mode_ended.is_connected(_on_path_mode_ended):
+		SignalBus.path_mode_ended.disconnect(_on_path_mode_ended)
+	if SignalBus.path_mode_cancelled.is_connected(_on_path_mode_cancelled):
+		SignalBus.path_mode_cancelled.disconnect(_on_path_mode_cancelled)
+	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
+		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
+	if SignalBus.round_ended.is_connected(_on_round_ended):
+		SignalBus.round_ended.disconnect(_on_round_ended)
+	if _round_hud:
+		if SignalBus.survivor_count_changed.is_connected(_round_hud.update_survivor_counts):
+			SignalBus.survivor_count_changed.disconnect(_round_hud.update_survivor_counts)
+		if SignalBus.round_ended.is_connected(_round_hud.show_result):
+			SignalBus.round_ended.disconnect(_round_hud.show_result)
 
 	# PlayerStateのシグナル切断
 	if PlayerState.money_changed.is_connected(_on_money_changed):

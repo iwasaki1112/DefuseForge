@@ -8,36 +8,19 @@ class_name GameManager
 ## PathDrawerのみスクリプト参照が必要（RefCounted継承のため）
 var PathDrawerScript: GDScript = null
 
-## UI接続用シグナル
-signal selection_changed(selected: Array[Node], primary: Node)
-signal primary_changed(character: Node)
-signal path_mode_started(character: Node)
-signal path_mode_ended()
-signal path_mode_cancelled()
+## 内部シグナル（GameManager内部・高頻度で使用されるため残留）
 signal path_ready()
-signal path_confirmed(count: int)
-signal paths_execution_started(count: int)
-signal all_paths_completed()
-signal paths_cleared()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 ## グレネード投擲シグナル
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
-## グレネードネットワークイベント（マルチプレイヤー同期用）
+## ネットワークイベント（MultiplayerModeProviderが直接接続）
 signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
-## グレネード爆発ネットワークイベント（マルチプレイヤー同期用）
 signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
-## ドアキックネットワークイベント（マルチプレイヤー同期用）
 signal door_kick_network_event(door_id: int, character_network_id: int)
-## ダメージネットワークイベント（マルチプレイヤー同期用）
 signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
-## ラウンド管理シグナル
-signal round_started()
-signal round_ended(winner: int, reason: int)
-signal round_timer_updated(remaining: float)
-signal survivor_count_changed(ct_count: int, t_count: int)
 
 ## コアシステム
 var selection_manager: CharacterSelectionManager = null
@@ -1015,23 +998,23 @@ func _setup_moving_path_vision_service(mesh_parent: Node3D) -> void:
 ## ========================================
 
 func _on_selection_changed(selected: Array[Node], primary: Node) -> void:
-	selection_changed.emit(selected, primary)
+	SignalBus.selection_changed.emit(selected, primary)
 
 
 func _on_primary_changed(character: Node) -> void:
-	primary_changed.emit(character)
+	SignalBus.primary_changed.emit(character)
 
 
 func _on_path_mode_started(character: Node) -> void:
-	path_mode_started.emit(character)
+	SignalBus.path_mode_started.emit(character)
 
 
 func _on_path_mode_ended() -> void:
-	path_mode_ended.emit()
+	SignalBus.path_mode_ended.emit()
 
 
 func _on_path_mode_cancelled() -> void:
-	path_mode_cancelled.emit()
+	SignalBus.path_mode_cancelled.emit()
 
 
 func _on_path_ready() -> void:
@@ -1039,11 +1022,11 @@ func _on_path_ready() -> void:
 
 
 func _on_path_confirmed(count: int) -> void:
-	path_confirmed.emit(count)
+	SignalBus.path_confirmed.emit(count)
 
 
 func _on_all_paths_completed() -> void:
-	all_paths_completed.emit()
+	SignalBus.all_paths_completed.emit()
 
 
 func _on_character_path_completed(character: Node) -> void:
@@ -1125,11 +1108,11 @@ func _calculate_ratio_from_position_on_path(path: Array[Vector3], position: Vect
 
 
 func _on_paths_execution_started(count: int) -> void:
-	paths_execution_started.emit(count)
+	SignalBus.paths_execution_started.emit(count)
 
 
 func _on_paths_cleared() -> void:
-	paths_cleared.emit()
+	SignalBus.paths_cleared.emit()
 
 
 func _on_path_mode_changed(mode: int) -> void:
@@ -1151,19 +1134,19 @@ func _on_path_drawer_path_tapped(screen_pos: Vector2, path_data: Dictionary) -> 
 
 
 func _on_round_started() -> void:
-	round_started.emit()
+	SignalBus.round_started.emit()
 
 
 func _on_round_ended(winner: int, reason: int) -> void:
-	round_ended.emit(winner, reason)
+	SignalBus.round_ended.emit(winner, reason)
 
 
 func _on_round_timer_updated(remaining: float) -> void:
-	round_timer_updated.emit(remaining)
+	SignalBus.round_timer_updated.emit(remaining)
 
 
 func _on_survivor_count_changed(ct_count: int, t_count: int) -> void:
-	survivor_count_changed.emit(ct_count, t_count)
+	SignalBus.survivor_count_changed.emit(ct_count, t_count)
 
 
 ## キャラクター死亡時の処理
