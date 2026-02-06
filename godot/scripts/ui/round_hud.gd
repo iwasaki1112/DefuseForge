@@ -50,7 +50,7 @@ func _setup_ui() -> void:
 	_ct_label.text = "CT: 0"
 	_ct_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ct_label.add_theme_font_size_override("font_size", 28)
-	_ct_label.add_theme_color_override("font_color", GameConstants.CGameConstants.T_COLOR)
+	_ct_label.add_theme_color_override("font_color", GameConstants.CT_COLOR)
 	_ct_label.custom_minimum_size = Vector2(80, 0)
 	_top_bar.add_child(_ct_label)
 
@@ -102,7 +102,7 @@ func show_result(winner: int, _reason: int) -> void:
 	match winner:
 		GameCharacter.Team.COUNTER_TERRORIST:
 			result_text = "COUNTER-TERRORIST WINS"
-			result_color = GameConstants.CGameConstants.T_COLOR
+			result_color = GameConstants.CT_COLOR
 		GameCharacter.Team.TERRORIST:
 			result_text = "TERRORIST WINS"
 			result_color = GameConstants.T_COLOR
