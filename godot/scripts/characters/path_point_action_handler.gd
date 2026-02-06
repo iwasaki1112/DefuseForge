@@ -80,9 +80,9 @@ func check_wait_points(_progress: float) -> bool:
 	if not _controller:
 		return false
 
-	var char_distance := _controller._calculate_distance_traveled()
+	var char_distance: float = _controller._calculate_distance_traveled()
 
-	var reached_index := _controller._wait_checker.get_current_index()
+	var reached_index: int = _controller._wait_checker.get_current_index()
 	var wp = _controller._wait_checker.check_reached(char_distance)
 	if wp == null:
 		return false
