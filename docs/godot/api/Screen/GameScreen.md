@@ -39,7 +39,10 @@ GameScreenはゲームのメイン画面を担当し、以下の機能を提供�
 func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void
 ```
 
-Multiplayerモードでゲームを初期化します。LobbyScreenから呼ばれます。
+MultiplayerモードのプロバイダーとマップIDを設定します。LobbyScreenから呼ばれます。
+
+**重要:** `add_child()`でシーンツリーに追加する**前に**呼ぶこと。
+`_ready()`で`_initialize_game()`が一度だけ正しいProviderで実行されます。
 
 **パラメータ:**
 - `net_manager`: NetworkManagerインスタンス
@@ -49,9 +52,9 @@ Multiplayerモードでゲームを初期化します。LobbyScreenから呼ば�
 ```gdscript
 # LobbyScreenから
 var game_scene = load("res://scenes/screens/game.tscn").instantiate()
-get_tree().root.add_child(game_scene)
+game_scene.setup_multiplayer(network_manager, "park")  # add_child前に呼ぶ
+get_tree().root.add_child(game_scene)  # _ready() → _initialize_game()
 game_scene.add_child(network_manager)
-game_scene.setup_multiplayer(network_manager, "park")
 ```
 
 ### cleanup
@@ -69,7 +72,7 @@ func cleanup() -> void
 ## 初期化フロー
 
 ```
-_ready() または setup_multiplayer()
+_ready()  ※setup_multiplayer()はadd_child前に呼ばれ、Providerを設定するのみ
     │
     ├── _setup_environment()      # 環境設定
     ├── _setup_game_manager()     # GameManager初期化

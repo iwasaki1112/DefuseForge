@@ -55,10 +55,11 @@ func _ready() -> void:
 	if _mode_provider == null:
 		_mode_provider = TrainingModeProvider.new()
 		_map_id = SettingsManager.get_selected_map()
-		_initialize_game()
+	_initialize_game()
 
 
 ## Multiplayerモードでセットアップ（LobbyScreenから呼ばれる）
+## 注意: add_child()前に呼ぶこと（_ready()で_initialize_game()を一度だけ実行するため）
 func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 	_map_id = map_id
 
@@ -66,8 +67,6 @@ func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 	var mp_provider := MultiplayerModeProvider.new()
 	mp_provider.setup_network(net_manager)
 	_mode_provider = mp_provider
-
-	_initialize_game()
 
 
 ## ゲームの初期化（共通処理）
