@@ -112,14 +112,14 @@ size_flags_horizontal = 3
 min_value = -180.0
 max_value = 180.0
 step = 1.0
-value = -33.0
+value = -19.0
 
 [node name="SpinBox" type="SpinBox" parent="UI/Panel/VBox/LightYaw"]
 layout_mode = 2
 min_value = -180.0
 max_value = 180.0
 step = 1.0
-value = -33.0
+value = -19.0
 
 [node name="LabelLightColor" type="Label" parent="UI/Panel/VBox"]
 layout_mode = 2
