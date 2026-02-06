@@ -9,7 +9,7 @@ extends RefCounted
 # Constants
 # ============================================
 
-const BULLET_TRAIL_SHADER = preload("res://shaders/bullet_trail.gdshader")
+var BULLET_TRAIL_SHADER: Shader = null
 const BULLET_TRAIL_DURATION: float = 0.15
 const BULLET_TRAIL_WIDTH: float = 0.01
 const BULLET_TRAIL_MAX_DISTANCE: float = 50.0
@@ -36,6 +36,10 @@ var _bullet_trail_quad2: MeshInstance3D = null
 # ============================================
 # Setup
 # ============================================
+
+func _init() -> void:
+	BULLET_TRAIL_SHADER = load("res://shaders/bullet_trail.gdshader")
+
 
 ## セットアップ
 func setup(character: Node3D, weapon_socket: Node3D, muzzle_flash: MuzzleFlashComponent, combat_awareness = null) -> void:

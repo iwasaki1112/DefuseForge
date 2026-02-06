@@ -363,9 +363,7 @@ func _handle_path_confirm(from_peer: int, data: Dictionary) -> void:
 		# HostはClientからのパス確定を受け取り、全体に転送
 		var character := game_manager.find_character_by_network_id(path_msg.character_id)
 		if character:
-			game_manager.path_execution_manager.confirm_path_for_player(
-				from_peer, path_msg, character
-			)
+			game_manager.confirm_path_for_player(from_peer, path_msg, character)
 		# 全Clientへ転送
 		network_bus.broadcast_from_host(
 			NetworkConstants.MessageType.PATH_CONFIRM,

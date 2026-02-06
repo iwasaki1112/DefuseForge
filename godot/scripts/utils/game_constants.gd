@@ -98,3 +98,13 @@ const ROUND_END_DELAY: float = 3.0        # ラウンド終了後の遅延（秒
 # ========================================================
 const NODE_ROUND_MANAGER := "RoundManager"
 const NODE_ROUND_HUD := "RoundHUD"
+
+# ========================================================
+# UI Colors
+# ========================================================
+## チームカラー
+const CT_COLOR := Color(0.4, 0.6, 1.0)   # CT（青）
+const T_COLOR := Color(1.0, 0.6, 0.3)    # T（オレンジ）
+## ショップUI
+const AFFORDABLE_COLOR := Color(0.2, 0.6, 0.2)  # 購入可能時
+const SELECTED_COLOR := Color(0.3, 0.5, 0.7)    # 選択時

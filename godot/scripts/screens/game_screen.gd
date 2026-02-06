@@ -7,8 +7,11 @@ class_name GameScreen
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
-const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
-const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
+var GameHUDScene: PackedScene
+
+
+func _init() -> void:
+	GameHUDScene = load("res://scenes/ui/game_hud.tscn")
 
 ## カメラ設定
 const CAMERA_HEIGHT := 25.0
@@ -115,19 +118,25 @@ func _setup_game_manager() -> void:
 		game_manager = GameManager.new()
 		game_manager.name = "GameManager"
 		add_child(game_manager)
+
+		# UIコンポーネントをGameScreenが作成してGameManagerに注入
+		_setup_label_manager()
+		_setup_path_context_menu()
+
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-		# シグナル接続
-		game_manager.selection_changed.connect(_on_selection_changed)
-		game_manager.path_confirmed.connect(_on_path_confirmed)
-		game_manager.paths_execution_started.connect(_on_paths_execution_started)
-		game_manager.all_paths_completed.connect(_on_all_paths_completed)
-		game_manager.paths_cleared.connect(_on_paths_cleared)
+		# シグナル接続（SignalBus経由）
+		SignalBus.selection_changed.connect(_on_selection_changed)
+		SignalBus.path_confirmed.connect(_on_path_confirmed)
+		SignalBus.paths_execution_started.connect(_on_paths_execution_started)
+		SignalBus.all_paths_completed.connect(_on_all_paths_completed)
+		SignalBus.paths_cleared.connect(_on_paths_cleared)
+		SignalBus.path_mode_ended.connect(_on_path_mode_ended)
+		SignalBus.path_mode_cancelled.connect(_on_path_mode_cancelled)
+		SignalBus.round_timer_updated.connect(_on_round_timer_updated)
+		SignalBus.round_ended.connect(_on_round_ended)
+		# 内部シグナル（GameManager直接）
 		game_manager.path_ready.connect(_on_path_ready)
-		game_manager.path_mode_ended.connect(_on_path_mode_ended)
-		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
-		game_manager.round_timer_updated.connect(_on_round_timer_updated)
-		game_manager.round_ended.connect(_on_round_ended)
 		# 同期待機状態変更シグナル（PCビルドでの型解決問題を回避するため動的アクセス）
 		var pem = game_manager.get("path_execution_manager")
 		if pem:
@@ -223,8 +232,9 @@ func _setup_hud() -> void:
 		_hud.set_undo_enabled(false)
 
 		# PathUndoManagerのシグナル接続（Undo状態変更時にHUD更新）
-		if game_manager and game_manager.path_service and game_manager.path_service.path_undo_manager:
-			game_manager.path_service.path_undo_manager.undo_state_changed.connect(_on_undo_state_changed)
+		var undo_manager = game_manager.get_path_undo_manager() if game_manager else null
+		if undo_manager:
+			undo_manager.undo_state_changed.connect(_on_undo_state_changed)
 
 
 func _setup_round_hud() -> void:
@@ -233,8 +243,8 @@ func _setup_round_hud() -> void:
 		_round_hud.name = GameConstants.NODE_ROUND_HUD
 		ui_layer.add_child(_round_hud)
 
-		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
-		game_manager.round_ended.connect(_round_hud.show_result)
+		SignalBus.survivor_count_changed.connect(_round_hud.update_survivor_counts)
+		SignalBus.round_ended.connect(_round_hud.show_result)
 
 
 func _setup_status_ui() -> void:
@@ -253,7 +263,7 @@ func _setup_status_ui() -> void:
 
 func _setup_camera_pan() -> void:
 	if _camera_pan_controller == null:
-		_camera_pan_controller = CameraPanControllerScript.new()
+		_camera_pan_controller = CameraPanController.new()
 		_camera_pan_controller.setup(camera, 0.05)
 
 
@@ -263,6 +273,23 @@ func _setup_input_controller() -> void:
 		_input_controller.name = "InputController"
 		add_child(_input_controller)
 		_input_controller.setup(game_manager, _camera_pan_controller)
+
+
+func _setup_label_manager() -> void:
+	var lm := CharacterLabelManager.new()
+	lm.name = GameConstants.NODE_LABEL_MANAGER
+	game_manager.add_child(lm)
+	game_manager.set_label_manager(lm)
+
+
+func _setup_path_context_menu() -> void:
+	var menu := PathContextMenu.new()
+	menu.name = "PathContextMenu"
+	if ui_layer:
+		ui_layer.add_child(menu)
+	else:
+		game_manager.add_child(menu)
+	game_manager.set_path_context_menu(menu)
 
 
 func _setup_money() -> void:
@@ -368,8 +395,8 @@ func _process(_delta: float) -> void:
 
 func _on_execute_button_pressed() -> void:
 	# パスモード中でパスがあればモードを終了する
-	if game_manager.is_path_mode() and game_manager.path_service and game_manager.path_service.has_path():
-		game_manager.path_service.confirm_path()
+	if game_manager.is_path_mode() and game_manager.has_path():
+		game_manager.confirm_path()
 
 	# マルチプレイヤーモードでは自分のキャラクターのみ実行
 	var local_only := _mode_provider.get_mode_name() == "multiplayer"
@@ -377,8 +404,7 @@ func _on_execute_button_pressed() -> void:
 	_mode_provider.on_execute_paths(count)
 
 	# パス実行後はUndo履歴をクリア
-	if game_manager.path_service:
-		game_manager.path_service.clear_undo_history()
+	game_manager.clear_undo_history()
 
 
 func _on_clear_paths_button_pressed() -> void:
@@ -398,43 +424,44 @@ func _on_sync_wait_state_changed(has_waiting: bool) -> void:
 
 
 func _on_point_edit_requested(action: String) -> void:
-	if not game_manager or not game_manager.path_service:
+	if not game_manager or not game_manager.has_path():
 		return
 
-	var path_service = game_manager.path_service
-	if not path_service.has_path():
+	# PathServiceにはpath_service経由でアクセスする必要があるモード切替メソッド
+	var ps = game_manager.path_service
+	if not ps:
 		return
 
 	match action:
 		"vision":
-			path_service.start_vision_mode()
+			ps.start_vision_mode()
 		"run":
-			path_service.start_run_mode()
+			ps.start_run_mode()
 		"clear":
-			path_service.start_clear_mode()
+			ps.start_clear_mode()
 		"grenade":
-			path_service.start_grenade_mode()
+			ps.start_grenade_mode()
 		"smoke":
-			path_service.start_smoke_grenade_mode()
+			ps.start_smoke_grenade_mode()
 		"door":
-			path_service.start_door_mode()
+			ps.start_door_mode()
 		"wait":
-			path_service.start_wait_mode()
+			ps.start_wait_mode()
 
 
 func _on_point_undo_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.undo_last_point()
+	if game_manager:
+		game_manager.undo_last_point()
 
 
 func _on_point_cancel_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.cancel_path()
+	if game_manager:
+		game_manager.cancel_path()
 
 
 func _on_global_undo_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.global_undo()
+	if game_manager:
+		game_manager.global_undo()
 
 
 func _on_undo_state_changed(can_undo: bool) -> void:
@@ -560,6 +587,31 @@ func _cleanup_before_transition() -> void:
 	if game_manager:
 		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
 		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
+
+	# SignalBusのシグナル切断
+	if SignalBus.selection_changed.is_connected(_on_selection_changed):
+		SignalBus.selection_changed.disconnect(_on_selection_changed)
+	if SignalBus.path_confirmed.is_connected(_on_path_confirmed):
+		SignalBus.path_confirmed.disconnect(_on_path_confirmed)
+	if SignalBus.paths_execution_started.is_connected(_on_paths_execution_started):
+		SignalBus.paths_execution_started.disconnect(_on_paths_execution_started)
+	if SignalBus.all_paths_completed.is_connected(_on_all_paths_completed):
+		SignalBus.all_paths_completed.disconnect(_on_all_paths_completed)
+	if SignalBus.paths_cleared.is_connected(_on_paths_cleared):
+		SignalBus.paths_cleared.disconnect(_on_paths_cleared)
+	if SignalBus.path_mode_ended.is_connected(_on_path_mode_ended):
+		SignalBus.path_mode_ended.disconnect(_on_path_mode_ended)
+	if SignalBus.path_mode_cancelled.is_connected(_on_path_mode_cancelled):
+		SignalBus.path_mode_cancelled.disconnect(_on_path_mode_cancelled)
+	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
+		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
+	if SignalBus.round_ended.is_connected(_on_round_ended):
+		SignalBus.round_ended.disconnect(_on_round_ended)
+	if _round_hud:
+		if SignalBus.survivor_count_changed.is_connected(_round_hud.update_survivor_counts):
+			SignalBus.survivor_count_changed.disconnect(_round_hud.update_survivor_counts)
+		if SignalBus.round_ended.is_connected(_round_hud.show_result):
+			SignalBus.round_ended.disconnect(_round_hud.show_result)
 
 	# PlayerStateのシグナル切断
 	if PlayerState.money_changed.is_connected(_on_money_changed):

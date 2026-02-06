@@ -141,7 +141,7 @@ func _undo_path_start(character: Node, char_id: int, _data: Dictionary) -> bool:
 ## パスポイントのUndo（延長セグメント単位）
 ## data.points_before が指定されている場合、その数までポイントを削除
 ## 指定がない場合は最後のポイント1つを削除
-func _undo_path_point(character: Node, char_id: int, data: Dictionary) -> bool:
+func _undo_path_point(_character: Node, char_id: int, data: Dictionary) -> bool:
 	if not _path_execution_manager:
 		return false
 

@@ -9,11 +9,17 @@ signal map_selected(preset_id: String)
 
 const MAIN_MENU_SCENE := "res://scenes/screens/main_menu.tscn"
 const GAME_SCENE := "res://scenes/screens/game.tscn"
-const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
-const BACKGROUND_TEXTURE := preload("res://assets/ui/map_selection/background.png")
-const BACK_BUTTON_TEXTURE := preload("res://assets/ui/map_selection/back-button.png")
-const START_BUTTON_TEXTURE := preload("res://assets/ui/map_selection/start-button.png")
-const MAP_CARD_TEXTURE := preload("res://assets/ui/map_selection/map-card-1-button.png")
+var BACKGROUND_TEXTURE: Texture2D
+var BACK_BUTTON_TEXTURE: Texture2D
+var START_BUTTON_TEXTURE: Texture2D
+var MAP_CARD_TEXTURE: Texture2D
+
+
+func _init() -> void:
+	BACKGROUND_TEXTURE = load("res://assets/ui/map_selection/background.png")
+	BACK_BUTTON_TEXTURE = load("res://assets/ui/map_selection/back-button.png")
+	START_BUTTON_TEXTURE = load("res://assets/ui/map_selection/start-button.png")
+	MAP_CARD_TEXTURE = load("res://assets/ui/map_selection/map-card-1-button.png")
 
 var _map_container: HBoxContainer
 var _selected_map_id: String = ""

@@ -11,11 +11,6 @@ extends Node3D
 ## - カメラアングル操作
 ## - マズルフラッシュ調整
 
-const GameCharacterScript = preload("res://scripts/characters/game_character.gd")
-const CharacterPresetScript = preload("res://scripts/resources/character_preset.gd")
-const WeaponPresetScript = preload("res://scripts/resources/weapon_preset.gd")
-const CharacterAnimationControllerScript = preload("res://scripts/animation/character_animation_controller.gd")
-
 # UI References
 @onready var character_option: OptionButton = $UI/Panel/VBox/CharacterOption
 @onready var weapon_option: OptionButton = $UI/Panel/VBox/WeaponOption
@@ -56,8 +51,8 @@ const CharacterAnimationControllerScript = preload("res://scripts/animation/char
 
 # Data
 var character: GameCharacter
-var characters: Array[CharacterPresetScript] = []
-var weapons: Array[WeaponPresetScript] = []
+var characters: Array[CharacterPreset] = []
+var weapons: Array[WeaponPreset] = []
 var current_character_idx: int = -1
 var current_weapon_idx: int = -1
 var _environment_setup: Node = null
@@ -102,7 +97,7 @@ func _process(delta: float) -> void:
 			# Look towards -Z (facing the camera at front view)
 			anim_ctrl.update_animation(Vector3.ZERO, Vector3.BACK, false, delta)
 
-func _setup_scene(preset: CharacterPresetScript) -> void:
+func _setup_scene(preset: CharacterPreset) -> void:
 	if not preset:
 		printerr("Failed to load character preset")
 		return
@@ -113,7 +108,7 @@ func _setup_scene(preset: CharacterPresetScript) -> void:
 		character = null
 
 	var model = preset.model_scene.instantiate()
-	character = GameCharacterScript.new()
+	character = GameCharacter.new()
 	character.name = "TestCharacter"
 	add_child(character)
 
@@ -133,7 +128,7 @@ func _setup_scene(preset: CharacterPresetScript) -> void:
 			anim_player.remove_animation_library("")
 		anim_player.add_animation_library("", _animation_library)
 
-	var anim_ctrl = CharacterAnimationControllerScript.new()
+	var anim_ctrl = CharacterAnimationController.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 	anim_ctrl.setup(model, anim_player)
@@ -180,7 +175,7 @@ func _load_data() -> void:
 		while file_name != "":
 			if not char_dir.current_is_dir() and file_name.ends_with(".tres"):
 				var path = "res://data/characters/" + file_name
-				var c = load(path) as CharacterPresetScript
+				var c = load(path) as CharacterPreset
 				if c:
 					characters.append(c)
 			file_name = char_dir.get_next()
@@ -194,7 +189,7 @@ func _load_data() -> void:
 
 	for path in weapon_paths:
 		if ResourceLoader.exists(path):
-			var w = load(path) as WeaponPresetScript
+			var w = load(path) as WeaponPreset
 			if w:
 				weapons.append(w)
 
@@ -341,7 +336,7 @@ func _update_muzzle_flash() -> void:
 		character.update_muzzle_flash_preview()
 
 
-func _get_current_weapon() -> WeaponPresetScript:
+func _get_current_weapon() -> WeaponPreset:
 	if current_weapon_idx < 0 or current_weapon_idx >= weapons.size():
 		return null
 	return weapons[current_weapon_idx]

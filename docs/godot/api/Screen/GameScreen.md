@@ -18,6 +18,7 @@ GameScreenはゲームのメイン画面を担当し、以下の機能を提供�
 - HUD（GameHUD, RoundHUD）の管理
 - カメラとインプットの制御
 - GameManagerとの連携
+- **UIコンポーネントの生成とGameManagerへの注入**（`CharacterLabelManager`、`PathContextMenu`）
 
 モード固有の処理は`GameModeProvider`に委譲されます。
 
@@ -72,6 +73,9 @@ _ready() または setup_multiplayer()
     │
     ├── _setup_environment()      # 環境設定
     ├── _setup_game_manager()     # GameManager初期化
+    │     ├── _setup_label_manager()       # CharacterLabelManager生成→注入
+    │     ├── _setup_path_context_menu()   # PathContextMenu生成→注入
+    │     └── game_manager.setup()          # サブシステム初期化（Factory使用）
     ├── _mode_provider.initialize() # Provider初期化
     ├── _mode_provider.determine_player_team() # チーム決定
     ├── _load_map()               # マップロード
@@ -83,6 +87,30 @@ _ready() または setup_multiplayer()
     ├── _setup_camera_pan()       # カメラパン設定
     ├── _setup_input_controller() # 入力設定
     └── _setup_camera_for_player() # カメラ位置設定
+```
+
+### UIコンポーネント注入
+
+GameScreenはUIコンポーネントを生成し、GameManagerに注入する責務を持つ。
+これはUI関連の責務をGameManagerから分離するためのパターン。
+
+```gdscript
+# GameScreen._setup_label_manager()
+func _setup_label_manager() -> void:
+    var lm := CharacterLabelManager.new()
+    lm.name = GameConstants.NODE_LABEL_MANAGER
+    game_manager.add_child(lm)
+    game_manager.set_label_manager(lm)
+
+# GameScreen._setup_path_context_menu()
+func _setup_path_context_menu() -> void:
+    var menu := PathContextMenu.new()
+    menu.name = "PathContextMenu"
+    if ui_layer:
+        ui_layer.add_child(menu)
+    else:
+        game_manager.add_child(menu)
+    game_manager.set_path_context_menu(menu)
 ```
 
 ## モード判定
@@ -124,4 +152,7 @@ GameScreenは以下のGameManagerシグナルを購読します：
 - [TrainingModeProvider](./TrainingModeProvider.md)
 - [MultiplayerModeProvider](./MultiplayerModeProvider.md)
 - [GameManager](../System/GameManager.md)
+- [GameSystemFactory](../System/GameSystemFactory.md) - GameManager内部で使用されるファクトリ
 - [GameHUD](../UI/GameHUD.md)
+- [CharacterLabelManager](../UI/CharacterLabelManager.md) - GameScreenが生成しGameManagerに注入
+- [PathContextMenu](../UI/PathContextMenu.md) - GameScreenが生成しGameManagerに注入

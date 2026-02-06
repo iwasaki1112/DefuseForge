@@ -15,6 +15,7 @@ enum PointType { VISION, PATH, WAIT }
 signal drawing_finished(points: PackedVector3Array)
 signal vision_point_added(anchor: Vector3, target_point: Vector3)
 signal wait_point_added(path_ratio: float, wait_duration: float)
+@warning_ignore("unused_signal")
 signal path_undone()
 signal mode_changed(mode: int)
 ## パス外タップ時のシグナル（モード終了用）
@@ -53,8 +54,6 @@ signal path_extension_finished(character: Node, points_before: int, points_after
 #endregion
 
 #region 定数
-const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
 #endregion
 
 #region 内部変数
@@ -95,13 +94,17 @@ var _wait_handler: WaitPointHandler
 ## 他パスとの比較用（PathExecutionManagerへの参照）
 var _path_execution_manager: Node = null
 
-## 実行中のキャラクター（パス完了シグナル接続用）
+## 実行中のキャラクター（パス完了シグナル接続用 - PathDrawerDataManagerから参照）
+@warning_ignore("unused_private_class_variable")
 var _executing_character: Node = null
 
 ## パス延長モードフラグ
 var _is_continuing: bool = false
 ## 延長開始前のポイント数
 var _points_before_extension: int = 0
+
+## データマネージャー
+var _data_manager: PathDrawerDataManager
 #endregion
 
 
@@ -118,7 +121,7 @@ func _process(_delta: float) -> void:
 
 func _setup_mesh() -> void:
 	_path_mesh = MeshInstance3D.new()
-	_path_mesh.set_script(PathLineMeshScript)
+	_path_mesh.set_script(PathLineMesh)
 	_path_mesh.line_color = line_color
 	_path_mesh.line_width = line_width
 	add_child(_path_mesh)
@@ -131,6 +134,10 @@ func _setup_handlers() -> void:
 	# ハンドラのシグナル接続
 	_vision_handler.point_added.connect(_on_vision_point_added)
 	_wait_handler.point_added.connect(_on_wait_point_added)
+
+	# データマネージャーのセットアップ
+	_data_manager = PathDrawerDataManager.new()
+	_data_manager.setup(self)
 
 
 func _setup_handlers_with_camera() -> void:
@@ -916,51 +923,51 @@ func start_wait_mode() -> bool:
 #endregion
 
 
-#region ポイント取得 API（ファサード）
+#region ポイント取得 API（ファサード - データマネージャーに委譲）
 func has_vision_points() -> bool:
-	return _vision_handler.has_points()
+	return _data_manager.has_vision_points()
 
 
 func get_vision_points() -> Array[Dictionary]:
-	return _vision_handler.get_points()
+	return _data_manager.get_vision_points()
 
 
 func get_vision_point_count() -> int:
-	return _vision_handler.get_point_count()
+	return _data_manager.get_vision_point_count()
 
 
 func take_vision_points() -> Array[MeshInstance3D]:
-	return _vision_handler.take_points()
+	return _data_manager.take_vision_points()
 
 
 func has_wait_points() -> bool:
-	return _wait_handler.has_points()
+	return _data_manager.has_wait_points()
 
 
 func get_wait_points() -> Array[Dictionary]:
-	return _wait_handler.get_points()
+	return _data_manager.get_wait_points()
 
 
 func get_wait_point_count() -> int:
-	return _wait_handler.get_point_count()
+	return _data_manager.get_wait_point_count()
 
 
 func take_wait_points() -> Array[MeshInstance3D]:
-	return _wait_handler.take_points()
+	return _data_manager.take_wait_points()
 
 
 ## Visionポイントメッシュを指定親ノードに転送（データもクリア）
 ## @param parent: 転送先の親ノード
 ## @return: 転送されたメッシュの配列
 func transfer_vision_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
-	return _vision_handler.transfer_meshes_to(parent)
+	return _data_manager.transfer_vision_meshes_to(parent)
 
 
 ## Waitポイントメッシュを指定親ノードに転送（データもクリア）
 ## @param parent: 転送先の親ノード
 ## @return: 転送されたメッシュの配列
 func transfer_wait_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
-	return _wait_handler.transfer_meshes_to(parent)
+	return _data_manager.transfer_wait_meshes_to(parent)
 
 
 ## 指定アンカー位置でVisionモードを開始（外部からの呼び出し用）
@@ -985,67 +992,31 @@ func add_sync_wait_point(path_ratio: float, anchor: Vector3) -> void:
 #endregion
 
 
-#region 全キャラクター用 API（後方互換）
+#region 全キャラクター用 API（後方互換 - データマネージャーに委譲）
 func get_all_vision_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_vision_points() }
-	return {}
+	return _data_manager.get_all_vision_points()
 
 
 func get_all_wait_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_wait_points() }
-	return {}
+	return _data_manager.get_all_wait_points()
 
 
 func take_all_vision_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_vision_points() }
-	return {}
+	return _data_manager.take_all_vision_points()
 
 
 func take_all_wait_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_wait_points() }
-	return {}
+	return _data_manager.take_all_wait_points()
 #endregion
 
 
-#region Undo API
+#region Undo API（データマネージャーに委譲）
 func undo_last_point() -> int:
-	if _point_history.is_empty():
-		return -1
-
-	var last_type = _point_history.pop_back()
-
-	match last_type:
-		PointType.VISION:
-			_vision_handler.undo_last()
-		PointType.WAIT:
-			_wait_handler.undo_last()
-		PointType.PATH:
-			_undo_path()
-
-	return last_type
-
-
-func _undo_path() -> void:
-	_path_points.clear()
-	_path_mesh.clear()
-	_is_drawing = false
-	_drawing_mode = DrawingMode.MOVEMENT
-
-	# 全ハンドラをクリア
-	for handler in _get_all_handlers():
-		handler.clear_all()
-
-	_point_history.clear()
-
-	path_undone.emit()
+	return _data_manager.undo_last_point()
 
 
 func remove_last_vision_point() -> void:
-	_vision_handler.undo_last()
+	_data_manager.remove_last_vision_point()
 #endregion
 
 
@@ -1086,27 +1057,11 @@ func get_smoothed_path() -> PackedVector3Array:
 
 
 func get_relative_path() -> PackedVector3Array:
-	if _path_points.size() < 2:
-		return PackedVector3Array()
-	var start = _path_points[0]
-	var relative = PackedVector3Array()
-	for point in _path_points:
-		relative.append(point - start)
-	return relative
+	return _data_manager.get_relative_path()
 
 
 func get_relative_vision_points() -> Array[Dictionary]:
-	if _path_points.size() < 2:
-		return []
-	var start = _path_points[0]
-	var relative_points: Array[Dictionary] = []
-	for vp in get_vision_points():
-		relative_points.append({
-			"path_ratio": vp.path_ratio,
-			"anchor": vp.anchor - start,
-			"target_point": vp.target_point - start
-		})
-	return relative_points
+	return _data_manager.get_relative_vision_points()
 
 
 func is_drawing() -> bool:
@@ -1162,172 +1117,48 @@ func get_preview_path() -> PackedVector3Array:
 #endregion
 
 
-#region 実行 API
+#region 実行 API（データマネージャーに委譲）
 func execute(run: bool = false) -> bool:
-	if _path_points.size() < 2 or _character == null:
-		return false
-
-	var path_array: Array[Vector3] = []
-	for point in _path_points:
-		path_array.append(point)
-	_character.set_path(path_array, run)
-
-	_executing_character = _character
-
-	if not _executing_character.path_completed.is_connected(_on_path_completed):
-		_executing_character.path_completed.connect(_on_path_completed)
-
-	_path_points.clear()
-	_character = null
-
-	return true
+	return _data_manager.execute(run)
 
 
 func execute_with_vision(run: bool = false) -> bool:
-	if _path_points.size() < 2 or _character == null:
-		return false
-
-	var path_array: Array[Vector3] = []
-	for point in _path_points:
-		path_array.append(point)
-
-	var vision_points = get_vision_points()
-	if vision_points.size() > 0:
-		_character.set_path_with_vision_points(path_array, vision_points.duplicate(), run)
-	else:
-		_character.set_path(path_array, run)
-
-	_executing_character = _character
-
-	if not _executing_character.path_completed.is_connected(_on_path_completed):
-		_executing_character.path_completed.connect(_on_path_completed)
-
-	_path_points.clear()
-	_character = null
-
-	return true
-
-
-func _on_path_completed() -> void:
-	if _executing_character:
-		if _executing_character.path_completed.is_connected(_on_path_completed):
-			_executing_character.path_completed.disconnect(_on_path_completed)
-		_executing_character = null
-
-	clear()
+	return _data_manager.execute_with_vision(run)
 #endregion
 
 
-#region 統一ポイント API
-func get_points_by_type(point_type: ActionPointDataScript.Type) -> Array[Dictionary]:
-	match point_type:
-		ActionPointDataScript.Type.VISION:
-			return get_vision_points()
-		ActionPointDataScript.Type.WAIT:
-			return get_wait_points()
-		_:
-			return []
+#region 統一ポイント API（データマネージャーに委譲）
+func get_points_by_type(point_type: ActionPointData.Type) -> Array[Dictionary]:
+	return _data_manager.get_points_by_type(point_type)
 
 
-func take_points_by_type(point_type: ActionPointDataScript.Type) -> Array[MeshInstance3D]:
-	match point_type:
-		ActionPointDataScript.Type.VISION:
-			return take_vision_points()
-		ActionPointDataScript.Type.WAIT:
-			return take_wait_points()
-		_:
-			return []
+func take_points_by_type(point_type: ActionPointData.Type) -> Array[MeshInstance3D]:
+	return _data_manager.take_points_by_type(point_type)
 
 
-func get_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
-	match point_type:
-		ActionPointDataScript.Type.VISION:
-			return get_all_vision_points()
-		ActionPointDataScript.Type.WAIT:
-			return get_all_wait_points()
-		_:
-			return {}
+func get_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
+	return _data_manager.get_all_points_by_type(point_type)
 
 
-func take_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
-	match point_type:
-		ActionPointDataScript.Type.VISION:
-			return take_all_vision_points()
-		ActionPointDataScript.Type.WAIT:
-			return take_all_wait_points()
-		_:
-			return {}
+func take_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
+	return _data_manager.take_all_points_by_type(point_type)
 
 
 func get_all_point_types_data() -> Dictionary:
-	var result: Dictionary = {}
-	for type_value in ActionPointDataScript.Type.values():
-		result[type_value] = get_points_by_type(type_value)
-	return result
+	return _data_manager.get_all_point_types_data()
 
 
 func take_all_point_types_meshes() -> Dictionary:
-	var result: Dictionary = {}
-	for type_value in ActionPointDataScript.Type.values():
-		result[type_value] = take_points_by_type(type_value)
-	return result
+	return _data_manager.take_all_point_types_meshes()
 #endregion
 
 
-#region 復元 API
+#region 復元 API（データマネージャーに委譲）
 func restore_path_points(character: Node3D, path_data: Dictionary) -> bool:
-	if path_data.is_empty():
-		return false
-
-	clear()
-
-	_character = character
-	_is_enabled = true
-	_drawing_mode = DrawingMode.MOVEMENT
-	_character = character as CharacterBody3D
-
-	if path_data.has("path"):
-		_path_points.clear()
-		for point in path_data["path"]:
-			_path_points.append(point)
-		_path_points = _path_points.duplicate()
-	if _path_points.size() < 2:
-		return false
-
-	if _path_mesh and _path_points.size() > 0:
-		_path_mesh.update_from_points(_path_points)
-
-	if path_data.has("path_mesh") and is_instance_valid(path_data["path_mesh"]):
-		path_data["path_mesh"].queue_free()
-
-	_point_history.append(PointType.PATH)
-
-	# ポイントをハンドラに復元
-	_restore_all_points(path_data)
-
-	call_deferred("_emit_drawing_finished_after_restore")
-	return true
+	return _data_manager.restore_path_points(character, path_data)
 
 
-## 全ポイントをハンドラに復元
-func _restore_all_points(path_data: Dictionary) -> void:
-	# Vision points
-	var vision_data = path_data.get("vision_points_data", [])
-	var vision_meshes = path_data.get("vision_points", [])
-	if vision_data.size() > 0:
-		_vision_handler.restore_points(vision_data, vision_meshes)
-		for _i in range(vision_data.size()):
-			_point_history.append(PointType.VISION)
-
-	# Wait points
-	var wait_data = path_data.get("wait_points_data", [])
-	var wait_meshes = path_data.get("wait_points", [])
-	if wait_data.size() > 0:
-		_wait_handler.restore_points(wait_data, wait_meshes)
-		for _i in range(wait_data.size()):
-			_point_history.append(PointType.WAIT)
-
-
+## drawing_finished シグナルを発火（データマネージャーから呼ばれる）
 func _emit_drawing_finished_after_restore() -> void:
 	if _path_points.size() >= 2:
 		drawing_finished.emit(_path_points)

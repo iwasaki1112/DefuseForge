@@ -2,7 +2,6 @@ class_name CharacterSetupService
 extends RefCounted
 ## キャラクターの初期セットアップを担当
 
-const AnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
 
 var enemy_visibility_system: Node = null
 var fog_of_war_system: Node3D = null
@@ -77,7 +76,7 @@ func _complete_character_setup(character: Node) -> void:
 	# デフォルト武器を装備
 	var anim_ctrl = character.get_anim_controller()
 	if anim_ctrl:
-		anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
+		anim_ctrl.set_weapon(CharacterAnimationController.Weapon.PISTOL)
 
 	var default_weapon = WeaponRegistry.get_preset(default_weapon_id)
 	if default_weapon:

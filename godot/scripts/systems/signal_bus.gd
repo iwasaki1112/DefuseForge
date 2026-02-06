@@ -100,23 +100,6 @@ signal character_registered(character: Node)
 signal character_unregistered(character: Node)
 
 # ============================================
-# Network Signals (Multiplayer)
-# ============================================
-
-## グレネードネットワークイベント
-@warning_ignore("unused_signal")
-signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
-## グレネード爆発ネットワークイベント
-@warning_ignore("unused_signal")
-signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
-## ドアキックネットワークイベント
-@warning_ignore("unused_signal")
-signal door_kick_network_event(door_id: int, character_network_id: int)
-## ダメージネットワークイベント
-@warning_ignore("unused_signal")
-signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
-
-# ============================================
 # Map Signals
 # ============================================
 

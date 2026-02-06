@@ -3,41 +3,22 @@ class_name GameManager
 ## コアゲームシステム管理
 ## システムの初期化・更新・入力処理・UI管理を一元管理
 
-## iOS互換性のため preload は使用しない
-## class_name を持つスクリプトは直接クラス名を使用
-## PathDrawerのみスクリプト参照が必要（RefCounted継承のため）
-var PathDrawerScript: GDScript = null
+## システム生成ファクトリ
+var _factory: GameSystemFactory = null
 
-## UI接続用シグナル
-signal selection_changed(selected: Array[Node], primary: Node)
-signal primary_changed(character: Node)
-signal path_mode_started(character: Node)
-signal path_mode_ended()
-signal path_mode_cancelled()
+## 内部シグナル（GameManager内部・高頻度で使用されるため残留）
 signal path_ready()
-signal path_confirmed(count: int)
-signal paths_execution_started(count: int)
-signal all_paths_completed()
-signal paths_cleared()
 signal path_mode_changed(mode: int)
 signal vision_point_added(anchor: Vector3, direction: Vector3)
 ## グレネード投擲シグナル
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
-## グレネードネットワークイベント（マルチプレイヤー同期用）
+## ネットワークイベント（MultiplayerModeProviderが直接接続）
 signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
-## グレネード爆発ネットワークイベント（マルチプレイヤー同期用）
 signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
-## ドアキックネットワークイベント（マルチプレイヤー同期用）
 signal door_kick_network_event(door_id: int, character_network_id: int)
-## ダメージネットワークイベント（マルチプレイヤー同期用）
 signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
-## ラウンド管理シグナル
-signal round_started()
-signal round_ended(winner: int, reason: int)
-signal round_timer_updated(remaining: float)
-signal survivor_count_changed(ct_count: int, t_count: int)
 
 ## コアシステム
 var selection_manager: CharacterSelectionManager = null
@@ -60,7 +41,7 @@ var grenade_service: GrenadeService = null
 var door_service: DoorService = null
 var moving_path_vision_service: MovingPathVisionService = null
 
-## UIコンポーネント
+## UIコンポーネント（GameScreenから注入される）
 var label_manager: CharacterLabelManager = null
 var path_context_menu: PathContextMenu = null
 
@@ -94,9 +75,9 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_ui_layer = ui_layer
 	fow_map_size = map_size
 
-	# iOS互換性のため遅延ロード（preloadは使用しない）
-	if PathDrawerScript == null:
-		PathDrawerScript = load("res://scripts/effects/path_drawer.gd")
+	# ファクトリを初期化
+	if _factory == null:
+		_factory = GameSystemFactory.new()
 
 	# 初期化順序が重要
 	# SmokeAreaManagerはGrenadeServiceより先に初期化（依存関係）
@@ -116,8 +97,6 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_vision_service()
 	_setup_map_manager()
 	_setup_path_service()
-	_setup_label_manager()
-	_setup_path_context_menu()
 	_setup_round_manager()
 	_setup_character_setup_service()
 
@@ -741,8 +720,85 @@ func set_path_drawer_color(color: Color) -> void:
 
 
 ## ========================================
+## ファサードAPI（深いネスト回避用）
+## ========================================
+
+## PathService: 最後のポイントをUndo
+func undo_last_point() -> void:
+	if path_service:
+		path_service.undo_last_point()
+
+
+## PathService: グローバルUndo
+func global_undo() -> bool:
+	return path_service.global_undo() if path_service else false
+
+
+## PathService: Undo履歴クリア
+func clear_undo_history() -> void:
+	if path_service:
+		path_service.clear_undo_history()
+
+
+## PathService: パス追従をキャンセル
+func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
+	if path_service:
+		path_service.cancel_path_following(character, clear_pending)
+
+
+## PathService: キャラクターの保留パスがあるか
+func has_pending_path_for_character(character: Node) -> bool:
+	return path_service.has_pending_path_for_character(character) if path_service else false
+
+
+## PathService: 指定キャラクターのパスを実行
+func execute_path_for_character(character: Node, run: bool) -> bool:
+	return path_service.execute_path_for_character(character, run) if path_service else false
+
+
+## PathService: PathUndoManagerのシグナルに接続するためのアクセサ
+func get_path_undo_manager() -> PathUndoManager:
+	return path_service.path_undo_manager if path_service else null
+
+
+## PathService: PathModeControllerへのアクセサ
+func get_path_mode_controller() -> PathModeController:
+	return path_service.path_mode_controller if path_service else null
+
+
+## PathExecutionManager: 確定済みパスの先端位置を検索
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float) -> Dictionary:
+	return path_execution_manager.find_path_endpoint_at_position(ground_pos, threshold) if path_execution_manager else {}
+
+
+## PathExecutionManager: 確定済みパス上の点を検索
+func find_path_point_at_position(ground_pos: Vector3, threshold: float) -> Dictionary:
+	return path_execution_manager.find_path_point_at_position(ground_pos, threshold) if path_execution_manager else {}
+
+
+## PathExecutionManager: プレイヤーのパスを確定（マルチプレイヤー用）
+func confirm_path_for_player(player_id: int, path_msg: NetworkMessages.PathConfirmMessage, character: Node) -> bool:
+	if path_execution_manager:
+		return path_execution_manager.confirm_path_for_player(player_id, path_msg, character)
+	return false
+
+
+## ========================================
 ## UI管理
 ## ========================================
+
+## UIコンポーネントを設定（GameScreenから呼び出し）
+func set_label_manager(mgr: CharacterLabelManager) -> void:
+	label_manager = mgr
+
+
+## パスコンテキストメニューを設定（GameScreenから呼び出し）
+func set_path_context_menu(menu: PathContextMenu) -> void:
+	path_context_menu = menu
+	if path_context_menu:
+		path_context_menu.menu_item_selected.connect(_on_path_context_menu_selected)
+		path_context_menu.menu_closed.connect(_on_path_context_menu_closed)
+
 
 ## 全キャラクターの色・ラベルを再割り当て
 func refresh_character_colors() -> void:
@@ -813,8 +869,7 @@ func release_all_sync_waiting_characters() -> void:
 
 func _setup_selection_manager() -> void:
 	if selection_manager == null:
-		selection_manager = CharacterSelectionManager.new()
-		selection_manager.name = GameConstants.NODE_SELECTION_MANAGER
+		selection_manager = _factory.create_selection_manager()
 		add_child(selection_manager)
 		selection_manager.selection_changed.connect(_on_selection_changed)
 		selection_manager.primary_changed.connect(_on_primary_changed)
@@ -822,10 +877,8 @@ func _setup_selection_manager() -> void:
 
 func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 	if path_execution_manager == null:
-		path_execution_manager = PathExecutionManager.new()
-		path_execution_manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
+		path_execution_manager = _factory.create_path_execution_manager(mesh_parent)
 		add_child(path_execution_manager)
-		path_execution_manager.setup(mesh_parent)
 		path_execution_manager.paths_execution_started.connect(_on_paths_execution_started)
 		# パス完了時に移動中パスVisionポイントをクリア
 		path_execution_manager.character_path_completed.connect(_on_character_path_completed)
@@ -839,61 +892,50 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 
 func _setup_idle_manager() -> void:
 	if idle_manager == null:
-		idle_manager = IdleCharacterManager.new()
-		idle_manager.name = GameConstants.NODE_IDLE_MANAGER
-		add_child(idle_manager)
-		idle_manager.setup(
+		idle_manager = _factory.create_idle_manager(
 			characters,
 			func(c): return path_execution_manager.is_character_following_path(c) if path_execution_manager else false,
 			func(): return selection_manager.primary_character if selection_manager else null
 		)
+		add_child(idle_manager)
 
 
 func _setup_smoke_area_manager() -> void:
 	if smoke_area_manager == null:
-		smoke_area_manager = SmokeAreaManager.new()
-		smoke_area_manager.name = "SmokeAreaManager"
+		smoke_area_manager = _factory.create_smoke_area_manager()
 		add_child(smoke_area_manager)
 
 
 func _setup_path_drawer() -> void:
 	if path_drawer == null:
-		path_drawer = Node3D.new()
-		path_drawer.set_script(PathDrawerScript)
-		path_drawer.name = GameConstants.NODE_PATH_DRAWER
+		path_drawer = _factory.create_path_drawer(camera, path_execution_manager)
 		add_child(path_drawer)
-		path_drawer.setup(camera, null)
-		path_drawer.set_path_execution_manager(path_execution_manager)
+		_factory.setup_path_drawer(path_drawer, camera, path_execution_manager)
 		path_drawer.auto_confirm_requested.connect(_on_path_drawer_auto_confirm_requested)
 
 
 func _setup_path_mode_controller() -> void:
 	if path_mode_controller == null:
-		path_mode_controller = PathModeController.new()
-		path_mode_controller.name = GameConstants.NODE_PATH_MODE_CONTROLLER
+		path_mode_controller = _factory.create_path_mode_controller(
+			path_drawer, selection_manager, path_execution_manager
+		)
 		add_child(path_mode_controller)
-		path_mode_controller.setup(path_drawer, selection_manager, path_execution_manager)
 
 
 func _setup_vision_service() -> void:
 	if vision_service == null:
-		vision_service = VisionService.new()
-		vision_service.name = GameConstants.NODE_VISION_SERVICE
+		vision_service = _factory.create_vision_service(
+			fow_map_size, is_vision_enabled, smoke_area_manager
+		)
 		add_child(vision_service)
-		vision_service.setup(fow_map_size, is_vision_enabled)
 		fog_of_war_system = vision_service.fog_of_war_system
 		enemy_visibility_system = vision_service.enemy_visibility_system
-		# スモークエリアマネージャーを接続
-		if smoke_area_manager:
-			vision_service.set_smoke_area_manager(smoke_area_manager)
 
 
 func _setup_map_manager() -> void:
 	if map_manager == null:
-		map_manager = MapManager.new()
-		map_manager.name = GameConstants.NODE_MAP_MANAGER
+		map_manager = _factory.create_map_manager(_map_container, self)
 		add_child(map_manager)
-		map_manager.setup(_map_container, self)
 		map_manager.map_loaded.connect(_on_map_loaded)
 		map_manager.map_will_unload.connect(_on_map_will_unload)
 
@@ -906,36 +948,12 @@ func _update_remote_character_interpolation(delta: float) -> void:
 			game_char.update_remote_interpolation(delta)
 
 
-func _setup_label_manager() -> void:
-	if label_manager == null:
-		label_manager = CharacterLabelManager.new()
-		label_manager.name = GameConstants.NODE_LABEL_MANAGER
-		add_child(label_manager)
-
-
-func _setup_path_context_menu() -> void:
-	if path_context_menu == null:
-		path_context_menu = PathContextMenu.new()
-		path_context_menu.name = "PathContextMenu"
-		if _ui_layer:
-			_ui_layer.add_child(path_context_menu)
-		else:
-			add_child(path_context_menu)
-		path_context_menu.menu_item_selected.connect(_on_path_context_menu_selected)
-		path_context_menu.menu_closed.connect(_on_path_context_menu_closed)
-
-
 func _setup_path_service() -> void:
 	if path_service == null:
-		path_service = PathService.new()
-		path_service.name = GameConstants.NODE_PATH_SERVICE
-		add_child(path_service)
-		path_service.setup(
-			path_drawer,
-			selection_manager,
-			path_execution_manager,
-			path_mode_controller
+		path_service = _factory.create_path_service(
+			path_drawer, selection_manager, path_execution_manager, path_mode_controller
 		)
+		add_child(path_service)
 		path_service.mode_started.connect(_on_path_mode_started)
 		path_service.mode_ended.connect(_on_path_mode_ended)
 		path_service.mode_cancelled.connect(_on_path_mode_cancelled)
@@ -949,10 +967,8 @@ func _setup_path_service() -> void:
 
 func _setup_round_manager() -> void:
 	if round_manager == null:
-		round_manager = RoundManager.new()
-		round_manager.name = GameConstants.NODE_ROUND_MANAGER
+		round_manager = _factory.create_round_manager(self)
 		add_child(round_manager)
-		round_manager.setup(self)
 		round_manager.round_started.connect(_on_round_started)
 		round_manager.round_ended.connect(_on_round_ended)
 		round_manager.timer_updated.connect(_on_round_timer_updated)
@@ -961,8 +977,7 @@ func _setup_round_manager() -> void:
 
 func _setup_character_setup_service() -> void:
 	if character_setup_service == null:
-		character_setup_service = CharacterSetupService.new()
-		character_setup_service.setup(
+		character_setup_service = _factory.create_character_setup_service(
 			vision_service.enemy_visibility_system,
 			vision_service.fog_of_war_system,
 			label_manager,
@@ -975,17 +990,14 @@ func _setup_character_setup_service() -> void:
 
 func _setup_character_manager_service() -> void:
 	if character_manager == null:
-		character_manager = CharacterManagerService.new()
-		character_manager.name = "CharacterManagerService"
+		character_manager = _factory.create_character_manager_service()
 		add_child(character_manager)
 
 
 func _setup_grenade_service(mesh_parent: Node3D) -> void:
 	if grenade_service == null:
-		grenade_service = GrenadeService.new()
-		grenade_service.name = "GrenadeService"
+		grenade_service = _factory.create_grenade_service(mesh_parent, smoke_area_manager)
 		add_child(grenade_service)
-		grenade_service.setup(mesh_parent, smoke_area_manager)
 		# シグナル転送
 		grenade_service.grenade_thrown.connect(func(g, c): grenade_thrown.emit(g, c))
 		grenade_service.smoke_grenade_thrown.connect(func(g, c): smoke_grenade_thrown.emit(g, c))
@@ -995,19 +1007,17 @@ func _setup_grenade_service(mesh_parent: Node3D) -> void:
 
 func _setup_door_service() -> void:
 	if door_service == null:
-		door_service = DoorService.new()
-		door_service.name = "DoorService"
+		door_service = _factory.create_door_service(character_manager, _force_update_all_vision)
 		add_child(door_service)
-		door_service.setup(character_manager)
-		door_service.set_vision_update_callback(_force_update_all_vision)
 		# シグナル転送
 		door_service.door_kick_network_event.connect(func(d, c): door_kick_network_event.emit(d, c))
 
 
 func _setup_moving_path_vision_service(mesh_parent: Node3D) -> void:
 	if moving_path_vision_service == null:
-		moving_path_vision_service = MovingPathVisionService.new()
-		moving_path_vision_service.setup(mesh_parent, path_execution_manager)
+		moving_path_vision_service = _factory.create_moving_path_vision_service(
+			mesh_parent, path_execution_manager
+		)
 
 
 ## ========================================
@@ -1015,23 +1025,23 @@ func _setup_moving_path_vision_service(mesh_parent: Node3D) -> void:
 ## ========================================
 
 func _on_selection_changed(selected: Array[Node], primary: Node) -> void:
-	selection_changed.emit(selected, primary)
+	SignalBus.selection_changed.emit(selected, primary)
 
 
 func _on_primary_changed(character: Node) -> void:
-	primary_changed.emit(character)
+	SignalBus.primary_changed.emit(character)
 
 
 func _on_path_mode_started(character: Node) -> void:
-	path_mode_started.emit(character)
+	SignalBus.path_mode_started.emit(character)
 
 
 func _on_path_mode_ended() -> void:
-	path_mode_ended.emit()
+	SignalBus.path_mode_ended.emit()
 
 
 func _on_path_mode_cancelled() -> void:
-	path_mode_cancelled.emit()
+	SignalBus.path_mode_cancelled.emit()
 
 
 func _on_path_ready() -> void:
@@ -1039,11 +1049,11 @@ func _on_path_ready() -> void:
 
 
 func _on_path_confirmed(count: int) -> void:
-	path_confirmed.emit(count)
+	SignalBus.path_confirmed.emit(count)
 
 
 func _on_all_paths_completed() -> void:
-	all_paths_completed.emit()
+	SignalBus.all_paths_completed.emit()
 
 
 func _on_character_path_completed(character: Node) -> void:
@@ -1125,11 +1135,11 @@ func _calculate_ratio_from_position_on_path(path: Array[Vector3], position: Vect
 
 
 func _on_paths_execution_started(count: int) -> void:
-	paths_execution_started.emit(count)
+	SignalBus.paths_execution_started.emit(count)
 
 
 func _on_paths_cleared() -> void:
-	paths_cleared.emit()
+	SignalBus.paths_cleared.emit()
 
 
 func _on_path_mode_changed(mode: int) -> void:
@@ -1145,25 +1155,20 @@ func _on_path_drawer_auto_confirm_requested() -> void:
 	confirm_path()
 
 
-func _on_path_drawer_path_tapped(screen_pos: Vector2, path_data: Dictionary) -> void:
-	# パスモード中のパス上タップでコンテキストメニューを表示
-	show_path_context_menu(screen_pos, path_data)
-
-
 func _on_round_started() -> void:
-	round_started.emit()
+	SignalBus.round_started.emit()
 
 
 func _on_round_ended(winner: int, reason: int) -> void:
-	round_ended.emit(winner, reason)
+	SignalBus.round_ended.emit(winner, reason)
 
 
 func _on_round_timer_updated(remaining: float) -> void:
-	round_timer_updated.emit(remaining)
+	SignalBus.round_timer_updated.emit(remaining)
 
 
 func _on_survivor_count_changed(ct_count: int, t_count: int) -> void:
-	survivor_count_changed.emit(ct_count, t_count)
+	SignalBus.survivor_count_changed.emit(ct_count, t_count)
 
 
 ## キャラクター死亡時の処理

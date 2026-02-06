@@ -3,7 +3,6 @@ class_name MapManager
 ## マップライフサイクル管理
 ## マップのロード・アンロード・状態追跡・クリーンアップを一元管理
 
-const MapPresetScript = preload("res://scripts/resources/map_preset.gd")
 
 # ============================================
 # Signals
@@ -25,7 +24,7 @@ signal map_unloaded(map_id: String)
 ## 現在のマップインスタンス
 var current_map: Node3D = null
 ## 現在のマッププリセット
-var current_preset: MapPresetScript = null
+var current_preset: MapPreset = null
 ## 現在のマップID
 var current_map_id: String = ""
 

@@ -2,6 +2,7 @@ extends Node
 class_name PathExecutionManager
 ## パス実行管理
 ## パス確定・実行・pending_paths管理を担当
+## PendingPathStore, PathMeshManager, PathPointMeshManagerに委譲
 
 ## デバッグログ出力フラグ（運用時はfalseに設定）
 const DEBUG_PATH: bool = false
@@ -33,14 +34,21 @@ signal extension_points_scaled(character: Node, scale: float)
 ## 同期待機状態変更シグナル（HUD更新用）
 signal sync_wait_state_changed(has_waiting: bool)
 
-## 保留中のパス（キャラクターごと）
-## { character_id: { "character": Node, "path": Array[Vector3], "vision_points_data": Array, "wait_points_data": Array,
-##                   "path_mesh": Node3D, "vision_points": Array[MeshInstance3D], "wait_points": Array[MeshInstance3D] } }
-var pending_paths: Dictionary = {}
+## ポイントタイプのエイリアス
+const PointType = ActionPointData.Type
 
-## プレイヤーごとの保留パス（マルチプレイヤー用）
-## { player_id: { character_id: PathConfirmMessage } }
-var _pending_paths_by_player: Dictionary = {}
+## ハンドラインスタンス
+var _path_store: PendingPathStore = null
+var _mesh_manager: PathMeshManager = null
+var _point_mesh_manager: PathPointMeshManager = null
+
+## pending_pathsへの後方互換アクセサ（外部からの直接参照をサポート）
+var pending_paths: Dictionary:
+	get:
+		return _path_store.pending_paths if _path_store else {}
+	set(value):
+		if _path_store:
+			_path_store.pending_paths = value
 
 ## パス追従コントローラー { character_id -> PathFollowingController }
 var _path_controllers: Dictionary = {}
@@ -52,10 +60,6 @@ var _extension_path_meshes: Dictionary = {}
 ## 複数回延長した場合に全てのセグメントを保持
 var _active_path_meshes: Dictionary = {}
 
-## 移動中パスのポイントメッシュ（統合管理）
-## { character_id -> { point_type -> Array[MeshInstance3D] } }
-var _moving_path_points: Dictionary = {}
-
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
 
@@ -66,6 +70,16 @@ var _execution_order_counter: int = 0
 ## セットアップ
 func setup(mesh_parent: Node3D) -> void:
 	_mesh_parent = mesh_parent
+
+	# ハンドラを初期化
+	_path_store = PendingPathStore.new()
+	_path_store.setup(self)
+
+	_mesh_manager = PathMeshManager.new()
+	_mesh_manager.setup(mesh_parent)
+
+	_point_mesh_manager = PathPointMeshManager.new()
+	_point_mesh_manager.setup(mesh_parent)
 
 
 ## メッシュ親ノードを取得（内部状態を隠蔽するAPI）
@@ -84,17 +98,17 @@ func start_realtime_path(character: Node, start_point: Vector3, is_continuation:
 	var char_id = character.get_instance_id()
 
 	# 継続モードの場合は既存パスを維持
-	if is_continuation and pending_paths.has(char_id):
+	if is_continuation and _path_store.pending_paths.has(char_id):
 		return
 
 	# 既存のパスがあれば削除（新規開始）
-	_clear_pending_path_for_character(char_id)
+	_path_store.clear_pending_path_for_character(char_id)
 
 	# 新しいパスを開始
 	var path: Array[Vector3] = [start_point]
-	var path_mesh = _create_path_mesh(path, character)
+	var path_mesh = _mesh_manager.create_path_mesh(path, character)
 
-	pending_paths[char_id] = {
+	_path_store.pending_paths[char_id] = {
 		"character": character,
 		"path": path,
 		"vision_points_data": [],
@@ -113,12 +127,12 @@ func add_realtime_path_point(character: Node, point: Vector3) -> void:
 		return
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		# パスがまだ開始されていない場合は開始
 		start_realtime_path(character, point)
 		return
 
-	var data = pending_paths[char_id]
+	var data = _path_store.pending_paths[char_id]
 	var path: Array = data.get("path", [])
 	path.append(point)
 	data["path"] = path
@@ -142,10 +156,10 @@ func add_realtime_vision_point(character: Node, anchor: Vector3, target_point: V
 		return
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		return
 
-	var data = pending_paths[char_id]
+	var data = _path_store.pending_paths[char_id]
 	if not data.has("vision_points_data"):
 		data["vision_points_data"] = []
 
@@ -167,10 +181,10 @@ func add_realtime_wait_point(character: Node, anchor: Vector3, path_ratio: float
 		return
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		return
 
-	var data = pending_paths[char_id]
+	var data = _path_store.pending_paths[char_id]
 	if not data.has("wait_points_data"):
 		data["wait_points_data"] = []
 
@@ -200,8 +214,8 @@ func add_point_to_moving_path(character: Node, point: Vector3) -> void:
 	controller.append_path_point(point)
 
 	# パスメッシュを更新（残りパスのみ、通過済み部分は含めない）
-	if pending_paths.has(char_id):
-		var data = pending_paths[char_id]
+	if _path_store.pending_paths.has(char_id):
+		var data = _path_store.pending_paths[char_id]
 		# 保存されているパスにも追加（同期維持）
 		var stored_path: Array = data.get("path", [])
 		stored_path.append(point)
@@ -239,7 +253,7 @@ func confirm_path(
 	_free_drawer_point_meshes(path_drawer)
 
 	# 既存のパスがあれば削除
-	_clear_pending_path_for_character(char_id)
+	_path_store.clear_pending_path_for_character(char_id)
 
 	# 接続線を含むパスを作成
 	var connected := _build_connected_paths(char_pos, base_path, display_path)
@@ -255,12 +269,12 @@ func confirm_path(
 	adjusted_points["vision"] = _recalculate_vision_ratios_from_anchors(full_path, adjusted_points.get("vision", []))
 
 	# パスメッシュを作成（表示用の生パスを使用）
-	var path_mesh = _create_path_mesh(full_display_path, character)
+	var path_mesh = _mesh_manager.create_path_mesh(full_display_path, character)
 
 	# ポイントを新規生成
 	var point_nodes := _create_point_nodes_for_path(full_path, adjusted_points, character)
 
-	_register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh)
+	_path_store.register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh)
 
 	path_confirmed.emit(1)
 	return true
@@ -269,15 +283,15 @@ func confirm_path(
 ## 全キャラクターのパスを同時実行
 ## local_only: trueの場合、ローカルプレイヤーのキャラクターのみ実行
 func execute_all_paths(run: bool, local_only: bool = false) -> int:
-	if pending_paths.is_empty():
+	if _path_store.pending_paths.is_empty():
 		return 0
 
 	# 優先度カウンターをリセット
 	_execution_order_counter = 0
 
 	var executed_count = 0
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
 		# 既に実行済み（characterキーなし）のエントリはスキップ
 		if not data.has("character"):
 			continue
@@ -346,8 +360,8 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 			executed_count += 1
 
 	# ポイントデータのみクリア（パスとメッシュは残す）
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
 		# パスは進行状況表示のために残す
 		# NOTE: *_dataはデータ配列、*_pointsはメッシュ配列
 		# メッシュは通過時に非表示にするため残す
@@ -368,10 +382,10 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 		return false
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		return false
 
-	var data = pending_paths[char_id]
+	var data = _path_store.pending_paths[char_id]
 	# 既に実行済み（characterキーなし）のエントリはスキップ
 	if not data.has("character"):
 		return false
@@ -442,49 +456,32 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 ## 全ての保留パスをクリア
 func clear_all_pending_paths() -> void:
 	_clear_all_path_meshes()
-	pending_paths.clear()
+	_path_store.pending_paths.clear()
 	paths_cleared.emit()
 
 
 ## 保留パス数を取得
 func get_pending_path_count() -> int:
-	return pending_paths.size()
+	return _path_store.get_pending_path_count()
 
 
 ## 指定キャラクターに保留パスがあるかチェック
 func has_pending_path_for_character(character: Node) -> bool:
-	if not character:
-		return false
-	return pending_paths.has(character.get_instance_id())
+	return _path_store.has_pending_path_for_character(character)
 
 
 ## 指定キャラクターの保留パスを編集用に取り出す
 ## パスデータを返し、pending_pathsから削除する（メッシュ・ポイントは削除しない）
 ## @return: パスデータのDictionary、存在しない場合は空のDictionary
 func take_pending_path_for_editing(character: Node) -> Dictionary:
-	if not character:
-		return {}
-
-	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
-		return {}
-
-	var data = pending_paths[char_id]
-	pending_paths.erase(char_id)
-	return data
+	return _path_store.take_pending_path_for_editing(character)
 
 
 ## 指定キャラクターの確定済みパスを取得（削除せずに参照のみ）
 ## @param character: 対象キャラクター
 ## @return: パスのVector3配列。見つからない場合は空配列
 func get_pending_path_for_character(character: Node) -> Array:
-	if not character:
-		return []
-	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
-		return []
-	var data = pending_paths[char_id]
-	return data.get("path", [])
+	return _path_store.get_pending_path_for_character(character)
 
 
 ## 指定位置近くにある確定済みパスの先端を検索
@@ -492,43 +489,7 @@ func get_pending_path_for_character(character: Node) -> Array:
 ## @param threshold: 検出閾値
 ## @return: {character: Node, path_data: Dictionary} を返す。見つからない場合は空のDictionary
 func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
-	var closest_distance: float = threshold
-	var result: Dictionary = {}
-
-	for char_id in pending_paths:
-		var data: Dictionary = pending_paths[char_id]
-		if not data.has("path") or not data.has("character"):
-			continue
-
-		var path: Array = data["path"]
-		if path.size() < 2:
-			continue
-
-		var character: Node = data["character"]
-		if not is_instance_valid(character):
-			continue
-
-		# 敵キャラクターのパスは対象外
-		if PlayerState.is_enemy(character):
-			continue
-
-		# パスの先端（終点）を取得
-		var endpoint: Vector3 = path[path.size() - 1]
-		endpoint.y = 0.0
-		var check_pos := ground_pos
-		check_pos.y = 0.0
-
-		var distance := endpoint.distance_to(check_pos)
-		if distance < closest_distance:
-			closest_distance = distance
-			result = {
-				"character": character,
-				"char_id": char_id,
-				"endpoint": endpoint,
-				"distance": distance
-			}
-
-	return result
+	return _path_store.find_path_endpoint_at_position(ground_pos, threshold)
 
 
 ## 指定位置が確定済みパス上にあるかを検索（先端は除外）
@@ -536,57 +497,7 @@ func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = Game
 ## @param threshold: 検出閾値
 ## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
 func find_path_point_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
-	var closest_distance: float = threshold
-	var result: Dictionary = {}
-
-	for char_id in pending_paths:
-		var data: Dictionary = pending_paths[char_id]
-		if not data.has("path") or not data.has("character"):
-			continue
-
-		var path: Array = data["path"]
-		if path.size() < 2:
-			continue
-
-		var character: Node = data["character"]
-		if not is_instance_valid(character):
-			continue
-
-		# 敵キャラクターのパスは対象外
-		if PlayerState.is_enemy(character):
-			continue
-
-		# PackedVector3Arrayに変換してPathCalculatorを使用
-		var path_packed := PackedVector3Array()
-		for p in path:
-			path_packed.append(p)
-
-		var check_pos := ground_pos
-		check_pos.y = 0.0
-
-		var path_result := PathCalculator.find_closest_point_on_path(path_packed, check_pos)
-		if path_result.is_empty():
-			continue
-
-		var distance: float = path_result.distance
-		if distance < closest_distance:
-			# 先端（終点）付近は除外（パス延長用に狭い範囲のみ除外）
-			var endpoint: Vector3 = path[path.size() - 1]
-			endpoint.y = 0.0
-			const ENDPOINT_EXCLUSION_THRESHOLD := 0.15  # パス延長用の除外範囲
-			if path_result.point.distance_to(endpoint) < ENDPOINT_EXCLUSION_THRESHOLD:
-				continue
-
-			closest_distance = distance
-			result = {
-				"character": character,
-				"char_id": char_id,
-				"path_ratio": path_result.ratio,
-				"point": path_result.point,
-				"distance": distance
-			}
-
-	return result
+	return _path_store.find_path_point_at_position(ground_pos, threshold)
 
 
 ## パス追従中のコントローラーがあるかチェック
@@ -601,37 +512,7 @@ func is_any_path_following_active() -> bool:
 ## @param ground_pos: 地面上の位置（y=0）
 ## @return: { char_id: distance } の辞書
 func get_all_pending_path_distances(ground_pos: Vector3) -> Dictionary:
-	var distances: Dictionary = {}
-	var check_pos := ground_pos
-	check_pos.y = 0.0
-
-	for char_id in pending_paths:
-		var data: Dictionary = pending_paths[char_id]
-		if not data.has("path") or not data.has("character"):
-			continue
-
-		var path: Array = data["path"]
-		if path.size() < 2:
-			continue
-
-		var character: Node = data["character"]
-		if not is_instance_valid(character):
-			continue
-
-		# 敵キャラクターのパスは対象外
-		if PlayerState.is_enemy(character):
-			continue
-
-		# PackedVector3Arrayに変換してPathCalculatorを使用
-		var path_packed := PackedVector3Array()
-		for p in path:
-			path_packed.append(p)
-
-		var path_result := PathCalculator.find_closest_point_on_path(path_packed, check_pos)
-		if not path_result.is_empty():
-			distances[char_id] = path_result.distance
-
-	return distances
+	return _path_store.get_all_pending_path_distances(ground_pos)
 
 
 ## 移動中パス上の点を検索（先端は除外）
@@ -706,26 +587,6 @@ func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = 
 	return result
 
 
-## 移動中パスにポイントメッシュを追加（内部ヘルパー）
-func _add_moving_path_point(char_id: int, point_type: int, mesh: MeshInstance3D) -> void:
-	if not mesh:
-		return
-	if not _moving_path_points.has(char_id):
-		_moving_path_points[char_id] = {}
-	if not _moving_path_points[char_id].has(point_type):
-		_moving_path_points[char_id][point_type] = []
-	_moving_path_points[char_id][point_type].append(mesh)
-
-
-## 移動中パスのポイントを取得（内部ヘルパー）
-func _get_moving_path_points(char_id: int, point_type: int) -> Array:
-	if not _moving_path_points.has(char_id):
-		return []
-	if not _moving_path_points[char_id].has(point_type):
-		return []
-	return _moving_path_points[char_id][point_type]
-
-
 ## 移動中パスにVisionポイントを追加
 ## @param character: 対象キャラクター
 ## @param path_ratio: パス上の比率
@@ -757,7 +618,7 @@ func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor:
 	# 視覚的なポイントメッシュを作成
 	var char_color = CharacterColorManager.get_character_color(character)
 	var visual_point = PointFactory.create_vision_point(anchor, target_point, Vector3.ZERO, char_color, _mesh_parent)
-	_add_moving_path_point(char_id, PointType.VISION, visual_point)
+	_point_mesh_manager.add_moving_path_point(char_id, PointType.VISION, visual_point)
 
 	return true
 
@@ -907,54 +768,11 @@ func set_extension_path_for_character(character: Node, extension_path: Array[Vec
 	controller.set_extension_path(extension_path, markers, append_to_existing)
 
 	# 新しい延長パスのメッシュを作成
-	var mesh = _create_path_mesh(extension_path, character)
+	var mesh = _mesh_manager.create_path_mesh(extension_path, character)
 	if mesh:
 		_extension_path_meshes[char_id] = mesh
 
 	return true
-
-
-## 延長パスのメッシュを解放（プールに返却）
-func _free_extension_mesh(char_id: int) -> void:
-	if _extension_path_meshes.has(char_id):
-		var mesh = _extension_path_meshes[char_id]
-		if is_instance_valid(mesh):
-			PathLineMeshPool.release(mesh)
-		_extension_path_meshes.erase(char_id)
-
-
-## アクティブパスメッシュを解放（プールに返却、複数回延長した場合の全セグメント）
-func _free_active_path_meshes(char_id: int) -> void:
-	if _active_path_meshes.has(char_id):
-		var meshes: Array = _active_path_meshes[char_id]
-		for mesh in meshes:
-			if is_instance_valid(mesh):
-				PathLineMeshPool.release(mesh)
-		_active_path_meshes.erase(char_id)
-
-
-## 移動中パスのポイントメッシュを解放（統合版）
-## @param char_id: キャラクターID
-## @param point_type: ポイントタイプ（-1で全タイプ）
-func _free_moving_path_points(char_id: int, point_type: int = -1) -> void:
-	if not _moving_path_points.has(char_id):
-		return
-
-	var char_points: Dictionary = _moving_path_points[char_id]
-
-	if point_type < 0:
-		# 全タイプを解放
-		for type_key in char_points.keys():
-			PointFactory.free_point_meshes(char_points[type_key])
-		_moving_path_points.erase(char_id)
-	else:
-		# 特定タイプのみ解放
-		if char_points.has(point_type):
-			PointFactory.free_point_meshes(char_points[point_type])
-			char_points.erase(point_type)
-		# 全タイプが空になったらエントリを削除
-		if char_points.is_empty():
-			_moving_path_points.erase(char_id)
 
 
 ## 移動中キャラクターの延長パスをキャンセル
@@ -971,7 +789,7 @@ func cancel_extension_for_character(character: Node) -> void:
 	controller.cancel_extension()
 
 	# 延長パスのメッシュも削除
-	_free_extension_mesh(char_id)
+	_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
 
 
 ## 指定キャラクターがパス追従中かチェック
@@ -1075,12 +893,12 @@ func add_sync_wait_point_to_path(character: Node, path_ratio: float, anchor: Vec
 			# 視覚的なポイントメッシュを作成
 			var char_color = CharacterColorManager.get_character_color(character)
 			var visual_point = PointFactory.create_wait_point(anchor, -1.0, char_color, _mesh_parent)
-			_add_moving_path_point(char_id, PointType.WAIT, visual_point)
+			_point_mesh_manager.add_moving_path_point(char_id, PointType.WAIT, visual_point)
 			return
 
 	# 確定済み（未実行）のパスに追加
-	if pending_paths.has(char_id):
-		var path_data = pending_paths[char_id]
+	if _path_store.pending_paths.has(char_id):
+		var path_data = _path_store.pending_paths[char_id]
 		if not path_data.has("wait_points_data"):
 			path_data["wait_points_data"] = []
 		path_data["wait_points_data"].append(point_data)
@@ -1088,7 +906,7 @@ func add_sync_wait_point_to_path(character: Node, path_ratio: float, anchor: Vec
 		# 視覚的なポイントメッシュを作成（既存のwait_pointsに追加）
 		if not path_data.has("wait_points"):
 			path_data["wait_points"] = []
-		var visual_point = _create_single_wait_point(anchor, -1.0, character)
+		var visual_point = _point_mesh_manager.create_single_wait_point(anchor, -1.0, character)
 		if visual_point:
 			path_data["wait_points"].append(visual_point)
 
@@ -1110,10 +928,10 @@ func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
 		if controller.is_following_path():
 			controller.cancel()
 	if clear_pending:
-		_clear_pending_path_for_character(char_id)
+		_path_store.clear_pending_path_for_character(char_id)
 		# 延長パスとアクティブパスのメッシュも削除
-		_free_extension_mesh(char_id)
-		_free_active_path_meshes(char_id)
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
 
 
 ## 全パス追従コントローラーを処理（毎フレーム呼ぶ）
@@ -1135,14 +953,14 @@ func on_path_following_completed(_character: Node) -> void:
 			any_active = true
 			break
 	if DEBUG_PATH:
-		if Debug.enabled: print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, pending_paths.size()])
+		if Debug.enabled: print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, _path_store.pending_paths.size()])
 	if not any_active:
 		# 実行済みパスのみクリア（characterキーがないもの）
 		# まだ実行されていないパス（characterキーがあるもの）は保持
 		var chars_to_clear: Array[int] = []
 		var chars_to_keep: int = 0
-		for char_id in pending_paths:
-			var data = pending_paths[char_id]
+		for char_id in _path_store.pending_paths:
+			var data = _path_store.pending_paths[char_id]
 			if not data.has("character"):
 				# 実行済み（characterが削除されている）のでクリア対象
 				chars_to_clear.append(char_id)
@@ -1155,17 +973,17 @@ func on_path_following_completed(_character: Node) -> void:
 
 		# 実行済みパスのメッシュを解放してエントリを削除
 		for char_id in chars_to_clear:
-			_free_pending_path_data(pending_paths[char_id])
-			pending_paths.erase(char_id)
+			_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
+			_path_store.pending_paths.erase(char_id)
 
 		# まだ未実行のパスがなければ完了シグナルを発行
-		if pending_paths.is_empty():
+		if _path_store.pending_paths.is_empty():
 			if DEBUG_PATH:
 				if Debug.enabled: print("[PointDebug] on_path_following_completed: all paths completed, emitting signal")
 			all_paths_completed.emit()
 		else:
 			if DEBUG_PATH:
-				if Debug.enabled: print("[PointDebug] on_path_following_completed: %d pending paths remaining" % pending_paths.size())
+				if Debug.enabled: print("[PointDebug] on_path_following_completed: %d pending paths remaining" % _path_store.pending_paths.size())
 
 
 ## キャラクター用のPathFollowingControllerを取得または作成
@@ -1225,15 +1043,15 @@ func _on_path_completed(character: Node) -> void:
 	# 到着したキャラクターのパスメッシュを即座に削除
 	if character:
 		var char_id = character.get_instance_id()
-		if pending_paths.has(char_id):
-			_free_pending_path_data(pending_paths[char_id])
-			pending_paths.erase(char_id)
+		if _path_store.pending_paths.has(char_id):
+			_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
+			_path_store.pending_paths.erase(char_id)
 		# 延長パスのメッシュも削除
-		_free_extension_mesh(char_id)
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
 		# アクティブパスメッシュも削除（複数回延長した場合の全セグメント）
-		_free_active_path_meshes(char_id)
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
 		# 移動中パスのポイントも削除（全タイプ）
-		_free_moving_path_points(char_id)
+		_point_mesh_manager.free_moving_path_points(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -1266,42 +1084,8 @@ func _on_path_progress_updated(path_index: int, character: Node) -> void:
 
 	var char_id = character.get_instance_id()
 
-	# 通常のパスメッシュを更新
-	if pending_paths.has(char_id):
-		var path_data = pending_paths[char_id]
-		var full_path = path_data.get("path", [])
-
-		if full_path.size() < 2:
-			return
-
-		var path_mesh = path_data.get("path_mesh")
-		if not path_mesh or not is_instance_valid(path_mesh):
-			return
-
-		if path_index >= full_path.size() - 1:
-			# 最後のポイントに到達 - メッシュをクリア
-			path_mesh.clear()
-			return
-
-		# 通過した距離を計算（アニメーション連続性用）
-		var passed_distance: float = 0.0
-		for i in range(1, path_index + 1):
-			if i < full_path.size():
-				passed_distance += full_path[i - 1].distance_to(full_path[i])
-
-		# path_index以降のポイントで新しいパスを作成
-		var remaining_path = PackedVector3Array()
-		for i in range(path_index, full_path.size()):
-			remaining_path.append(full_path[i])
-
-		# パスメッシュを更新
-		if remaining_path.size() >= 2:
-			# 通過距離をオフセットとして設定（ドットアニメーション連続性用）
-			if path_mesh.has_method("set_path_offset"):
-				path_mesh.set_path_offset(passed_distance)
-			path_mesh.update_from_points(remaining_path)
-		else:
-			path_mesh.clear()
+	# 通常のパスメッシュを更新（PathMeshManagerに委譲）
+	_mesh_manager.update_path_progress(path_index, _path_store.pending_paths, char_id)
 
 
 ## 延長パスに切り替わった時のコールバック
@@ -1312,77 +1096,20 @@ func _on_extension_path_activated(character: Node) -> void:
 
 	var char_id = character.get_instance_id()
 
-	# 古いパスメッシュをクリア
-	if pending_paths.has(char_id):
-		var path_data = pending_paths[char_id]
-		var old_mesh = path_data.get("path_mesh")
-		if old_mesh and is_instance_valid(old_mesh):
-			old_mesh.clear()
-
-	# アクティブパスメッシュ（過去の延長パス）もクリア
-	if _active_path_meshes.has(char_id):
-		for mesh in _active_path_meshes[char_id]:
-			if is_instance_valid(mesh):
-				mesh.clear()
-		_active_path_meshes[char_id].clear()
-
-	# 延長パスメッシュを新しいメインパスメッシュとして設定
-	if _extension_path_meshes.has(char_id):
-		var mesh = _extension_path_meshes[char_id]
-		if is_instance_valid(mesh) and pending_paths.has(char_id):
-			pending_paths[char_id]["path_mesh"] = mesh
-		_extension_path_meshes.erase(char_id)
+	# PathMeshManagerに委譲
+	_mesh_manager.on_extension_path_activated(char_id, _path_store.pending_paths, _extension_path_meshes, _active_path_meshes)
 
 	# コントローラから新しいパスデータを取得して保存
-	if _path_controllers.has(char_id) and pending_paths.has(char_id):
+	if _path_controllers.has(char_id) and _path_store.pending_paths.has(char_id):
 		var controller = _path_controllers[char_id]
 		var new_path = controller.get_current_path()
-		pending_paths[char_id]["path"] = new_path
-
-
-## ========================================
-## ポイント非表示共通処理
-## ========================================
-
-## 指定位置のポイントを非表示にする（位置ベースマッチング）
-## @param char_id: キャラクターID
-## @param anchor: ポイントのアンカー位置
-## @param point_key: pending_paths内のポイント配列のキー名
-## @param moving_points: 移動中パスのポイント配列（オプション）
-## @param threshold: マッチング距離閾値（デフォルト0.2で正確なマッチング）
-func _hide_point_at_position(char_id: int, anchor: Vector3, point_key: String, moving_points: Array = [], threshold: float = 0.2) -> void:
-	var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
-
-	# 移動中パスの動的ポイントを優先チェック
-	for i in range(moving_points.size()):
-		var point = moving_points[i]
-		if is_instance_valid(point) and point.visible:
-			var point_pos = point.global_position
-			point_pos.y = 0.0
-			var dist = point_pos.distance_to(anchor_flat)
-			if dist < threshold:
-				point.visible = false
-				return
-
-	# 確認済みパスのポイントを非表示
-	if pending_paths.has(char_id):
-		var path_data = pending_paths[char_id]
-		var points = path_data.get(point_key, [])
-		for i in range(points.size()):
-			var point = points[i]
-			if is_instance_valid(point) and point.visible:
-				var point_pos = point.global_position
-				point_pos.y = 0.0
-				var dist = point_pos.distance_to(anchor_flat)
-				if dist < threshold:
-					point.visible = false
-					return
+		_path_store.pending_paths[char_id]["path"] = new_path
 
 
 ## Visionポイント到達時のコールバック
 ## 通過したVisionポイントを非表示にする
 func _on_vision_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
-	_on_point_reached(PointType.VISION, _index, point_data, character)
+	_point_mesh_manager.on_point_reached(PointType.VISION, _index, point_data, character, _path_store.pending_paths)
 
 	# Visionポイント専用のシグナルを発行（移動中パスポイント非表示用）
 	var path_ratio: float = point_data.get("path_ratio", 0.0)
@@ -1392,34 +1119,7 @@ func _on_vision_point_reached(_index: int, point_data: Dictionary, character: No
 ## Waitポイント到達時のコールバック
 ## 通過したWaitポイントを非表示にする
 func _on_wait_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
-	_on_point_reached(PointType.WAIT, _index, point_data, character)
-
-
-## ポイント到達時の統合コールバック
-func _on_point_reached(point_type: int, _index: int, point_data: Dictionary, character: Node) -> void:
-	if not character:
-		return
-
-	# マーカー参照が直接保持されている場合はそれを使用（確実なマッチング）
-	if point_data.has("marker"):
-		var marker = point_data.marker
-		if is_instance_valid(marker) and marker.visible:
-			marker.visible = false
-		return
-
-	# フォールバック: 移動中パスの動的ポイント（マーカー参照なし）
-	var char_id = character.get_instance_id()
-	var anchor: Vector3 = point_data.get("anchor", Vector3.ZERO)
-
-	# 移動中パスのポイントを取得
-	var moving_points: Array = _get_moving_path_points(char_id, point_type)
-
-	# ポイントタイプに応じたpending_pathsのキー名
-	var point_key: String = "vision_points" if point_type == PointType.VISION else "wait_points"
-
-	# フォールバック: 位置ベースマッチング（移動中パスなど）
-	if anchor != Vector3.ZERO:
-		_hide_point_at_position(char_id, anchor, point_key, moving_points)
+	_point_mesh_manager.on_point_reached(PointType.WAIT, _index, point_data, character, _path_store.pending_paths)
 
 
 ## 延長ポイントの比率がスケールされた時のコールバック
@@ -1474,43 +1174,22 @@ func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: b
 func clear_pending_path_for_character(character: Node) -> void:
 	if not character:
 		return
-	_clear_pending_path_for_character(character.get_instance_id())
-
-
-## 特定キャラクターの保留パスをクリア（内部）
-func _clear_pending_path_for_character(char_id: int) -> void:
-	if not pending_paths.has(char_id):
-		return
-
-	_free_pending_path_data(pending_paths[char_id])
-	pending_paths.erase(char_id)
+	_path_store.clear_pending_path_for_character(character.get_instance_id())
 
 
 ## 全てのパスメッシュとポイントを削除
 func _clear_all_path_meshes() -> void:
-	for char_id in pending_paths:
-		_free_pending_path_data(pending_paths[char_id])
+	for char_id in _path_store.pending_paths:
+		_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
 	# 延長パスのメッシュも削除
 	for char_id in _extension_path_meshes.keys():
-		_free_extension_mesh(char_id)
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
 	# アクティブパスメッシュも削除
 	for char_id in _active_path_meshes.keys():
-		_free_active_path_meshes(char_id)
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
 	# 移動中パスのポイントも削除（全タイプ）
-	for char_id in _moving_path_points.keys():
-		_free_moving_path_points(char_id)
-
-
-## pending_pathsのデータからメッシュとポイントを解放（プールに返却）
-func _free_pending_path_data(data: Dictionary) -> void:
-	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
-		PathLineMeshPool.release(data["path_mesh"])
-
-	# ポイントメッシュを解放（プールに返却）
-	var mesh_keys = ["vision_points", "wait_points"]
-	for key in mesh_keys:
-		if data.has(key):
-			PointFactory.free_point_meshes(data[key])
+	for char_id in _point_mesh_manager._moving_path_points.keys():
+		_point_mesh_manager.free_moving_path_points(char_id)
 
 
 ## PathDrawerからポイントデータを取得
@@ -1564,41 +1243,15 @@ func _adjust_point_data_for_connection(point_data: Dictionary, connect_length: f
 ## ポイントを一括生成
 func _create_point_nodes_for_path(path: Array[Vector3], point_data: Dictionary, character: Node) -> Dictionary:
 	return {
-		"vision": _create_vision_points_for_path(path, point_data.get("vision", []), character),
-		"wait": _create_wait_points_for_path(path, point_data.get("wait", []), character)
+		"vision": _point_mesh_manager.create_vision_points(path, point_data.get("vision", []), character, _calculate_position_on_path),
+		"wait": _point_mesh_manager.create_wait_points(path, point_data.get("wait", []), character)
 	}
 
 
 ## PathDrawer側のポイントメッシュを解放
 func _free_drawer_point_meshes(path_drawer: Node) -> void:
-	free_point_meshes(path_drawer.take_vision_points())
-	free_point_meshes(path_drawer.take_wait_points())
-
-
-## pending_pathsへの登録
-func _register_pending_path(
-	char_id: int,
-	character: Node,
-	full_path: Array[Vector3],
-	adjusted_points: Dictionary,
-	point_nodes: Dictionary,
-	path_mesh: MeshInstance3D,
-	player_id: int = -1
-) -> void:
-	var pending_data := {
-		"character": character,
-		"path": full_path,
-		"vision_points_data": adjusted_points.get("vision", []),
-		"wait_points_data": adjusted_points.get("wait", []),
-		"path_mesh": path_mesh,
-		"vision_points": point_nodes.get("vision", []),
-		"wait_points": point_nodes.get("wait", [])
-	}
-
-	if player_id >= 0:
-		pending_data["player_id"] = player_id
-
-	pending_paths[char_id] = pending_data
+	_point_mesh_manager.free_point_meshes(path_drawer.take_vision_points())
+	_point_mesh_manager.free_point_meshes(path_drawer.take_wait_points())
 
 
 func _copy_vector3_array(source) -> Array[Vector3]:
@@ -1661,26 +1314,21 @@ func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_len
 	return adjusted
 
 
-## パスメッシュを作成（キャラクター色対応、プール使用）
-func _create_path_mesh(path: Array[Vector3], character: Node = null) -> MeshInstance3D:
-	# キャラクター色を適用（ない場合はデフォルト水色）
-	var line_color: Color
-	if character:
-		var char_color = CharacterColorManager.get_character_color(character)
-		line_color = Color(char_color.r, char_color.g, char_color.b, 0.8)
-	else:
-		line_color = Color(0.3, 0.8, 1.0, 0.8)
+## 接続線を考慮してWaitポイントの比率を調整
+func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+	if connect_length < 0.01 or base_length < 0.01:
+		return wait_points.duplicate()
 
-	# プールからメッシュを取得
-	var mesh = PathLineMeshPool.acquire(_mesh_parent, line_color, GameConstants.PATH_LINE_WIDTH)
+	var adjusted: Array[Dictionary] = []
 
-	# パスを描画
-	var packed_path = PackedVector3Array()
-	for point in path:
-		packed_path.append(point)
-	mesh.update_from_points(packed_path)
+	for wp in wait_points:
+		adjusted.append({
+			"path_ratio": _adjust_single_ratio(wp.path_ratio, connect_length, base_length),
+			"anchor": wp.get("anchor", Vector3.ZERO),
+			"wait_duration": wp.get("wait_duration", 1.0)
+		})
 
-	return mesh
+	return adjusted
 
 
 ## path_ratioからパス上の絶対座標を計算
@@ -1771,93 +1419,7 @@ func _calculate_ratio_from_position(path: Array[Vector3], position: Vector3) -> 
 	return clamp(best_ratio, 0.0, 1.0)
 
 
-## 調整済み視線ポイントから新しいVisionPointを生成（PointFactory使用）
-func _create_vision_points_for_path(
-	path: Array[Vector3],
-	adjusted_vision_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-	var char_color = CharacterColorManager.get_character_color(character)
-
-	for vp in adjusted_vision_points:
-		var ratio: float = vp.path_ratio
-
-		# anchorが保存されている場合はそれを使用、なければpath_ratioから計算
-		var anchor: Vector3
-		if vp.has("anchor") and vp.anchor != Vector3.ZERO:
-			anchor = vp.anchor
-		else:
-			anchor = _calculate_position_on_path(path, ratio)
-
-		# PointFactoryでVisionPointを作成
-		var target_point = vp.get("target_point", null)
-		var direction: Vector3 = vp.get("direction", Vector3.FORWARD)
-		var point = PointFactory.create_vision_point(anchor, target_point, direction, char_color, _mesh_parent)
-		points.append(point)
-
-		# マーカー参照をpoint_dataに直接保持（距離マッチング不要化）
-		vp["marker"] = point
-
-	return points
-
-
-## 接続線を考慮してWaitポイントの比率を調整
-func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return wait_points.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for wp in wait_points:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(wp.path_ratio, connect_length, base_length),
-			"anchor": wp.get("anchor", Vector3.ZERO),
-			"wait_duration": wp.get("wait_duration", 1.0)
-		})
-
-	return adjusted
-
-
-## 調整済みWaitポイントから新しいWaitPointを生成（PointFactory使用）
-func _create_wait_points_for_path(
-	_path: Array[Vector3],
-	adjusted_wait_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var points: Array[MeshInstance3D] = []
-	var char_color = CharacterColorManager.get_character_color(character)
-
-	for wp in adjusted_wait_points:
-		var point = PointFactory.create_wait_point_from_dict(wp, char_color, _mesh_parent)
-		points.append(point)
-
-		# マーカー参照をpoint_dataに直接保持（距離マッチング不要化）
-		wp["marker"] = point
-
-	return points
-
-
-## 単一のWaitPointメッシュを作成（PointFactory使用）
-func _create_single_wait_point(anchor: Vector3, duration: float, character: Node) -> MeshInstance3D:
-	if not _mesh_parent:
-		return null
-	var char_color = CharacterColorManager.get_character_color(character)
-	return PointFactory.create_wait_point(anchor, duration, char_color, _mesh_parent)
-
-
-## 単一のVisionPointメッシュを作成（PointFactory使用）
-func _create_single_vision_point(anchor: Vector3, target_point: Vector3, character: Node) -> MeshInstance3D:
-	if not _mesh_parent:
-		return null
-	var char_color = CharacterColorManager.get_character_color(character)
-	return PointFactory.create_vision_point(anchor, target_point, Vector3.ZERO, char_color, _mesh_parent)
-
-
-#region 統一ポイントAPI
-## ポイントタイプのエイリアス
-const PointType = ActionPointData.Type
-
+#region 統一ポイントAPI（PathPointMeshManagerに委譲）
 
 ## 指定タイプのポイント比率を一括調整
 func adjust_point_ratios_for_type(
@@ -1866,13 +1428,10 @@ func adjust_point_ratios_for_type(
 	connect_length: float,
 	base_length: float
 ) -> Array[Dictionary]:
-	match point_type:
-		PointType.VISION:
-			return _adjust_ratios_for_connection(point_data, connect_length, base_length)
-		PointType.WAIT:
-			return _adjust_wait_ratios_for_connection(point_data, connect_length, base_length)
-		_:
-			return point_data.duplicate()
+	return _point_mesh_manager.adjust_point_ratios_for_type(
+		point_data, point_type, connect_length, base_length,
+		_adjust_ratios_for_connection, _adjust_wait_ratios_for_connection
+	)
 
 
 ## 指定タイプのポイントを一括生成
@@ -1882,37 +1441,17 @@ func create_points_for_type(
 	point_type: int,
 	character: Node
 ) -> Array[MeshInstance3D]:
-	match point_type:
-		PointType.VISION:
-			return _create_vision_points_for_path(path, point_data, character)
-		PointType.WAIT:
-			return _create_wait_points_for_path(path, point_data, character)
-		_:
-			return []
+	return _point_mesh_manager.create_points_for_type(path, point_data, point_type, character, _calculate_position_on_path)
 
 
 ## PathDrawerから統一APIでポイントデータを取得
 func get_all_points_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dictionary:
-	var result: Dictionary = {}
-
-	for type_value in PointType.values():
-		if is_multi_mode:
-			result[type_value] = {
-				"data": path_drawer.get_all_points_by_type(type_value),
-				"meshes": path_drawer.take_all_points_by_type(type_value)
-			}
-		else:
-			result[type_value] = {
-				"data": path_drawer.get_points_by_type(type_value).duplicate(),
-				"meshes": path_drawer.take_points_by_type(type_value)
-			}
-
-	return result
+	return _point_mesh_manager.get_all_points_from_drawer(path_drawer, is_multi_mode)
 
 
 ## ポイントメッシュを一括削除（PointFactory委譲）
 func free_point_meshes(meshes: Array) -> void:
-	PointFactory.free_point_meshes(meshes)
+	_point_mesh_manager.free_point_meshes(meshes)
 #endregion
 
 
@@ -1936,7 +1475,7 @@ func confirm_path_for_player(
 	var base_path := _copy_vector3_array(path_msg.path)
 
 	# 既存のパスがあれば削除
-	_clear_pending_path_for_character(char_id)
+	_path_store.clear_pending_path_for_character(char_id)
 
 	# 接続線を含むパスを作成
 	var connected := _build_connected_paths(char_pos, base_path, base_path)
@@ -1954,17 +1493,15 @@ func confirm_path_for_player(
 	adjusted_points["vision"] = _recalculate_vision_ratios_from_anchors(full_path, adjusted_points.get("vision", []))
 
 	# パスメッシュを作成
-	var path_mesh = _create_path_mesh(full_path, character)
+	var path_mesh = _mesh_manager.create_path_mesh(full_path, character)
 
 	# ポイントを生成
 	var point_nodes := _create_point_nodes_for_path(full_path, adjusted_points, character)
 
-	_register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh, player_id)
+	_path_store.register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh, player_id)
 
 	# プレイヤーごとのパス管理に追加
-	if not _pending_paths_by_player.has(player_id):
-		_pending_paths_by_player[player_id] = {}
-	_pending_paths_by_player[player_id][char_id] = path_msg
+	_path_store.add_pending_path_for_player(player_id, char_id, path_msg)
 
 	path_confirmed.emit(1)
 	return true
@@ -1972,24 +1509,17 @@ func confirm_path_for_player(
 
 ## プレイヤーの保留パスを取得
 func get_pending_paths_for_player(player_id: int) -> Dictionary:
-	return _pending_paths_by_player.get(player_id, {}).duplicate()
+	return _path_store.get_pending_paths_for_player(player_id)
 
 
 ## 全プレイヤーの保留パスを取得
 func get_all_pending_paths_by_player() -> Dictionary:
-	return _pending_paths_by_player.duplicate()
+	return _path_store.get_all_pending_paths_by_player()
 
 
 ## プレイヤーの保留パスをクリア
 func clear_pending_paths_for_player(player_id: int) -> void:
-	if not _pending_paths_by_player.has(player_id):
-		return
-
-	var player_paths: Dictionary = _pending_paths_by_player[player_id]
-	for char_id in player_paths.keys():
-		_clear_pending_path_for_character(char_id)
-
-	_pending_paths_by_player.erase(player_id)
+	_path_store.clear_pending_paths_for_player(player_id)
 
 
 ## 保留パスをPathConfirmMessageに変換
@@ -1998,10 +1528,10 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 		return null
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		return null
 
-	var data: Dictionary = pending_paths[char_id]
+	var data: Dictionary = _path_store.pending_paths[char_id]
 	var msg := NetworkMessages.PathConfirmMessage.new()
 	msg.player_id = player_id
 	msg.character_id = char_id
@@ -2025,8 +1555,8 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 func get_all_pending_paths_as_messages(player_id: int) -> Array[NetworkMessages.PathConfirmMessage]:
 	var result: Array[NetworkMessages.PathConfirmMessage] = []
 
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
 		if not data.has("character"):
 			continue
 
@@ -2056,8 +1586,9 @@ func get_path_snapshot(character: Node) -> SyncState.PathSnapshot:
 			snapshot.progress = controller.get_current_progress()
 
 	# 元のパスメッセージを参照
-	if _pending_paths_by_player.has(PlayerState.get_local_peer_id()):
-		var player_paths = _pending_paths_by_player[PlayerState.get_local_peer_id()]
+	var by_player = _path_store.get_all_pending_paths_by_player()
+	if by_player.has(PlayerState.get_local_peer_id()):
+		var player_paths = by_player[PlayerState.get_local_peer_id()]
 		if player_paths.has(char_id):
 			snapshot.path_message = player_paths[char_id]
 

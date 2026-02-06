@@ -8,11 +8,17 @@ extends Control
 const MAP_SELECTION_SCENE := "res://scenes/screens/map_selection.tscn"
 const OPTION_SCENE := "res://scenes/screens/option.tscn"
 const LOBBY_SCENE := "res://scenes/screens/lobby.tscn"
-const ScreenLayoutScript := preload("res://scripts/ui/screen_layout.gd")
-const LOGO_TEXTURE := preload("res://assets/images/logo.png")
-const TRAINING_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/training-button.png")
-const MULTIPLAYER_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/multiplayer-button.png")
-const OPTION_BUTTON_TEXTURE := preload("res://assets/ui/main_menu/option-button.png")
+var LOGO_TEXTURE: Texture2D
+var TRAINING_BUTTON_TEXTURE: Texture2D
+var MULTIPLAYER_BUTTON_TEXTURE: Texture2D
+var OPTION_BUTTON_TEXTURE: Texture2D
+
+
+func _init() -> void:
+	LOGO_TEXTURE = load("res://assets/images/logo.png")
+	TRAINING_BUTTON_TEXTURE = load("res://assets/ui/main_menu/training-button.png")
+	MULTIPLAYER_BUTTON_TEXTURE = load("res://assets/ui/main_menu/multiplayer-button.png")
+	OPTION_BUTTON_TEXTURE = load("res://assets/ui/main_menu/option-button.png")
 
 
 func _ready() -> void:

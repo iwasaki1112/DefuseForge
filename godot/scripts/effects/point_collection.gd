@@ -7,8 +7,6 @@ extends RefCounted
 ## ポイントが変更された時のシグナル（追加・削除・クリア時に発火）
 signal point_changed()
 
-const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
-
 ## ポイントデータ（タイプ別）
 ## { Type: Array[ActionPointData] }
 var _points_by_type: Dictionary = {}
@@ -27,13 +25,13 @@ func _init() -> void:
 
 ## タイプ別の配列を初期化
 func _init_type_arrays() -> void:
-	for type_value in ActionPointDataScript.Type.values():
+	for type_value in ActionPointData.Type.values():
 		_points_by_type[type_value] = []
 		_meshes_by_type[type_value] = []
 
 
 ## ポイントを追加
-func add_point(data: ActionPointDataScript, mesh: MeshInstance3D = null) -> void:
+func add_point(data: ActionPointData, mesh: MeshInstance3D = null) -> void:
 	var type = data.type
 	_points_by_type[type].append(data)
 	if mesh:
@@ -43,21 +41,21 @@ func add_point(data: ActionPointDataScript, mesh: MeshInstance3D = null) -> void
 
 
 ## 指定タイプのポイントデータを取得
-func get_points(type: ActionPointDataScript.Type) -> Array:
+func get_points(type: ActionPointData.Type) -> Array:
 	if _points_by_type.has(type):
 		return _points_by_type[type]
 	return []
 
 
 ## 指定タイプのポイントメッシュを取得
-func get_meshes(type: ActionPointDataScript.Type) -> Array:
+func get_meshes(type: ActionPointData.Type) -> Array:
 	if _meshes_by_type.has(type):
 		return _meshes_by_type[type]
 	return []
 
 
 ## 指定タイプのポイントメッシュを取得して所有権を移譲
-func take_meshes(type: ActionPointDataScript.Type) -> Array[MeshInstance3D]:
+func take_meshes(type: ActionPointData.Type) -> Array[MeshInstance3D]:
 	var result: Array[MeshInstance3D] = []
 	if _meshes_by_type.has(type):
 		for mesh in _meshes_by_type[type]:
@@ -85,7 +83,7 @@ func take_all_meshes() -> Array[MeshInstance3D]:
 
 
 ## 指定タイプのポイントをDictionary配列として取得（後方互換用）
-func get_points_as_dicts(type: ActionPointDataScript.Type) -> Array[Dictionary]:
+func get_points_as_dicts(type: ActionPointData.Type) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for point in get_points(type):
 		result.append(point.to_dict())
@@ -127,7 +125,7 @@ func undo_last_point() -> Dictionary:
 
 
 ## 指定タイプのポイントをクリア
-func clear_type(type: ActionPointDataScript.Type) -> void:
+func clear_type(type: ActionPointData.Type) -> void:
 	var had_points = not _points_by_type.get(type, []).is_empty()
 	# メッシュを削除
 	for mesh in _meshes_by_type.get(type, []):
@@ -155,7 +153,7 @@ func clear_all() -> void:
 
 
 ## ポイント数を取得
-func get_point_count(type: ActionPointDataScript.Type) -> int:
+func get_point_count(type: ActionPointData.Type) -> int:
 	return _points_by_type.get(type, []).size()
 
 
@@ -179,17 +177,17 @@ func clear_history() -> void:
 
 #region Vision専用メソッド（後方互換）
 func get_vision_points() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.VISION)
+	return get_points_as_dicts(ActionPointData.Type.VISION)
 
 func take_vision_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.VISION)
+	return take_meshes(ActionPointData.Type.VISION)
 #endregion
 
 
 #region Wait専用メソッド（後方互換）
 func get_wait_points() -> Array[Dictionary]:
-	return get_points_as_dicts(ActionPointDataScript.Type.WAIT)
+	return get_points_as_dicts(ActionPointData.Type.WAIT)
 
 func take_wait_meshes() -> Array[MeshInstance3D]:
-	return take_meshes(ActionPointDataScript.Type.WAIT)
+	return take_meshes(ActionPointData.Type.WAIT)
 #endregion
