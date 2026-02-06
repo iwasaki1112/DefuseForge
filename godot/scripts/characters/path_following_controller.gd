@@ -36,14 +36,8 @@ signal sync_wait_released()  ## 同期待機解放時
 ## 移動スムージング設定
 @export var direction_smoothing: float = 8.0  ## 移動方向のスムージング係数（大きいほど追従が速い）
 
-## 衝突回避設定
-@export var collision_check_radius: float = 0.8  ## 前方衝突検出の半径
-@export var collision_check_distance: float = 1.5  ## 前方衝突検出の距離
-@export var avoidance_timeout: float = 3.0  ## 回避タイムアウト（この時間経過で強制解除）
-
 ## キャッシュ設定
 const CHARACTERS_CACHE_INTERVAL: float = 0.15  ## キャラクターキャッシュ更新間隔（150ms）
-const COLLISION_CHECK_INTERVAL: float = 0.1  ## 衝突検出間隔（100ms、モバイル最適化）
 
 ## 内部状態
 var _character: CharacterBody3D = null
@@ -82,9 +76,8 @@ var _cached_segment_lengths: Array[float] = []  # 各セグメントの累積距
 
 ## 距離ベースのポイント検出用（_calculate_distance_traveled()で動的に計算）
 
-## 衝突検出・キャラクターキャッシュ（process内で使用）
+## 移動優先度（PathExecutionManagerが設定）
 var _movement_priority: int = 0  ## 移動優先度（低いほど高優先）
-var _collision_check_timer: float = 0.0  ## 衝突検出タイマー
 
 ## キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
@@ -195,6 +188,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_stuck_time = 0.0
 	_last_distance_traveled = 0.0  # 距離計算をリセット
 
+
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
 	_door_handler.reset()
@@ -242,6 +236,7 @@ func cancel() -> void:
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 
+
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
 	_door_handler.reset()
@@ -276,10 +271,6 @@ func get_vision_points() -> Array[Dictionary]:
 ## 移動優先度を設定（PathExecutionManagerから呼ばれる）
 func set_movement_priority(priority: int) -> void:
 	_movement_priority = priority
-	# 優先度に基づいて衝突検出タイミングをずらす
-	# 高優先度（小さい数値）は早く検出し、先に行動を開始
-	# 低優先度は遅く検出し、相手が既に行動中ならスキップ
-	_collision_check_timer = COLLISION_CHECK_INTERVAL - float(priority) * 0.03
 
 
 ## 移動優先度を取得
@@ -317,40 +308,11 @@ func process(delta: float) -> void:
 			_point_handler._update_idle_animation_while_waiting()
 			return  # まだ閉じているので待機継続
 
-	# 側方回避中の場合
-	if _collision_avoidance.is_sidestepping:
-		_collision_avoidance.sidestep_timer += delta
-		# 終了条件: 時間経過、すれ違い完了、または衝突解消
-		if _collision_avoidance.sidestep_timer >= CollisionAvoidanceController.SIDESTEP_DURATION or _collision_avoidance.has_passed_blocker() or _collision_avoidance.check_avoidance_resolved():
-			_collision_avoidance.end_sidestep()
-		else:
-			# 側方移動を実行
-			_collision_avoidance.execute_sidestep(delta)
-			return  # 側方回避継続
-
-	# 衝突回避待機中の場合（低優先度キャラは停止して待つだけ）
-	if _collision_avoidance.is_avoiding_collision:
-		_collision_avoidance.avoidance_timer += delta
-		# タイムアウトまたは衝突解消で待機終了
-		if _collision_avoidance.avoidance_timer >= avoidance_timeout or _collision_avoidance.check_avoidance_resolved():
-			_collision_avoidance.end_collision_halt()
-		else:
-			# アイドルアニメーションを維持（sidestepはしない）
-			_point_handler._update_idle_animation_while_waiting()
-			return  # 待機継続
-
 	# キャラクターキャッシュ更新（150ms間隔）
 	_characters_cache_timer += delta
 	if _characters_cache_timer >= CHARACTERS_CACHE_INTERVAL:
 		_characters_cache_timer = 0.0
 		_characters_cache = get_tree().get_nodes_in_group("characters")
-
-	# 衝突検出タイマー更新（100ms間隔）
-	_collision_check_timer += delta
-
-	# 回避クールダウンタイマー更新
-	if _collision_avoidance.avoidance_cooldown_timer > 0:
-		_collision_avoidance.avoidance_cooldown_timer -= delta
 
 	if not _character or _current_path.size() == 0:
 		_finish()
@@ -499,34 +461,6 @@ func process(delta: float) -> void:
 		# アイドルアニメーションに切り替え
 		_point_handler._update_idle_animation_while_waiting()
 		return
-
-	# 衝突回避チェック（100ms間隔、クールダウン中はスキップ）
-	if _collision_check_timer >= COLLISION_CHECK_INTERVAL and _collision_avoidance.avoidance_cooldown_timer <= 0:
-		_collision_check_timer = 0.0
-		var ally_ahead: Node = _collision_avoidance.detect_ally_ahead(move_dir, _characters_cache, collision_check_radius, collision_check_distance)
-		if ally_ahead:
-			_collision_avoidance.avoidance_blocker = ally_ahead
-			var dist: float = _collision_avoidance.get_distance_to_ally(ally_ahead)
-			var head_on: bool = _collision_avoidance.is_head_on_collision()
-			var should_yield: bool = _collision_avoidance.should_yield_to(ally_ahead)
-
-			# 相手が sidestep 中なら、こちらは通常通り進む
-			if _collision_avoidance.is_other_sidestepping(ally_ahead):
-				_collision_avoidance.avoidance_blocker = null
-			# 相手との距離が非常に近い場合 or Head-on
-			elif dist < collision_check_radius * 1.2 or head_on:
-				# 低優先度が sidestep して避ける、高優先度はそのまま進む
-				if should_yield:
-					_collision_avoidance.start_sidestep()
-					return
-				else:
-					_collision_avoidance.avoidance_blocker = null
-			elif should_yield:
-				# 追いつきなど: 低優先度が sidestep
-				_collision_avoidance.start_sidestep()
-				return
-			else:
-				_collision_avoidance.avoidance_blocker = null  # 高優先度なので進む
 
 	# 物理移動（スムージング適用）
 	# 移動方向をスムーズに補間してカーブ時のカクつきを軽減
@@ -899,6 +833,7 @@ func _finish() -> void:
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
+
 
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
