@@ -7,8 +7,11 @@ class_name GameScreen
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
-const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
-const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
+var GameHUDScene: PackedScene
+
+
+func _init() -> void:
+	GameHUDScene = load("res://scenes/ui/game_hud.tscn")
 
 ## カメラ設定
 const CAMERA_HEIGHT := 25.0
@@ -253,7 +256,7 @@ func _setup_status_ui() -> void:
 
 func _setup_camera_pan() -> void:
 	if _camera_pan_controller == null:
-		_camera_pan_controller = CameraPanControllerScript.new()
+		_camera_pan_controller = CameraPanController.new()
 		_camera_pan_controller.setup(camera, 0.05)
 
 

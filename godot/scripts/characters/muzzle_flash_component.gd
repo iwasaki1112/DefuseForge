@@ -9,7 +9,7 @@ extends RefCounted
 # Constants
 # ============================================
 
-const MUZZLE_FLASH_TEXTURE = preload("res://assets/effects/muzzle_flash_sprite_sheet.jpg")
+var MUZZLE_FLASH_TEXTURE: Texture2D = null
 const MUZZLE_FLASH_BASE_SIZE: float = 0.25
 const MUZZLE_FLASH_SCALE_MULTIPLIER: float = 200.0
 const MUZZLE_FLASH_DURATION: float = 0.09  # 3フレーム × 0.03秒/フレーム
@@ -38,6 +38,10 @@ var _muzzle_flash_quad1_z_offset: float = 0.026
 # ============================================
 # Setup
 # ============================================
+
+func _init() -> void:
+	MUZZLE_FLASH_TEXTURE = load("res://assets/effects/muzzle_flash_sprite_sheet.jpg")
+
 
 ## セットアップ
 func setup(character: Node3D, weapon_socket: Node3D) -> void:

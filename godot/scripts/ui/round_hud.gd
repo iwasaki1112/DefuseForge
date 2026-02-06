@@ -8,9 +8,6 @@ class_name RoundHUD
 # Constants
 # ============================================
 
-const CT_COLOR := Color(0.4, 0.6, 1.0)  # CTの色（青）
-const T_COLOR := Color(1.0, 0.6, 0.3)  # Tの色（オレンジ）
-
 # ============================================
 # UI Elements
 # ============================================
@@ -53,7 +50,7 @@ func _setup_ui() -> void:
 	_ct_label.text = "CT: 0"
 	_ct_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ct_label.add_theme_font_size_override("font_size", 28)
-	_ct_label.add_theme_color_override("font_color", CT_COLOR)
+	_ct_label.add_theme_color_override("font_color", GameConstants.CGameConstants.T_COLOR)
 	_ct_label.custom_minimum_size = Vector2(80, 0)
 	_top_bar.add_child(_ct_label)
 
@@ -63,7 +60,7 @@ func _setup_ui() -> void:
 	_t_label.text = "T: 0"
 	_t_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_t_label.add_theme_font_size_override("font_size", 28)
-	_t_label.add_theme_color_override("font_color", T_COLOR)
+	_t_label.add_theme_color_override("font_color", GameConstants.T_COLOR)
 	_t_label.custom_minimum_size = Vector2(80, 0)
 	_top_bar.add_child(_t_label)
 
@@ -105,10 +102,10 @@ func show_result(winner: int, _reason: int) -> void:
 	match winner:
 		GameCharacter.Team.COUNTER_TERRORIST:
 			result_text = "COUNTER-TERRORIST WINS"
-			result_color = CT_COLOR
+			result_color = GameConstants.CGameConstants.T_COLOR
 		GameCharacter.Team.TERRORIST:
 			result_text = "TERRORIST WINS"
-			result_color = T_COLOR
+			result_color = GameConstants.T_COLOR
 		_:
 			result_text = "DRAW"
 			result_color = Color.WHITE

@@ -53,8 +53,6 @@ signal path_extension_finished(character: Node, points_before: int, points_after
 #endregion
 
 #region 定数
-const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const ActionPointDataScript = preload("res://scripts/effects/action_point_data.gd")
 #endregion
 
 #region 内部変数
@@ -118,7 +116,7 @@ func _process(_delta: float) -> void:
 
 func _setup_mesh() -> void:
 	_path_mesh = MeshInstance3D.new()
-	_path_mesh.set_script(PathLineMeshScript)
+	_path_mesh.set_script(PathLineMesh)
 	_path_mesh.line_color = line_color
 	_path_mesh.line_width = line_width
 	add_child(_path_mesh)
@@ -1219,41 +1217,41 @@ func _on_path_completed() -> void:
 
 
 #region 統一ポイント API
-func get_points_by_type(point_type: ActionPointDataScript.Type) -> Array[Dictionary]:
+func get_points_by_type(point_type: ActionPointData.Type) -> Array[Dictionary]:
 	match point_type:
-		ActionPointDataScript.Type.VISION:
+		ActionPointData.Type.VISION:
 			return get_vision_points()
-		ActionPointDataScript.Type.WAIT:
+		ActionPointData.Type.WAIT:
 			return get_wait_points()
 		_:
 			return []
 
 
-func take_points_by_type(point_type: ActionPointDataScript.Type) -> Array[MeshInstance3D]:
+func take_points_by_type(point_type: ActionPointData.Type) -> Array[MeshInstance3D]:
 	match point_type:
-		ActionPointDataScript.Type.VISION:
+		ActionPointData.Type.VISION:
 			return take_vision_points()
-		ActionPointDataScript.Type.WAIT:
+		ActionPointData.Type.WAIT:
 			return take_wait_points()
 		_:
 			return []
 
 
-func get_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
+func get_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
 	match point_type:
-		ActionPointDataScript.Type.VISION:
+		ActionPointData.Type.VISION:
 			return get_all_vision_points()
-		ActionPointDataScript.Type.WAIT:
+		ActionPointData.Type.WAIT:
 			return get_all_wait_points()
 		_:
 			return {}
 
 
-func take_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictionary:
+func take_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
 	match point_type:
-		ActionPointDataScript.Type.VISION:
+		ActionPointData.Type.VISION:
 			return take_all_vision_points()
-		ActionPointDataScript.Type.WAIT:
+		ActionPointData.Type.WAIT:
 			return take_all_wait_points()
 		_:
 			return {}
@@ -1261,14 +1259,14 @@ func take_all_points_by_type(point_type: ActionPointDataScript.Type) -> Dictiona
 
 func get_all_point_types_data() -> Dictionary:
 	var result: Dictionary = {}
-	for type_value in ActionPointDataScript.Type.values():
+	for type_value in ActionPointData.Type.values():
 		result[type_value] = get_points_by_type(type_value)
 	return result
 
 
 func take_all_point_types_meshes() -> Dictionary:
 	var result: Dictionary = {}
-	for type_value in ActionPointDataScript.Type.values():
+	for type_value in ActionPointData.Type.values():
 		result[type_value] = take_points_by_type(type_value)
 	return result
 #endregion

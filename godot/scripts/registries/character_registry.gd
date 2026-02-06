@@ -2,10 +2,6 @@ extends Node
 ## Character Registry - Manages all character presets
 ## Use as Autoload singleton (CharacterRegistry)
 
-const GameCharacterScript = preload("res://scripts/characters/game_character.gd")
-const CharacterPresetScript = preload("res://scripts/resources/character_preset.gd")
-const CharAnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
-
 ## Shared animation library source (GLB with character and all animations)
 const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
 var _animation_library: AnimationLibrary = null
@@ -46,7 +42,7 @@ func _ready() -> void:
 	_load_presets_from_list()
 
 func _init_team_arrays() -> void:
-	for team in GameCharacterScript.Team.values():
+	for team in GameCharacter.Team.values():
 		_by_team[team] = []
 
 ## Load shared animation library from blend file
@@ -87,7 +83,7 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 func _load_presets_from_list() -> void:
 	for path in PRESET_FILES:
 		if ResourceLoader.exists(path):
-			var preset := load(path) as CharacterPresetScript
+			var preset := load(path) as CharacterPreset
 			if preset:
 				register(preset)
 		else:
@@ -98,7 +94,7 @@ func _load_presets_from_list() -> void:
 # ============================================
 
 ## Register a preset
-func register(preset: CharacterPresetScript) -> void:
+func register(preset: CharacterPreset) -> void:
 	if preset.id.is_empty():
 		push_warning("CharacterRegistry: Cannot register preset with empty ID")
 		return
@@ -115,7 +111,7 @@ func unregister(id: String) -> void:
 	if not _presets.has(id):
 		return
 
-	var preset: CharacterPresetScript = _presets[id]
+	var preset: CharacterPreset = _presets[id]
 	_by_team[preset.team].erase(preset)
 	_presets.erase(id)
 
@@ -124,7 +120,7 @@ func unregister(id: String) -> void:
 # ============================================
 
 ## Get preset by ID
-func get_preset(id: String) -> CharacterPresetScript:
+func get_preset(id: String) -> CharacterPreset:
 	return _presets.get(id)
 
 ## Check if preset exists
@@ -136,16 +132,16 @@ func get_all() -> Array:
 	return _presets.values()
 
 ## Get presets by team
-func get_by_team(team: GameCharacterScript.Team) -> Array:
+func get_by_team(team: GameCharacter.Team) -> Array:
 	return _by_team.get(team, [])
 
 ## Get all Terrorist presets
 func get_terrorists() -> Array:
-	return get_by_team(GameCharacterScript.Team.TERRORIST)
+	return get_by_team(GameCharacter.Team.TERRORIST)
 
 ## Get all Counter-Terrorist presets
 func get_counter_terrorists() -> Array:
-	return get_by_team(GameCharacterScript.Team.COUNTER_TERRORIST)
+	return get_by_team(GameCharacter.Team.COUNTER_TERRORIST)
 
 # ============================================
 # Factory API
@@ -162,7 +158,7 @@ func create_character(preset_id: String, spawn_position: Vector3 = Vector3.ZERO)
 	return create_character_from_preset(preset, spawn_position)
 
 ## Create a GameCharacter instance from preset object
-func create_character_from_preset(preset: CharacterPresetScript, spawn_position: Vector3 = Vector3.ZERO) -> Node:
+func create_character_from_preset(preset: CharacterPreset, spawn_position: Vector3 = Vector3.ZERO) -> Node:
 	if not preset.model_scene:
 		push_error("CharacterRegistry: Preset has no model_scene: %s" % preset.id)
 		return null
@@ -171,7 +167,7 @@ func create_character_from_preset(preset: CharacterPresetScript, spawn_position:
 	var model := preset.model_scene.instantiate()
 
 	# Create GameCharacter as parent
-	var character := GameCharacterScript.new()
+	var character := GameCharacter.new()
 	character.name = preset.id
 	character.character_preset_id = preset.id
 	character.max_health = preset.max_health
@@ -220,7 +216,7 @@ func create_character_from_preset(preset: CharacterPresetScript, spawn_position:
 
 	# Setup animation controller (deferred until added to scene tree)
 	# Speed settings are defined in CharacterAnimationController defaults
-	var anim_ctrl := CharAnimCtrl.new()
+	var anim_ctrl := CharacterAnimationController.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 

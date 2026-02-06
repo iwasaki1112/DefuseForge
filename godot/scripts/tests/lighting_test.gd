@@ -10,9 +10,6 @@ extends Node3D
 ## - マップの選択とロード
 ## - キャラクターの配置
 
-const GameCharacterScript = preload("res://scripts/characters/game_character.gd")
-const CharAnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
-
 # UI References - Directional Light
 @onready var light_energy_slider: HSlider = $UI/Panel/VBox/LightEnergy/HSlider
 @onready var light_energy_spin: SpinBox = $UI/Panel/VBox/LightEnergy/SpinBox
@@ -186,7 +183,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 		return null
 
 	var model = preset.model_scene.instantiate()
-	var character := GameCharacterScript.new()
+	var character := GameCharacter.new()
 	character.name = preset.id
 	character.character_preset_id = preset.id
 	character.position = spawn_pos
@@ -208,7 +205,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 		anim_player.add_animation_library("", _animation_library)
 
 	# Setup animation controller
-	var anim_ctrl := CharAnimCtrl.new()
+	var anim_ctrl := CharacterAnimationController.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 

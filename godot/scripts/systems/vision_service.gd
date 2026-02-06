@@ -3,8 +3,6 @@ extends Node
 ## 視界/FoW/敵可視性の統合サービス
 ## Light2D + LightOccluder2D方式のFoWシステムを管理
 
-const FogOfWarSystemScript = preload("res://scripts/systems/fog_of_war_system.gd")
-const EnemyVisibilitySystemScript = preload("res://scripts/systems/enemy_visibility_system.gd")
 
 var fog_of_war_system: Node3D = null
 var enemy_visibility_system: Node = null
@@ -138,8 +136,7 @@ func is_debug_draw_enabled() -> bool:
 
 func _setup_fog_of_war(map_size: Vector2) -> void:
 	if Debug.enabled: print("[FOW] Creating FogOfWarSystem with map_size: ", map_size)
-	fog_of_war_system = Node3D.new()
-	fog_of_war_system.set_script(FogOfWarSystemScript)
+	fog_of_war_system = FogOfWarSystem.new()
 	fog_of_war_system.name = "FogOfWarSystem"
 	fog_of_war_system.map_size = map_size
 	if Debug.enabled: print("[FOW] FogOfWarSystem.map_size after set: ", fog_of_war_system.map_size)
@@ -148,8 +145,7 @@ func _setup_fog_of_war(map_size: Vector2) -> void:
 
 
 func _setup_enemy_visibility_system() -> void:
-	enemy_visibility_system = Node.new()
-	enemy_visibility_system.set_script(EnemyVisibilitySystemScript)
+	enemy_visibility_system = EnemyVisibilitySystem.new()
 	enemy_visibility_system.name = "EnemyVisibilitySystem"
 	add_child(enemy_visibility_system)
 	enemy_visibility_system.setup(fog_of_war_system)

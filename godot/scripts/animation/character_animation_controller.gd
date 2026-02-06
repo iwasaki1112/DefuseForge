@@ -74,8 +74,6 @@ var _fire_cooldown := 0.0
 
 # Internal nodes
 
-const RecoilModifierScript = preload("res://scripts/modifiers/recoil_modifier.gd")
-const LeanModifierScript = preload("res://scripts/modifiers/lean_modifier.gd")
 
 #region Public API
 
@@ -450,13 +448,13 @@ func _find_skeleton(node: Node) -> Skeleton3D:
 	return null
 
 func _setup_recoil_modifier() -> void:
-	_recoil_modifier = RecoilModifierScript.new()
+	_recoil_modifier = RecoilModifier.new()
 	_recoil_modifier.spine_bone_name = spine_bone
 	_recoil_modifier.active = true
 	_skeleton.add_child(_recoil_modifier)
 
 func _setup_lean_modifier() -> void:
-	_lean_modifier = LeanModifierScript.new()
+	_lean_modifier = LeanModifier.new()
 	_lean_modifier.spine_bone_name = spine_bone
 	_lean_modifier.recovery_speed = lean_speed
 	_skeleton.add_child(_lean_modifier)
