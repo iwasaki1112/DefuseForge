@@ -1,6 +1,6 @@
 ---
 name: action-system
-description: アクションシステム変更ガイド
+description: アクションシステム・ポイントシステムの変更ガイド
 allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
 ---
 
