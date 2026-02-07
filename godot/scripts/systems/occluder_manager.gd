@@ -23,6 +23,9 @@ var _scale_factor: float = 1.0
 ## 壁コリジョンレイヤー
 const WALL_COLLISION_LAYER: int = 2
 
+## この高さ未満の障害物はFoW遮蔽しない（目線=1.5mより低い障害物は見越せる）
+const MIN_OCCLUSION_HEIGHT: float = 1.2
+
 
 ## セットアップ
 ## @param viewport: 描画先のSubViewport
@@ -141,6 +144,35 @@ func set_texture_resolution(resolution: int) -> void:
 # 内部メソッド - オクルーダー抽出
 # ============================================
 
+## CollisionShape3Dのワールド空間での上端Y座標を取得
+func _get_obstacle_world_height(collision_shape: CollisionShape3D) -> float:
+	var shape := collision_shape.shape
+	var t := collision_shape.global_transform
+
+	if shape is BoxShape3D:
+		return t.origin.y + shape.size.y / 2.0
+	elif shape is CylinderShape3D:
+		return t.origin.y + shape.height / 2.0
+	elif shape is ConvexPolygonShape3D:
+		var max_y := -INF
+		for point in shape.points:
+			var world_y: float = (t * point).y
+			if world_y > max_y:
+				max_y = world_y
+		return max_y
+
+	# 未対応のシェイプはデフォルトで高いとみなす（遮蔽する）
+	return INF
+
+
+## MeshInstance3DのAABBからワールド空間での上端Y座標を取得
+func _get_mesh_world_height(mesh_instance: MeshInstance3D) -> float:
+	var aabb := mesh_instance.get_aabb()
+	var t := mesh_instance.global_transform
+	var local_top := Vector3(0, aabb.position.y + aabb.size.y, 0)
+	return (t * local_top).y
+
+
 func _extract_occluders_recursive(node: Node) -> void:
 	var node_name_lower := node.name.to_lower()
 	var parent: Node = node.get_parent()
@@ -155,6 +187,11 @@ func _extract_occluders_recursive(node: Node) -> void:
 		if node is StaticBody3D:
 			for child in node.get_children():
 				if child is CollisionShape3D:
+					# 高さフィルター: 低い障害物はFoW遮蔽しない
+					var height := _get_obstacle_world_height(child)
+					if height < MIN_OCCLUSION_HEIGHT:
+						if Debug.enabled: print("[FOW] Skip low obstacle: ", node.name, " (height=", snapped(height, 0.01), " < min=", MIN_OCCLUSION_HEIGHT, ")")
+						continue
 					var occluder := _create_occluder_from_shape(child)
 					if occluder:
 						_occluder_parent.add_child(occluder)
@@ -166,14 +203,19 @@ func _extract_occluders_recursive(node: Node) -> void:
 
 		# MeshInstance3Dの場合、AABBからオクルーダーを生成
 		elif node is MeshInstance3D:
-			var occluder := _create_occluder_from_mesh(node as MeshInstance3D)
-			if occluder:
-				_occluder_parent.add_child(occluder)
-				if is_door:
-					var door_node: Node = node if node_name_lower.begins_with("door_") else parent
-					_door_occluders[door_node] = occluder
-				else:
-					_wall_occluders.append(occluder)
+			# 高さフィルター: 低い障害物はFoW遮蔽しない
+			var height := _get_mesh_world_height(node as MeshInstance3D)
+			if height < MIN_OCCLUSION_HEIGHT:
+				if Debug.enabled: print("[FOW] Skip low obstacle: ", node.name, " (height=", snapped(height, 0.01), " < min=", MIN_OCCLUSION_HEIGHT, ")")
+			else:
+				var occluder := _create_occluder_from_mesh(node as MeshInstance3D)
+				if occluder:
+					_occluder_parent.add_child(occluder)
+					if is_door:
+						var door_node: Node = node if node_name_lower.begins_with("door_") else parent
+						_door_occluders[door_node] = occluder
+					else:
+						_wall_occluders.append(occluder)
 
 	# 子ノードを再帰的に処理
 	for child in node.get_children():
