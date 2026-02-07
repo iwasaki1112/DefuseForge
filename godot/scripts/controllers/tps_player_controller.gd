@@ -17,15 +17,11 @@ extends Node
 # ============================================
 # Constants
 # ============================================
-const CAMERA_HEIGHT := 10.0
+const CAMERA_HEIGHT := 14.0
 const CAMERA_PITCH_DEG := -50.0
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
 const GROUND_Y := 0.0
-
-# Movement smoothing
-const ACCEL_RATE := 8.0   # 加速（0→最高速の立ち上がり）
-const DECEL_RATE := 10.0  # 減速（入力なし時のブレーキ）
 
 # Joystick
 const STICK_RADIUS := 80.0
@@ -47,9 +43,8 @@ var _stick_mouse_active: bool = false
 var _stick_input: Vector2 = Vector2.ZERO
 var _stick_center: Vector2 = Vector2.ZERO
 
-# Movement state
-var _current_velocity: Vector3 = Vector3.ZERO  # スムージング済み速度
-var _last_move_dir: Vector3 = Vector3.ZERO     # 向き用キャッシュ
+# Movement direction cache (for mobile facing)
+var _last_move_dir: Vector3 = Vector3.ZERO
 
 
 # ============================================
@@ -118,36 +113,20 @@ func _handle_movement(delta: float) -> void:
 	if input_dir.length() > 1.0:
 		input_dir = input_dir.normalized()
 
-	# 目標速度を計算
-	var target_velocity := Vector3.ZERO
+	var move_dir := Vector3.ZERO
 	if input_dir.length() > 0.01:
 		input_dir = input_dir.normalized()
-		var move_dir := Vector3(input_dir.x, 0, input_dir.y).normalized()
-		var speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
-		target_velocity = move_dir * speed
+		move_dir = Vector3(input_dir.x, 0, input_dir.y).normalized()
 
-	# 加減速スムージング
-	var rate := ACCEL_RATE if target_velocity.length_squared() > 0.01 else DECEL_RATE
-	_current_velocity = _current_velocity.lerp(target_velocity, rate * delta)
+	_last_move_dir = move_dir
 
-	# 十分遅くなったら完全停止
-	if _current_velocity.length_squared() < 0.001:
-		_current_velocity = Vector3.ZERO
-
-	_character.velocity = _current_velocity
+	var speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
+	_character.velocity = move_dir * speed
 	_character.move_and_slide()
-
-	# アニメーション更新（正規化した移動方向を渡す）
-	var anim_move_dir := _current_velocity.normalized() if _current_velocity.length_squared() > 0.01 else Vector3.ZERO
-	_last_move_dir = anim_move_dir
 
 	if _character.anim_ctrl:
 		var aim_dir := _character.get_facing_direction()
-		# movement_blendをスムーズにするため実際の速度比を渡す
-		var max_speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
-		var speed_ratio := _current_velocity.length() / max_speed if max_speed > 0.01 else 0.0
-		var scaled_move_dir := anim_move_dir * clampf(speed_ratio, 0.0, 1.0)
-		_character.anim_ctrl.update_animation(scaled_move_dir, aim_dir, false, delta)
+		_character.anim_ctrl.update_animation(move_dir, aim_dir, false, delta)
 
 
 # ============================================

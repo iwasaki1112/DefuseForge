@@ -54,14 +54,11 @@ var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 
-# Animation visual speeds at 1x playback (1-second/30-frame animations at 30fps)
-# Different directions have different stride lengths
-# Rifle walk speeds
-const ANIM_SPEED_FORWARD := 2.0   # Forward/backward: large strides
-const ANIM_SPEED_STRAFE := 1.2    # Left/right: small strides
-# Pistol walk speeds (shorter strides than rifle)
-const PISTOL_ANIM_SPEED_FORWARD := 1.4
-const PISTOL_ANIM_SPEED_STRAFE := 0.85
+# Animation visual speeds at 1x playback
+# ピストル歩行はライフル歩行と同じアニメーションを使用するため共通定数
+const ANIM_SPEED_FORWARD := 2.0
+const ANIM_SPEED_BACKWARD := 1.3   # 後退は足交差で遅い
+const ANIM_SPEED_STRAFE := 1.2
 
 # Death animation names
 const DEATH_ANIM := GameConstants.ANIM_DEATH
@@ -86,7 +83,6 @@ var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0
 var _weapon_blend := 0.0
 var _fire_cooldown := 0.0
-var _walk_time_scale := 1.0  # 移動速度に連動するアニメーション再生速度
 
 # Internal nodes
 
@@ -195,27 +191,22 @@ func get_current_speed() -> float:
 	# Calculate direction-based speed from current blend position
 	return _get_directional_anim_speed()
 
-## Calculate animation visual speed based on blend direction and weapon type
+## Calculate animation visual speed based on blend direction
+## _input_dir: y<0 = forward, y>0 = backward, x = strafe
 func _get_directional_anim_speed() -> float:
-	# Select speed constants based on weapon type
-	var fwd_speed := PISTOL_ANIM_SPEED_FORWARD if _weapon == Weapon.PISTOL else ANIM_SPEED_FORWARD
-	var strafe_speed := PISTOL_ANIM_SPEED_STRAFE if _weapon == Weapon.PISTOL else ANIM_SPEED_STRAFE
-
 	if _input_dir.length() < 0.01:
-		return fwd_speed  # Default when idle
+		return ANIM_SPEED_FORWARD  # Default when idle
 
-	# Normalize input direction
 	var dir := _input_dir.normalized()
 
-	# Calculate weights for forward/backward vs strafe
-	var forward_weight := absf(dir.y)  # Y = forward/backward
-	var strafe_weight := absf(dir.x)   # X = left/right
+	# 前進(y<0)と後退(y>0)を区別
+	var longitudinal_speed := ANIM_SPEED_BACKWARD if dir.y > 0.0 else ANIM_SPEED_FORWARD
+	var longitudinal_weight := absf(dir.y)
+	var strafe_weight := absf(dir.x)
 
-	# Blend between forward and strafe speeds based on direction
-	var speed := fwd_speed * forward_weight + strafe_speed * strafe_weight
+	var speed := longitudinal_speed * longitudinal_weight + ANIM_SPEED_STRAFE * strafe_weight
 
-	# Normalize for diagonal (weights sum to ~1.414 for diagonal)
-	var total_weight := forward_weight + strafe_weight
+	var total_weight := longitudinal_weight + strafe_weight
 	if total_weight > 0.01:
 		speed /= total_weight
 
@@ -828,8 +819,7 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	var move_dir := movement_direction
 	move_dir.y = 0
 
-	var move_len := move_dir.length()
-	if move_len > 0.1:
+	if move_dir.length() > 0.1:
 		var char_forward := _model.global_transform.basis.z
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 		var target_blend := Vector2(-sin(angle), -cos(angle))
@@ -839,16 +829,11 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		var blend_speed := 12.0  # Higher = faster response
 		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
-
-		# TimeScaleを速度比に連動（0.3下限で極端なスロー再生を防ぐ）
-		var target_scale := clampf(move_len, 0.3, 1.0)
-		_walk_time_scale = lerpf(_walk_time_scale, target_scale, 1.0 - exp(-10.0 * delta))
 	else:
 		# Quick fade to idle when stopped
 		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
-		_walk_time_scale = lerpf(_walk_time_scale, 1.0, 1.0 - exp(-6.0 * delta))
 
 func _update_animation_tree() -> void:
 	if not _anim_tree or not _anim_tree.active:
@@ -859,8 +844,8 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 
-	# TimeScale を移動速度比に連動（加減速時に足のテンポが追従）
-	_anim_tree.set("parameters/WalkSpeed/scale", _walk_time_scale)
+	# TimeScale = 1.0（アニメーション速度と移動速度は定数で同期済み）
+	_anim_tree.set("parameters/WalkSpeed/scale", 1.0)
 
 	# Update blend amounts
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
