@@ -66,6 +66,6 @@ common/physics_interpolation=true
 
 renderer/rendering_method="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
-lights_and_shadows/directional_shadow/size=1024
-lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=2
 scaling_3d/scale=0.75

@@ -30,8 +30,10 @@ MapBase.gd が自動検出してコリジョンレイヤーとFoWオクルーダ
 | プレフィックス | コリジョンレイヤー | FoWオクルーダー | 用途 |
 |-------------|-------------------|----------------|------|
 | `Ground_` | Layer 1（床） | マップサイズ計算に使用 | 床、地面 |
-| `Wall_` | Layer 2（壁） | **視界を遮蔽する** | 壁、家具、フェンス等のカバー |
+| `Wall_` | Layer 2（壁） | **視界を遮蔽する**（高さ≥1.2m） | 壁、家具、フェンス等のカバー |
 | `Door_` | Layer 2 + doorsグループ | **視界を遮蔽する** | 開閉するドア |
+| `Glass_` | デフォルト（Layer 1） | **遮蔽しない** | 窓ガラス（視界は通る、移動はブロック） |
+| `Frame_` | デフォルト（Layer 1） | **遮蔽しない** | 窓上部の壁帯（構造材） |
 | `Outdoor_` | 設定なし | **遮蔽しない** | 装飾（樹冠、花壇等） |
 | `spawn_ct_*` | — | — | CTスポーン位置（Empty） |
 | `spawn_t_*` | — | — | Tスポーン位置（Empty） |
@@ -52,7 +54,10 @@ Ground_Garden-col       # 庭の地面（コリジョン付き）
 Ground_Path_Main        # 歩道（装飾、コリジョン不要）
 Wall_North-col          # 外壁（コリジョン+FoW遮蔽）
 Wall_Desk_O1-col        # デスク（カバー用コリジョン+FoW遮蔽）
-Wall_Hedge_South-col    # 生垣（カバー用）
+Wall_Hedge_South-col    # 生垣（カバー用、高さ0.8m→FoW遮蔽スキップ）
+Wall_South_Pier0-col    # 窓間の柱（FoW遮蔽）
+Glass_South_Win0-col    # 窓ガラス（視界透過、移動ブロック）
+Frame_South_Header-col  # 窓上部の壁帯（FoW遮蔽なし）
 Outdoor_Tree_Canopy     # 木の葉（装飾のみ）
 spawn_ct_1              # CTスポーン（Empty）
 spawn_t_1               # Tスポーン（Empty）
@@ -60,32 +65,39 @@ spawn_t_1               # Tスポーン（Empty）
 
 ## 重要な教訓（Must Follow）
 
-### 1. 地面は必ず厚みのあるBoxにする
+### 1. マップは必ず原点(0,0)中心に配置する
+
+FoWシステムがマップを原点中心で計算するため、Ground_全体のバウンディングボックスの中心がBlenderの原点(0,0)になるようにする。
+例: 24×24mのマップなら X[-12,12] × Y[-12,12] に収まるように配置。
+
+### 2. 地面は必ず厚みのあるBoxにする
 
 **NG**: `primitive_plane_add`（厚さ0） → コリジョン生成失敗 → キャラクター落下
 **OK**: `primitive_cube_add` で厚さ0.1m程度のBoxを使用
 
-### 2. 全歩行可能エリアにコリジョン付き地面が必要
+### 3. 全歩行可能エリアにコリジョン付き地面が必要
 
 - 建物内: `Ground_Floor-col`
 - 庭全体: `Ground_Garden-col`（全エリアをカバーする大きなBox）
 - 歩道やラインは装飾のみ（庭の地面のコリジョンがカバー）
 
-### 3. ドア開口部にリンテル壁を置かない
+### 4. ドア開口部にリンテル壁を置かない
 
 FoWが2D投影（Y軸無視）のため、リンテルがドア開口を塞いで視界が通らない。
 TopDown視点でドアの位置がわからなくなる。壁の上端まで完全に突き抜ける開口にすること。
 
-### 4. FoWオクルーダーはXZ平面投影（Y軸=高さは完全無視）
+### 5. FoWオクルーダーの高さフィルター
 
-`Wall_`プレフィックスのオブジェクトのAABBをXZ平面に投影して2D LightOccluder2Dとして登録する。
-Y座標（高さ）は一切考慮されないため、装飾用の高所オブジェクトに`Wall_`プレフィックスを使わないこと。
+`Wall_`プレフィックスのオブジェクトをXZ平面に投影して2D LightOccluder2Dとして登録する。
+**高さ1.2m未満の障害物はFoW遮蔽をスキップ**（`MIN_OCCLUSION_HEIGHT = 1.2`）。
+これにより低い障害物（0.8mの生垣等）は3Dレイキャストと同様にFoWでも視界が通る。
+装飾用の高所オブジェクトに`Wall_`プレフィックスを使わないこと。
 
-### 5. 天井（屋根）は不要
+### 6. 天井（屋根）は不要
 
 TopDownゲームのため、建物に天井を付けない。
 
-### 6. スポーンポイントの向き
+### 7. スポーンポイントの向き
 
 BlenderではZ軸回転でヨー設定。GLTF Y-up exportでGodot Y軸回転に自動変換される。
 
@@ -94,7 +106,7 @@ BlenderではZ軸回転でヨー設定。GLTF Y-up exportでGodot Y軸回転に�
 empty.rotation_euler = (0, 0, math.radians(180))  # 建物方向を向く
 ```
 
-### 7. ライト・カメラはマップに含めない
+### 8. ライト・カメラはマップに含めない
 
 GameScreenの`EnvironmentSetup`が自動適用するため不要。
 
@@ -147,7 +159,37 @@ create_wall("Wall_South_Right-col", door_x + DOOR_WIDTH, 0, remaining, WALL_THIC
 # リンテルは作らない！
 ```
 
-### Step 4: スポーンポイント
+### Step 4: 窓の追加（任意）
+
+外壁に窓を追加する場合、壁を分割して窓構造を作成する。
+
+**窓の構成要素:**
+- `Wall_*_Sill-col` — 窓台（Z: 0→0.8m）。高さフィルターでFoW遮蔽スキップ
+- `Wall_*_Pier*-col` — 窓間の柱（Z: 0.8→2.0m）。FoW遮蔽あり
+- `Frame_*_Header-col` — 窓上部の壁帯（Z: 2.0→2.5m）。`Frame_`プレフィックスでFoW遮蔽なし
+- `Glass_*_Win*-col` — ガラス面（薄いBox 0.02m厚）。`Glass_`プレフィックスでFoW遮蔽なし
+
+**窓サイズの目安:** 幅1.5m × 高1.2m、窓台高0.8m
+
+**重要ポイント:**
+- Header（窓上壁帯）は `Wall_` ではなく `Frame_` プレフィックス。全幅に渡るため `Wall_` だと窓部分もFoWで遮蔽されてしまう
+- Sill（窓台）は `Wall_` プレフィックスでOK。高さ0.8m < 1.2m なので高さフィルターでスキップされる
+- Glass は `-col` サフィックスで移動ブロック。`Glass_` プレフィックスでFoW/3D視界は透過
+
+```python
+# 窓付き壁の作成例（南壁）
+# 1. 元の壁を削除
+# 2. 窓台（全幅、Wall_プレフィックス）
+create_box("Wall_South_Sill-col", (0,0,0), (9.5, 0.15, 0.8))
+# 3. 窓上壁帯（全幅、Frame_プレフィックス）
+create_box("Frame_South_Header-col", (0,0,2.0), (9.5, 0.15, 2.5))
+# 4. 柱（窓間、Wall_プレフィックス）
+create_box("Wall_South_Pier0-col", (0,0,0.8), (0.75, 0.15, 2.0))
+# 5. ガラス（薄いBox、Glass_プレフィックス）
+create_box("Glass_South_Win0-col", (0.75, 0.065, 0.8), (2.25, 0.085, 2.0))
+```
+
+### Step 5: スポーンポイント（旧Step 4）
 
 ```python
 import math
@@ -166,7 +208,7 @@ create_spawn("spawn_ct_1", 10, -5, 0, 180)
 create_spawn("spawn_t_1", 3, 3, 0, 0)
 ```
 
-### Step 5: GLTFエクスポート
+### Step 6: GLTFエクスポート
 
 ```python
 bpy.ops.export_scene.gltf(
@@ -248,6 +290,9 @@ const PRESET_FILES := [
 | マップ選択に表示されない | MapRegistryのPRESET_FILESに未登録 | パスを追加 |
 | FoWのマップサイズがおかしい | `Ground_`プレフィックスの地面が不足 | 全歩行エリアに`Ground_`付きBoxを配置 |
 | スポーンの向きが逆 | BlenderのZ回転が未設定 | Z回転180度=建物方向を向く |
+| FoWの範囲がマップとズレている | マップが原点中心に配置されていない | Blenderで全オブジェクトを原点中心に移動 |
+| 窓越しにFoW視界が通らない | Header が `Wall_` プレフィックス | `Frame_` にリネーム |
+| 低い障害物がFoWで見えない | 高さ < 1.2m だが `Wall_` が付いている | 正常動作。高さフィルターでスキップされる |
 
 ## 関連ファイル
 
