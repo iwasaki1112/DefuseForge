@@ -71,6 +71,7 @@ var _confirmed_path_longpress_timer: float = 0.0
 var _confirmed_path_longpress_threshold: float = 0.5
 var _confirmed_path_longpress_screen_pos: Vector2 = Vector2.ZERO
 var _confirmed_path_longpress_ground_pos: Vector3 = Vector3.ZERO
+var _confirmed_path_longpress_is_touch: bool = false
 var _confirmed_path_tap_path_data: Dictionary = {}
 
 #endregion
@@ -121,10 +122,10 @@ func _setup_progress_ring() -> void:
 	var ui_layer = game_manager.get_ui_layer()
 	if not ui_layer:
 		return
-	_progress_ring = LongPressProgressRing.create(ui_layer, 25.0)
-	_progress_ring.ring_width = 3.0
+	_progress_ring = LongPressProgressRing.create(ui_layer, 50.0)
+	_progress_ring.ring_width = 6.0
 	_progress_ring.ring_color = Color(1.0, 1.0, 1.0, 0.9)
-	_progress_ring.background_color = Color(0.2, 0.2, 0.2, 0.4)
+	_progress_ring.background_color = Color(0.3, 0.3, 0.3, 0.5)
 
 	# パス先端ドラッグシグナルを接続
 	var path_drawer = _get_path_drawer()
@@ -856,6 +857,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 		_confirmed_path_longpress_timer = 0.0
 		_confirmed_path_longpress_screen_pos = screen_pos
 		_confirmed_path_longpress_ground_pos = ground_pos
+		_confirmed_path_longpress_is_touch = is_touch
 		_confirmed_path_tap_path_data = result
 		return true
 
@@ -878,16 +880,21 @@ func _start_vision_mode_on_confirmed_path() -> void:
 	_confirmed_path_longpress_pending = false
 	_confirmed_path_longpress_timer = 0.0
 
-	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting")
+	# 初回検出と同じ閾値を使用（モバイルでは0.5m、PCでは0.15m）
+	var threshold := GameConstants.PATH_CLICK_THRESHOLD_MOBILE if _confirmed_path_longpress_is_touch else GameConstants.PATH_CLICK_THRESHOLD
+
+	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting, threshold=%.2f" % threshold)
 	if game_manager.try_start_vision_point_on_confirmed_path(
 		_confirmed_path_longpress_screen_pos,
-		_confirmed_path_longpress_ground_pos
+		_confirmed_path_longpress_ground_pos,
+		threshold
 	):
 		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: success")
 		_path_endpoint_extension_pending = false
 		_path_endpoint_extension_started = false
 	else:
 		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: failed")
+		_reset_confirmed_path_longpress()
 
 
 func _reset_confirmed_path_longpress() -> void:
@@ -895,6 +902,7 @@ func _reset_confirmed_path_longpress() -> void:
 	_confirmed_path_longpress_timer = 0.0
 	_confirmed_path_longpress_screen_pos = Vector2.ZERO
 	_confirmed_path_longpress_ground_pos = Vector3.ZERO
+	_confirmed_path_longpress_is_touch = false
 	_confirmed_path_tap_path_data = {}
 	_hide_progress_ring()
 

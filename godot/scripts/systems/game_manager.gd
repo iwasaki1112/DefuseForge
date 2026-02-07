@@ -374,7 +374,7 @@ func try_start_path_continuation_at_position(screen_pos: Vector2) -> bool:
 ## @param screen_pos: 画面座標
 ## @param ground_pos: 地面座標（既に計算済みの場合）
 ## @return: Visionポイント配置モードを開始した場合true
-func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool:
+func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> bool:
 	if not path_execution_manager or not camera:
 		return false
 
@@ -390,7 +390,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		target_ground_pos = intersect as Vector3
 
 	# 確定済みパス上の点を検索（先端は除外 - 先端はパス延長用）
-	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
+	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, threshold)
 	if path_result.is_empty():
 		return false
 
