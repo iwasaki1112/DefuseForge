@@ -56,9 +56,12 @@ var _remote_last_fire_state := false  # リモート同期用: 前回のfire状�
 
 # Animation visual speeds at 1x playback (1-second/30-frame animations at 30fps)
 # Different directions have different stride lengths
+# Rifle walk speeds
 const ANIM_SPEED_FORWARD := 2.0   # Forward/backward: large strides
 const ANIM_SPEED_STRAFE := 1.2    # Left/right: small strides
-const ANIM_SPEED_DIAGONAL := 1.6  # Diagonal: medium strides
+# Pistol walk speeds (shorter strides than rifle)
+const PISTOL_ANIM_SPEED_FORWARD := 1.4
+const PISTOL_ANIM_SPEED_STRAFE := 0.85
 
 # Death animation names
 const DEATH_ANIM := GameConstants.ANIM_DEATH
@@ -191,10 +194,14 @@ func get_current_speed() -> float:
 	# Calculate direction-based speed from current blend position
 	return _get_directional_anim_speed()
 
-## Calculate animation visual speed based on blend direction
+## Calculate animation visual speed based on blend direction and weapon type
 func _get_directional_anim_speed() -> float:
+	# Select speed constants based on weapon type
+	var fwd_speed := PISTOL_ANIM_SPEED_FORWARD if _weapon == Weapon.PISTOL else ANIM_SPEED_FORWARD
+	var strafe_speed := PISTOL_ANIM_SPEED_STRAFE if _weapon == Weapon.PISTOL else ANIM_SPEED_STRAFE
+
 	if _input_dir.length() < 0.01:
-		return ANIM_SPEED_FORWARD  # Default when idle
+		return fwd_speed  # Default when idle
 
 	# Normalize input direction
 	var dir := _input_dir.normalized()
@@ -204,10 +211,7 @@ func _get_directional_anim_speed() -> float:
 	var strafe_weight := absf(dir.x)   # X = left/right
 
 	# Blend between forward and strafe speeds based on direction
-	# Pure forward/backward: forward_weight=1, strafe_weight=0
-	# Pure strafe: forward_weight=0, strafe_weight=1
-	# Diagonal: both ~0.707
-	var speed := ANIM_SPEED_FORWARD * forward_weight + ANIM_SPEED_STRAFE * strafe_weight
+	var speed := fwd_speed * forward_weight + strafe_speed * strafe_weight
 
 	# Normalize for diagonal (weights sum to ~1.414 for diagonal)
 	var total_weight := forward_weight + strafe_weight
