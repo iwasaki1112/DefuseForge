@@ -24,6 +24,7 @@ const PRESET_DIR := "res://data/maps/"
 ## DirAccess does not work with res:// in exported .pck files
 const PRESET_FILES := [
 	"res://data/maps/home.tres",
+	"res://data/maps/office.tres",
 ]
 
 # ============================================

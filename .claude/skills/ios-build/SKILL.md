@@ -1,4 +1,10 @@
-# iOS Build Skill
+---
+name: ios-build
+description: iOS Build & Deploy
+allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
+---
+
+# iOS Build & Deploy
 
 iPhoneにゲームをビルド＆インストールする。Xcodeを開く必要なく完全自動化。
 
@@ -71,6 +77,10 @@ xcrun devicectl list devices
 
 ## トラブルシューティング
 
+### エラー: "This application does not support this kind of device"
+- **原因**: `targeted_device_family` の設定が間違っている
+- **解決**: `export_presets.cfg` で `application/targeted_device_family=0` に設定
+
 ### デバイスが見つからない
 
 ```bash
@@ -90,6 +100,11 @@ Xcode DerivedDataをクリア:
 ```bash
 rm -rf ~/Library/Developer/Xcode/DerivedData/RescueForge-*
 ```
+
+## 前提条件
+- Xcode がインストールされていること
+- 有効なプロビジョニングプロファイルが設定されていること
+- iPhoneがMacと接続されていること（USB or WiFi）
 
 ## 関連ファイル
 

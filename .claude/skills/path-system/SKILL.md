@@ -1,3 +1,9 @@
+---
+name: path-system
+description: パスシステム変更ガイド
+allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
+---
+
 # パスシステム変更ガイド
 
 パス描画・実行システムに変更を加える際のガイド。

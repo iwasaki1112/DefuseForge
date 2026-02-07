@@ -1,3 +1,9 @@
+---
+name: rename-mixamo-rig
+description: Blenderで開いているMixamoリグのボーン名をRescueForgeプロジェクト用にリネームする
+allowed-tools: Bash(*)
+---
+
 # Mixamo Rig Rename Skill
 
 Blenderで開いているMixamoリグのボーン名をRescueForgeプロジェクト用にリネームする。

@@ -1,3 +1,9 @@
+---
+name: action-system
+description: アクションシステム変更ガイド
+allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
+---
+
 # アクションシステム変更ガイド
 
 Vision/Wait等のアクションポイントに変更を加える際のガイド。

@@ -1,3 +1,9 @@
+---
+name: character-system
+description: キャラクターシステム変更ガイド
+allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
+---
+
 # キャラクターシステム変更ガイド
 
 キャラクター管理・移動・視界システムに変更を加える際のガイド。
