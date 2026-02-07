@@ -315,10 +315,12 @@ func handle_path_mode_mouse_press(position: Vector2, viewport: Viewport) -> void
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
+		var _gc := clicked as GameCharacter
+		var is_dead = _gc and not _gc.is_alive
 		var is_following = game_manager.is_character_following_path(clicked)
-		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_dead=%s, is_following=%s" % [is_enemy, is_dead, is_following])
 
-		if not is_enemy:
+		if not is_enemy and not is_dead:
 			if is_following:
 				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
@@ -475,10 +477,12 @@ func handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer, vi
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
+		var _gc := clicked as GameCharacter
+		var is_dead = _gc and not _gc.is_alive
 		var is_following = game_manager.is_character_following_path(clicked)
-		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_dead=%s, is_following=%s" % [is_enemy, is_dead, is_following])
 
-		if not is_enemy:
+		if not is_enemy and not is_dead:
 			if is_following:
 				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
@@ -738,6 +742,10 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 	if not clicked:
 		return false
 	if PlayerState.is_enemy(clicked):
+		return false
+	# 死亡キャラクターはスキップ
+	var game_char := clicked as GameCharacter
+	if game_char and not game_char.is_alive:
 		return false
 
 	if game_manager.is_character_following_path(clicked):

@@ -200,6 +200,10 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 				# 敵キャラクターは無視
 				if PlayerState.is_enemy(clicked_character):
 					return false
+				# 死亡キャラクターは無視
+				var _gc := clicked_character as GameCharacter
+				if _gc and not _gc.is_alive:
+					return false
 				# 移動中キャラクターを選択したら、移動を停止してパスモード開始
 				if path_service and path_service.is_character_following_path(clicked_character):
 					path_service.cancel_path_following(clicked_character, true)

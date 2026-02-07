@@ -32,6 +32,11 @@ func add_to_selection(character: Node) -> void:
 	if selected_characters.has(character):
 		return
 
+	# 死亡キャラクターは選択不可
+	var game_char := character as GameCharacter
+	if game_char and not game_char.is_alive:
+		return
+
 	# 既存の選択を全て解除（シングルセレクトのみ）
 	for c in selected_characters.duplicate():
 		_remove_outline(c)
@@ -324,6 +329,8 @@ func add_to_selection_if_local(character: Node) -> bool:
 	var game_char := character as GameCharacter
 	if game_char and not game_char.is_local():
 		return false  # リモートキャラクターは選択不可
+	if game_char and not game_char.is_alive:
+		return false  # 死亡キャラクターは選択不可
 
 	add_to_selection(character)
 	return true
@@ -334,6 +341,8 @@ func toggle_selection_if_local(character: Node) -> bool:
 	var game_char := character as GameCharacter
 	if game_char and not game_char.is_local():
 		return false  # リモートキャラクターは選択不可
+	if game_char and not game_char.is_alive:
+		return false  # 死亡キャラクターは選択不可
 
 	toggle_selection(character)
 	return true

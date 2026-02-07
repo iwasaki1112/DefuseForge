@@ -293,31 +293,37 @@ func play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: boo
 	if _anim_tree:
 		_anim_tree.active = false
 
-	# 方向別アニメーション選択
-	var anim_name: String
-	match hit_direction:
-		HitDirection.FRONT:
-			anim_name = DEATH_ANIM_FORWARD
-		HitDirection.BACK:
-			anim_name = DEATH_ANIM_BACKWARD
-		HitDirection.RIGHT:
-			anim_name = DEATH_ANIM_RIGHT
-		HitDirection.LEFT:
-			# death_leftがないのでデフォルトにフォールバック
-			anim_name = DEATH_ANIM_FORWARD
-		_:
-			anim_name = DEATH_ANIM_FORWARD
+	# 方向別アニメーション候補から存在するものを選択
+	var anim_name := _pick_death_anim(hit_direction)
 
-	# Play death animation with fallback
-	if _anim_player.has_animation(anim_name):
+	if not anim_name.is_empty() and _anim_player.has_animation(anim_name):
 		_anim_player.play(anim_name)
 		_anim_player.animation_finished.connect(_on_death_animation_finished, CONNECT_ONE_SHOT)
-	elif _anim_player.has_animation(DEATH_ANIM):
-		# フォールバック: デフォルトアニメーション
-		_anim_player.play(DEATH_ANIM)
-		_anim_player.animation_finished.connect(_on_death_animation_finished, CONNECT_ONE_SHOT)
 	else:
-		push_warning("CharacterAnimationController: Death animation not found: %s" % anim_name)
+		push_warning("CharacterAnimationController: Death animation not found for direction: %s" % hit_direction)
+
+
+## 被弾方向に応じた死亡アニメーション候補を優先度順に探索
+## 存在するアニメーションの中から最適なものを返す
+func _pick_death_anim(hit_direction: HitDirection) -> String:
+	var candidates: Array[String]
+	match hit_direction:
+		HitDirection.FRONT:
+			candidates = [DEATH_ANIM_FORWARD, DEATH_ANIM_BACKWARD, DEATH_ANIM_RIGHT]
+		HitDirection.BACK:
+			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+		HitDirection.RIGHT:
+			candidates = [DEATH_ANIM_RIGHT, DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD]
+		HitDirection.LEFT:
+			# death_leftがないので後方→前方→右の順でフォールバック
+			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+		_:
+			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+
+	for name in candidates:
+		if _anim_player.has_animation(name):
+			return name
+	return ""
 
 func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
