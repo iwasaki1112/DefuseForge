@@ -1,11 +1,11 @@
 extends Node3D
 ## TPS テストシーン コントローラー
 ##
-## WASD移動 + マウスエイムのテストシーン。
+## WASD移動 + マウスエイム + バーチャルスティックのテストシーン。
 ## TPSゲームへの移行に向けた検証用。
 ##
 ## 操作:
-## - WASD: 移動
+## - WASD / 左スティック: 移動
 ## - マウス: エイム（キャラクターがカーソル方向を向く）
 ## - 左クリック: 射撃
 ## - 画面左上プルダウン: 武器切り替え
@@ -25,6 +25,11 @@ const DEFAULT_WEAPON_ID := "glock"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
 
+# Joystick
+const STICK_RADIUS := 80.0
+const STICK_KNOB_RADIUS := 30.0
+const STICK_DEADZONE := 0.15
+
 # ============================================
 # References
 # ============================================
@@ -32,7 +37,15 @@ var _character: GameCharacter = null
 var _camera: Camera3D = null
 var _animation_library: AnimationLibrary = null
 var _weapon_option: OptionButton = null
-var _weapon_list: Array = []  # WeaponPreset array
+var _weapon_list: Array = []
+
+# Joystick state
+var _stick_base: Control = null
+var _stick_knob: Control = null
+var _stick_touch_idx: int = -1
+var _stick_mouse_active: bool = false
+var _stick_input: Vector2 = Vector2.ZERO
+var _stick_center: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -53,6 +66,10 @@ func _physics_process(delta: float) -> void:
 	_handle_aim()
 	_handle_fire()
 	_update_camera(delta)
+
+
+func _input(event: InputEvent) -> void:
+	_handle_stick_input(event)
 
 
 # ============================================
@@ -132,6 +149,7 @@ func _setup_ui() -> void:
 	canvas.name = "UI"
 	add_child(canvas)
 
+	# Weapon selector (top-left)
 	var hbox := HBoxContainer.new()
 	hbox.position = Vector2(10, 10)
 	canvas.add_child(hbox)
@@ -144,7 +162,6 @@ func _setup_ui() -> void:
 	_weapon_option.custom_minimum_size.x = 160
 	hbox.add_child(_weapon_option)
 
-	# Populate weapon list
 	_weapon_list = WeaponRegistry.get_all()
 	var default_idx := 0
 	for i in range(_weapon_list.size()):
@@ -155,6 +172,57 @@ func _setup_ui() -> void:
 	_weapon_option.selected = default_idx
 	_weapon_option.item_selected.connect(_on_weapon_selected)
 
+	# Virtual joystick (bottom-left)
+	_create_joystick(canvas)
+
+
+func _create_joystick(canvas: CanvasLayer) -> void:
+	var margin := 40.0
+	var base_size := STICK_RADIUS * 2
+
+	# Base circle (outer ring)
+	_stick_base = Control.new()
+	_stick_base.name = "StickBase"
+	_stick_base.custom_minimum_size = Vector2(base_size, base_size)
+	_stick_base.size = Vector2(base_size, base_size)
+	_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_stick_base.position = Vector2(margin, -margin - base_size)
+	_stick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(_stick_base)
+
+	# Draw base circle
+	var base_draw := ColorRect.new()
+	base_draw.name = "BaseBG"
+	base_draw.size = Vector2(base_size, base_size)
+	base_draw.color = Color(1, 1, 1, 0.0)
+	base_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stick_base.add_child(base_draw)
+
+	# Use a custom draw for circles
+	var base_circle := _create_circle_control(STICK_RADIUS, Color(0.5, 0.5, 0.5, 0.3))
+	base_circle.position = Vector2(STICK_RADIUS, STICK_RADIUS)
+	base_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stick_base.add_child(base_circle)
+
+	# Knob (inner circle)
+	_stick_knob = _create_circle_control(STICK_KNOB_RADIUS, Color(0.8, 0.8, 0.8, 0.6))
+	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
+	_stick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stick_base.add_child(_stick_knob)
+
+	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
+
+
+func _create_circle_control(radius: float, color: Color) -> Control:
+	var ctrl := Control.new()
+	ctrl.custom_minimum_size = Vector2(radius * 2, radius * 2)
+	ctrl.size = Vector2(radius * 2, radius * 2)
+	ctrl.pivot_offset = Vector2(radius, radius)
+	ctrl.draw.connect(func():
+		ctrl.draw_circle(Vector2.ZERO, radius, color)
+	)
+	return ctrl
+
 
 func _on_weapon_selected(idx: int) -> void:
 	if not _character or idx < 0 or idx >= _weapon_list.size():
@@ -164,15 +232,90 @@ func _on_weapon_selected(idx: int) -> void:
 
 
 # ============================================
+# Joystick Input
+# ============================================
+
+func _is_in_stick_area(pos: Vector2) -> bool:
+	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
+	return pos.distance_to(_stick_center) <= STICK_RADIUS * 1.5
+
+
+func _handle_stick_input(event: InputEvent) -> void:
+	# Touch input (mobile)
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			if _stick_touch_idx < 0 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.5:
+				_stick_touch_idx = touch.index
+				_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
+				_update_stick_position(touch.position)
+		else:
+			if touch.index == _stick_touch_idx:
+				_release_stick()
+
+	elif event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		if drag.index == _stick_touch_idx:
+			_update_stick_position(drag.position)
+
+	# Mouse input (PC)
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed and _is_in_stick_area(mb.position):
+				_stick_mouse_active = true
+				_update_stick_position(mb.position)
+			elif not mb.pressed and _stick_mouse_active:
+				_stick_mouse_active = false
+				_release_stick()
+
+	elif event is InputEventMouseMotion:
+		if _stick_mouse_active:
+			_update_stick_position(event.position)
+
+
+func _release_stick() -> void:
+	_stick_touch_idx = -1
+	_stick_input = Vector2.ZERO
+	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
+
+
+func _update_stick_position(touch_pos: Vector2) -> void:
+	var offset := touch_pos - _stick_center
+	var dist := offset.length()
+
+	if dist > STICK_RADIUS:
+		offset = offset.normalized() * STICK_RADIUS
+
+	# Update knob visual position
+	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS) + offset
+
+	# Calculate normalized input (-1 to 1)
+	var normalized := offset / STICK_RADIUS
+	if normalized.length() < STICK_DEADZONE:
+		_stick_input = Vector2.ZERO
+	else:
+		_stick_input = normalized
+
+
+# ============================================
 # Input Handling
 # ============================================
 
 func _handle_movement(delta: float) -> void:
+	# WASD input
 	var input_dir := Vector2.ZERO
 	input_dir.y -= Input.get_action_strength("move_forward")
 	input_dir.y += Input.get_action_strength("move_backward")
 	input_dir.x -= Input.get_action_strength("move_left")
 	input_dir.x += Input.get_action_strength("move_right")
+
+	# Combine with joystick (stick X = left/right, stick Y = up/down on screen)
+	input_dir.x += _stick_input.x
+	input_dir.y += _stick_input.y
+
+	if input_dir.length() > 1.0:
+		input_dir = input_dir.normalized()
 
 	var move_dir := Vector3.ZERO
 	if input_dir.length() > 0.01:
@@ -210,6 +353,8 @@ func _handle_aim() -> void:
 
 
 func _handle_fire() -> void:
+	if _stick_mouse_active:
+		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		if _character.anim_ctrl:
 			_character.anim_ctrl.fire()

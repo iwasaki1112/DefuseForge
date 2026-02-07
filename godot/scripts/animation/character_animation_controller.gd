@@ -171,6 +171,11 @@ func fire() -> void:
 	if _recoil_modifier:
 		_recoil_modifier.recovery_speed = recoil_recovery
 		_recoil_modifier.trigger_recoil(strength)
+
+	# Trigger shoot animation OneShot
+	if _anim_tree:
+		_anim_tree.set("parameters/ShootOneShot/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
 	fired.emit()
 
 ## Get current movement speed based on state and direction
@@ -618,7 +623,32 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("IdleMoveBlend", 0, "WeaponIdleBlend")
 	blend_tree.connect_node("IdleMoveBlend", 1, "WalkSpeed")
 
-	blend_tree.connect_node("output", 0, "IdleMoveBlend")
+	# Fire animation OneShot (weapon-based)
+	var rifle_shoot_anim := AnimationNodeAnimation.new()
+	rifle_shoot_anim.animation = "rifle_shoot" if _anim_player.has_animation("rifle_shoot") else ""
+
+	var pistol_shoot_anim := AnimationNodeAnimation.new()
+	pistol_shoot_anim.animation = "pistol_shoot" if _anim_player.has_animation("pistol_shoot") else ""
+
+	var shoot_weapon_blend := AnimationNodeBlend2.new()
+	var shoot_oneshot := AnimationNodeOneShot.new()
+	shoot_oneshot.fadein_time = 0.05
+	shoot_oneshot.fadeout_time = 0.15
+
+	# Upper body filter: shoot animation only affects spine and above
+	_apply_upper_body_filter(shoot_oneshot)
+
+	blend_tree.add_node("RifleShoot", rifle_shoot_anim, Vector2(100, 150))
+	blend_tree.add_node("PistolShoot", pistol_shoot_anim, Vector2(100, 200))
+	blend_tree.add_node("ShootWeaponBlend", shoot_weapon_blend, Vector2(200, 150))
+	blend_tree.add_node("ShootOneShot", shoot_oneshot, Vector2(300, 0))
+
+	blend_tree.connect_node("ShootWeaponBlend", 0, "RifleShoot")
+	blend_tree.connect_node("ShootWeaponBlend", 1, "PistolShoot")
+	blend_tree.connect_node("ShootOneShot", 0, "IdleMoveBlend")
+	blend_tree.connect_node("ShootOneShot", 1, "ShootWeaponBlend")
+
+	blend_tree.connect_node("output", 0, "ShootOneShot")
 
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
@@ -665,6 +695,51 @@ func _create_blend_space_with_fallback(anims: Dictionary) -> AnimationNodeBlendS
 			blend_space.add_blend_point(anim_node, pos)
 
 	return blend_space
+
+## Apply upper body bone filter to an AnimationNode (e.g. OneShot)
+## Only filtered bones will play the one-shot; unfiltered bones continue the base animation
+func _apply_upper_body_filter(node: AnimationNode) -> void:
+	if not _skeleton:
+		return
+
+	# Find the bone track path prefix from actual animation data
+	var prefix := _detect_bone_track_prefix()
+	if prefix.is_empty():
+		return
+
+	# Get all upper body bones (Spine and its descendants)
+	var spine_idx := _skeleton.find_bone("mixamorig_Spine")
+	if spine_idx < 0:
+		return
+
+	var upper_bones: Array[String] = []
+	_collect_descendant_bones(spine_idx, upper_bones)
+
+	# Enable filter and set paths
+	node.filter_enabled = true
+	for bone_name in upper_bones:
+		node.set_filter_path(NodePath("%s:%s" % [prefix, bone_name]), true)
+
+
+## Detect the skeleton path prefix from animation track data
+func _detect_bone_track_prefix() -> String:
+	var anim_lib = _anim_player.get_animation_library("")
+	for anim_name in anim_lib.get_animation_list():
+		var anim := anim_lib.get_animation(anim_name)
+		for i in range(anim.get_track_count()):
+			var path_str := str(anim.track_get_path(i))
+			var colon_idx := path_str.find(":mixamorig_")
+			if colon_idx >= 0:
+				return path_str.substr(0, colon_idx)
+	return ""
+
+
+## Recursively collect a bone and all its descendants
+func _collect_descendant_bones(bone_idx: int, result: Array[String]) -> void:
+	result.append(_skeleton.get_bone_name(bone_idx))
+	for child_idx in _skeleton.get_bone_children(bone_idx):
+		_collect_descendant_bones(child_idx, result)
+
 
 func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	if not _model:
@@ -742,5 +817,7 @@ func _update_animation_tree() -> void:
 	_anim_tree.set("parameters/IdleMoveBlend/blend_amount", _movement_blend)
 	# Weapon-based walk animation (0 = rifle, 1 = pistol)
 	_anim_tree.set("parameters/WalkWeaponBlend/blend_amount", _weapon_blend)
+	# Weapon-based shoot animation (0 = rifle, 1 = pistol)
+	_anim_tree.set("parameters/ShootWeaponBlend/blend_amount", _weapon_blend)
 
 #endregion
