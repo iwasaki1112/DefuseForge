@@ -1,20 +1,13 @@
 extends Node3D
 class_name GameScreen
-## ゲーム画面
+## ゲーム画面（TPS版）
 ##
-## TrainingモードとMultiplayerモードを統合。
+## TPS直接操作モード。プレイヤー1体をWASD/ジョイスティックで操作し、
+## FoW+自動攻撃で敵と戦う。
 ## GameModeProviderでモード固有の処理を分離。
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
-var GameHUDScene: PackedScene
-
-
-func _init() -> void:
-	GameHUDScene = load("res://scenes/ui/game_hud.tscn")
-
-## カメラ設定
-const CAMERA_HEIGHT := 25.0
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -29,14 +22,19 @@ var environment_setup: EnvironmentSetup = null
 ## モードプロバイダー
 var _mode_provider: GameModeProvider = null
 
-## UI要素
-var _hud: GameHUD = null
-var _round_hud: RoundHUD = null
-var _status_label: Label = null
+## TPS制御
+var _tps_controller: TPSPlayerController = null
+var _player_character: GameCharacter = null
 
-## カメラ移動
-var _camera_pan_controller: CameraPanController = null
-var _input_controller: InputController = null
+## TPS HUD要素
+var _weapon_option: OptionButton = null
+var _weapon_list: Array = []
+var _timer_label: Label = null
+var _money_label: Label = null
+var _debug_vision_btn: Button = null
+
+## UI要素
+var _round_hud: RoundHUD = null
 
 ## 設定
 var _map_id: String = ""
@@ -80,15 +78,10 @@ func _initialize_game() -> void:
 	_mode_provider.determine_player_team()
 	_load_map()
 	_spawn_characters()
-	_setup_hud()
+	_setup_tps_hud()
 	_setup_round_hud()
-	_register_character_markers()
-	_setup_status_ui()
-	_update_team_display()
 	_setup_money()
-	_setup_camera_for_player()
-	_setup_camera_pan()
-	_setup_input_controller()
+	_setup_tps_controller()
 
 	# 視界システムを初期化（FoW ON）
 	game_manager.set_vision_enabled(true)
@@ -124,22 +117,9 @@ func _setup_game_manager() -> void:
 
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-		# シグナル接続（SignalBus経由）
-		SignalBus.selection_changed.connect(_on_selection_changed)
-		SignalBus.path_confirmed.connect(_on_path_confirmed)
-		SignalBus.paths_execution_started.connect(_on_paths_execution_started)
-		SignalBus.all_paths_completed.connect(_on_all_paths_completed)
-		SignalBus.paths_cleared.connect(_on_paths_cleared)
-		SignalBus.path_mode_ended.connect(_on_path_mode_ended)
-		SignalBus.path_mode_cancelled.connect(_on_path_mode_cancelled)
+		# シグナル接続（TPS用: タイマーとラウンド終了のみ）
 		SignalBus.round_timer_updated.connect(_on_round_timer_updated)
 		SignalBus.round_ended.connect(_on_round_ended)
-		# 内部シグナル（GameManager直接）
-		game_manager.path_ready.connect(_on_path_ready)
-		# 同期待機状態変更シグナル（PCビルドでの型解決問題を回避するため動的アクセス）
-		var pem = game_manager.get("path_execution_manager")
-		if pem:
-			pem.sync_wait_state_changed.connect(_on_sync_wait_state_changed)
 
 
 func _load_map() -> void:
@@ -157,7 +137,7 @@ func _spawn_characters() -> void:
 	if _mode_provider.spawn_characters(self, game_manager):
 		return
 
-	# デフォルトのスポーン処理（Trainingモード用）
+	# デフォルトのスポーン処理
 	if not game_manager.has_map():
 		push_warning("[GameScreen] Cannot spawn characters - no map loaded yet")
 		return
@@ -167,73 +147,136 @@ func _spawn_characters() -> void:
 		push_error("[GameScreen] Cannot spawn characters - no map preset")
 		return
 
-	# CT側キャラクターをスポーン（alpha, bravo）
+	# CT: 1体のみ（alpha）— TPS操作対象
 	var alpha_preset = CharacterRegistry.get_preset("alpha")
 	var ct_spawns = preset.spawn_points_ct
 	var ct_rotations = preset.spawn_rotations_ct
-	var ct_marker_names := ["alpha", "bravo"]
-	if alpha_preset:
-		_spawn_team_characters([alpha_preset, alpha_preset], ct_spawns, ct_rotations, ct_marker_names, GameCharacter.Team.COUNTER_TERRORIST)
+	if alpha_preset and ct_spawns.size() > 0:
+		var character = CharacterRegistry.create_character(alpha_preset.id, ct_spawns[0])
+		if character:
+			character.team = GameCharacter.Team.COUNTER_TERRORIST
+			character.marker_name = "alpha"
+			if ct_rotations.size() > 0:
+				var dir = Vector3(sin(ct_rotations[0]), 0, cos(ct_rotations[0]))
+				character._facing_direction = dir
+			game_manager.get_character_parent().add_child(character)
+			_mode_provider.register_character(game_manager, character, _network_id_counter)
+			_network_id_counter += 1
+			_player_character = character
 
-	# T側キャラクターをスポーン（ares, brim）
+	# T: 全敵スポーン（ares preset）
 	var ares_preset = CharacterRegistry.get_preset("ares")
 	var t_spawns = preset.spawn_points_t
 	var t_rotations = preset.spawn_rotations_t
-	var t_marker_names := ["ares", "brim"]
 	if ares_preset:
-		_spawn_team_characters([ares_preset, ares_preset], t_spawns, t_rotations, t_marker_names, GameCharacter.Team.TERRORIST)
+		for i in range(t_spawns.size()):
+			var enemy = CharacterRegistry.create_character(ares_preset.id, t_spawns[i])
+			if enemy:
+				enemy.team = GameCharacter.Team.TERRORIST
+				if i < t_rotations.size():
+					var dir = Vector3(sin(t_rotations[i]), 0, cos(t_rotations[i]))
+					enemy._facing_direction = dir
+				game_manager.get_character_parent().add_child(enemy)
+				_mode_provider.register_character(game_manager, enemy, _network_id_counter)
+				_network_id_counter += 1
 
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
 		game_manager.idle_manager.set_characters(game_manager.characters)
 
 
-func _spawn_team_characters(presets: Array, spawn_points: Array, spawn_rotations: Array, marker_names: Array, team: int) -> void:
-	var count := mini(presets.size(), spawn_points.size())
-	for i in range(count):
-		var char_preset = presets[i]
-		var spawn_pos: Vector3 = spawn_points[i]
-		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
-		if character:
-			character.team = team
-			# マーカー名を設定
-			if i < marker_names.size():
-				character.marker_name = marker_names[i]
-			# add_child()前に向きを設定
-			if i < spawn_rotations.size():
-				var spawn_rot: float = spawn_rotations[i]
-				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
-				character._facing_direction = direction
-			var character_parent = game_manager.get_character_parent()
-			character_parent.add_child(character)
-
-			# モードプロバイダー経由でキャラクター登録
-			var network_id := _network_id_counter
-			_network_id_counter += 1
-			_mode_provider.register_character(game_manager, character, network_id)
+func _setup_tps_controller() -> void:
+	if not _player_character:
+		push_error("[GameScreen] Cannot setup TPS controller - no player character")
+		return
+	_tps_controller = TPSPlayerController.new()
+	_tps_controller.name = "TPSPlayerController"
+	add_child(_tps_controller)
+	_tps_controller.setup(_player_character, camera, ui_layer)
 
 
-func _setup_hud() -> void:
-	if _hud == null:
-		_hud = GameHUDScene.instantiate()
-		ui_layer.add_child(_hud)
-		_hud.setup()
-		_hud.execute_all_requested.connect(_on_execute_button_pressed)
-		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
-		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
-		_hud.point_edit_requested.connect(_on_point_edit_requested)
-		_hud.point_undo_requested.connect(_on_point_undo_requested)
-		_hud.point_cancel_requested.connect(_on_point_cancel_requested)
-		_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
-		_hud.global_undo_requested.connect(_on_global_undo_requested)
+func _setup_tps_hud() -> void:
+	# 武器セレクター（左上）
+	var hbox := HBoxContainer.new()
+	hbox.name = "WeaponSelector"
+	hbox.position = Vector2(10, 10)
+	ui_layer.add_child(hbox)
 
-		# Undo状態の初期化
-		_hud.set_undo_enabled(false)
+	var label := Label.new()
+	label.text = "Weapon: "
+	hbox.add_child(label)
 
-		# PathUndoManagerのシグナル接続（Undo状態変更時にHUD更新）
-		var undo_manager = game_manager.get_path_undo_manager() if game_manager else null
-		if undo_manager:
-			undo_manager.undo_state_changed.connect(_on_undo_state_changed)
+	_weapon_option = OptionButton.new()
+	_weapon_option.custom_minimum_size.x = 160
+	hbox.add_child(_weapon_option)
+
+	_weapon_list = WeaponRegistry.get_all()
+	var default_idx := 0
+	for i in range(_weapon_list.size()):
+		var w: WeaponPreset = _weapon_list[i]
+		_weapon_option.add_item(w.display_name, i)
+		if w.id == "glock":
+			default_idx = i
+	_weapon_option.selected = default_idx
+	_weapon_option.item_selected.connect(_on_weapon_selected)
+
+	# タイマー（右上）
+	_timer_label = Label.new()
+	_timer_label.name = "TimerLabel"
+	_timer_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_timer_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_timer_label.position = Vector2(-120, 10)
+	_timer_label.add_theme_font_size_override("font_size", 24)
+	_timer_label.text = "2:00"
+	ui_layer.add_child(_timer_label)
+
+	# マネー（タイマーの下）
+	_money_label = Label.new()
+	_money_label.name = "MoneyLabel"
+	_money_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_money_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_money_label.position = Vector2(-120, 45)
+	_money_label.add_theme_font_size_override("font_size", 18)
+	_money_label.text = "$0"
+	ui_layer.add_child(_money_label)
+
+	# アクションボタン（右中央）
+	_create_action_buttons()
+
+
+func _create_action_buttons() -> void:
+	var vbox := VBoxContainer.new()
+	vbox.name = "ActionButtons"
+	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	vbox.position = Vector2(-170, -80)
+	vbox.add_theme_constant_override("separation", 12)
+	ui_layer.add_child(vbox)
+
+	var btn_grenade := Button.new()
+	btn_grenade.text = "Grenade"
+	btn_grenade.custom_minimum_size = Vector2(150, 50)
+	btn_grenade.pressed.connect(_on_grenade_pressed)
+	vbox.add_child(btn_grenade)
+
+	var btn_door_kick := Button.new()
+	btn_door_kick.text = "Door Kick"
+	btn_door_kick.custom_minimum_size = Vector2(150, 50)
+	btn_door_kick.pressed.connect(_on_door_kick_pressed)
+	vbox.add_child(btn_door_kick)
+
+	var btn_door_open := Button.new()
+	btn_door_open.text = "Door Open"
+	btn_door_open.custom_minimum_size = Vector2(150, 50)
+	btn_door_open.pressed.connect(_on_door_open_pressed)
+	vbox.add_child(btn_door_open)
+
+	_debug_vision_btn = Button.new()
+	_debug_vision_btn.text = "Debug Vision"
+	_debug_vision_btn.toggle_mode = true
+	_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
+	_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
+	vbox.add_child(_debug_vision_btn)
 
 
 func _setup_round_hud() -> void:
@@ -244,34 +287,6 @@ func _setup_round_hud() -> void:
 
 		SignalBus.survivor_count_changed.connect(_round_hud.update_survivor_counts)
 		SignalBus.round_ended.connect(_round_hud.show_result)
-
-
-func _setup_status_ui() -> void:
-	# Multiplayerモードのみステータス表示
-	if _mode_provider.get_mode_name() != "multiplayer":
-		return
-
-	_status_label = Label.new()
-	_status_label.name = "NetworkStatus"
-	_status_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_status_label.position = Vector2(10, 10)
-	_status_label.add_theme_font_size_override("font_size", 14)
-	ui_layer.add_child(_status_label)
-	_update_status()
-
-
-func _setup_camera_pan() -> void:
-	if _camera_pan_controller == null:
-		_camera_pan_controller = CameraPanController.new()
-		_camera_pan_controller.setup(camera, 0.05)
-
-
-func _setup_input_controller() -> void:
-	if _input_controller == null:
-		_input_controller = InputController.new()
-		_input_controller.name = "InputController"
-		add_child(_input_controller)
-		_input_controller.setup(game_manager, _camera_pan_controller)
 
 
 func _setup_label_manager() -> void:
@@ -298,77 +313,13 @@ func _setup_money() -> void:
 	_update_money_display()
 
 
-func _register_character_markers() -> void:
-	if not _hud or not game_manager:
-		return
-
-	var player_team: GameCharacter.Team = PlayerState.get_player_team()
-	for character in game_manager.characters:
-		if not is_instance_valid(character):
-			continue
-		if character.team == player_team and not character.marker_name.is_empty():
-			_hud.register_character_marker(character)
-
-
-func _setup_camera_for_player() -> void:
-	if not camera:
-		return
-
-	var player_team := PlayerState.get_player_team()
-	var player_character: Node3D = null
-
-	for character in game_manager.characters:
-		if character is GameCharacter and character.team == player_team:
-			player_character = character
-			break
-
-	if player_character:
-		var target_pos := player_character.global_position
-		var z_offset := _calculate_camera_z_offset()
-		camera.global_position = Vector3(target_pos.x, CAMERA_HEIGHT, target_pos.z + z_offset)
-		if Debug.enabled: print("[Camera] Initial setup: character_pos=%s, height=%s, z_offset=%s, camera_pos=%s" % [target_pos, CAMERA_HEIGHT, z_offset, camera.global_position])
-		#_create_debug_axis(target_pos)  # デバッグ用軸表示（必要時にコメント解除）
-
-
-## カメラの角度からZオフセットを計算
-## Z_offset = height * tan(90° + rotation.x)
-func _calculate_camera_z_offset() -> float:
-	if not camera:
-		return 0.0
-	return CAMERA_HEIGHT * tan(PI / 2.0 + camera.rotation.x)
-
-
 ## ========================================
 ## UI更新
 ## ========================================
 
-func _update_team_display() -> void:
-	if team_display_label:
-		var team_name := PlayerState.get_team_name()
-		var full_name := "Counter-Terrorist" if team_name == "CT" else "Terrorist"
-		team_display_label.text = "You are: %s (%s)" % [full_name, team_name]
-
-
 func _update_money_display() -> void:
-	if _hud:
-		_hud.update_money(PlayerState.get_money())
-
-
-func _update_pending_paths_label() -> void:
-	if _hud:
-		_hud.set_pending_paths(game_manager.get_pending_path_count())
-
-
-func _update_status() -> void:
-	if not _status_label:
-		return
-
-	if _mode_provider is MultiplayerModeProvider:
-		var mp := _mode_provider as MultiplayerModeProvider
-		var role := "Host" if mp.is_host() else "Client"
-		var player_count := mp.get_player_count()
-		var team_name := PlayerState.get_team_name()
-		_status_label.text = "[%s] Players: %d | Team: %s" % [role, player_count, team_name]
+	if _money_label:
+		_money_label.text = "$%d" % PlayerState.get_money()
 
 
 ## ========================================
@@ -378,168 +329,62 @@ func _update_status() -> void:
 func _physics_process(delta: float) -> void:
 	if game_manager:
 		game_manager.process_frame(delta)
-	if _camera_pan_controller:
-		_camera_pan_controller.process(delta)
+	if _tps_controller:
+		_tps_controller.process(delta)
 
 
-func _process(_delta: float) -> void:
-	# Multiplayerモードのステータス更新（30フレームごと）
-	if _status_label and Engine.get_process_frames() % 30 == 0:
-		_update_status()
+func _input(event: InputEvent) -> void:
+	if _tps_controller:
+		_tps_controller.handle_input(event)
 
 
 ## ========================================
-## ボタンコールバック
+## TPS HUDコールバック
 ## ========================================
 
-func _on_execute_button_pressed() -> void:
-	# パスモード中でパスがあればモードを終了する
-	if game_manager.is_path_mode() and game_manager.has_path():
-		game_manager.confirm_path()
-
-	# マルチプレイヤーモードでは自分のキャラクターのみ実行
-	var local_only := _mode_provider.get_mode_name() == "multiplayer"
-	var count := game_manager.execute_all_paths(false, local_only)
-	_mode_provider.on_execute_paths(count)
-
-	# パス実行後はUndo履歴をクリア
-	game_manager.clear_undo_history()
-
-
-func _on_clear_paths_button_pressed() -> void:
-	game_manager.clear_all_pending_paths()
-
-
-func _on_sync_go_button_pressed() -> void:
-	game_manager.release_all_sync_waiting_characters()
-	# ボタンを非表示にする
-	if _hud:
-		_hud.hide_sync_go_button()
-
-
-func _on_sync_wait_state_changed(has_waiting: bool) -> void:
-	if _hud:
-		_hud.update_sync_go_button_visibility(has_waiting)
-
-
-func _on_point_edit_requested(action: String) -> void:
-	if not game_manager or not game_manager.has_path():
+func _on_weapon_selected(idx: int) -> void:
+	if not _player_character or idx < 0 or idx >= _weapon_list.size():
 		return
-
-	# PathServiceにはpath_service経由でアクセスする必要があるモード切替メソッド
-	var ps = game_manager.path_service
-	if not ps:
-		return
-
-	match action:
-		"vision":
-			ps.start_vision_mode()
-		"run":
-			ps.start_run_mode()
-		"clear":
-			ps.start_clear_mode()
-		"grenade":
-			ps.start_grenade_mode()
-		"smoke":
-			ps.start_smoke_grenade_mode()
-		"door":
-			ps.start_door_mode()
-		"wait":
-			ps.start_wait_mode()
+	var weapon: WeaponPreset = _weapon_list[idx]
+	_player_character.equip_weapon(weapon)
 
 
-func _on_point_undo_requested() -> void:
-	if game_manager:
-		game_manager.undo_last_point()
+func _on_grenade_pressed() -> void:
+	if _player_character and _player_character.anim_ctrl:
+		_player_character.anim_ctrl.play_throw()
 
 
-func _on_point_cancel_requested() -> void:
-	if game_manager:
-		game_manager.cancel_path()
+func _on_door_kick_pressed() -> void:
+	if _player_character and _player_character.anim_ctrl:
+		_player_character.anim_ctrl.play_door_kick()
 
 
-func _on_global_undo_requested() -> void:
-	if game_manager:
-		game_manager.global_undo()
+func _on_door_open_pressed() -> void:
+	if _player_character and _player_character.anim_ctrl:
+		_player_character.anim_ctrl.play_door_open()
 
 
-func _on_undo_state_changed(can_undo: bool) -> void:
-	if _hud:
-		_hud.set_undo_enabled(can_undo)
-
-
-func _on_path_ready() -> void:
-	if _hud:
-		_hud.show_point_edit_panel()
-
-
-func _on_path_mode_ended() -> void:
-	if _hud:
-		_hud.hide_point_edit_panel()
-
-
-func _on_path_mode_cancelled() -> void:
-	if _hud:
-		_hud.hide_point_edit_panel()
-
-
-func _on_character_marker_pressed(character: Node) -> void:
-	if not is_instance_valid(character) or not camera:
-		return
-
-	# カメラをキャラクター位置に移動
-	var target_pos: Vector3 = character.global_position
-	_pan_camera_to_position(target_pos)
-
-
-func _pan_camera_to_position(target_pos: Vector3) -> void:
-	if not camera or not _camera_pan_controller:
-		return
-
-	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s" % [target_pos])
-
-	# CameraPanControllerのターゲット位置を設定
-	_camera_pan_controller.set_ground_target(target_pos)
+func _on_debug_vision_toggled(enabled: bool) -> void:
+	if game_manager and game_manager.vision_service:
+		game_manager.vision_service.set_debug_draw(enabled)
 
 
 ## ========================================
 ## シグナルハンドラ
 ## ========================================
 
-func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
-	pass
-
-
-func _on_path_confirmed(_count: int) -> void:
-	_update_pending_paths_label()
-	_mode_provider.on_path_confirmed()
-
-
-func _on_paths_execution_started(_count: int) -> void:
-	pass
-
-
-func _on_all_paths_completed() -> void:
-	_update_pending_paths_label()
-
-
-func _on_paths_cleared() -> void:
-	_update_pending_paths_label()
-
-
 func _on_money_changed(_new_amount: int) -> void:
 	_update_money_display()
 
 
 func _on_round_timer_updated(time: float) -> void:
-	if _hud:
-		_hud.update_timer(time)
+	if _timer_label:
+		var minutes := int(time) / 60
+		var seconds := int(time) % 60
+		_timer_label.text = "%d:%02d" % [minutes, seconds]
 
 
 func _on_round_ended(winner: int, reason: int) -> void:
-	if game_manager:
-		game_manager.cancel_all_path_following()
-
 	_mode_provider.on_round_ended(winner, reason)
 
 	# 3秒後に遷移
@@ -584,24 +429,10 @@ func _cleanup_before_transition() -> void:
 
 	# マップとキャラクターのクリーンアップ
 	if game_manager:
-		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
+		game_manager.unload_map(true)
 		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
 
 	# SignalBusのシグナル切断
-	if SignalBus.selection_changed.is_connected(_on_selection_changed):
-		SignalBus.selection_changed.disconnect(_on_selection_changed)
-	if SignalBus.path_confirmed.is_connected(_on_path_confirmed):
-		SignalBus.path_confirmed.disconnect(_on_path_confirmed)
-	if SignalBus.paths_execution_started.is_connected(_on_paths_execution_started):
-		SignalBus.paths_execution_started.disconnect(_on_paths_execution_started)
-	if SignalBus.all_paths_completed.is_connected(_on_all_paths_completed):
-		SignalBus.all_paths_completed.disconnect(_on_all_paths_completed)
-	if SignalBus.paths_cleared.is_connected(_on_paths_cleared):
-		SignalBus.paths_cleared.disconnect(_on_paths_cleared)
-	if SignalBus.path_mode_ended.is_connected(_on_path_mode_ended):
-		SignalBus.path_mode_ended.disconnect(_on_path_mode_ended)
-	if SignalBus.path_mode_cancelled.is_connected(_on_path_mode_cancelled):
-		SignalBus.path_mode_cancelled.disconnect(_on_path_mode_cancelled)
 	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
 		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
 	if SignalBus.round_ended.is_connected(_on_round_ended):
@@ -617,17 +448,9 @@ func _cleanup_before_transition() -> void:
 		PlayerState.money_changed.disconnect(_on_money_changed)
 
 	# HUDを明示的に削除
-	if _hud and is_instance_valid(_hud):
-		_hud.queue_free()
-		_hud = null
-
 	if _round_hud and is_instance_valid(_round_hud):
 		_round_hud.queue_free()
 		_round_hud = null
-
-	if _status_label and is_instance_valid(_status_label):
-		_status_label.queue_free()
-		_status_label = null
 
 	# Providerのクリーンアップ（WebSocket切断含む）
 	if _mode_provider:
@@ -649,47 +472,3 @@ func _unhandled_input(event: InputEvent) -> void:
 			_vision_debug_enabled = not _vision_debug_enabled
 			game_manager.set_vision_debug_draw(_vision_debug_enabled)
 			if Debug.enabled: print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
-
-
-## デバッグ用の軸を作成（X=赤, Y=緑, Z=青）
-func _create_debug_axis(axis_position: Vector3) -> void:
-	var axis_length := 3.0
-	var axis_thickness := 0.05
-
-	# X軸（赤）
-	var x_axis := MeshInstance3D.new()
-	var x_mesh := BoxMesh.new()
-	x_mesh.size = Vector3(axis_length, axis_thickness, axis_thickness)
-	x_axis.mesh = x_mesh
-	var x_mat := StandardMaterial3D.new()
-	x_mat.albedo_color = Color.RED
-	x_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	x_axis.material_override = x_mat
-	x_axis.position = axis_position + Vector3(axis_length / 2, 0.1, 0)
-	add_child(x_axis)
-
-	# Y軸（緑）- 上方向
-	var y_axis := MeshInstance3D.new()
-	var y_mesh := BoxMesh.new()
-	y_mesh.size = Vector3(axis_thickness, axis_length, axis_thickness)
-	y_axis.mesh = y_mesh
-	var y_mat := StandardMaterial3D.new()
-	y_mat.albedo_color = Color.GREEN
-	y_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	y_axis.material_override = y_mat
-	y_axis.position = axis_position + Vector3(0, axis_length / 2 + 0.1, 0)
-	add_child(y_axis)
-
-	# Z軸（青）
-	var z_axis := MeshInstance3D.new()
-	var z_mesh := BoxMesh.new()
-	z_mesh.size = Vector3(axis_thickness, axis_thickness, axis_length)
-	z_axis.mesh = z_mesh
-	var z_mat := StandardMaterial3D.new()
-	z_mat.albedo_color = Color.BLUE
-	z_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	z_axis.material_override = z_mat
-	z_axis.position = axis_position + Vector3(0, 0.1, axis_length / 2)
-	add_child(z_axis)
-
-	if Debug.enabled: print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)
