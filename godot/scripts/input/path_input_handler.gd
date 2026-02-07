@@ -789,8 +789,14 @@ func _process_rotation_drag(screen_pos: Vector2) -> void:
 
 #region プログレスリング
 
+## タップ時にリングが一瞬表示されるのを防ぐための遅延
+const PROGRESS_RING_DISPLAY_DELAY: float = 0.2
+
 func _update_progress_ring(screen_pos: Vector2, elapsed: float, threshold: float) -> void:
 	if not _progress_ring:
+		return
+	# 遅延未満はリングを表示しない（タップのチラつき防止）
+	if elapsed < PROGRESS_RING_DISPLAY_DELAY:
 		return
 	if not _progress_ring.is_active():
 		_progress_ring.start_manual(screen_pos)
