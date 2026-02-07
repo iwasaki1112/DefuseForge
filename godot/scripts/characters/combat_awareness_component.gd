@@ -386,6 +386,13 @@ func _calculate_hit_chance(weapon: WeaponPreset, distance: float) -> float:
 	if distance > weapon.effective_range:
 		distance_factor = weapon.effective_range / distance  # e.g., 2x range = 50%
 
+	# Close range bonus: within 30% of effective range, accuracy increases up to +20%
+	var close_range_threshold: float = weapon.effective_range * 0.3
+	if distance < close_range_threshold and close_range_threshold > 0.0:
+		var closeness: float = 1.0 - (distance / close_range_threshold)  # 1.0 at 0m, 0.0 at threshold
+		base_accuracy += closeness * 0.2  # Up to +20% accuracy bonus
+		spread_penalty *= (1.0 - closeness * 0.7)  # Reduce spread up to 70% at point blank
+
 	# Movement penalty
 	var movement_penalty: float = 0.0
 	if _character is CharacterBody3D:
