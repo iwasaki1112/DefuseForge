@@ -119,43 +119,11 @@ func _apply_outline(character: Node) -> void:
 	if _outlined_meshes_by_character.has(char_id):
 		return
 
-	# CharacterModelだけを検索（武器を除外）
-	var model = character.get_node_or_null("CharacterModel")
-	var search_root = model if model else character
-	var meshes = _find_mesh_instances(search_root)
-	var outlined: Array[MeshInstance3D] = []
-	var original_materials: Dictionary = {}  # { mesh_instance_id: { surface_index: Material } }
+	# Note: Stencil outline (STENCIL_MODE_OUTLINE) removed for Godot 4.4 compatibility
+	# Selection is indicated by selection marker only
 
-	for mesh in meshes:
-		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
-		var mesh_id = mesh.get_instance_id()
-		var mesh_originals: Dictionary = {}
-
-		for i in range(surface_count):
-			# 元のオーバーライドマテリアルを保存（nullの場合もそのまま保存）
-			mesh_originals[i] = mesh.get_surface_override_material(i)
-
-			var mat = mesh.get_active_material(i)
-			if mat and mat is StandardMaterial3D:
-				# マテリアルを複製してステンシルアウトラインを設定
-				var mat_copy: StandardMaterial3D = mat.duplicate()
-				mat_copy.stencil_mode = BaseMaterial3D.STENCIL_MODE_OUTLINE
-				mat_copy.stencil_outline_thickness = outline_thickness
-				mat_copy.stencil_color = outline_color
-				mesh.set_surface_override_material(i, mat_copy)
-			elif mat:
-				# 新しいStandardMaterial3Dを作成
-				var new_mat = StandardMaterial3D.new()
-				new_mat.stencil_mode = BaseMaterial3D.STENCIL_MODE_OUTLINE
-				new_mat.stencil_outline_thickness = outline_thickness
-				new_mat.stencil_color = outline_color
-				mesh.set_surface_override_material(i, new_mat)
-
-		original_materials[mesh_id] = mesh_originals
-		outlined.append(mesh)
-
-	_outlined_meshes_by_character[char_id] = outlined
-	_original_materials_by_character[char_id] = original_materials
+	_outlined_meshes_by_character[char_id] = []
+	_original_materials_by_character[char_id] = {}
 
 	# 選択マーカーを作成
 	_create_selection_marker(character)

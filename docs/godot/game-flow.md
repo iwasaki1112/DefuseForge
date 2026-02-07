@@ -14,21 +14,28 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 ┌─────────────────┐
 │  MainMenuScreen │  メインメニュー
 │  - Training     │
+│  - Multiplayer  │
 │  - Option       │
 └────────┬────────┘
          │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐  ┌────────────┐
-│ Option │  │ MapSelection│  マップ選択
-│ Screen │  │   Screen    │
-└────────┘  └──────┬─────┘
-    │              │
-    │         [Start Game]
-    ▼              ▼
-┌────────┐  ┌────────────┐
-│  Back  │  │ GameScreen │  ゲームプレイ
-└────────┘  └────────────┘
+    ┌────┼──────────────┐
+    ▼    │              ▼
+┌────────┐  │  ┌────────────┐
+│ Option │  │  │ MapSelection│  Training
+│ Screen │  │  │   Screen    │
+└────────┘  │  └──────┬─────┘
+    │       │         │
+    │       │    [Start Game]
+    ▼       ▼         ▼
+┌────────┐  ┌────────────┐  ┌────────────┐
+│  Back  │  │ LobbyScreen│  │ GameScreen │
+└────────┘  └──────┬─────┘  └────────────┘
+                   │
+              [Start Game]
+                   ▼
+            ┌────────────┐
+            │ GameScreen │  Multiplayer
+            └────────────┘
 ```
 
 ## 画面詳細
@@ -42,7 +49,8 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 
 | ボタン | 遷移先 | 説明 |
 |--------|--------|------|
-| Training | MapSelectionScreen | マップ選択画面へ |
+| Training | MapSelectionScreen | シングルプレイヤー（トレーニング）へ |
+| Multiplayer | LobbyScreen | マルチプレイヤーロビーへ |
 | Option | OptionScreen | 設定画面へ |
 
 **表示内容**:
@@ -64,7 +72,7 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 **シーン**: `scenes/screens/map_selection.tscn`
 **スクリプト**: `scripts/screens/map_selection_screen.gd`
 
-プレイするマップを選択する画面。
+プレイするマップを選択する画面（Trainingモード用）。
 
 **機能**:
 - `MapRegistry`から登録済みマップ一覧を取得
@@ -77,7 +85,25 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 | Back | MainMenuScreen | メインメニューに戻る |
 | Start Game | GameScreen | 選択したマップでゲーム開始 |
 
-### 4. GameScreen
+### 4. LobbyScreen
+
+**シーン**: `scenes/screens/lobby.tscn`
+**スクリプト**: `scripts/screens/lobby_screen.gd`
+
+マルチプレイヤー用のロビー画面。
+
+**機能**:
+- WebSocketリレーサーバーへの接続
+- ルーム作成・参加
+- プレイヤー一覧表示・準備完了状態の切り替え
+- ホストによるゲーム開始
+
+| ボタン | 遷移先 | 説明 |
+|--------|--------|------|
+| Back | MainMenuScreen | メインメニューに戻る |
+| Start Game | GameScreen | 全員準備完了時にホストが開始 |
+
+### 5. GameScreen
 
 **シーン**: `scenes/screens/game.tscn`
 **スクリプト**: `scripts/screens/game_screen.gd`
@@ -182,6 +208,7 @@ GameScreen._spawn_characters()
 | MainMenuScreen | メインメニューUI |
 | MapSelectionScreen | マップ選択UI |
 | OptionScreen | 設定UI |
+| LobbyScreen | マルチプレイヤーロビーUI |
 | GameScreen | ゲームプレイ画面 |
 | SettingsManager | 設定永続化・選択マップ保持 |
 | MapRegistry | マッププリセット管理 |

@@ -217,9 +217,6 @@ class CharacterSnapshot extends RefCounted:
 	## 生存フラグ
 	var is_alive: bool = true
 
-	## しゃがみ状態
-	var is_crouching: bool = false
-
 	## チーム（GameCharacter.Team相当）
 	var team: int = 0
 
@@ -242,7 +239,6 @@ class CharacterSnapshot extends RefCounted:
 		snapshot.velocity = msg.velocity
 		snapshot.current_health = msg.current_health
 		snapshot.is_alive = msg.is_alive
-		snapshot.is_crouching = msg.is_crouching
 		snapshot.animation_state = msg.animation_state
 		snapshot.timestamp = msg.timestamp
 		return snapshot
@@ -257,7 +253,6 @@ class CharacterSnapshot extends RefCounted:
 		msg.velocity = velocity
 		msg.current_health = int(current_health)
 		msg.is_alive = is_alive
-		msg.is_crouching = is_crouching
 		msg.animation_state = animation_state
 		msg.timestamp = timestamp
 		return msg
@@ -275,7 +270,6 @@ class CharacterSnapshot extends RefCounted:
 			"current_health": current_health,
 			"max_health": max_health,
 			"is_alive": is_alive,
-			"is_crouching": is_crouching,
 			"team": team,
 			"weapon_id": weapon_id,
 			"animation_state": animation_state,
@@ -300,7 +294,6 @@ class CharacterSnapshot extends RefCounted:
 		current_health = data.get("current_health", 100.0)
 		max_health = data.get("max_health", 100.0)
 		is_alive = data.get("is_alive", true)
-		is_crouching = data.get("is_crouching", false)
 		team = data.get("team", 0)
 		weapon_id = data.get("weapon_id", "")
 		animation_state = data.get("animation_state", "")
@@ -320,7 +313,6 @@ class CharacterSnapshot extends RefCounted:
 		result.current_health = to_snap.current_health
 		result.max_health = to_snap.max_health
 		result.is_alive = to_snap.is_alive
-		result.is_crouching = to_snap.is_crouching
 		result.team = to_snap.team
 		result.weapon_id = to_snap.weapon_id
 		result.animation_state = to_snap.animation_state

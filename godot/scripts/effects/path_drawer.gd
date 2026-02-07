@@ -3,46 +3,57 @@ extends Node3D
 
 ## 地面にパスを描画するコンポーネント
 ## マウスドラッグでパスを描き、キャラクター移動に使用
-## マーカー処理は各ハンドラに委譲
+## ポイント処理は各ハンドラに委譲
 
 ## 描画モード
-enum DrawingMode { MOVEMENT, VISION_POINT, RUN_MARKER, CLEAR_MARKER, GRENADE_MARKER, DOOR_MARKER, WAIT_MARKER, SMOKE_GRENADE_MARKER }
+enum DrawingMode { MOVEMENT, VISION_POINT, WAIT_POINT }
 
-## マーカー履歴用の種別
-enum MarkerType { VISION, RUN, CLEAR, PATH, GRENADE, DOOR, PATH_EXTENSION, WAIT, SMOKE_GRENADE }
+## ポイント履歴用の種別
+enum PointType { VISION, PATH, WAIT }
 
 #region シグナル
 signal drawing_finished(points: PackedVector3Array)
 signal vision_point_added(anchor: Vector3, target_point: Vector3)
-signal run_segment_added(start_ratio: float, end_ratio: float)
-signal clear_point_added(path_ratio: float)
-signal grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal smoke_grenade_marker_added(path_ratio: float, target_pos: Vector3)
-signal door_marker_added(path_ratio: float, door: Node3D)
-signal wait_marker_added(path_ratio: float, wait_duration: float)
+signal wait_point_added(path_ratio: float, wait_duration: float)
+@warning_ignore("unused_signal")
 signal path_undone()
 signal mode_changed(mode: int)
+## パス外タップ時のシグナル（モード終了用）
+signal off_path_tapped()
+## 自動確定リクエスト（確認済みパスへのVisionポイント配置後など）
+signal auto_confirm_requested()
+## パスポイント追加シグナル（リアルタイム確定用 - ポイント追加のたびに発火）
+signal path_point_added(character: Node, point: Vector3)
+## パス描画開始シグナル（新規パス開始時に発火）
+signal path_started(character: Node, start_point: Vector3)
+## パス先端近くでドラッグが検出されたシグナル（パス延長用）
+@warning_ignore("unused_signal")
+signal endpoint_drag_detected(screen_pos: Vector2)
+## パス延長終了シグナル（ドラッグリリースごとの履歴追加用）
+signal path_extension_finished(character: Node, points_before: int, points_after: int)
 #endregion
 
 #region エクスポート設定
-@export var min_point_distance: float = 0.2
+@export var min_point_distance: float = 0.35
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.9)
 @export var vision_line_color: Color = Color(0.7, 0.3, 0.9, 0.9)
 @export var vision_line_length: float = 2.0
-@export var line_width: float = 0.04
+## 線の太さ（GameConstants.PATH_LINE_WIDTH と統一）
+@export var line_width: float = GameConstants.PATH_LINE_WIDTH
 @export var ground_plane_height: float = 0.0
 @export var max_points: int = 500
-@export var path_click_threshold: float = 0.5
-@export var path_endpoint_threshold: float = 0.3
+## クリック判定エリア（GameConstants.PATH_CLICK_THRESHOLD と統一）
+@export var path_click_threshold: float = GameConstants.PATH_CLICK_THRESHOLD
+@export var path_endpoint_threshold: float = 0.15
 @export_flags_3d_physics var wall_collision_mask: int = 2
-@export var enable_smoothing: bool = true
+@export var enable_wall_sliding: bool = true
+@export var wall_slide_offset: float = 0.5  ## 壁からの距離
+@export var enable_smoothing: bool = false
 @export var smoothing_epsilon: float = 0.15
 @export var smoothing_segments: int = 4
 #endregion
 
 #region 定数
-const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
 #endregion
 
 #region 内部変数
@@ -50,29 +61,50 @@ var _camera: Camera3D
 var _character: Node3D
 var _ground_plane: Plane
 var _is_drawing: bool = false
-var _is_extending_path: bool = false
 var _is_enabled: bool = false
 var _drawing_mode: DrawingMode = DrawingMode.MOVEMENT
+## 現在描画中のパスポイント（リアルタイムで確定済み）
 var _path_points: PackedVector3Array = PackedVector3Array()
 var _path_mesh: MeshInstance3D
 
-var _pending_path: PackedVector3Array = PackedVector3Array()
-var _pending_character: CharacterBody3D = null
-var _executing_character: CharacterBody3D = null
-var _path_extension_snapshots: Array[PackedVector3Array] = []
 var _character_color: Color = Color(1.0, 1.0, 1.0)
 
-var _marker_history: Array[int] = []
+var _point_history: Array[int] = []
 var _active_edit_character: Node = null
 
-## マーカーハンドラ
-var _vision_handler: VisionMarkerHandler
-var _run_handler: RunMarkerHandler
-var _clear_handler: ClearMarkerHandler
-var _grenade_handler: GrenadeMarkerHandler
-var _smoke_grenade_handler: SmokeGrenadeMarkerHandler
-var _door_handler: DoorMarkerHandler
-var _wait_handler: WaitMarkerHandler
+## 壁沿いモード状態
+var _is_wall_sliding: bool = false           ## 壁沿いモード中か
+var _wall_slide_normal: Vector3 = Vector3.ZERO  ## 壁の法線
+var _wall_slide_direction: Vector3 = Vector3.ZERO  ## スライド方向
+
+## 最後のタッチ時刻（エミュレートマウスイベント対策）
+var _last_touch_time: int = 0
+
+## タッチイベントとマウスイベントの間隔閾値（ミリ秒）
+const TOUCH_MOUSE_INTERVAL_MS: int = 100
+
+## 外部からVisionモードを開始した場合の状態管理
+var _external_vision_mode: bool = false  ## 外部（InputController）からVisionモードに入ったか
+var _auto_confirm_after_vision: bool = false  ## Visionポイント配置後に自動確定するか
+
+## ポイントハンドラ
+var _vision_handler: VisionPointHandler
+var _wait_handler: WaitPointHandler
+
+## 他パスとの比較用（PathExecutionManagerへの参照）
+var _path_execution_manager: Node = null
+
+## 実行中のキャラクター（パス完了シグナル接続用 - PathDrawerDataManagerから参照）
+@warning_ignore("unused_private_class_variable")
+var _executing_character: Node = null
+
+## パス延長モードフラグ
+var _is_continuing: bool = false
+## 延長開始前のポイント数
+var _points_before_extension: int = 0
+
+## データマネージャー
+var _data_manager: PathDrawerDataManager
 #endregion
 
 
@@ -89,29 +121,23 @@ func _process(_delta: float) -> void:
 
 func _setup_mesh() -> void:
 	_path_mesh = MeshInstance3D.new()
-	_path_mesh.set_script(PathLineMeshScript)
+	_path_mesh.set_script(PathLineMesh)
 	_path_mesh.line_color = line_color
 	_path_mesh.line_width = line_width
 	add_child(_path_mesh)
 
 
 func _setup_handlers() -> void:
-	_vision_handler = VisionMarkerHandler.new()
-	_run_handler = RunMarkerHandler.new()
-	_clear_handler = ClearMarkerHandler.new()
-	_grenade_handler = GrenadeMarkerHandler.new()
-	_smoke_grenade_handler = SmokeGrenadeMarkerHandler.new()
-	_door_handler = DoorMarkerHandler.new()
-	_wait_handler = WaitMarkerHandler.new()
+	_vision_handler = VisionPointHandler.new()
+	_wait_handler = WaitPointHandler.new()
 
 	# ハンドラのシグナル接続
-	_vision_handler.marker_added.connect(_on_vision_marker_added)
-	_run_handler.marker_added.connect(_on_run_marker_added)
-	_clear_handler.marker_added.connect(_on_clear_marker_added)
-	_grenade_handler.marker_added.connect(_on_grenade_marker_added)
-	_smoke_grenade_handler.marker_added.connect(_on_smoke_grenade_marker_added)
-	_door_handler.marker_added.connect(_on_door_marker_added)
-	_wait_handler.marker_added.connect(_on_wait_marker_added)
+	_vision_handler.point_added.connect(_on_vision_point_added)
+	_wait_handler.point_added.connect(_on_wait_point_added)
+
+	# データマネージャーのセットアップ
+	_data_manager = PathDrawerDataManager.new()
+	_data_manager.setup(self)
 
 
 func _setup_handlers_with_camera() -> void:
@@ -122,63 +148,47 @@ func _setup_handlers_with_camera() -> void:
 
 
 func _get_all_handlers() -> Array:
-	return [_vision_handler, _run_handler, _clear_handler, _grenade_handler, _smoke_grenade_handler, _door_handler, _wait_handler]
+	return [_vision_handler, _wait_handler]
 
 
 func _get_handler_for_mode(mode: DrawingMode):
 	match mode:
 		DrawingMode.VISION_POINT:
 			return _vision_handler
-		DrawingMode.RUN_MARKER:
-			return _run_handler
-		DrawingMode.CLEAR_MARKER:
-			return _clear_handler
-		DrawingMode.GRENADE_MARKER:
-			return _grenade_handler
-		DrawingMode.SMOKE_GRENADE_MARKER:
-			return _smoke_grenade_handler
-		DrawingMode.DOOR_MARKER:
-			return _door_handler
-		DrawingMode.WAIT_MARKER:
+		DrawingMode.WAIT_POINT:
 			return _wait_handler
 		_:
 			return null
 
 
 #region シグナルハンドラ
-func _on_vision_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.VISION)
+func _on_vision_point_added(data: Dictionary) -> void:
+	if Debug.enabled: print("[PointDebug] _on_vision_point_added: longpress_mode=%s, auto_confirm=%s" % [
+		str(_external_vision_mode), str(_auto_confirm_after_vision)
+	])
+	_point_history.append(PointType.VISION)
 	vision_point_added.emit(data.get("anchor", Vector3.ZERO), data.get("target_point", Vector3.ZERO))
 
+	# 長押しからVisionモードに入った場合、ポイント配置後にMOVEMENTモードに戻る
+	if _external_vision_mode:
+		if Debug.enabled: print("[PointDebug] _on_vision_point_added: returning to MOVEMENT mode (longpress)")
+		_external_vision_mode = false
+		_drawing_mode = DrawingMode.MOVEMENT
+		mode_changed.emit(int(DrawingMode.MOVEMENT))
 
-func _on_run_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.RUN)
-	run_segment_added.emit(data.get("start_ratio", 0.0), data.get("end_ratio", 0.0))
-
-
-func _on_clear_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.CLEAR)
-	clear_point_added.emit(data.get("path_ratio", 0.0))
-
-
-func _on_grenade_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.GRENADE)
-	grenade_marker_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
-
-
-func _on_smoke_grenade_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.SMOKE_GRENADE)
-	smoke_grenade_marker_added.emit(data.get("path_ratio", 0.0), data.get("target_pos", Vector3.ZERO))
+	# 自動確定フラグが立っている場合（確認済みパスからの長押し）は確定をリクエスト
+	# _external_vision_modeとは独立してチェック（_unhandled_inputで先にリセットされる場合があるため）
+	if _auto_confirm_after_vision:
+		if Debug.enabled: print("[PointDebug] _on_vision_point_added: auto_confirm_requested")
+		_auto_confirm_after_vision = false
+		_drawing_mode = DrawingMode.MOVEMENT
+		mode_changed.emit(int(DrawingMode.MOVEMENT))
+		auto_confirm_requested.emit()
 
 
-func _on_door_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.DOOR)
-	door_marker_added.emit(data.get("path_ratio", 0.0), data.get("door_node", null))
-
-
-func _on_wait_marker_added(data: Dictionary) -> void:
-	_marker_history.append(MarkerType.WAIT)
-	wait_marker_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
+func _on_wait_point_added(data: Dictionary) -> void:
+	_point_history.append(PointType.WAIT)
+	wait_point_added.emit(data.get("path_ratio", 0.0), data.get("wait_duration", 0.0))
 #endregion
 
 
@@ -189,6 +199,11 @@ func setup(camera: Camera3D, character: Node3D = null) -> void:
 	_setup_handlers_with_camera()
 
 
+## PathExecutionManagerの参照を設定（他パスとの比較用）
+func set_path_execution_manager(manager: Node) -> void:
+	_path_execution_manager = manager
+
+
 func enable(character: Node3D) -> void:
 	_character = character
 	_is_enabled = true
@@ -196,10 +211,43 @@ func enable(character: Node3D) -> void:
 	clear()
 
 
+## 指定した開始点からパス描画を開始
+## @param character: 対象キャラクター
+## @param start_point: パス開始点
+func enable_from_point(character: Node3D, start_point: Vector3) -> void:
+	_character = character
+	_is_enabled = true
+	_drawing_mode = DrawingMode.MOVEMENT
+	clear()
+
+	# 開始点を設定（パス開始シグナルも発火）
+	_path_points.append(start_point)
+	if _path_mesh:
+		_path_mesh.update_from_points(_path_points)
+	path_started.emit(_character, start_point)
+
+
+## 既存パスを読み込んでパス描画を開始（Visionポイント追加用）
+## @param character: 対象キャラクター
+## @param path: 既存のパス（Vector3配列）
+func enable_with_path(character: Node3D, path: Array) -> void:
+	_character = character
+	_is_enabled = true
+	_drawing_mode = DrawingMode.MOVEMENT
+	clear()
+
+	# 既存パスを読み込む
+	for point in path:
+		_path_points.append(point)
+	if _path_mesh and _path_points.size() > 0:
+		_path_mesh.update_from_points(_path_points)
+	if _path_points.size() > 0:
+		path_started.emit(_character, _path_points[0])
+
+
 func disable() -> void:
 	_is_enabled = false
 	_is_drawing = false
-	_is_extending_path = false
 
 
 func is_enabled() -> bool:
@@ -228,6 +276,13 @@ func set_active_edit_character(character: Node) -> void:
 
 func get_active_edit_character() -> Node:
 	return _active_edit_character
+
+
+## 継続モードの状態を設定（PathServiceから呼ばれる）
+## @param points_before: 既存パスのポイント数
+func set_continuation_state(points_before: int) -> void:
+	_is_continuing = true
+	_points_before_extension = points_before
 #endregion
 
 
@@ -236,73 +291,193 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _camera == null or not _is_enabled:
 		return
 
-	# パス継続描画の入力処理（優先）
-	if _handle_path_extension_input(event):
-		return
-
 	match _drawing_mode:
 		DrawingMode.MOVEMENT:
 			_handle_movement_input(event)
 		_:
-			# マーカーモードはハンドラに委譲
+			# ポイントモードはハンドラに委譲
 			var handler = _get_handler_for_mode(_drawing_mode)
 			if handler and handler.handle_input(event):
 				get_viewport().set_input_as_handled()
+				# 長押しVisionモードでリリース後、描画が終了したらMOVEMENTに戻る
+				if _external_vision_mode and _drawing_mode == DrawingMode.VISION_POINT:
+					if not _vision_handler._is_active:
+						_external_vision_mode = false
+						_drawing_mode = DrawingMode.MOVEMENT
+						mode_changed.emit(int(DrawingMode.MOVEMENT))
+			else:
+				# ハンドラがイベントを処理しなかった場合、パス外タップをチェック
+				_check_off_path_tap(event)
 
 
-func _handle_path_extension_input(event: InputEvent) -> bool:
-	if _is_extending_path:
-		if event is InputEventMouseMotion:
-			var ground_pos = _get_ground_position(event.position)
-			if ground_pos != null:
-				_add_extend_point(ground_pos)
-			get_viewport().set_input_as_handled()
-			return true
-		elif event is InputEventMouseButton:
-			var mouse_event = event as InputEventMouseButton
-			if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
-				_finish_extending_path()
-				get_viewport().set_input_as_handled()
-				return true
+## パス外タップのチェック（ポイントモード用）
+func _check_off_path_tap(event: InputEvent) -> void:
+	var screen_pos: Vector2
+	var is_press: bool = false
 
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
-			if has_pending_path() and not _is_drawing:
-				var ground_pos = _get_ground_position(mouse_event.position)
-				if ground_pos != null and _is_near_path_endpoint(ground_pos):
-					_start_extending_path()
-					get_viewport().set_input_as_handled()
-					return true
+			screen_pos = mouse_event.position
+			is_press = true
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			screen_pos = event.position
+			is_press = true
 
-	return false
+	if is_press:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos != null and has_path():
+			if not is_point_on_path(ground_pos) and not _is_near_path_endpoint(ground_pos):
+				off_path_tapped.emit()
+				get_viewport().set_input_as_handled()
 
 
 func _handle_movement_input(event: InputEvent) -> void:
+	# タッチ入力（優先処理）
+	# タッチ入力
+	if event is InputEventScreenTouch:
+		_last_touch_time = Time.get_ticks_msec()
+		if event.pressed:
+			handle_movement_press(event.position)
+		else:
+			handle_movement_release(event.position)
+		get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventScreenDrag:
+		_handle_movement_motion(event.position)
+		get_viewport().set_input_as_handled()
+		return
+
+	# マウス入力（タッチ直後のエミュレートイベントはスキップ）
+	if Time.get_ticks_msec() - _last_touch_time < TOUCH_MOUSE_INTERVAL_MS:
+		return
+
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				var start_pos: Vector3
-				if _character:
-					start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
-				else:
-					var ground_pos = _get_ground_position(mouse_event.position)
-					if ground_pos == null:
-						return
-					start_pos = ground_pos
-				_start_drawing(start_pos)
-				get_viewport().set_input_as_handled()
+				handle_movement_press(mouse_event.position)
 			else:
-				if _is_drawing:
-					_finish_drawing()
-					get_viewport().set_input_as_handled()
+				handle_movement_release(mouse_event.position)
+			get_viewport().set_input_as_handled()
 
 	if event is InputEventMouseMotion:
-		if _is_drawing:
-			var ground_pos = _get_ground_position(event.position)
-			if ground_pos != null:
-				_add_point(ground_pos)
+		_handle_movement_motion(event.position)
+
+
+## 移動モードでのプレス処理（外部から呼び出し可能）
+## @return: 描画を開始した場合true、それ以外false
+## 注意: パス上の長押し/ダブルタップ検出はInputControllerで統一管理
+func handle_movement_press(screen_pos: Vector2) -> bool:
+	# 既に描画中の場合は無視（重複イベント対策）
+	if _is_drawing:
+		return true
+
+	var ground_pos = _get_ground_position(screen_pos)
+
+	# 既存パスがある場合
+	if has_path() and ground_pos != null:
+		var on_path = is_point_on_path(ground_pos)
+		if on_path:
+			# パス上のタップ → InputControllerで長押し/ダブルタップ検出するのでfalse
+			return false
+		# パス外をタップした場合は何もしない（handle_clickに任せる）
+		return false
+
+	# パスがない場合のみ、通常の描画開始
+	_handle_drawing_press(screen_pos)
+	return true
+
+
+## 移動モードでのリリース処理（外部から呼び出し可能）
+func handle_movement_release(_screen_pos: Vector2) -> void:
+	_handle_drawing_release()
+
+
+## ポイントモードでのリリース処理（外部から呼び出し可能）
+## Visionポイント等のドラッグリリース時に呼ばれる
+func handle_point_release(screen_pos: Vector2) -> bool:
+	if _drawing_mode == DrawingMode.MOVEMENT:
+		return false
+
+	var handler = _get_handler_for_mode(_drawing_mode)
+	if handler:
+		# VisionPointHandler等のリリース処理を呼ぶ
+		var fake_event = InputEventMouseButton.new()
+		fake_event.button_index = MOUSE_BUTTON_LEFT
+		fake_event.pressed = false
+		fake_event.position = screen_pos
+		return handler.handle_input(fake_event)
+	return false
+
+
+## ポイントモードでのタッチ入力処理（外部から呼び出し可能）
+## InputControllerからタッチイベントを直接受け取り、ハンドラに委譲する
+func handle_point_touch_input(event: InputEvent) -> bool:
+	if _drawing_mode == DrawingMode.MOVEMENT:
+		return false
+
+	var handler = _get_handler_for_mode(_drawing_mode)
+	if handler and handler.handle_input(event):
+		# 長押しVisionモードでリリース後、描画が終了したらMOVEMENTに戻る
+		if _external_vision_mode and _drawing_mode == DrawingMode.VISION_POINT:
+			if not _vision_handler._is_active:
+				_external_vision_mode = false
+				_drawing_mode = DrawingMode.MOVEMENT
+				mode_changed.emit(int(DrawingMode.MOVEMENT))
+		return true
+	return false
+
+
+## 移動モードでのモーション処理
+func _handle_movement_motion(screen_pos: Vector2) -> void:
+	if _is_drawing:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos != null:
+			_add_point(ground_pos)
+
+
+## 位置だけで移動入力を処理（InputControllerから呼び出し用）
+func _handle_movement_input_with_position(screen_pos: Vector2) -> void:
+	_handle_movement_motion(screen_pos)
+
+
+## 描画開始処理（マウス/タッチ共通）
+func _handle_drawing_press(screen_pos: Vector2) -> void:
+	# 既に描画中の場合は無視（重複イベント対策）
+	if _is_drawing:
+		return
+
+	# 既にパスポイントがある場合（継続モードで終点から開始）、描画開始のみ行う
+	# enable_from_point で1点追加されているので >= 1 でチェック
+	if _path_points.size() >= 1:
+		_is_drawing = true
+		return
+
+	var start_pos: Vector3
+	if _character:
+		start_pos = Vector3(_character.global_position.x, 0, _character.global_position.z)
+	else:
+		var ground_pos = _get_ground_position(screen_pos)
+		if ground_pos == null:
+			return
+		start_pos = ground_pos
+	_start_drawing(start_pos)
+
+
+## 描画終了処理（マウス/タッチ共通）
+func _handle_drawing_release() -> void:
+	if _is_drawing:
+		_finish_drawing()
+	# Note: 描画が開始されていない場合（パスモード開始直後のリリース等）は何もしない
+	# キャンセルはユーザーが明示的にESCキーなどで行う
+
+
+## 描画開始処理（外部から呼び出し可能）
+func handle_drawing_press(screen_pos: Vector2) -> void:
+	_handle_drawing_press(screen_pos)
 #endregion
 
 
@@ -319,102 +494,122 @@ func _start_drawing(start_pos: Vector3) -> void:
 	_path_points.append(start_pos)
 	_path_mesh.update_from_points(_path_points)
 
+	# パス開始シグナルを発火（リアルタイム確定）
+	path_started.emit(_character, start_pos)
+
 
 func _add_point(pos: Vector3) -> void:
 	if _path_points.size() >= max_points:
+		_reset_wall_slide_state()
 		return
 
 	var last_point = _path_points[_path_points.size() - 1]
 	if pos.distance_to(last_point) < min_point_distance:
 		return
 
+	# 壁沿いモード中の処理
+	if _is_wall_sliding:
+		var slide_result = _process_wall_slide(pos)
+		if slide_result.should_exit:
+			_reset_wall_slide_state()
+			# 壁沿いモード終了後、通常の描画に戻る
+			if not slide_result.corner_hit:
+				# 壁から離れる場合は通常のポイント追加を試みる
+				var exit_hit_result = _check_wall_between(last_point, pos)
+				if not exit_hit_result.hit:
+					_append_point_and_emit(pos)
+			return
+		if slide_result.new_point != Vector3.ZERO:
+			_append_point_and_emit(slide_result.new_point)
+		return
+
+	# 通常モードの処理
 	var hit_result = _check_wall_between(last_point, pos)
 	if hit_result.hit:
 		var wall_pos = hit_result.position
+
+		if enable_wall_sliding:
+			# 壁沿いモードに入る
+			var move_dir = (pos - last_point).normalized()
+			if _enter_wall_slide_mode(hit_result, move_dir):
+				# 壁沿いの開始位置（壁の法線方向にオフセット）
+				var wall_slide_start = wall_pos + _wall_slide_normal * wall_slide_offset
+				wall_slide_start.y = ground_plane_height
+
+				# last_point が壁に近すぎる場合は修正
+				var last_to_wall_dist = last_point.distance_to(wall_pos)
+				if last_to_wall_dist < wall_slide_offset and _path_points.size() > 1:
+					# 最後のポイントを壁から離れた位置に修正
+					var corrected_last = wall_pos + _wall_slide_normal * wall_slide_offset
+					corrected_last.y = ground_plane_height
+					_path_points[_path_points.size() - 1] = corrected_last
+					_path_mesh.update_from_points(_path_points)
+					# 修正されたポイントを通知
+					path_point_added.emit(_character, corrected_last)
+				else:
+					# last_point から wall_slide_start への線が壁を通らないかチェック
+					var check_hit = _check_wall_between(last_point, wall_slide_start)
+					if check_hit.hit:
+						var slide_safe_pos = check_hit.position + _wall_slide_normal * wall_slide_offset
+						slide_safe_pos.y = ground_plane_height
+						if slide_safe_pos.distance_to(last_point) >= min_point_distance:
+							_append_point_and_emit(slide_safe_pos)
+					elif wall_slide_start.distance_to(last_point) >= min_point_distance:
+						_append_point_and_emit(wall_slide_start)
+				return
+
+		# スライドできない場合は壁の手前で停止
 		var to_wall = (wall_pos - last_point).normalized()
-		var safe_pos = wall_pos - to_wall * 0.1
+		var safe_pos = wall_pos - to_wall * wall_slide_offset
 		safe_pos.y = ground_plane_height
-		_path_points.append(safe_pos)
-		_path_mesh.update_from_points(_path_points)
+		if safe_pos.distance_to(last_point) >= min_point_distance:
+			_append_point_and_emit(safe_pos)
 		_finish_drawing()
 		return
 
+	# 壁に近すぎないかチェックして補正
+	var corrected_pos = _correct_position_away_from_wall(pos)
+	_append_point_and_emit(corrected_pos)
+
+
+## ポイントを追加してシグナルを発火（リアルタイム確定）
+func _append_point_and_emit(pos: Vector3) -> void:
 	_path_points.append(pos)
 	_path_mesh.update_from_points(_path_points)
+	# リアルタイムでパスポイント追加を通知
+	path_point_added.emit(_character, pos)
 
 
 func _finish_drawing() -> void:
 	_is_drawing = false
+	_reset_wall_slide_state()
 
 	if _path_points.size() >= 2 and _character:
-		if enable_smoothing and _path_points.size() >= 3:
-			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
-		else:
-			_pending_path = _path_points.duplicate()
-		_pending_character = _character as CharacterBody3D
-		_marker_history.append(MarkerType.PATH)
+		_point_history.append(PointType.PATH)
 
+		# パス延長モードの場合、延長終了シグナルを発火
+		if _is_continuing:
+			path_extension_finished.emit(_character, _points_before_extension, _path_points.size())
+			_is_continuing = false
+			_points_before_extension = 0
+
+	# パスは既にリアルタイムで確定済み - 描画終了を通知
 	drawing_finished.emit(_path_points)
-#endregion
 
 
-#region パス継続描画
-func can_extend_path() -> bool:
-	return has_pending_path() and not _is_drawing and not _is_extending_path
+## パスの先端から続けて描画可能かどうか
+func can_continue_path() -> bool:
+	return _path_points.size() >= 2 and not _is_drawing
 
 
-func is_extending_path() -> bool:
-	return _is_extending_path
-
-
-func _start_extending_path() -> void:
-	if not has_pending_path():
-		return
-
-	_is_extending_path = true
-	_path_extension_snapshots.append(_pending_path.duplicate())
-	_path_points = _pending_path.duplicate()
-	_path_mesh.update_from_points(_path_points)
-
-
-func _add_extend_point(pos: Vector3) -> void:
-	if not _is_extending_path:
-		return
-
-	if _path_points.size() >= max_points:
-		_finish_extending_path()
-		return
-
-	var last_point = _path_points[_path_points.size() - 1]
-	if pos.distance_to(last_point) < min_point_distance:
-		return
-
-	var hit_result = _check_wall_between(last_point, pos)
-	if hit_result.hit:
-		var wall_pos = hit_result.position
-		var to_wall = (wall_pos - last_point).normalized()
-		var safe_pos = wall_pos - to_wall * 0.1
-		safe_pos.y = ground_plane_height
-		_path_points.append(safe_pos)
-		_path_mesh.update_from_points(_path_points)
-		_finish_extending_path()
-		return
-
-	_path_points.append(pos)
-	_path_mesh.update_from_points(_path_points)
-
-
-func _finish_extending_path() -> void:
-	_is_extending_path = false
-
-	if _path_points.size() >= 2 and _character:
-		if enable_smoothing and _path_points.size() >= 3:
-			_pending_path = PathSmoother.smooth_path(_path_points, smoothing_epsilon, smoothing_segments * 2)
-		else:
-			_pending_path = _path_points.duplicate()
-		_marker_history.append(MarkerType.PATH_EXTENSION)
-
-	drawing_finished.emit(_path_points)
+## パスの先端から描画を継続開始
+func start_continue_from_endpoint() -> bool:
+	if not can_continue_path():
+		return false
+	_is_continuing = true
+	_points_before_extension = _path_points.size()
+	_is_drawing = true
+	return true
 #endregion
 
 
@@ -428,30 +623,264 @@ func _check_wall_between(from: Vector3, to: Vector3) -> Dictionary:
 	return PathRaycastHelper.check_wall_between(space_state, from, to, wall_collision_mask, ground_plane_height)
 
 
+## 壁沿いにスライドした位置を計算
+## @param from: 開始位置
+## @param to: 目標位置（壁にぶつかった）
+## @param hit_result: 壁ヒット結果 { position, normal }
+## @return: スライド後の位置（スライド不可の場合はVector3.ZERO）
+func _calculate_wall_slide_position(from: Vector3, to: Vector3, hit_result: Dictionary) -> Vector3:
+	var wall_normal: Vector3 = hit_result.get("normal", Vector3.ZERO)
+	if wall_normal.length() < 0.001:
+		return Vector3.ZERO
+
+	# 移動方向
+	var move_dir := (to - from).normalized()
+
+	# スライド方向 = 移動方向から壁法線成分を除去
+	var slide_dir := move_dir - wall_normal * move_dir.dot(wall_normal)
+	if slide_dir.length() < 0.001:
+		# 壁に真正面から当たった
+		return Vector3.ZERO
+	slide_dir = slide_dir.normalized()
+
+	# 壁の手前位置（安全な距離を確保）
+	# wall_normalは壁から離れる方向を向いているので、その方向にオフセット
+	var wall_pos: Vector3 = hit_result.position
+	var safe_wall_pos := wall_pos + wall_normal * wall_slide_offset
+	safe_wall_pos.y = ground_plane_height
+
+	# スライド方向への移動量（元の目標までの残り距離を使用）
+	var remaining_distance := wall_pos.distance_to(to)
+	var slide_target := safe_wall_pos + slide_dir * remaining_distance
+	slide_target.y = ground_plane_height
+
+	# スライド先が壁にぶつからないかチェック
+	var slide_hit := _check_wall_between(safe_wall_pos, slide_target)
+	if slide_hit.hit:
+		# 壁角に当たった - スライド先の壁の手前で止める
+		var slide_wall_pos: Vector3 = slide_hit.position
+		var slide_wall_normal: Vector3 = slide_hit.get("normal", Vector3.ZERO)
+		if slide_wall_normal.length() > 0.001:
+			var corner_pos := slide_wall_pos + slide_wall_normal * wall_slide_offset
+			corner_pos.y = ground_plane_height
+			# 最低距離を確保
+			if corner_pos.distance_to(from) >= min_point_distance:
+				return corner_pos
+		return Vector3.ZERO
+
+	# 最低距離を確保
+	if slide_target.distance_to(from) < min_point_distance:
+		return Vector3.ZERO
+
+	return slide_target
+
+
+## 壁沿いモードに入る
+## @param hit_result: 壁ヒット結果 { position, normal }
+## @param move_dir: 移動方向
+## @return: 成功した場合true
+func _enter_wall_slide_mode(hit_result: Dictionary, move_dir: Vector3) -> bool:
+	var wall_normal: Vector3 = hit_result.get("normal", Vector3.ZERO)
+	if wall_normal.length() < 0.001:
+		return false
+
+	# Y成分を除去して水平方向のみで計算
+	wall_normal.y = 0
+	wall_normal = wall_normal.normalized()
+	if wall_normal.length() < 0.001:
+		return false
+
+	# スライド方向 = 移動方向から壁法線成分を除去
+	var slide_dir := move_dir - wall_normal * move_dir.dot(wall_normal)
+	slide_dir.y = 0
+	if slide_dir.length() < 0.001:
+		# 壁に真正面から当たった
+		return false
+	slide_dir = slide_dir.normalized()
+
+	_is_wall_sliding = true
+	_wall_slide_normal = wall_normal
+	_wall_slide_direction = slide_dir
+
+	return true
+
+
+## 壁沿いモード中の処理
+## @param user_pos: ユーザーの入力位置
+## @return: { should_exit: bool, corner_hit: bool, new_point: Vector3 }
+func _process_wall_slide(user_pos: Vector3) -> Dictionary:
+	var result = { "should_exit": false, "corner_hit": false, "new_point": Vector3.ZERO }
+
+	if _path_points.size() == 0:
+		result.should_exit = true
+		return result
+
+	var last_point = _path_points[_path_points.size() - 1]
+
+	# ユーザーの移動方向を計算
+	var user_move_dir = (user_pos - last_point)
+	user_move_dir.y = 0
+	if user_move_dir.length() < 0.001:
+		return result  # 動いていない
+	user_move_dir = user_move_dir.normalized()
+
+	# 壁沿いモード終了判定
+	if _should_exit_wall_slide(user_pos, user_move_dir):
+		result.should_exit = true
+		result.corner_hit = false
+		return result
+
+	# スライド方向への移動量を計算
+	var slide_amount = user_move_dir.dot(_wall_slide_direction)
+	if slide_amount < 0.1:
+		# スライド方向にほとんど動いていない
+		return result
+
+	# スライド方向に沿って新しい位置を計算
+	var move_distance = user_pos.distance_to(last_point) * slide_amount
+	var new_pos = last_point + _wall_slide_direction * move_distance
+	new_pos.y = ground_plane_height
+
+	# 最低距離チェック
+	if new_pos.distance_to(last_point) < min_point_distance:
+		return result
+
+	# スライド先が壁にぶつからないかチェック（角の検出）
+	var slide_hit = _check_wall_between(last_point, new_pos)
+	if slide_hit.hit:
+		# 角に当たった - 壁沿いモード終了
+		var corner_wall_pos: Vector3 = slide_hit.position
+		var corner_wall_normal: Vector3 = slide_hit.get("normal", Vector3.ZERO)
+		if corner_wall_normal.length() > 0.001:
+			corner_wall_normal.y = 0
+			corner_wall_normal = corner_wall_normal.normalized()
+			var corner_pos = corner_wall_pos + corner_wall_normal * wall_slide_offset
+			corner_pos.y = ground_plane_height
+			if corner_pos.distance_to(last_point) >= min_point_distance:
+				result.new_point = corner_pos
+		result.should_exit = true
+		result.corner_hit = true
+		return result
+
+	# 新しい位置から壁方向にレイキャストして、壁が近すぎないかチェック
+	var wall_check_pos = new_pos - _wall_slide_normal * (wall_slide_offset * 2)
+	var wall_distance_hit = _check_wall_between(new_pos, wall_check_pos)
+	if wall_distance_hit.hit:
+		# 壁が近い場合は壁から離れた位置に補正
+		var nearby_wall_pos: Vector3 = wall_distance_hit.position
+		var nearby_wall_normal: Vector3 = wall_distance_hit.get("normal", _wall_slide_normal)
+		nearby_wall_normal.y = 0
+		if nearby_wall_normal.length() > 0.001:
+			nearby_wall_normal = nearby_wall_normal.normalized()
+			new_pos = nearby_wall_pos + nearby_wall_normal * wall_slide_offset
+			new_pos.y = ground_plane_height
+			# 壁法線を更新（壁が曲がっている場合に対応）
+			_wall_slide_normal = nearby_wall_normal
+	else:
+		# 壁がない = 穴がある
+		# ユーザーが穴の方向（壁の向こう側）へ向かおうとしているかチェック
+		var toward_gap = user_move_dir.dot(-_wall_slide_normal)
+		if toward_gap > 0.2:
+			# 穴を通過しようとしている -> 壁沿いモード終了
+			result.should_exit = true
+			result.corner_hit = false
+			return result
+
+	result.new_point = new_pos
+	return result
+
+
+## 壁沿いモード終了判定
+## @param _user_pos: ユーザーの入力位置（将来の拡張用、現在未使用）
+## @param user_move_dir: ユーザーの移動方向（正規化済み）
+## @return: 終了すべき場合true
+func _should_exit_wall_slide(_user_pos: Vector3, user_move_dir: Vector3) -> bool:
+	# ユーザーが壁から離れる方向に動いているかチェック
+	# 壁法線とユーザー移動方向のドット積が正なら、壁から離れている
+	var away_from_wall = user_move_dir.dot(_wall_slide_normal)
+
+	# スライド方向との角度をチェック
+	var slide_alignment = abs(user_move_dir.dot(_wall_slide_direction))
+
+	# 壁から離れる方向に明確に動いている場合（閾値: 0.3）
+	# かつスライド方向との整合性が低い場合
+	if away_from_wall > 0.3 and slide_alignment < 0.5:
+		return true
+
+	# ユーザーがスライド方向と逆方向に大きく動いている場合も終了
+	var reverse_slide = user_move_dir.dot(_wall_slide_direction)
+	if reverse_slide < -0.5:
+		return true
+
+	return false
+
+
+## 壁沿い状態をリセット
+func _reset_wall_slide_state() -> void:
+	_is_wall_sliding = false
+	_wall_slide_normal = Vector3.ZERO
+	_wall_slide_direction = Vector3.ZERO
+
+
+## 位置が壁に近すぎる場合は壁から離れた位置に補正
+## @param pos: チェックする位置
+## @return: 補正後の位置（壁が近くない場合はそのまま返す）
+func _correct_position_away_from_wall(pos: Vector3) -> Vector3:
+	var corrected = pos
+	var check_distance = wall_slide_offset * 2
+
+	# 4方向にレイキャストして壁をチェック
+	var directions = [
+		Vector3(1, 0, 0),
+		Vector3(-1, 0, 0),
+		Vector3(0, 0, 1),
+		Vector3(0, 0, -1)
+	]
+
+	for dir in directions:
+		var check_target = pos + dir * check_distance
+		var hit = _check_wall_between(pos, check_target)
+		if hit.hit:
+			var wall_pos: Vector3 = hit.position
+			var wall_normal: Vector3 = hit.get("normal", -dir)
+			wall_normal.y = 0
+			if wall_normal.length() > 0.001:
+				wall_normal = wall_normal.normalized()
+				var dist_to_wall = pos.distance_to(wall_pos)
+				if dist_to_wall < wall_slide_offset:
+					# 壁から離れた位置に補正
+					corrected = wall_pos + wall_normal * wall_slide_offset
+					corrected.y = ground_plane_height
+					break
+
+	return corrected
+
+
 func _find_closest_point_on_path(pos: Vector3) -> Dictionary:
-	return PathCalculator.find_closest_point_on_path(_pending_path, pos)
+	return PathCalculator.find_closest_point_on_path(_path_points, pos)
 
 
 func _find_offset_point_on_path(base_ratio: float, offset_distance: float) -> Dictionary:
-	return PathCalculator.find_offset_point_on_path(_pending_path, base_ratio, offset_distance)
+	return PathCalculator.find_offset_point_on_path(_path_points, base_ratio, offset_distance)
 
 
 func _get_path_endpoint() -> Vector3:
-	return PathCalculator.get_path_endpoint(_pending_path)
+	return PathCalculator.get_path_endpoint(_path_points)
 
 
 func _is_near_path_endpoint(ground_pos: Vector3) -> bool:
-	return PathCalculator.is_near_path_endpoint(_pending_path, ground_pos, path_endpoint_threshold)
+	var result = PathCalculator.is_near_path_endpoint(_path_points, ground_pos, path_endpoint_threshold)
+	if result and _path_points.size() > 0:
+		var endpoint = _path_points[_path_points.size() - 1]
+		var dist = ground_pos.distance_to(endpoint)
+		if Debug.enabled: print("[PointDebug] _is_near_path_endpoint: true (dist=%.2f, threshold=%.2f)" % [dist, path_endpoint_threshold])
+	return result
 
 
 func _raycast_wall_or_floor(screen_pos: Vector2) -> Dictionary:
 	var space_state = get_world_3d().direct_space_state
 	return PathRaycastHelper.raycast_wall_or_floor(_camera, space_state, screen_pos)
 
-
-func _raycast_door(screen_pos: Vector2) -> Node3D:
-	var space_state = get_world_3d().direct_space_state
-	return PathRaycastHelper.raycast_door(_camera, space_state, screen_pos)
 #endregion
 
 
@@ -461,375 +890,158 @@ func get_drawing_mode() -> DrawingMode:
 
 
 func start_movement_mode() -> void:
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_movement_mode")
 	_drawing_mode = DrawingMode.MOVEMENT
 	_path_points.clear()
+	_external_vision_mode = false
 	mode_changed.emit(int(DrawingMode.MOVEMENT))
 
 
 func start_vision_mode() -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
+		if Debug.enabled: print("[PointDebug] PathDrawer.start_vision_mode: failed (path_points=%d)" % _path_points.size())
 		return false
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_vision_mode: success")
 	_drawing_mode = DrawingMode.VISION_POINT
 	_is_enabled = true
+	_external_vision_mode = false  # UIから開始した場合は自動復帰しない
+	_vision_handler.reset_state()
 	mode_changed.emit(int(DrawingMode.VISION_POINT))
 	return true
 
 
-func start_run_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.RUN_MARKER
-	_is_enabled = true
-	_run_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.RUN_MARKER))
-	return true
-
-
-func start_clear_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.CLEAR_MARKER
-	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.CLEAR_MARKER))
-	return true
-
-
-func start_grenade_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.GRENADE_MARKER
-	_is_enabled = true
-	_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.GRENADE_MARKER))
-	return true
-
-
-func start_smoke_grenade_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.SMOKE_GRENADE_MARKER
-	_is_enabled = true
-	_smoke_grenade_handler.reset_state()
-	mode_changed.emit(int(DrawingMode.SMOKE_GRENADE_MARKER))
-	return true
-
-
-func start_door_mode() -> bool:
-	if _pending_path.size() < 2:
-		return false
-	_drawing_mode = DrawingMode.DOOR_MARKER
-	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.DOOR_MARKER))
-	return true
-
-
 func start_wait_mode() -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
+		if Debug.enabled: print("[PointDebug] PathDrawer.start_wait_mode: failed (path_points=%d)" % _path_points.size())
 		return false
-	_drawing_mode = DrawingMode.WAIT_MARKER
+	if Debug.enabled: print("[PointDebug] PathDrawer.start_wait_mode: success")
+	_drawing_mode = DrawingMode.WAIT_POINT
 	_is_enabled = true
-	mode_changed.emit(int(DrawingMode.WAIT_MARKER))
+	_wait_handler.reset_state()
+	mode_changed.emit(int(DrawingMode.WAIT_POINT))
 	return true
 #endregion
 
 
-#region マーカー取得 API（ファサード）
+#region ポイント取得 API（ファサード - データマネージャーに委譲）
 func has_vision_points() -> bool:
-	return _vision_handler.has_markers()
+	return _data_manager.has_vision_points()
 
 
 func get_vision_points() -> Array[Dictionary]:
-	return _vision_handler.get_markers()
+	return _data_manager.get_vision_points()
 
 
 func get_vision_point_count() -> int:
-	return _vision_handler.get_marker_count()
+	return _data_manager.get_vision_point_count()
 
 
-func take_vision_markers() -> Array[MeshInstance3D]:
-	return _vision_handler.take_markers()
+func take_vision_points() -> Array[MeshInstance3D]:
+	return _data_manager.take_vision_points()
 
 
-func has_run_segments() -> bool:
-	return _run_handler.has_markers()
+func has_wait_points() -> bool:
+	return _data_manager.has_wait_points()
 
 
-func get_run_segments() -> Array[Dictionary]:
-	return _run_handler.get_markers()
+func get_wait_points() -> Array[Dictionary]:
+	return _data_manager.get_wait_points()
 
 
-func get_run_segment_count() -> int:
-	return _run_handler.get_marker_count()
+func get_wait_point_count() -> int:
+	return _data_manager.get_wait_point_count()
 
 
-func has_incomplete_run_start() -> bool:
-	return _run_handler.has_incomplete_run_start()
+func take_wait_points() -> Array[MeshInstance3D]:
+	return _data_manager.take_wait_points()
 
 
-func take_run_markers() -> Array[MeshInstance3D]:
-	return _run_handler.take_markers()
+## Visionポイントメッシュを指定親ノードに転送（データもクリア）
+## @param parent: 転送先の親ノード
+## @return: 転送されたメッシュの配列
+func transfer_vision_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
+	return _data_manager.transfer_vision_meshes_to(parent)
 
 
-func has_clear_points() -> bool:
-	return _clear_handler.has_markers()
+## Waitポイントメッシュを指定親ノードに転送（データもクリア）
+## @param parent: 転送先の親ノード
+## @return: 転送されたメッシュの配列
+func transfer_wait_meshes_to(parent: Node3D) -> Array[MeshInstance3D]:
+	return _data_manager.transfer_wait_meshes_to(parent)
 
 
-func get_clear_points() -> Array[Dictionary]:
-	return _clear_handler.get_markers()
+## 指定アンカー位置でVisionモードを開始（外部からの呼び出し用）
+## 内部状態の直接操作を避けるためのAPI
+## @param anchor: アンカー位置
+## @param ratio: パス上の比率
+## @param auto_confirm: ポイント追加後に自動確定するかどうか
+func start_vision_mode_with_anchor(anchor: Vector3, ratio: float, auto_confirm: bool = false) -> void:
+	_external_vision_mode = true
+	_auto_confirm_after_vision = auto_confirm
+	_drawing_mode = DrawingMode.VISION_POINT
+	mode_changed.emit(int(DrawingMode.VISION_POINT))
+	_vision_handler.start_with_anchor(anchor, ratio)
 
 
-func get_clear_point_count() -> int:
-	return _clear_handler.get_marker_count()
-
-
-func take_clear_markers() -> Array[MeshInstance3D]:
-	return _clear_handler.take_markers()
-
-
-func has_grenade_markers() -> bool:
-	return _grenade_handler.has_markers()
-
-
-func get_grenade_markers() -> Array[Dictionary]:
-	return _grenade_handler.get_markers()
-
-
-func get_grenade_marker_count() -> int:
-	return _grenade_handler.get_marker_count()
-
-
-func take_grenade_markers() -> Array[MeshInstance3D]:
-	return _grenade_handler.take_markers()
-
-
-func has_smoke_grenade_markers() -> bool:
-	return _smoke_grenade_handler.has_markers()
-
-
-func get_smoke_grenade_markers() -> Array[Dictionary]:
-	return _smoke_grenade_handler.get_markers()
-
-
-func get_smoke_grenade_marker_count() -> int:
-	return _smoke_grenade_handler.get_marker_count()
-
-
-func take_smoke_grenade_markers() -> Array[MeshInstance3D]:
-	return _smoke_grenade_handler.take_markers()
-
-
-func has_door_markers() -> bool:
-	return _door_handler.has_markers()
-
-
-func get_door_markers() -> Array[Dictionary]:
-	return _door_handler.get_markers()
-
-
-func get_door_marker_count() -> int:
-	return _door_handler.get_marker_count()
-
-
-func take_door_markers() -> Array[MeshInstance3D]:
-	return _door_handler.take_markers()
-
-
-func has_wait_markers() -> bool:
-	return _wait_handler.has_markers()
-
-
-func get_wait_markers() -> Array[Dictionary]:
-	return _wait_handler.get_markers()
-
-
-func get_wait_marker_count() -> int:
-	return _wait_handler.get_marker_count()
-
-
-func take_wait_markers() -> Array[MeshInstance3D]:
-	return _wait_handler.take_markers()
+## 同期Waitポイントを追加（コンテキストメニューから呼ばれる）
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: ポイントの3D位置
+func add_sync_wait_point(path_ratio: float, anchor: Vector3) -> void:
+	_wait_handler.add_sync_point(path_ratio, anchor)
+	_point_history.append(int(PointType.WAIT))
 #endregion
 
 
-#region 全キャラクター用 API（後方互換）
+#region 全キャラクター用 API（後方互換 - データマネージャーに委譲）
 func get_all_vision_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_vision_points() }
-	return {}
+	return _data_manager.get_all_vision_points()
 
 
-func get_all_run_segments() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_run_segments() }
-	return {}
+func get_all_wait_points() -> Dictionary:
+	return _data_manager.get_all_wait_points()
 
 
-func get_all_clear_points() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_clear_points() }
-	return {}
+func take_all_vision_points() -> Dictionary:
+	return _data_manager.take_all_vision_points()
 
 
-func get_all_grenade_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_grenade_markers() }
-	return {}
-
-
-func get_all_smoke_grenade_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_smoke_grenade_markers() }
-	return {}
-
-
-func get_all_door_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_door_markers() }
-	return {}
-
-
-func get_all_wait_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): get_wait_markers() }
-	return {}
-
-
-func take_all_vision_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_vision_markers() }
-	return {}
-
-
-func take_all_run_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_run_markers() }
-	return {}
-
-
-func take_all_clear_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_clear_markers() }
-	return {}
-
-
-func take_all_grenade_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_grenade_markers() }
-	return {}
-
-
-func take_all_smoke_grenade_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_smoke_grenade_markers() }
-	return {}
-
-
-func take_all_door_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_door_markers() }
-	return {}
-
-
-func take_all_wait_markers() -> Dictionary:
-	if _active_edit_character:
-		return { _active_edit_character.get_instance_id(): take_wait_markers() }
-	return {}
+func take_all_wait_points() -> Dictionary:
+	return _data_manager.take_all_wait_points()
 #endregion
 
 
-#region Undo API
-func undo_last_marker() -> int:
-	if _marker_history.is_empty():
-		return -1
-
-	var last_type = _marker_history.pop_back()
-
-	match last_type:
-		MarkerType.VISION:
-			_vision_handler.undo_last()
-		MarkerType.RUN:
-			_run_handler.undo_last()
-		MarkerType.CLEAR:
-			_clear_handler.undo_last()
-		MarkerType.GRENADE:
-			_grenade_handler.undo_last()
-		MarkerType.SMOKE_GRENADE:
-			_smoke_grenade_handler.undo_last()
-		MarkerType.DOOR:
-			_door_handler.undo_last()
-		MarkerType.WAIT:
-			_wait_handler.undo_last()
-		MarkerType.PATH:
-			_undo_path()
-		MarkerType.PATH_EXTENSION:
-			_undo_path_extension()
-
-	return last_type
-
-
-func _undo_path() -> void:
-	_path_points.clear()
-	_path_mesh.clear()
-	_pending_path.clear()
-	_pending_character = null
-	_path_extension_snapshots.clear()
-	_is_drawing = false
-	_drawing_mode = DrawingMode.MOVEMENT
-
-	# 全ハンドラをクリア
-	for handler in _get_all_handlers():
-		handler.clear_all()
-
-	_marker_history.clear()
-
-	path_undone.emit()
-
-
-func _undo_path_extension() -> void:
-	if _path_extension_snapshots.is_empty():
-		return
-
-	var previous_path = _path_extension_snapshots.pop_back()
-	_pending_path = previous_path
-	_path_points = previous_path.duplicate()
-
-	if _path_mesh:
-		_path_mesh.update_from_points(_path_points)
+#region Undo API（データマネージャーに委譲）
+func undo_last_point() -> int:
+	return _data_manager.undo_last_point()
 
 
 func remove_last_vision_point() -> void:
-	_vision_handler.undo_last()
-
-
-func remove_last_run_segment() -> void:
-	_run_handler.undo_last()
-
-
-func remove_last_clear_point() -> void:
-	_clear_handler.undo_last()
+	_data_manager.remove_last_vision_point()
 #endregion
 
 
 #region クリア
 func clear() -> void:
 	_path_points.clear()
-	_path_mesh.clear()
+	if _path_mesh:
+		_path_mesh.clear()
 	_is_drawing = false
-	_is_extending_path = false
+	_reset_wall_slide_state()
 	_drawing_mode = DrawingMode.MOVEMENT
-	_pending_path.clear()
-	_pending_character = null
-	_path_extension_snapshots.clear()
-	_marker_history.clear()
+	_point_history.clear()
 	_active_edit_character = null
+	# 継続状態もリセット
+	_is_continuing = false
+	_points_before_extension = 0
 
 	for handler in _get_all_handlers():
 		handler.clear_all()
 
 
-func clear_pending() -> void:
-	_pending_path.clear()
-	_pending_character = null
+func clear_path() -> void:
+	_path_points.clear()
+	if _path_mesh:
+		_path_mesh.clear()
 	for handler in _get_all_handlers():
 		handler.clear_all()
 #endregion
@@ -841,259 +1053,112 @@ func get_drawn_path() -> PackedVector3Array:
 
 
 func get_smoothed_path() -> PackedVector3Array:
-	return _pending_path
+	return _path_points
 
 
 func get_relative_path() -> PackedVector3Array:
-	if _pending_path.size() < 2:
-		return PackedVector3Array()
-	var start = _pending_path[0]
-	var relative = PackedVector3Array()
-	for point in _pending_path:
-		relative.append(point - start)
-	return relative
+	return _data_manager.get_relative_path()
 
 
 func get_relative_vision_points() -> Array[Dictionary]:
-	if _pending_path.size() < 2:
-		return []
-	var start = _pending_path[0]
-	var relative_points: Array[Dictionary] = []
-	for vp in get_vision_points():
-		relative_points.append({
-			"path_ratio": vp.path_ratio,
-			"anchor": vp.anchor - start,
-			"target_point": vp.target_point - start
-		})
-	return relative_points
+	return _data_manager.get_relative_vision_points()
 
 
 func is_drawing() -> bool:
-	return _is_drawing or _is_extending_path
+	return _is_drawing
 
 
 func is_point_on_path(ground_pos: Vector3) -> bool:
-	if _pending_path.size() < 2:
+	if _path_points.size() < 2:
 		return false
 	var result = _find_closest_point_on_path(ground_pos)
-	return result.distance <= path_click_threshold
+	var distance_to_current: float = result.distance
+	if Debug.enabled: print("[PointDebug] is_point_on_path: distance_to_current=%.3f, threshold=%.3f" % [distance_to_current, path_click_threshold])
+	if distance_to_current > path_click_threshold:
+		return false
+
+	# 他のパスがより近い場合はfalseを返す（誤操作防止）
+	if _path_execution_manager and _character:
+		var current_char_id: int = _character.get_instance_id()
+		# 確定済みパスをチェック
+		if _path_execution_manager.has_method("get_all_pending_path_distances"):
+			var distances: Dictionary = _path_execution_manager.get_all_pending_path_distances(ground_pos)
+			if Debug.enabled: print("[PointDebug] is_point_on_path: checking %d other paths, current_char_id=%d" % [distances.size(), current_char_id])
+			for char_id in distances:
+				if char_id != current_char_id:
+					var other_distance: float = distances[char_id]
+					if Debug.enabled: print("[PointDebug] is_point_on_path: char_id=%d, other_distance=%.3f" % [char_id, other_distance])
+					if other_distance < distance_to_current:
+						if Debug.enabled: print("[PointDebug] is_point_on_path: REJECTED - other path is closer (current=%.3f, other=%.3f)" % [distance_to_current, other_distance])
+						return false
+
+	return true
 
 
 func is_near_path_endpoint(ground_pos: Vector3) -> bool:
 	return _is_near_path_endpoint(ground_pos)
 
 
-func is_marker_mode() -> bool:
+func is_point_mode() -> bool:
 	return _drawing_mode != DrawingMode.MOVEMENT
 
 
-func has_pending_path() -> bool:
-	return _pending_path.size() >= 2 and _pending_character != null
+## パスが存在するかどうか（2点以上）
+func has_path() -> bool:
+	return _path_points.size() >= 2
 
 
 func has_preview_path() -> bool:
-	if _is_drawing or _is_extending_path:
-		return _path_points.size() >= 2 and _character != null
-	return has_pending_path()
+	return _path_points.size() >= 2
 
 
 func get_preview_path() -> PackedVector3Array:
-	if _is_drawing or _is_extending_path:
-		return _path_points
-	return _pending_path
+	return _path_points
 #endregion
 
 
-#region 実行 API
+#region 実行 API（データマネージャーに委譲）
 func execute(run: bool = false) -> bool:
-	if _pending_path.size() < 2 or _pending_character == null:
-		return false
-
-	var path_array: Array[Vector3] = []
-	for point in _pending_path:
-		path_array.append(point)
-	_pending_character.set_path(path_array, run)
-
-	_executing_character = _pending_character
-
-	if not _executing_character.path_completed.is_connected(_on_path_completed):
-		_executing_character.path_completed.connect(_on_path_completed)
-
-	_pending_path.clear()
-	_pending_character = null
-
-	return true
+	return _data_manager.execute(run)
 
 
 func execute_with_vision(run: bool = false) -> bool:
-	if _pending_path.size() < 2 or _pending_character == null:
-		return false
-
-	var path_array: Array[Vector3] = []
-	for point in _pending_path:
-		path_array.append(point)
-
-	var vision_points = get_vision_points()
-	if vision_points.size() > 0:
-		_pending_character.set_path_with_vision_points(path_array, vision_points.duplicate(), run)
-	else:
-		_pending_character.set_path(path_array, run)
-
-	_executing_character = _pending_character
-
-	if not _executing_character.path_completed.is_connected(_on_path_completed):
-		_executing_character.path_completed.connect(_on_path_completed)
-
-	_pending_path.clear()
-	_pending_character = null
-
-	return true
-
-
-func _on_path_completed() -> void:
-	if _executing_character:
-		if _executing_character.path_completed.is_connected(_on_path_completed):
-			_executing_character.path_completed.disconnect(_on_path_completed)
-		_executing_character = null
-
-	clear()
+	return _data_manager.execute_with_vision(run)
 #endregion
 
 
-#region 統一マーカー API
-func get_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[Dictionary]:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return get_vision_points()
-		ActionMarkerDataScript.Type.RUN:
-			return get_run_segments()
-		ActionMarkerDataScript.Type.CLEAR:
-			return get_clear_points()
-		ActionMarkerDataScript.Type.GRENADE:
-			return get_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return get_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return get_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return get_smoke_grenade_markers()
-		_:
-			return []
+#region 統一ポイント API（データマネージャーに委譲）
+func get_points_by_type(point_type: ActionPointData.Type) -> Array[Dictionary]:
+	return _data_manager.get_points_by_type(point_type)
 
 
-func take_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Array[MeshInstance3D]:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return take_vision_markers()
-		ActionMarkerDataScript.Type.RUN:
-			return take_run_markers()
-		ActionMarkerDataScript.Type.CLEAR:
-			return take_clear_markers()
-		ActionMarkerDataScript.Type.GRENADE:
-			return take_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return take_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return take_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return take_smoke_grenade_markers()
-		_:
-			return []
+func take_points_by_type(point_type: ActionPointData.Type) -> Array[MeshInstance3D]:
+	return _data_manager.take_points_by_type(point_type)
 
 
-func get_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return get_all_vision_points()
-		ActionMarkerDataScript.Type.RUN:
-			return get_all_run_segments()
-		ActionMarkerDataScript.Type.CLEAR:
-			return get_all_clear_points()
-		ActionMarkerDataScript.Type.GRENADE:
-			return get_all_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return get_all_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return get_all_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return get_all_smoke_grenade_markers()
-		_:
-			return {}
+func get_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
+	return _data_manager.get_all_points_by_type(point_type)
 
 
-func take_all_markers_by_type(marker_type: ActionMarkerDataScript.Type) -> Dictionary:
-	match marker_type:
-		ActionMarkerDataScript.Type.VISION:
-			return take_all_vision_markers()
-		ActionMarkerDataScript.Type.RUN:
-			return take_all_run_markers()
-		ActionMarkerDataScript.Type.CLEAR:
-			return take_all_clear_markers()
-		ActionMarkerDataScript.Type.GRENADE:
-			return take_all_grenade_markers()
-		ActionMarkerDataScript.Type.DOOR:
-			return take_all_door_markers()
-		ActionMarkerDataScript.Type.WAIT:
-			return take_all_wait_markers()
-		ActionMarkerDataScript.Type.SMOKE_GRENADE:
-			return take_all_smoke_grenade_markers()
-		_:
-			return {}
+func take_all_points_by_type(point_type: ActionPointData.Type) -> Dictionary:
+	return _data_manager.take_all_points_by_type(point_type)
 
 
-func get_all_marker_types_data() -> Dictionary:
-	var result: Dictionary = {}
-	for type_value in ActionMarkerDataScript.Type.values():
-		result[type_value] = get_markers_by_type(type_value)
-	return result
+func get_all_point_types_data() -> Dictionary:
+	return _data_manager.get_all_point_types_data()
 
 
-func take_all_marker_types_meshes() -> Dictionary:
-	var result: Dictionary = {}
-	for type_value in ActionMarkerDataScript.Type.values():
-		result[type_value] = take_markers_by_type(type_value)
-	return result
+func take_all_point_types_meshes() -> Dictionary:
+	return _data_manager.take_all_point_types_meshes()
 #endregion
 
 
-#region 復元 API
-func restore_pending_path(character: Node3D, path_data: Dictionary) -> bool:
-	if path_data.is_empty():
-		return false
-
-	clear()
-
-	_character = character
-	_is_enabled = true
-	_drawing_mode = DrawingMode.MOVEMENT
-	_pending_character = character as CharacterBody3D
-
-	if path_data.has("path"):
-		_pending_path.clear()
-		for point in path_data["path"]:
-			_pending_path.append(point)
-		_path_points = _pending_path.duplicate()
-	if _path_points.size() < 2:
-		return false
-
-	if _path_mesh and _path_points.size() > 0:
-		_path_mesh.update_from_points(_path_points)
-
-	if path_data.has("path_mesh") and is_instance_valid(path_data["path_mesh"]):
-		path_data["path_mesh"].queue_free()
-
-	_marker_history.append(MarkerType.PATH)
-
-	# マーカーの復元はハンドラには移行しない（既存メッシュの所有権移動のため）
-	# 簡易復元として履歴のみ追加
-	var vision_count = path_data.get("vision_points", []).size()
-	for _i in range(vision_count):
-		_marker_history.append(MarkerType.VISION)
-
-	call_deferred("_emit_drawing_finished_after_restore")
-	return true
+#region 復元 API（データマネージャーに委譲）
+func restore_path_points(character: Node3D, path_data: Dictionary) -> bool:
+	return _data_manager.restore_path_points(character, path_data)
 
 
+## drawing_finished シグナルを発火（データマネージャーから呼ばれる）
 func _emit_drawing_finished_after_restore() -> void:
 	if _path_points.size() >= 2:
 		drawing_finished.emit(_path_points)
@@ -1103,4 +1168,12 @@ func _emit_drawing_finished_after_restore() -> void:
 #region 後方互換
 func is_multi_character_mode() -> bool:
 	return false
+#endregion
+
+
+#region 移動中パス継続用
+## パスメッシュを非表示にする（移動中継続モード用）
+func hide_path_mesh() -> void:
+	if _path_mesh:
+		_path_mesh.visible = false
 #endregion

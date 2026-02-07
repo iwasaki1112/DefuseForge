@@ -69,9 +69,9 @@ func _process(delta: float) -> void:
 			# ゲーム開始を全員に通知
 			_network_manager.broadcast_message(
 				NetworkConstants.MessageType.ROUND_STATE,
-				{"action": "start_game", "map_id": "bank"}
+				{"action": "start_game", "map_id": "office"}
 			)
-			_start_game("bank")
+			_start_game("office")
 		else:
 			# カウントダウン表示更新
 			var seconds := ceili(_countdown_time)
@@ -573,7 +573,7 @@ func _on_network_message(_from_peer: int, msg_type: int, data: Dictionary) -> vo
 		var action: String = data.get("action", "")
 		match action:
 			"start_game":
-				var map_id: String = data.get("map_id", "bank")
+				var map_id: String = data.get("map_id", "office")
 				_start_game(map_id)
 			"countdown_start":
 				_start_countdown()
@@ -619,11 +619,12 @@ func _start_game(map_id: String) -> void:
 
 	# ゲームシーンをロード（統合されたGameScreenを使用）
 	var game_scene := load(GAME_SCENE).instantiate() as GameScreen
-	get_tree().root.add_child(game_scene)
 
-	# NetworkManagerをゲームシーンにセットアップ
-	game_scene.add_child(_network_manager)
+	# Multiplayerモードをadd_child前にセットアップ（_ready()で正しいProviderで初期化するため）
 	game_scene.setup_multiplayer(_network_manager, map_id)
+
+	get_tree().root.add_child(game_scene)
+	game_scene.add_child(_network_manager)
 
 	# このシーンを削除
 	queue_free()

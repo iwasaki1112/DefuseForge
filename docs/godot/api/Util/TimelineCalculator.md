@@ -26,8 +26,8 @@
 |----|------|
 | `WALK` | 歩行区間 |
 | `RUN` | 走行区間 |
-| `WAIT` | 待機区間（Waitマーカー） |
-| `DOOR` | ドア操作区間（Doorマーカー） |
+| `WAIT` | 待機区間（Waitポイント） |
+| `DOOR` | ドア操作区間（Doorポイント） |
 
 ## 内部クラス
 
@@ -73,8 +73,8 @@
 static func calculate_timeline(
     path: Array[Vector3],
     run_segments: Array[Dictionary] = [],
-    wait_markers: Array[Dictionary] = [],
-    door_markers: Array[Dictionary] = []
+    wait_points: Array[Dictionary] = [],
+    door_points: Array[Dictionary] = []
 ) -> TimelineData
 ```
 
@@ -82,8 +82,8 @@ static func calculate_timeline(
 |------|-----|------|
 | `path` | Array[Vector3] | パスポイント配列 |
 | `run_segments` | Array[Dictionary] | Run区間配列 `[{ start_ratio, end_ratio }]` |
-| `wait_markers` | Array[Dictionary] | Waitマーカー配列 `[{ path_ratio, wait_duration }]` |
-| `door_markers` | Array[Dictionary] | Doorマーカー配列 `[{ path_ratio }]` |
+| `wait_points` | Array[Dictionary] | Waitポイント配列 `[{ path_ratio, wait_duration }]` |
+| `door_points` | Array[Dictionary] | Doorポイント配列 `[{ path_ratio }]` |
 
 ### calculate_time_for_distance
 
@@ -107,9 +107,9 @@ static func calculate_simple_duration(path: Array[Vector3], is_running: bool = f
 # タイムラインを計算
 var path: Array[Vector3] = [Vector3(0, 0, 0), Vector3(10, 0, 0)]
 var run_segments: Array[Dictionary] = [{ "start_ratio": 0.3, "end_ratio": 0.6 }]
-var wait_markers: Array[Dictionary] = [{ "path_ratio": 0.8, "wait_duration": 2.0 }]
+var wait_points: Array[Dictionary] = [{ "path_ratio": 0.8, "wait_duration": 2.0 }]
 
-var timeline = TimelineCalculator.calculate_timeline(path, run_segments, wait_markers)
+var timeline = TimelineCalculator.calculate_timeline(path, run_segments, wait_points)
 print("Total duration: %s seconds" % timeline.total_duration)
 
 # 比率から時間を取得

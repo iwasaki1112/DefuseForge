@@ -149,17 +149,6 @@ func _physics_process(delta: float) -> void:
     anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
 ```
 
-### ROTATION操作後の敵追跡解除
-
-```gdscript
-# 回転モード確定時に敵追跡を解除
-func _on_rotation_confirmed(final_direction: Vector3) -> void:
-    var rotating_character = rotation_controller.get_character()
-    if rotating_character and rotating_character.combat_awareness:
-        # 現在の追跡を解除（敵は視界外に出るまで無視される）
-        rotating_character.combat_awareness.dismiss_current_target()
-```
-
 ## 視線方向の優先順位
 
 このコンポーネントを使用する場合、視線方向は以下の優先順位で決定される：

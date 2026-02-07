@@ -128,11 +128,17 @@ host_sync.send_path_execute(false)  # 歩き
 ### Client → Host
 1. `send_path_confirm()` - パス確定リクエスト
 2. `send_local_character_states()` - キャラクター状態変更（15Hz）
-3. `send_game_event()` - ゲームイベント
+3. `send_game_event()` - ゲームイベント（グレネード、スモーク、ドアキック等）
 
 ### 双方向
 - `send_selection_update()` - 選択状態（表示用）
 - `send_animation_event()` - アニメーションイベント（即時）
+
+### 帯域幅の最適化
+
+- **バイナリシリアライズ**: キャラクター状態の更新は`CharacterStateMessage`をバイナリ変換し、Base64エンコードしてJSONに埋め込むことでデータサイズを削減しています。
+- **一括送信 (Batching)**: 複数のローカルキャラクターの状態を1つのメッセージ(`CHARACTER_BATCH_UPDATE_BINARY`)にまとめて送信します。
+- **差分更新 (Delta Compression)**: キャラクターの位置や回転、状態に有意な変化がない場合は送信をスキップします（Debug実装）。
 
 ## ラグ補償アーキテクチャ
 

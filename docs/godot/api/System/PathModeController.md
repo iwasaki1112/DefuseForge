@@ -53,22 +53,40 @@ func setup(
 
 ### start()
 
-パスモードを開始する。
+パスモードを開始する（通常のパス描画）。
 
 ```gdscript
 func start(character: Node, char_color: Color = Color.WHITE) -> bool
 ```
 
+### start_with_existing_path()
+
+既存パスを読み込んで編集モードを開始する。
+
+```gdscript
+func start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool
+```
+
+### start_extension_mode()
+
+パス延長モードを開始する（一時的な選択状態で既存パスを編集）。
+
+```gdscript
+func start_extension_mode(character: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool
+```
+
+### start_moving_extension_mode()
+
+移動中のパス延長モードを開始する。キャラクターが移動を続けながら、終点から新しいパスを描画できる。
+
+```gdscript
+func start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool
+```
+
 **引数:**
-- `character`: パス描画の基準キャラクター
-- `char_color`: パス描画色
-
-**戻り値:** 成功した場合 `true`
-
-**処理:**
-1. 選択マネージャーでパス適用対象をスナップショット
-2. PathDrawerを有効化
-3. `mode_started`シグナルを発火
+- `character`: 対象キャラクター
+- `remaining_data`: 残りのパスデータ（endpoint含む）
+- `is_extending_extension`: 既存の延長パスをさらに延長する場合 `true`
 
 ### confirm()
 
@@ -81,9 +99,9 @@ func confirm() -> bool
 **戻り値:** 成功した場合 `true`
 
 **処理:**
-1. PathExecutionManagerにパスを委譲
-2. クリーンアップ処理
-3. 選択を解除
+1. モード（通常/延長/移動中延長）に応じて適切な確定処理を実行
+2. PathExecutionManagerにパスを委譲
+3. クリーンアップ処理
 4. `mode_ended`シグナルを発火
 
 ### cancel()
@@ -128,17 +146,37 @@ func get_editing_character() -> Node
 func get_target_count() -> int
 ```
 
-### handle_click_to_cancel()
+### handle_click_to_confirm()
 
-クリック・トゥ・キャンセル処理。
+クリック・トゥ・コンファーム処理。
 
 ```gdscript
-func handle_click_to_cancel(clicked_character: Node) -> bool
+func handle_click_to_confirm(clicked_character: Node) -> bool
 ```
 
-パス描画後にキャラクター以外をクリックした場合にキャンセル。
+パス描画後にキャラクター以外（パス外）をクリックした場合にパスを確定する。
 
-**戻り値:** キャンセルした場合 `true`
+**戻り値:** 確定した場合 `true`
+
+### start_with_existing_path()
+
+既存パスを読み込んで編集モードを開始する。
+
+```gdscript
+func start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool
+```
+
+**引数:**
+- `path_data`: PathExecutionManagerから取得したパスデータ
+- `char_color`: パス描画色
+
+**戻り値:** 成功した場合 `true`
+
+**処理:**
+1. 選択マネージャーでパス適用対象をスナップショット
+2. 既存パスデータをPathDrawerに復元
+3. 復元に失敗した場合は通常のenableにフォールバック
+4. `mode_started`シグナルを発火
 
 ## 使用例
 
@@ -174,18 +212,29 @@ func _unhandled_input(event: InputEvent) -> void:
     if path_mode_controller.is_path_mode() and event is InputEventMouseButton:
         if path_drawer.has_pending_path():
             var clicked = _raycast_character(event.position)
-            path_mode_controller.handle_click_to_cancel(clicked)
+            path_mode_controller.handle_click_to_confirm(clicked)
+
+# 既存パスの編集
+func _edit_existing_path(path_data: Dictionary) -> void:
+    var char_color = CharacterColorManager.get_character_color(selected_character)
+    path_mode_controller.start_with_existing_path(path_data, char_color)
 ```
 
 ## 状態遷移
 
 ```
 [Inactive] --start()--> [Drawing] --path_ready--> [Ready]
-    ^                       |                        |
-    |                       v                        v
-    +<---cancel()----------+                        |
-    +<---cancel()-------------------------------+
-    +<---confirm()-----------------------------+
+    ^          |            |                        |
+    |          |            v                        v
+    |          |     +--cancel()                     |
+    |          |     |                               |
+    +<---------+-----+                               |
+    +<---cancel()--------------------------------+
+    +<---confirm() / handle_click_to_confirm()---+
+
+[Inactive] --start_with_existing_path()--> [Ready] (既存パス復元)
+    ^                                         |
+    +<---cancel() / confirm()----------------+
 ```
 
 ## 関連クラス
@@ -205,12 +254,15 @@ func _unhandled_input(event: InputEvent) -> void:
 | `path_ready` | なし |
 
 ### メソッド
-- `setup(`
+- `setup(drawer: Node3D, sel_manager: CharacterSelectionManager, exec_manager: PathExecutionManager) -> void`
 - `start(_character: Node, char_color: Color = Color.WHITE) -> bool`
+- `start_with_existing_path(path_data: Dictionary, char_color: Color = Color.WHITE) -> bool`
+- `start_extension_mode(character: Node, path_data: Dictionary, char_color: Color = Color.WHITE) -> bool`
+- `start_moving_extension_mode(character: Node, remaining_data: Dictionary, char_color: Color = Color.WHITE, is_extending_extension: bool = false) -> bool`
 - `confirm() -> bool`
 - `cancel() -> void`
 - `is_path_mode() -> bool`
 - `has_pending_path() -> bool`
 - `get_editing_character() -> Node`
 - `get_target_count() -> int`
-- `handle_click_to_cancel(clicked_character: Node) -> bool`
+- `handle_click_to_confirm(clicked_character: Node) -> bool`

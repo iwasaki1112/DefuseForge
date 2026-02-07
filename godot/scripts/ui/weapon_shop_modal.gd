@@ -10,8 +10,6 @@ signal closed(character: CharacterBody3D)
 const MODAL_SIZE := Vector2(400, 500)
 const BUTTON_SIZE := Vector2(360, 60)
 const OVERLAY_COLOR := Color(0, 0, 0, 0.5)
-const AFFORDABLE_COLOR := Color(0.2, 0.6, 0.2)  ## 購入可能時の色
-const SELECTED_COLOR := Color(0.3, 0.5, 0.7)  ## 選択時の色
 
 @export_group("外観設定")
 @export var animation_duration: float = 0.15  ## 表示/非表示アニメーション時間
@@ -242,12 +240,12 @@ func _on_weapon_selected(weapon: WeaponPreset, button: Button) -> void:
 		if btn.disabled:
 			btn.modulate = Color(0.5, 0.5, 0.5)
 		elif btn == button:
-			btn.modulate = SELECTED_COLOR
+			btn.modulate = GameConstants.SELECTED_COLOR
 		else:
 			btn.modulate = Color.WHITE
 
 	# 選択ボタンをハイライト
-	button.modulate = SELECTED_COLOR
+	button.modulate = GameConstants.SELECTED_COLOR
 
 	_update_buy_button()
 

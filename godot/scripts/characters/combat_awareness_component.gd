@@ -12,6 +12,7 @@ signal enemy_lost(enemy: Node)
 signal target_changed(new_target: Node, old_target: Node)
 signal shot_missed(target: Node, miss_offset: Vector3)
 signal critical_hit(target: Node, damage: float)  ## Emitted when a critical hit occurs
+signal damage_dealt(attacker: Node, target: Node, damage: float, is_headshot: bool)  ## ダメージを与えた時（ネットワーク同期用）
 
 # ============================================
 # Configuration
@@ -184,7 +185,7 @@ func process(delta: float) -> void:
 
 ## Update ignored enemies list - remove enemies that are no longer in view
 func _update_ignored_list() -> void:
-	var vision: VisionComponent = _character.get_vision_component() if _character.has_method("get_vision_component") else null
+	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
 	if not vision:
 		return
 
@@ -211,7 +212,7 @@ func _scan_for_enemies() -> void:
 		if "is_alive" in _current_target and not _current_target.is_alive:
 			clear_target()
 
-	var vision: VisionComponent = _character.get_vision_component() if _character.has_method("get_vision_component") else null
+	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
 	if not vision:
 		return
 
@@ -224,7 +225,7 @@ func _scan_for_enemies() -> void:
 			clear_target()
 			return
 
-	# Get all enemy characters
+	# Get all enemy characters (uses cache, updated every 200ms)
 	var enemies := _get_enemy_characters()
 	if enemies.is_empty():
 		_handle_no_enemy_in_sight()
@@ -236,22 +237,44 @@ func _scan_for_enemies() -> void:
 
 	var char_pos: Vector3 = _character.global_position
 
+	# 可視性チェックの計測
+	var start_time := Time.get_ticks_usec() if Debug.enabled else 0
+
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
 		if enemy in _ignored_enemies:
+			if Debug.enabled: print("[CAC] Skip ignored enemy: ", enemy.name)
 			continue
 
 		# Skip dead enemies
 		if "is_alive" in enemy and not enemy.is_alive:
+			if Debug.enabled: print("[CAC] Skip dead enemy: ", enemy.name)
 			continue
 
-		var enemy_pos: Vector3 = enemy.global_position
-		# Check if enemy is in vision cone
-		if vision.is_position_in_view(enemy_pos):
+		# 敵の胴体中心の位置を使用（足元ではなく）
+		# レイキャストが目線から敵の足元に向かうと、近距離で検知できない問題がある
+		var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+		var dist_to_enemy: float = char_pos.distance_to(enemy.global_position)
+
+		# Check if enemy is visible (uses single raycast per enemy)
+		var is_visible := _is_enemy_visible(enemy_pos, vision)
+		if Debug.enabled:
+			print("[CAC] Check enemy: ", enemy.name, " dist=", "%.2f" % dist_to_enemy, "m visible=", is_visible)
+
+		if is_visible:
 			var dist: float = char_pos.distance_to(enemy_pos)
 			if dist < closest_distance:
 				closest_distance = dist
 				closest_enemy = enemy
+
+	if Debug.enabled:
+		var elapsed := Time.get_ticks_usec() - start_time
+		if elapsed > 2000:  # 2ms以上かかった場合のみログ
+			print("[CAC] Enemy scan took ", elapsed / 1000.0, "ms for ", enemies.size(), " enemies")
+		if closest_enemy:
+			print("[CAC] Closest enemy: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
+		else:
+			print("[CAC] No visible enemy found (checked ", enemies.size(), " enemies)")
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)
@@ -289,6 +312,18 @@ func _handle_no_enemy_in_sight() -> void:
 		target_changed.emit(null, old_target)
 
 
+## 敵が視界内にいるかを判定
+## 戦闘ターゲティングでは、このキャラクター自身が見える敵だけを攻撃対象にする
+## （FoWテクスチャは全味方の視界を合成しているため、ここでは使用しない）
+func _is_enemy_visible(enemy_pos: Vector3, vision: VisionComponent) -> bool:
+	# 各キャラクターは自分自身のVisionComponentで判定
+	# これにより、壁越しに敵を攻撃することを防ぐ
+	if vision:
+		return vision.is_position_in_view(enemy_pos)
+
+	return false
+
+
 ## Get all enemy characters
 func _get_enemy_characters() -> Array[Node]:
 	var enemies: Array[Node] = []
@@ -323,10 +358,12 @@ func _get_enemy_characters() -> Array[Node]:
 func _try_fire() -> void:
 	if not _character:
 		return
+	# ダメージ計算を先に行い、命中/外れ結果をセットしてからシグナルを発火
+	# これによりBulletTrailComponentが正しい射撃結果を取得できる
+	_apply_damage_to_target()
 	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl and anim_ctrl.has_method("fire"):
-		anim_ctrl.fire()  # Trigger recoil animation
-		_apply_damage_to_target()
+		anim_ctrl.fire()  # Trigger recoil animation + fired signal
 
 
 ## Calculate hit chance based on weapon stats, distance, and movement
@@ -399,7 +436,7 @@ func _apply_damage_to_target() -> void:
 		return
 
 	var damage: float = 10.0  # Default damage
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if weapon and "damage" in weapon:
 		damage = weapon.damage
 
@@ -422,6 +459,8 @@ func _apply_damage_to_target() -> void:
 			final_damage *= 2.0  # Critical hit: 2x damage
 			critical_hit.emit(_current_target, final_damage)
 		_current_target.take_damage(final_damage, _character, _last_critical_hit)
+		# ネットワーク同期用シグナル
+		damage_dealt.emit(_character, _current_target, final_damage, _last_critical_hit)
 	else:
 		# Miss - calculate miss offset and emit signal
 		_last_shot_miss_offset = _calculate_miss_offset()
@@ -435,7 +474,7 @@ func _apply_damage_to_target() -> void:
 
 ## Check if weapon supports auto firing mode
 func _supports_auto_firing_mode() -> bool:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon:
 		return false
 	if not weapon.auto_firing_mode_enabled:
@@ -446,7 +485,7 @@ func _supports_auto_firing_mode() -> bool:
 
 ## Get current range type based on distance (0=CQB, 1=Medium, 2=Long)
 func _get_range_type(distance: float) -> int:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon:
 		return 2  # Default to long range
 	if distance <= weapon.cqb_max_distance:
@@ -461,7 +500,7 @@ func _get_range_type(distance: float) -> int:
 func _get_current_firing_mode() -> int:
 	if not _current_target or not is_instance_valid(_current_target):
 		return WeaponPreset.FiringMode.SINGLE
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon:
 		return WeaponPreset.FiringMode.SINGLE
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)
@@ -474,7 +513,7 @@ func _get_current_firing_mode() -> int:
 
 ## Get shots per burst for current range
 func _get_current_shots_per_burst() -> int:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon or not _current_target:
 		return 1
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)
@@ -487,7 +526,7 @@ func _get_current_shots_per_burst() -> int:
 
 ## Get burst interval for current range
 func _get_current_burst_interval() -> float:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon or not _current_target:
 		return 0.1
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)
@@ -500,7 +539,7 @@ func _get_current_burst_interval() -> float:
 
 ## Get pause after burst for current range
 func _get_current_pause_after_burst() -> float:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon or not _current_target:
 		return 0.5
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)
@@ -513,7 +552,7 @@ func _get_current_pause_after_burst() -> float:
 
 ## Get accuracy modifier for current range
 func _get_current_accuracy_modifier() -> float:
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon or not _current_target:
 		return 1.0
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)
@@ -528,7 +567,7 @@ func _get_current_accuracy_modifier() -> float:
 func _get_current_critical_rate() -> float:
 	if not _supports_auto_firing_mode():
 		return 0.0  # No critical hits for non-auto firing mode weapons
-	var weapon: WeaponPreset = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
 	if not weapon or not _current_target:
 		return 0.0
 	var distance: float = _character.global_position.distance_to(_current_target.global_position)

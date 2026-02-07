@@ -2,7 +2,6 @@ extends Node
 ## Map Registry - Manages all map presets
 ## Use as Autoload singleton (MapRegistry)
 
-const MapPresetScript = preload("res://scripts/resources/map_preset.gd")
 
 ## Wall collision layer bit (for VisionComponent)
 const WALL_COLLISION_LAYER := 2
@@ -24,9 +23,8 @@ const PRESET_DIR := "res://data/maps/"
 ## Static list of map preset files (required for exported builds)
 ## DirAccess does not work with res:// in exported .pck files
 const PRESET_FILES := [
-	"res://data/maps/bank.tres",
-	        "res://data/maps/convenience_store.tres",	"res://data/maps/iwasaki_test.tres",
-	"res://data/maps/park.tres",
+	"res://data/maps/home.tres",
+	"res://data/maps/office.tres",
 ]
 
 # ============================================
@@ -44,7 +42,7 @@ func _ready() -> void:
 func _load_presets_from_list() -> void:
 	for path in PRESET_FILES:
 		if ResourceLoader.exists(path):
-			var preset := load(path) as MapPresetScript
+			var preset := load(path) as MapPreset
 			if preset:
 				register(preset)
 		else:
@@ -55,7 +53,7 @@ func _load_presets_from_list() -> void:
 # ============================================
 
 ## Register a preset
-func register(preset: MapPresetScript) -> void:
+func register(preset: MapPreset) -> void:
 	if preset.id.is_empty():
 		push_warning("MapRegistry: Cannot register preset with empty ID")
 		return
@@ -77,7 +75,7 @@ func unregister(id: String) -> void:
 # ============================================
 
 ## Get preset by ID
-func get_preset(id: String) -> MapPresetScript:
+func get_preset(id: String) -> MapPreset:
 	return _presets.get(id)
 
 ## Check if preset exists
@@ -107,7 +105,7 @@ func instantiate_map(preset_id: String) -> Node3D:
 	return instantiate_map_from_preset(preset)
 
 ## Create a map instance from preset object
-func instantiate_map_from_preset(preset: MapPresetScript) -> Node3D:
+func instantiate_map_from_preset(preset: MapPreset) -> Node3D:
 	if not preset.map_scene:
 		push_error("MapRegistry: Preset has no map_scene: %s" % preset.id)
 		return null
@@ -152,7 +150,7 @@ const SPAWN_T_PATTERNS := ["spawn_t_", "SpawnT"]
 ## Extract spawn points and rotations from scene markers and update preset
 ## Markers should be named: spawn_ct_1, spawn_ct_2, ... or SpawnCT1, SpawnCT2, ...
 ## For T side: spawn_t_1, spawn_t_2, ... or SpawnT1, SpawnT2, ...
-func _extract_spawn_points(map_instance: Node3D, preset: MapPresetScript) -> void:
+func _extract_spawn_points(map_instance: Node3D, preset: MapPreset) -> void:
 	var ct_spawns: Array[Vector3] = []
 	var ct_rotations: Array[float] = []
 	var t_spawns: Array[Vector3] = []

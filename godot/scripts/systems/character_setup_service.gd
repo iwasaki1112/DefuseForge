@@ -2,7 +2,6 @@ class_name CharacterSetupService
 extends RefCounted
 ## キャラクターの初期セットアップを担当
 
-const AnimCtrl = preload("res://scripts/animation/character_animation_controller.gd")
 
 var enemy_visibility_system: Node = null
 var fog_of_war_system: Node3D = null
@@ -29,11 +28,15 @@ func setup(
 	is_vision_enabled = vision_enabled
 	default_vision_fov = vision_fov
 	default_vision_range = vision_range
+	if Debug.enabled: print("[FOW] setup - fog_of_war_system: ", fog_of_war_system, ", is_vision_enabled: ", is_vision_enabled)
 
 
 func setup_character(character: Node) -> void:
 	if not character:
+		if Debug.enabled: print("[FOW] setup_character: character is null")
 		return
+
+	if Debug.enabled: print("[FOW] setup_character: ", character.name)
 
 	# Setup vision component
 	var vision = character.setup_vision(default_vision_fov, default_vision_range)
@@ -53,6 +56,11 @@ func _complete_character_setup(character: Node) -> void:
 	if enemy_visibility_system:
 		enemy_visibility_system.register_character(character)
 
+	# FogOfWarSystemに登録（味方キャラクターのみ）
+	if fog_of_war_system and PlayerState.is_friendly(character):
+		if Debug.enabled: print("[FOW] Registering to FoW: ", character.name)
+		fog_of_war_system.register_character(character)
+
 	# Combat awarenessセットアップ
 	character.setup_combat_awareness()
 	if character.combat_awareness:
@@ -68,7 +76,7 @@ func _complete_character_setup(character: Node) -> void:
 	# デフォルト武器を装備
 	var anim_ctrl = character.get_anim_controller()
 	if anim_ctrl:
-		anim_ctrl.set_weapon(AnimCtrl.Weapon.PISTOL)
+		anim_ctrl.set_weapon(CharacterAnimationController.Weapon.PISTOL)
 
 	var default_weapon = WeaponRegistry.get_preset(default_weapon_id)
 	if default_weapon:

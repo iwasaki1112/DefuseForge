@@ -19,7 +19,8 @@ func _ready() -> void:
 func _setup_sprite() -> void:
 	# スプライトの設定
 	billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	axis = Vector3.AXIS_Y  # スプライトを上向き（地面に平行）に配置
+	# 地面に平行に配置（X軸を-90度回転）
+	rotation_degrees.x = -90
 
 	# テクスチャを読み込み
 	var texture_path: String = "res://assets/ui/character_selected_marker/character_selected_marker.png"
@@ -41,12 +42,12 @@ func _setup_sprite() -> void:
 
 
 func _process(delta: float) -> void:
-	# Y軸周りで回転（地面に平行なまま回転）
-	rotation_degrees.y += rotation_speed * delta
+	# Z軸周りで回転（地面に平行な状態での回転）
+	rotation_degrees.z += rotation_speed * delta
 
 	# 360度超えたらリセット
-	if rotation_degrees.y >= 360.0:
-		rotation_degrees.y -= 360.0
+	if rotation_degrees.z >= 360.0:
+		rotation_degrees.z -= 360.0
 
 	# ターゲットキャラクターの位置を追従
 	_update_position()
@@ -55,7 +56,8 @@ func _process(delta: float) -> void:
 func _update_position() -> void:
 	if _target_character and is_instance_valid(_target_character):
 		var char_pos: Vector3 = _target_character.global_position
-		global_position = Vector3(char_pos.x, height_offset, char_pos.z)
+		# キャラクターの足元の高さ + オフセット
+		global_position = Vector3(char_pos.x, char_pos.y + height_offset, char_pos.z)
 
 
 ## キャラクターにマーカーをアタッチ

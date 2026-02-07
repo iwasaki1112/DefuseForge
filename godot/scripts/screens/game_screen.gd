@@ -7,8 +7,14 @@ class_name GameScreen
 
 ## シーン定数
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
-const GameHUDScene := preload("res://scenes/ui/game_hud.tscn")
-const CameraPanControllerScript := preload("res://scripts/utils/camera_pan_controller.gd")
+var GameHUDScene: PackedScene
+
+
+func _init() -> void:
+	GameHUDScene = load("res://scenes/ui/game_hud.tscn")
+
+## カメラ設定
+const CAMERA_HEIGHT := 25.0
 
 ## ノード参照
 @onready var camera: Camera3D = $Camera3D
@@ -49,10 +55,11 @@ func _ready() -> void:
 	if _mode_provider == null:
 		_mode_provider = TrainingModeProvider.new()
 		_map_id = SettingsManager.get_selected_map()
-		_initialize_game()
+	_initialize_game()
 
 
 ## Multiplayerモードでセットアップ（LobbyScreenから呼ばれる）
+## 注意: add_child()前に呼ぶこと（_ready()で_initialize_game()を一度だけ実行するため）
 func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 	_map_id = map_id
 
@@ -60,8 +67,6 @@ func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 	var mp_provider := MultiplayerModeProvider.new()
 	mp_provider.setup_network(net_manager)
 	_mode_provider = mp_provider
-
-	_initialize_game()
 
 
 ## ゲームの初期化（共通処理）
@@ -81,12 +86,12 @@ func _initialize_game() -> void:
 	_setup_status_ui()
 	_update_team_display()
 	_setup_money()
+	_setup_camera_for_player()
 	_setup_camera_pan()
 	_setup_input_controller()
-	_setup_camera_for_player()
 
-	# 視界システムを初期化（FoW OFF）
-	game_manager.set_vision_enabled(false)
+	# 視界システムを初期化（FoW ON）
+	game_manager.set_vision_enabled(true)
 
 	# ラウンド開始
 	if _mode_provider.can_start_round() and game_manager.round_manager:
@@ -112,19 +117,29 @@ func _setup_game_manager() -> void:
 		game_manager = GameManager.new()
 		game_manager.name = "GameManager"
 		add_child(game_manager)
+
+		# UIコンポーネントをGameScreenが作成してGameManagerに注入
+		_setup_label_manager()
+		_setup_path_context_menu()
+
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-		# シグナル接続
-		game_manager.selection_changed.connect(_on_selection_changed)
-		game_manager.path_confirmed.connect(_on_path_confirmed)
-		game_manager.paths_execution_started.connect(_on_paths_execution_started)
-		game_manager.all_paths_completed.connect(_on_all_paths_completed)
-		game_manager.paths_cleared.connect(_on_paths_cleared)
+		# シグナル接続（SignalBus経由）
+		SignalBus.selection_changed.connect(_on_selection_changed)
+		SignalBus.path_confirmed.connect(_on_path_confirmed)
+		SignalBus.paths_execution_started.connect(_on_paths_execution_started)
+		SignalBus.all_paths_completed.connect(_on_all_paths_completed)
+		SignalBus.paths_cleared.connect(_on_paths_cleared)
+		SignalBus.path_mode_ended.connect(_on_path_mode_ended)
+		SignalBus.path_mode_cancelled.connect(_on_path_mode_cancelled)
+		SignalBus.round_timer_updated.connect(_on_round_timer_updated)
+		SignalBus.round_ended.connect(_on_round_ended)
+		# 内部シグナル（GameManager直接）
 		game_manager.path_ready.connect(_on_path_ready)
-		game_manager.path_mode_ended.connect(_on_path_mode_ended)
-		game_manager.path_mode_cancelled.connect(_on_path_mode_cancelled)
-		game_manager.round_timer_updated.connect(_on_round_timer_updated)
-		game_manager.round_ended.connect(_on_round_ended)
+		# 同期待機状態変更シグナル（PCビルドでの型解決問題を回避するため動的アクセス）
+		var pem = game_manager.get("path_execution_manager")
+		if pem:
+			pem.sync_wait_state_changed.connect(_on_sync_wait_state_changed)
 
 
 func _load_map() -> void:
@@ -138,6 +153,11 @@ func _load_map() -> void:
 
 
 func _spawn_characters() -> void:
+	# モードプロバイダーがキャラクタースポーンを処理する場合はスキップ
+	if _mode_provider.spawn_characters(self, game_manager):
+		return
+
+	# デフォルトのスポーン処理（Trainingモード用）
 	if not game_manager.has_map():
 		push_warning("[GameScreen] Cannot spawn characters - no map loaded yet")
 		return
@@ -201,10 +221,19 @@ func _setup_hud() -> void:
 		_hud.execute_all_requested.connect(_on_execute_button_pressed)
 		_hud.clear_paths_requested.connect(_on_clear_paths_button_pressed)
 		_hud.character_marker_pressed.connect(_on_character_marker_pressed)
-		_hud.marker_edit_requested.connect(_on_marker_edit_requested)
-		_hud.marker_undo_requested.connect(_on_marker_undo_requested)
-		_hud.marker_confirm_requested.connect(_on_marker_confirm_requested)
-		_hud.marker_cancel_requested.connect(_on_marker_cancel_requested)
+		_hud.point_edit_requested.connect(_on_point_edit_requested)
+		_hud.point_undo_requested.connect(_on_point_undo_requested)
+		_hud.point_cancel_requested.connect(_on_point_cancel_requested)
+		_hud.sync_go_requested.connect(_on_sync_go_button_pressed)
+		_hud.global_undo_requested.connect(_on_global_undo_requested)
+
+		# Undo状態の初期化
+		_hud.set_undo_enabled(false)
+
+		# PathUndoManagerのシグナル接続（Undo状態変更時にHUD更新）
+		var undo_manager = game_manager.get_path_undo_manager() if game_manager else null
+		if undo_manager:
+			undo_manager.undo_state_changed.connect(_on_undo_state_changed)
 
 
 func _setup_round_hud() -> void:
@@ -213,8 +242,8 @@ func _setup_round_hud() -> void:
 		_round_hud.name = GameConstants.NODE_ROUND_HUD
 		ui_layer.add_child(_round_hud)
 
-		game_manager.survivor_count_changed.connect(_round_hud.update_survivor_counts)
-		game_manager.round_ended.connect(_round_hud.show_result)
+		SignalBus.survivor_count_changed.connect(_round_hud.update_survivor_counts)
+		SignalBus.round_ended.connect(_round_hud.show_result)
 
 
 func _setup_status_ui() -> void:
@@ -233,7 +262,7 @@ func _setup_status_ui() -> void:
 
 func _setup_camera_pan() -> void:
 	if _camera_pan_controller == null:
-		_camera_pan_controller = CameraPanControllerScript.new()
+		_camera_pan_controller = CameraPanController.new()
 		_camera_pan_controller.setup(camera, 0.05)
 
 
@@ -243,6 +272,23 @@ func _setup_input_controller() -> void:
 		_input_controller.name = "InputController"
 		add_child(_input_controller)
 		_input_controller.setup(game_manager, _camera_pan_controller)
+
+
+func _setup_label_manager() -> void:
+	var lm := CharacterLabelManager.new()
+	lm.name = GameConstants.NODE_LABEL_MANAGER
+	game_manager.add_child(lm)
+	game_manager.set_label_manager(lm)
+
+
+func _setup_path_context_menu() -> void:
+	var menu := PathContextMenu.new()
+	menu.name = "PathContextMenu"
+	if ui_layer:
+		ui_layer.add_child(menu)
+	else:
+		game_manager.add_child(menu)
+	game_manager.set_path_context_menu(menu)
 
 
 func _setup_money() -> void:
@@ -278,8 +324,18 @@ func _setup_camera_for_player() -> void:
 
 	if player_character:
 		var target_pos := player_character.global_position
-		var camera_offset := Vector3(0, 15, 5.5)
-		camera.global_position = Vector3(target_pos.x, camera_offset.y, target_pos.z + camera_offset.z)
+		var z_offset := _calculate_camera_z_offset()
+		camera.global_position = Vector3(target_pos.x, CAMERA_HEIGHT, target_pos.z + z_offset)
+		if Debug.enabled: print("[Camera] Initial setup: character_pos=%s, height=%s, z_offset=%s, camera_pos=%s" % [target_pos, CAMERA_HEIGHT, z_offset, camera.global_position])
+		#_create_debug_axis(target_pos)  # デバッグ用軸表示（必要時にコメント解除）
+
+
+## カメラの角度からZオフセットを計算
+## Z_offset = height * tan(90° + rotation.x)
+func _calculate_camera_z_offset() -> float:
+	if not camera:
+		return 0.0
+	return CAMERA_HEIGHT * tan(PI / 2.0 + camera.rotation.x)
 
 
 ## ========================================
@@ -337,87 +393,113 @@ func _process(_delta: float) -> void:
 ## ========================================
 
 func _on_execute_button_pressed() -> void:
-	var count := game_manager.execute_all_paths(false)
+	# パスモード中でパスがあればモードを終了する
+	if game_manager.is_path_mode() and game_manager.has_path():
+		game_manager.confirm_path()
+
+	# マルチプレイヤーモードでは自分のキャラクターのみ実行
+	var local_only := _mode_provider.get_mode_name() == "multiplayer"
+	var count := game_manager.execute_all_paths(false, local_only)
 	_mode_provider.on_execute_paths(count)
+
+	# パス実行後はUndo履歴をクリア
+	game_manager.clear_undo_history()
 
 
 func _on_clear_paths_button_pressed() -> void:
 	game_manager.clear_all_pending_paths()
 
 
-func _on_marker_edit_requested(action: String) -> void:
-	if not game_manager or not game_manager.path_service:
+func _on_sync_go_button_pressed() -> void:
+	game_manager.release_all_sync_waiting_characters()
+	# ボタンを非表示にする
+	if _hud:
+		_hud.hide_sync_go_button()
+
+
+func _on_sync_wait_state_changed(has_waiting: bool) -> void:
+	if _hud:
+		_hud.update_sync_go_button_visibility(has_waiting)
+
+
+func _on_point_edit_requested(action: String) -> void:
+	if not game_manager or not game_manager.has_path():
 		return
 
-	var path_service = game_manager.path_service
-	if not path_service.has_pending_path():
+	# PathServiceにはpath_service経由でアクセスする必要があるモード切替メソッド
+	var ps = game_manager.path_service
+	if not ps:
 		return
 
 	match action:
 		"vision":
-			path_service.start_vision_mode()
+			ps.start_vision_mode()
 		"run":
-			path_service.start_run_mode()
+			ps.start_run_mode()
 		"clear":
-			path_service.start_clear_mode()
+			ps.start_clear_mode()
 		"grenade":
-			path_service.start_grenade_mode()
+			ps.start_grenade_mode()
 		"smoke":
-			path_service.start_smoke_grenade_mode()
+			ps.start_smoke_grenade_mode()
 		"door":
-			path_service.start_door_mode()
+			ps.start_door_mode()
 		"wait":
-			path_service.start_wait_mode()
+			ps.start_wait_mode()
 
 
-func _on_marker_undo_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.undo_last_marker()
+func _on_point_undo_requested() -> void:
+	if game_manager:
+		game_manager.undo_last_point()
 
 
-func _on_marker_confirm_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.confirm_path()
+func _on_point_cancel_requested() -> void:
+	if game_manager:
+		game_manager.cancel_path()
 
 
-func _on_marker_cancel_requested() -> void:
-	if game_manager and game_manager.path_service:
-		game_manager.path_service.cancel_path()
+func _on_global_undo_requested() -> void:
+	if game_manager:
+		game_manager.global_undo()
+
+
+func _on_undo_state_changed(can_undo: bool) -> void:
+	if _hud:
+		_hud.set_undo_enabled(can_undo)
 
 
 func _on_path_ready() -> void:
 	if _hud:
-		_hud.show_marker_edit_panel()
+		_hud.show_point_edit_panel()
 
 
 func _on_path_mode_ended() -> void:
 	if _hud:
-		_hud.hide_marker_edit_panel()
+		_hud.hide_point_edit_panel()
 
 
 func _on_path_mode_cancelled() -> void:
 	if _hud:
-		_hud.hide_marker_edit_panel()
+		_hud.hide_point_edit_panel()
 
 
 func _on_character_marker_pressed(character: Node) -> void:
 	if not is_instance_valid(character) or not camera:
 		return
 
+	# カメラをキャラクター位置に移動
 	var target_pos: Vector3 = character.global_position
 	_pan_camera_to_position(target_pos)
 
 
 func _pan_camera_to_position(target_pos: Vector3) -> void:
-	if not camera:
+	if not camera or not _camera_pan_controller:
 		return
 
-	var new_camera_pos := Vector3(target_pos.x, camera.global_position.y, target_pos.z + 5.0)
+	if Debug.enabled: print("[Camera] Pan to character: target_pos=%s" % [target_pos])
 
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.tween_property(camera, "global_position", new_camera_pos, 0.4)
+	# CameraPanControllerのターゲット位置を設定
+	_camera_pan_controller.set_ground_target(target_pos)
 
 
 ## ========================================
@@ -483,6 +565,12 @@ func get_smoke_area_manager() -> SmokeAreaManager:
 	return null
 
 
+func get_vision_service() -> VisionService:
+	if game_manager:
+		return game_manager.vision_service
+	return null
+
+
 func cleanup() -> void:
 	_cleanup_before_transition()
 
@@ -497,7 +585,32 @@ func _cleanup_before_transition() -> void:
 	# マップとキャラクターのクリーンアップ
 	if game_manager:
 		game_manager.unload_map(true)  # キャラクターも含めてクリーンアップ
-		print("[GameScreen] Map and characters cleaned up")
+		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
+
+	# SignalBusのシグナル切断
+	if SignalBus.selection_changed.is_connected(_on_selection_changed):
+		SignalBus.selection_changed.disconnect(_on_selection_changed)
+	if SignalBus.path_confirmed.is_connected(_on_path_confirmed):
+		SignalBus.path_confirmed.disconnect(_on_path_confirmed)
+	if SignalBus.paths_execution_started.is_connected(_on_paths_execution_started):
+		SignalBus.paths_execution_started.disconnect(_on_paths_execution_started)
+	if SignalBus.all_paths_completed.is_connected(_on_all_paths_completed):
+		SignalBus.all_paths_completed.disconnect(_on_all_paths_completed)
+	if SignalBus.paths_cleared.is_connected(_on_paths_cleared):
+		SignalBus.paths_cleared.disconnect(_on_paths_cleared)
+	if SignalBus.path_mode_ended.is_connected(_on_path_mode_ended):
+		SignalBus.path_mode_ended.disconnect(_on_path_mode_ended)
+	if SignalBus.path_mode_cancelled.is_connected(_on_path_mode_cancelled):
+		SignalBus.path_mode_cancelled.disconnect(_on_path_mode_cancelled)
+	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
+		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
+	if SignalBus.round_ended.is_connected(_on_round_ended):
+		SignalBus.round_ended.disconnect(_on_round_ended)
+	if _round_hud:
+		if SignalBus.survivor_count_changed.is_connected(_round_hud.update_survivor_counts):
+			SignalBus.survivor_count_changed.disconnect(_round_hud.update_survivor_counts)
+		if SignalBus.round_ended.is_connected(_round_hud.show_result):
+			SignalBus.round_ended.disconnect(_round_hud.show_result)
 
 	# PlayerStateのシグナル切断
 	if PlayerState.money_changed.is_connected(_on_money_changed):
@@ -519,7 +632,7 @@ func _cleanup_before_transition() -> void:
 	# Providerのクリーンアップ（WebSocket切断含む）
 	if _mode_provider:
 		_mode_provider.cleanup()
-		print("[GameScreen] Network cleanup completed")
+		if Debug.enabled: print("[GameScreen] Network cleanup completed")
 
 
 func _exit_tree() -> void:
@@ -535,4 +648,48 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_F3:
 			_vision_debug_enabled = not _vision_debug_enabled
 			game_manager.set_vision_debug_draw(_vision_debug_enabled)
-			print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
+			if Debug.enabled: print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
+
+
+## デバッグ用の軸を作成（X=赤, Y=緑, Z=青）
+func _create_debug_axis(axis_position: Vector3) -> void:
+	var axis_length := 3.0
+	var axis_thickness := 0.05
+
+	# X軸（赤）
+	var x_axis := MeshInstance3D.new()
+	var x_mesh := BoxMesh.new()
+	x_mesh.size = Vector3(axis_length, axis_thickness, axis_thickness)
+	x_axis.mesh = x_mesh
+	var x_mat := StandardMaterial3D.new()
+	x_mat.albedo_color = Color.RED
+	x_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	x_axis.material_override = x_mat
+	x_axis.position = axis_position + Vector3(axis_length / 2, 0.1, 0)
+	add_child(x_axis)
+
+	# Y軸（緑）- 上方向
+	var y_axis := MeshInstance3D.new()
+	var y_mesh := BoxMesh.new()
+	y_mesh.size = Vector3(axis_thickness, axis_length, axis_thickness)
+	y_axis.mesh = y_mesh
+	var y_mat := StandardMaterial3D.new()
+	y_mat.albedo_color = Color.GREEN
+	y_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	y_axis.material_override = y_mat
+	y_axis.position = axis_position + Vector3(0, axis_length / 2 + 0.1, 0)
+	add_child(y_axis)
+
+	# Z軸（青）
+	var z_axis := MeshInstance3D.new()
+	var z_mesh := BoxMesh.new()
+	z_mesh.size = Vector3(axis_thickness, axis_thickness, axis_length)
+	z_axis.mesh = z_mesh
+	var z_mat := StandardMaterial3D.new()
+	z_mat.albedo_color = Color.BLUE
+	z_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	z_axis.material_override = z_mat
+	z_axis.position = axis_position + Vector3(0, 0.1, axis_length / 2)
+	add_child(z_axis)
+
+	if Debug.enabled: print("[Debug] Axis created at %s: X(red)=+X方向, Y(green)=上方向, Z(blue)=+Z方向" % position)

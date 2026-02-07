@@ -2,7 +2,6 @@ extends Node
 ## Weapon Registry - Manages all weapon presets
 ## Use as Autoload singleton (WeaponRegistry)
 
-const WeaponPresetScript = preload("res://scripts/resources/weapon_preset.gd")
 
 # ============================================
 # Preset Storage
@@ -37,7 +36,7 @@ func _ready() -> void:
 	_load_presets_from_list()
 
 func _init_category_arrays() -> void:
-	for category in WeaponPresetScript.WeaponCategory.values():
+	for category in WeaponPreset.WeaponCategory.values():
 		_by_category[category] = []
 
 # ============================================
@@ -48,7 +47,7 @@ func _init_category_arrays() -> void:
 func _load_presets_from_list() -> void:
 	for path in PRESET_FILES:
 		if ResourceLoader.exists(path):
-			var preset := load(path) as WeaponPresetScript
+			var preset := load(path) as WeaponPreset
 			if preset:
 				register(preset)
 		else:
@@ -59,7 +58,7 @@ func _load_presets_from_list() -> void:
 # ============================================
 
 ## Register a preset
-func register(preset: WeaponPresetScript) -> void:
+func register(preset: WeaponPreset) -> void:
 	if preset.id.is_empty():
 		push_warning("WeaponRegistry: Cannot register preset with empty ID")
 		return
@@ -76,7 +75,7 @@ func unregister(id: String) -> void:
 	if not _presets.has(id):
 		return
 
-	var preset: WeaponPresetScript = _presets[id]
+	var preset: WeaponPreset = _presets[id]
 	_by_category[preset.category].erase(preset)
 	_presets.erase(id)
 
@@ -85,7 +84,7 @@ func unregister(id: String) -> void:
 # ============================================
 
 ## Get preset by ID
-func get_preset(id: String) -> WeaponPresetScript:
+func get_preset(id: String) -> WeaponPreset:
 	return _presets.get(id)
 
 ## Check if preset exists
@@ -97,25 +96,25 @@ func get_all() -> Array:
 	return _presets.values()
 
 ## Get presets by category
-func get_by_category(category: WeaponPresetScript.WeaponCategory) -> Array:
+func get_by_category(category: WeaponPreset.WeaponCategory) -> Array:
 	return _by_category.get(category, [])
 
 ## Get all rifles
 func get_rifles() -> Array:
-	return get_by_category(WeaponPresetScript.WeaponCategory.RIFLE)
+	return get_by_category(WeaponPreset.WeaponCategory.RIFLE)
 
 ## Get all pistols
 func get_pistols() -> Array:
-	return get_by_category(WeaponPresetScript.WeaponCategory.PISTOL)
+	return get_by_category(WeaponPreset.WeaponCategory.PISTOL)
 
 ## Get all SMGs
 func get_smgs() -> Array:
-	return get_by_category(WeaponPresetScript.WeaponCategory.SMG)
+	return get_by_category(WeaponPreset.WeaponCategory.SMG)
 
 ## Get all shotguns
 func get_shotguns() -> Array:
-	return get_by_category(WeaponPresetScript.WeaponCategory.SHOTGUN)
+	return get_by_category(WeaponPreset.WeaponCategory.SHOTGUN)
 
 ## Get all snipers
 func get_snipers() -> Array:
-	return get_by_category(WeaponPresetScript.WeaponCategory.SNIPER)
+	return get_by_category(WeaponPreset.WeaponCategory.SNIPER)

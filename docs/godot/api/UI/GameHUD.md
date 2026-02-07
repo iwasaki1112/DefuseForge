@@ -19,7 +19,6 @@
 | `character_marker_pressed` | `character: Node` | キャラクターマーカー（Alpha等）が押されたとき |
 | `marker_edit_requested` | `action: String` | マーカー編集アクション（Vision等）が選択されたとき |
 | `marker_undo_requested` | なし | マーカー編集のUndoが要求されたとき |
-| `marker_confirm_requested` | なし | マーカー編集の確定が要求されたとき |
 | `marker_cancel_requested` | なし | マーカー編集のキャンセルが要求されたとき |
 
 ## UI要素

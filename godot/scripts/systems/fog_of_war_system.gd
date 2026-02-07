@@ -1,30 +1,33 @@
 class_name FogOfWarSystem
 extends Node3D
 
-## Fog of War System (Redesigned)
-## Uses SubViewport + Polygon2D for visibility rendering with external shader
-## Simplified architecture for better door/wall dynamic updates
+## Fog of War System (Light2D + LightOccluder2D)
+## GPU最適化されたFoW。レイキャスト不要で、ドア開閉時の即時更新をサポート
+## SubViewport内でLight2Dの影計算を利用して視界を描画
 
-## Quality presets
+## Quality presets（モバイル30FPS最適化）
 enum Quality { LOW, MEDIUM, HIGH }
-const QUALITY_SETTINGS := {
+
+## 品質設定（実行時に参照）
+## shadow_filter: 0=NONE, 1=PCF5, 2=PCF13
+static var QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 128,
-		"msaa": SubViewport.MSAA_DISABLED,
-		"ray_count": 36,
-		"update_hz": 15
+		"resolution": 256,
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
+		"shadow_smooth": 0.5,
+		"update_hz": 30
 	},
 	Quality.MEDIUM: {
-		"resolution": 256,
-		"msaa": SubViewport.MSAA_2X,
-		"ray_count": 54,
-		"update_hz": 20
+		"resolution": 512,
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5（軽量化）
+		"shadow_smooth": 1.0,
+		"update_hz": 30
 	},
 	Quality.HIGH: {
-		"resolution": 512,
-		"msaa": SubViewport.MSAA_4X,
-		"ray_count": 72,
-		"update_hz": 30
+		"resolution": 1024,
+		"shadow_filter": 2,  # SHADOW_FILTER_PCF13
+		"shadow_smooth": 1.5,
+		"update_hz": 30  # 60から30に削減
 	},
 }
 
@@ -34,21 +37,27 @@ const QUALITY_SETTINGS := {
 @export var fog_height: float = 0.02
 
 @export_group("Visual Settings")
-@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.85)
-@export var quality: Quality = Quality.LOW
+@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.3)
+@export var quality: Quality = Quality.MEDIUM  # パフォーマンス/品質バランス
 
 ## Internal settings (auto-configured from quality)
 var texture_resolution: int = 128
-var _update_interval: float = 0.067  # 15Hz default
+var _update_interval: float = 0.033  # 30Hz default
 
 ## Internal nodes
 var _fog_mesh: MeshInstance3D
 var _fog_material: ShaderMaterial
 var _visibility_viewport: SubViewport
-var _visibility_polygons: Array[Polygon2D] = []
 
-## Vision data
-var _vision_components: Array = []
+
+## OccluderManager
+var _occluder_manager: OccluderManager = null
+
+## VisionLight管理
+var _vision_lights: Dictionary = {}  # character -> VisionLight
+var _registered_characters: Array = []
+
+## 更新フラグ
 var _needs_update: bool = false
 var _time_since_update: float = 0.0
 
@@ -57,9 +66,13 @@ const FOW_SHADER_PATH := "res://shaders/fow.gdshader"
 
 
 func _ready() -> void:
+	if Debug.enabled: print("[FOW] FogOfWarSystem._ready() - map_size: ", map_size)
+	# テクスチャキャッシュをクリア（テクスチャ形式変更時の対策）
+	FovTextureGenerator.clear_cache()
 	_apply_quality_settings()
 	_setup_visibility_viewport()
 	_setup_fog_mesh()
+	_setup_occluder_manager()
 
 
 ## Apply quality preset settings
@@ -70,23 +83,38 @@ func _apply_quality_settings() -> void:
 
 
 func _setup_visibility_viewport() -> void:
-	var settings: Dictionary = QUALITY_SETTINGS[quality]
-
-	# Create SubViewport for visibility texture
+	# Create SubViewport for 2D lighting
 	_visibility_viewport = SubViewport.new()
 	_visibility_viewport.name = "VisibilityViewport"
 	_visibility_viewport.size = Vector2i(texture_resolution, texture_resolution)
-	_visibility_viewport.transparent_bg = true
+	_visibility_viewport.transparent_bg = false
+	# UPDATE_ONCE + 必要時更新でGPU負荷削減（UPDATE_ALWAYSより30-50%軽量）
 	_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_visibility_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
-	_visibility_viewport.msaa_2d = settings["msaa"]
+	# 2Dライティング用に設定
+	_visibility_viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
+	_visibility_viewport.disable_3d = true  # 2D専用
+	# NOTE: SubViewportは必ずシーンツリーに追加（add_child）してから使う
 	add_child(_visibility_viewport)
 
-	# Background (black = not visible)
+	# CanvasModulateを追加（2Dライティングの基盤）
+	# これにより、Light2Dがない部分は暗くなる
+	var canvas_modulate := CanvasModulate.new()
+	canvas_modulate.name = "CanvasModulate"
+	canvas_modulate.color = Color(0, 0, 0, 1)  # 暗い環境
+	_visibility_viewport.add_child(canvas_modulate)
+
+	# 白い背景（CanvasModulateで暗くされ、Light2Dで照らされる）
 	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 1)
+	bg.name = "Background"
+	bg.color = Color(1, 1, 1, 1)  # 白（Light2Dで照らされると明るくなる）
 	bg.size = Vector2(texture_resolution, texture_resolution)
+	bg.z_index = -100
+	# ライトの影響を受けるように明示的に設定
+	bg.light_mask = 1
 	_visibility_viewport.add_child(bg)
+
+	if Debug.enabled: print("[FOW] Viewport setup - size: ", _visibility_viewport.size)
 
 
 func _setup_fog_mesh() -> void:
@@ -110,103 +138,295 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("map_min", Vector2(-map_size.x / 2, -map_size.y / 2))
 	_fog_material.set_shader_parameter("map_max", Vector2(map_size.x / 2, map_size.y / 2))
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
-	# モバイル最適化: blurを無効化
+	# デバッグ: blur無効、edge_softnessを広げて可視化しやすく
 	_fog_material.set_shader_parameter("blur_radius", 0.0)
-	_fog_material.set_shader_parameter("edge_softness", 0.1)
+	_fog_material.set_shader_parameter("edge_softness", 0.4)  # 0.1〜0.9が可視範囲
 
 	_fog_mesh.material_override = _fog_material
 	add_child(_fog_mesh)
+	# グローバル位置は親がシーンツリーに追加された後でないと取得できない
+	_fog_mesh.ready.connect(func():
+		if Debug.enabled: print("[FOW] FogMesh global_position: ", _fog_mesh.global_position, ", FoWSystem global_position: ", global_position)
+	)
+	if Debug.enabled: print("[FOW] FogMesh local position: ", _fog_mesh.position, ", size: ", map_size)
+
+
+func _setup_occluder_manager() -> void:
+	_occluder_manager = OccluderManager.new()
+	_occluder_manager.name = "OccluderManager"
+	add_child(_occluder_manager)
+	_occluder_manager.setup(_visibility_viewport, map_size, texture_resolution)
 
 
 func _process(delta: float) -> void:
+	# VisionLightの位置は毎フレーム同期（滑らかな追従のため）
+	_sync_vision_lights()
+
+	# SubViewportは毎フレーム更新（視界の滑らかな追従のため）
+	if _visibility_viewport:
+		_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
 	_time_since_update += delta
 
-	# Update at configured interval or when dirty
-	if _needs_update and _time_since_update >= _update_interval:
+	# 可視性キャッシュ更新は一定間隔で行う（GPU→CPU転送のコスト削減）
+	if _time_since_update >= _update_interval:
 		_time_since_update = 0.0
-		_update_visibility_texture()
-		_needs_update = false
 
-		# Request viewport render
-		if _visibility_viewport:
-			_visibility_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-			_fog_material.set_shader_parameter("visibility_texture", _visibility_viewport.get_texture())
+		# シェーダーにテクスチャを設定
+		if _visibility_viewport and _fog_material:
+			var vis_tex := _visibility_viewport.get_texture()
+			_fog_material.set_shader_parameter("visibility_texture", vis_tex)
+
+		# 可視性キャッシュを更新（GPU→CPU転送はここで1回だけ行う）
+		# _physics_processより後に実行されるため、次フレームの判定で使用される
+		_visibility_image_dirty = true
+		_update_visibility_image_cache()
 
 
-func _update_visibility_texture() -> void:
-	_sync_polygon_count()
+## VisionLightの位置・回転を同期
+func _sync_vision_lights() -> void:
+	for character in _registered_characters:
+		if not is_instance_valid(character):
+			continue
+		if character in _vision_lights:
+			var vision_light: VisionLight = _vision_lights[character]
 
-	if _vision_components.is_empty():
+			# 死亡キャラクターの視界を無効化
+			var is_alive := true
+			if "is_alive" in character:
+				is_alive = character.is_alive
+
+			vision_light.set_enabled(is_alive)
+
+			if is_alive:
+				# VisionComponentからパラメータを同期（動的変更対応）
+				if character.has_method("get_vision_component"):
+					var vision = character.get_vision_component()
+					if vision:
+						if vision_light.fov_degrees != vision.fov_degrees:
+							vision_light.set_fov_degrees(vision.fov_degrees)
+						if vision_light.view_distance != vision.view_distance:
+							vision_light.set_view_distance(vision.view_distance)
+						if vision_light.peripheral_distance != vision.peripheral_distance:
+							if Debug.enabled:
+								print("[FOW] Sync peripheral: VisionLight=", vision_light.peripheral_distance, " -> VisionComponent=", vision.peripheral_distance)
+							vision_light.set_peripheral_distance(vision.peripheral_distance)
+
+				vision_light.sync_transform()
+
+
+# ============================================
+# Public API - キャラクター登録
+# ============================================
+
+## キャラクターを登録（VisionLightを作成）
+func register_character(character: Node3D) -> void:
+	if character in _registered_characters:
 		return
 
-	# Update each VisionComponent's polygon
-	for i in range(_vision_components.size()):
-		var vision = _vision_components[i]
-		if not is_instance_valid(vision):
-			_visibility_polygons[i].polygon = PackedVector2Array()
-			continue
+	_registered_characters.append(character)
 
-		var polygon_3d: PackedVector3Array = vision.get_visible_polygon()
-		_visibility_polygons[i].polygon = _convert_polygon_to_2d(polygon_3d)
+	# VisionLightを作成
+	var vision_light := VisionLight.new()
+	vision_light.name = "VisionLight_%s" % character.name
 
+	# キャラクターからFOV設定を取得（VisionComponentが唯一の設定元）
+	var fov := 90.0
+	var view_dist := 15.0
+	var peripheral_dist := 0.8
+	if character.has_method("get_vision_component"):
+		var vision = character.get_vision_component()
+		if vision:
+			fov = vision.fov_degrees
+			view_dist = vision.view_distance
+			peripheral_dist = vision.peripheral_distance
 
-## Sync polygon count with VisionComponent count
-func _sync_polygon_count() -> void:
-	# Add missing polygons
-	while _visibility_polygons.size() < _vision_components.size():
-		var polygon := Polygon2D.new()
-		polygon.color = Color(1, 1, 1, 1)
-		polygon.antialiased = true
-		_visibility_viewport.add_child(polygon)
-		_visibility_polygons.append(polygon)
+	vision_light.fov_degrees = fov
+	vision_light.view_distance = view_dist
+	vision_light.peripheral_distance = peripheral_dist
+	if Debug.enabled:
+		print("[FOW] register_character: ", character.name, " peripheral=", peripheral_dist)
+	add_child(vision_light)
 
-	# Clear excess polygons (don't delete, just hide)
-	for i in range(_vision_components.size(), _visibility_polygons.size()):
-		_visibility_polygons[i].polygon = PackedVector2Array()
+	# セットアップ
+	vision_light.setup(_visibility_viewport, character, map_size, texture_resolution)
 
+	# 品質設定を適用
+	var settings: Dictionary = QUALITY_SETTINGS[quality]
+	if vision_light._light:
+		vision_light._light.shadow_filter = settings["shadow_filter"]
+		vision_light._light.shadow_filter_smooth = settings["shadow_smooth"]
 
-## Convert 3D polygon to 2D texture coordinates
-func _convert_polygon_to_2d(polygon_3d: PackedVector3Array) -> PackedVector2Array:
-	if polygon_3d.size() < 3:
-		return PackedVector2Array()
-
-	var polygon_2d := PackedVector2Array()
-	var half_map := map_size / 2
-
-	for point in polygon_3d:
-		# World XZ -> Texture UV -> Pixel coordinates
-		var uv_x := (point.x + half_map.x) / map_size.x
-		var uv_y := (point.z + half_map.y) / map_size.y
-		polygon_2d.append(Vector2(uv_x * texture_resolution, uv_y * texture_resolution))
-
-	return polygon_2d
-
-
-## Register a VisionComponent
-func register_vision(vision) -> void:
-	if vision and vision not in _vision_components:
-		_vision_components.append(vision)
-		# Connect vision update signal
-		if vision.has_signal("vision_updated"):
-			if not vision.vision_updated.is_connected(_on_vision_updated):
-				vision.vision_updated.connect(_on_vision_updated)
-		_needs_update = true
-
-
-## Unregister a VisionComponent
-func unregister_vision(vision) -> void:
-	if vision in _vision_components:
-		# Disconnect signal
-		if vision.has_signal("vision_updated") and vision.vision_updated.is_connected(_on_vision_updated):
-			vision.vision_updated.disconnect(_on_vision_updated)
-		_vision_components.erase(vision)
-		_needs_update = true
-
-
-## Handler for vision update signal
-func _on_vision_updated(_visible_points: PackedVector3Array) -> void:
+	_vision_lights[character] = vision_light
 	_needs_update = true
 
+
+## キャラクターを解除
+func unregister_character(character: Node3D) -> void:
+	if character not in _registered_characters:
+		return
+
+	_registered_characters.erase(character)
+
+	if character in _vision_lights:
+		_vision_lights[character].cleanup()
+		_vision_lights[character].queue_free()
+		_vision_lights.erase(character)
+
+	_needs_update = true
+
+
+## 旧API互換: VisionComponentを登録（内部でキャラクターを登録）
+func register_vision(vision) -> void:
+	if vision and vision.has_method("get_parent"):
+		var character: Node = vision.get_parent()
+		if character is Node3D:
+			register_character(character)
+
+
+## 旧API互換: VisionComponentを解除
+func unregister_vision(vision) -> void:
+	if vision and vision.has_method("get_parent"):
+		var character: Node = vision.get_parent()
+		if character is Node3D:
+			unregister_character(character)
+
+
+# ============================================
+# Public API - Occluder管理
+# ============================================
+
+## マップからオクルーダーを抽出
+func extract_occluders_from_map(map_node: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.extract_occluders_from_map(map_node)
+	# 壁の明るさ調整は無効（環境光と同じにする）
+	# _boost_wall_brightness(map_node)
+
+
+## 壁メッシュを常に明るく表示（ライティングの影響を受けない）
+func _make_walls_always_lit(map_node: Node3D) -> void:
+	_make_walls_always_lit_recursive(map_node)
+
+
+## 再帰的に壁メッシュを探索してunshadedに設定
+func _make_walls_always_lit_recursive(node: Node) -> void:
+	var node_name_lower := node.name.to_lower()
+	var parent: Node = node.get_parent()
+	var parent_name_lower := parent.name.to_lower() if parent else ""
+
+	# 壁/ドアの判定
+	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
+	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
+
+	if (is_wall or is_door) and node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		_set_mesh_unshaded(mesh_instance)
+
+	# 子ノードを再帰的に処理
+	for child in node.get_children():
+		_make_walls_always_lit_recursive(child)
+
+
+## メッシュをunshadedに設定（常に明るく表示）- 現在未使用
+func _set_mesh_unshaded(mesh_instance: MeshInstance3D) -> void:
+	var mesh := mesh_instance.mesh
+	if not mesh:
+		return
+
+	for i in range(mesh.get_surface_count()):
+		var original_mat := mesh_instance.get_surface_override_material(i)
+		if not original_mat:
+			original_mat = mesh.surface_get_material(i)
+
+		# StandardMaterial3Dの場合、unshadedモードに設定
+		if original_mat is StandardMaterial3D:
+			var new_mat := original_mat.duplicate() as StandardMaterial3D
+			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mesh_instance.set_surface_override_material(i, new_mat)
+
+
+## 壁の明るさを底上げ（emissionで自己発光を追加）
+func _boost_wall_brightness(map_node: Node3D) -> void:
+	_boost_wall_brightness_recursive(map_node)
+
+
+## 再帰的に壁メッシュを探索してemissionを追加
+func _boost_wall_brightness_recursive(node: Node) -> void:
+	var node_name_lower := node.name.to_lower()
+	var parent: Node = node.get_parent()
+	var parent_name_lower := parent.name.to_lower() if parent else ""
+
+	# 壁/ドアの判定
+	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
+	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
+
+	if (is_wall or is_door) and node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		_add_emission_to_mesh(mesh_instance)
+
+	# 子ノードを再帰的に処理
+	for child in node.get_children():
+		_boost_wall_brightness_recursive(child)
+
+
+## 壁の明るさ調整用の定数
+const WALL_EMISSION_ENERGY := 0.3  # 発光の強さ（0.0〜1.0、調整可能）
+
+
+## メッシュにemissionを追加（通常ライティング＋自己発光で明るく）
+func _add_emission_to_mesh(mesh_instance: MeshInstance3D) -> void:
+	var mesh := mesh_instance.mesh
+	if not mesh:
+		return
+
+	for i in range(mesh.get_surface_count()):
+		var original_mat := mesh_instance.get_surface_override_material(i)
+		if not original_mat:
+			original_mat = mesh.surface_get_material(i)
+
+		# StandardMaterial3Dの場合、emissionを追加
+		if original_mat is StandardMaterial3D:
+			var new_mat := original_mat.duplicate() as StandardMaterial3D
+			# 通常のシェーディングを維持しつつ、emissionで明るさを底上げ
+			new_mat.emission_enabled = true
+			new_mat.emission = new_mat.albedo_color  # 元の色で発光
+			new_mat.emission_energy_multiplier = WALL_EMISSION_ENERGY
+			mesh_instance.set_surface_override_material(i, new_mat)
+
+
+## ドアオクルーダーの有効/無効を切り替え
+func set_door_occluder_enabled(door: Node3D, enabled: bool) -> void:
+	if _occluder_manager:
+		_occluder_manager.set_door_occluder_enabled(door, enabled)
+
+
+## スモークオクルーダーを追加
+func add_smoke_occluder(smoke_area: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.add_smoke_occluder(smoke_area)
+
+
+## スモークオクルーダーを削除
+func remove_smoke_occluder(smoke_area: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.remove_smoke_occluder(smoke_area)
+
+
+## スモークオクルーダーの半径を更新
+func update_smoke_radius(smoke_area: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.update_smoke_radius(smoke_area)
+
+
+## OccluderManagerを取得
+func get_occluder_manager() -> OccluderManager:
+	return _occluder_manager
+
+
+# ============================================
+# Public API - 表示制御
+# ============================================
 
 ## Set fog visibility
 func set_fog_visible(fog_visible: bool) -> void:
@@ -217,7 +437,7 @@ func set_fog_visible(fog_visible: bool) -> void:
 ## Force visibility texture update
 func force_update() -> void:
 	_needs_update = true
-	_time_since_update = _update_interval  # Force immediate update
+	_time_since_update = _update_interval
 
 
 ## Set fog color
@@ -234,8 +454,128 @@ func get_visibility_texture() -> ViewportTexture:
 	return null
 
 
+## 可視性閾値（この明るさ以上で「見える」と判定）
+const VISIBILITY_THRESHOLD: float = 0.15
+
+## キャッシュされたテクスチャデータ（毎フレームGPU→CPU転送を避ける）
+var _visibility_image: Image = null
+var _visibility_image_dirty: bool = true
+
+## GPU→CPU転送頻度削減用キャッシュ（2フレーム再利用で15Hz転送）
+const CACHE_REUSE_FRAMES: int = 2
+var _cache_frame_counter: int = 0
+
+
+## ワールド位置がFoWテクスチャで可視かどうかを判定
+## 視覚的なFoW表示と完全に同期した判定を行う
+## @param world_pos: 判定するワールド座標
+## @return: 可視ならtrue
+func is_position_visible_in_fow(world_pos: Vector3) -> bool:
+	if not _visibility_viewport:
+		return false
+
+	# ワールド座標をテクスチャUVに変換
+	var uv := _world_to_texture_uv(world_pos)
+
+	# UV範囲外は不可視
+	if uv.x < 0.0 or uv.x > 1.0 or uv.y < 0.0 or uv.y > 1.0:
+		return false
+
+	# テクスチャから明るさを取得
+	var brightness := _sample_visibility_at_uv(uv)
+
+	return brightness >= VISIBILITY_THRESHOLD
+
+
+## 複数のワールド位置の可視性を一括判定（バッチ処理で効率化）
+## @param positions: 判定するワールド座標の配列
+## @return: 各位置の可視性配列（true/false）
+func are_positions_visible_in_fow(positions: Array[Vector3]) -> Array[bool]:
+	var results: Array[bool] = []
+
+	if not _visibility_viewport or positions.is_empty():
+		results.resize(positions.size())
+		results.fill(false)
+		return results
+
+	# テクスチャデータを1回だけ取得
+	_update_visibility_image_cache()
+
+	for pos in positions:
+		var uv := _world_to_texture_uv(pos)
+		if uv.x < 0.0 or uv.x > 1.0 or uv.y < 0.0 or uv.y > 1.0:
+			results.append(false)
+		else:
+			var brightness := _sample_visibility_from_cache(uv)
+			results.append(brightness >= VISIBILITY_THRESHOLD)
+
+	return results
+
+
+## ワールド座標をテクスチャUVに変換
+func _world_to_texture_uv(world_pos: Vector3) -> Vector2:
+	var half_map := map_size / 2.0
+	var uv_x := (world_pos.x + half_map.x) / map_size.x
+	var uv_y := (world_pos.z + half_map.y) / map_size.y
+	return Vector2(uv_x, uv_y)
+
+
+## テクスチャUV位置の明るさを取得
+func _sample_visibility_at_uv(uv: Vector2) -> float:
+	_update_visibility_image_cache()
+	return _sample_visibility_from_cache(uv)
+
+
+## キャッシュされたImageから明るさを取得
+func _sample_visibility_from_cache(uv: Vector2) -> float:
+	if not _visibility_image:
+		return 0.0
+
+	# UVをピクセル座標に変換
+	var pixel_x := int(uv.x * _visibility_image.get_width())
+	var pixel_y := int(uv.y * _visibility_image.get_height())
+
+	# 範囲チェック
+	pixel_x = clampi(pixel_x, 0, _visibility_image.get_width() - 1)
+	pixel_y = clampi(pixel_y, 0, _visibility_image.get_height() - 1)
+
+	var color := _visibility_image.get_pixel(pixel_x, pixel_y)
+	# R成分を明るさとして使用（グレースケールの場合RGBは同じ）
+	return color.r
+
+
+## 可視性テクスチャキャッシュを更新
+## 2フレーム再利用でGPU→CPU転送頻度を30Hz→15Hzに削減
+func _update_visibility_image_cache() -> void:
+	if not _visibility_viewport:
+		return
+
+	# フレームごとに1回だけ更新（コスト削減）
+	if _visibility_image_dirty:
+		_cache_frame_counter += 1
+
+		# CACHE_REUSE_FRAMESフレームごとに実際のGPU転送を行う
+		if _cache_frame_counter >= CACHE_REUSE_FRAMES or _visibility_image == null:
+			var start_time := Time.get_ticks_usec()
+			var viewport_texture := _visibility_viewport.get_texture()
+			if viewport_texture:
+				_visibility_image = viewport_texture.get_image()
+			_cache_frame_counter = 0
+			var elapsed := Time.get_ticks_usec() - start_time
+			if Debug.enabled and elapsed > 5000:  # 5ms以上かかった場合のみログ
+				print("[FOW] get_image() took ", elapsed / 1000.0, "ms")
+
+		_visibility_image_dirty = false
+
+
+## フレーム終了時にキャッシュをダーティにする（次フレームで再取得）
+func _mark_visibility_cache_dirty() -> void:
+	_visibility_image_dirty = true
+
+
 ## Dynamically change map size
 func set_map_size(new_size: Vector2) -> void:
+	if Debug.enabled: print("[FOW] set_map_size called: ", new_size, " (was: ", map_size, ")")
 	map_size = new_size
 
 	# Update fog mesh size
@@ -243,9 +583,22 @@ func set_map_size(new_size: Vector2) -> void:
 		(_fog_mesh.mesh as PlaneMesh).size = map_size
 
 	# Update shader parameters
+	var map_min := Vector2(-map_size.x / 2, -map_size.y / 2)
+	var map_max := Vector2(map_size.x / 2, map_size.y / 2)
 	if _fog_material:
-		_fog_material.set_shader_parameter("map_min", Vector2(-map_size.x / 2, -map_size.y / 2))
-		_fog_material.set_shader_parameter("map_max", Vector2(map_size.x / 2, map_size.y / 2))
+		_fog_material.set_shader_parameter("map_min", map_min)
+		_fog_material.set_shader_parameter("map_max", map_max)
+		if Debug.enabled: print("[FOW] Shader params updated - map_min: ", map_min, ", map_max: ", map_max)
+
+	# Update occluder manager
+	if _occluder_manager:
+		_occluder_manager.set_map_size(new_size)
+
+	# Update existing VisionLights with new map_size
+	for vision_light in _vision_lights.values():
+		if vision_light:
+			vision_light._map_size = new_size
+			vision_light.sync_transform()
 
 	_needs_update = true
 
@@ -267,9 +620,20 @@ func set_quality(q: Quality) -> void:
 	if _fog_material:
 		_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
 
+	# Update occluder manager
+	if _occluder_manager:
+		_occluder_manager.set_texture_resolution(texture_resolution)
+
+	# Update vision light shadow settings
+	var settings: Dictionary = QUALITY_SETTINGS[quality]
+	for vision_light in _vision_lights.values():
+		if vision_light._light:
+			vision_light._light.shadow_filter = settings["shadow_filter"]
+			vision_light._light.shadow_filter_smooth = settings["shadow_smooth"]
+
 	_needs_update = true
 
 
-## Get quality settings for VisionComponent synchronization
+## Get quality settings for external synchronization
 func get_quality_settings() -> Dictionary:
 	return QUALITY_SETTINGS[quality]

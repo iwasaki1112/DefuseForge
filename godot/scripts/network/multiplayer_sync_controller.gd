@@ -157,10 +157,6 @@ func _has_significant_change(old_state: NetworkMessages.CharacterStateMessage, n
 	if old_state.is_alive != new_state.is_alive:
 		return true
 
-	# しゃがみ状態の変化
-	if old_state.is_crouching != new_state.is_crouching:
-		return true
-
 	return false
 
 
@@ -367,9 +363,7 @@ func _handle_path_confirm(from_peer: int, data: Dictionary) -> void:
 		# HostはClientからのパス確定を受け取り、全体に転送
 		var character := game_manager.find_character_by_network_id(path_msg.character_id)
 		if character:
-			game_manager.path_execution_manager.confirm_path_for_player(
-				from_peer, path_msg, character
-			)
+			game_manager.confirm_path_for_player(from_peer, path_msg, character)
 		# 全Clientへ転送
 		network_bus.broadcast_from_host(
 			NetworkConstants.MessageType.PATH_CONFIRM,
@@ -505,10 +499,12 @@ func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
 
 func _apply_damage_event(event: NetworkMessages.GameEventMessage) -> void:
 	var target := game_manager.find_character_by_network_id(event.target_id)
-	if target and not target.is_local():
-		var amount: float = event.data.get("amount", 0.0)
+	# ローカルキャラクターにのみダメージを適用（所有者側で処理）
+	# リモートキャラクターは攻撃側でローカルに処理済み
+	if target and target.is_local():
+		var damage: float = event.data.get("damage", 0.0)
 		var is_headshot: bool = event.data.get("is_headshot", false)
-		target.take_damage(amount, null, is_headshot)
+		target.take_damage(damage, null, is_headshot)
 
 
 func _apply_death_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -530,7 +526,7 @@ func _apply_grenade_throw_event(event: NetworkMessages.GameEventMessage) -> void
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
-	print("[GRENADE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	if Debug.enabled: print("[GRENADE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
 	game_manager.spawn_grenade_from_network(start_pos, velocity, grenade_id)
 
 
@@ -547,7 +543,7 @@ func _apply_smoke_grenade_throw_event(event: NetworkMessages.GameEventMessage) -
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
-	print("[SMOKE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	if Debug.enabled: print("[SMOKE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
 	game_manager.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id)
 
 
@@ -559,7 +555,7 @@ func _apply_grenade_explode_event(event: NetworkMessages.GameEventMessage) -> vo
 		event.data.get("pos_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
-	print("[GRENADE EXPLODE RECV] id=", grenade_id, " pos=", position)
+	if Debug.enabled: print("[GRENADE EXPLODE RECV] id=", grenade_id, " pos=", position)
 	game_manager.handle_grenade_explode_from_network(grenade_id, position, false)
 
 
@@ -571,7 +567,7 @@ func _apply_smoke_deploy_event(event: NetworkMessages.GameEventMessage) -> void:
 		event.data.get("pos_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
-	print("[SMOKE DEPLOY RECV] id=", grenade_id, " pos=", position)
+	if Debug.enabled: print("[SMOKE DEPLOY RECV] id=", grenade_id, " pos=", position)
 	game_manager.handle_grenade_explode_from_network(grenade_id, position, true)
 
 
@@ -618,14 +614,6 @@ func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
 			if anim_ctrl.has_method("play_grenade_throw"):
 				anim_ctrl.play_grenade_throw()
 				_seek_animation_forward(anim_ctrl, latency_sec)
-
-		NetworkConstants.AnimationEventType.CROUCH_START:
-			if character.has_method("set_crouching"):
-				character.set_crouching(true)
-
-		NetworkConstants.AnimationEventType.CROUCH_END:
-			if character.has_method("set_crouching"):
-				character.set_crouching(false)
 
 
 func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -700,7 +688,6 @@ func _char_snapshot_to_dict(snap: SyncState.CharacterSnapshot) -> Dictionary:
 		"current_health": snap.current_health,
 		"max_health": snap.max_health,
 		"is_alive": snap.is_alive,
-		"is_crouching": snap.is_crouching,
 		"team": snap.team,
 		"weapon_id": snap.weapon_id,
 		"animation_state": snap.animation_state
@@ -723,7 +710,6 @@ func _dict_to_char_snapshot(data: Dictionary) -> SyncState.CharacterSnapshot:
 	snap.current_health = data.get("current_health", 100.0)
 	snap.max_health = data.get("max_health", 100.0)
 	snap.is_alive = data.get("is_alive", true)
-	snap.is_crouching = data.get("is_crouching", false)
 	snap.team = data.get("team", 0)
 	snap.weapon_id = data.get("weapon_id", "")
 	snap.animation_state = data.get("animation_state", "")
@@ -741,10 +727,7 @@ func _path_message_to_dict(msg: NetworkMessages.PathConfirmMessage) -> Dictionar
 		"character_id": msg.character_id,
 		"path": path_array,
 		"vision_points": msg.vision_points.duplicate(true),
-		"run_segments": msg.run_segments.duplicate(true),
-		"clear_points": msg.clear_points.duplicate(true),
-		"grenade_markers": msg.grenade_markers.duplicate(true),
-		"door_markers": msg.door_markers.duplicate(true)
+		"wait_points": msg.wait_points.duplicate(true),
 	}
 
 
@@ -757,10 +740,7 @@ func _dict_to_path_message(data: Dictionary) -> NetworkMessages.PathConfirmMessa
 		msg.path.append(Vector3(p.get("x", 0), p.get("y", 0), p.get("z", 0)))
 
 	msg.vision_points = data.get("vision_points", []).duplicate(true)
-	msg.run_segments = data.get("run_segments", []).duplicate(true)
-	msg.clear_points = data.get("clear_points", []).duplicate(true)
-	msg.grenade_markers = data.get("grenade_markers", []).duplicate(true)
-	msg.door_markers = data.get("door_markers", []).duplicate(true)
+	msg.wait_points = data.get("wait_points", []).duplicate(true)
 
 	return msg
 
@@ -773,7 +753,6 @@ func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictio
 		"velocity": {"x": state.velocity.x, "y": state.velocity.y, "z": state.velocity.z},
 		"current_health": state.current_health,
 		"is_alive": state.is_alive,
-		"is_crouching": state.is_crouching,
 		"animation_state": state.animation_state
 	}
 
@@ -791,7 +770,6 @@ func _dict_to_char_state(data: Dictionary) -> NetworkMessages.CharacterStateMess
 	state.rotation = data.get("rotation", 0.0)
 	state.current_health = data.get("current_health", 100)
 	state.is_alive = data.get("is_alive", true)
-	state.is_crouching = data.get("is_crouching", false)
 	state.animation_state = data.get("animation_state", "")
 
 	return state

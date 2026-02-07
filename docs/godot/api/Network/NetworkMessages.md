@@ -14,25 +14,22 @@
 
 ### PathConfirmMessage
 
-パス確定時に送信するメッセージ。キャラクターの移動パスと全マーカー情報を含む。
+パス確定時に送信するメッセージ。キャラクターの移動パスとマーカー情報を含む。
 
 ```gdscript
 class PathConfirmMessage extends RefCounted:
     var player_id: int              # 送信元プレイヤーID
     var character_id: int           # 対象キャラクターID
     var path: Array[Vector3]        # パス座標配列
-    var vision_markers: Array[Dictionary]      # 視線マーカー
-    var run_segments: Array[Dictionary]        # Run区間
-    var clear_markers: Array[Dictionary]       # Clearマーカー
-    var grenade_markers: Array[Dictionary]     # グレネードマーカー
-    var door_markers: Array[Dictionary]        # ドアマーカー
-    var wait_markers: Array[Dictionary]        # Waitマーカー
-    var smoke_grenade_markers: Array[Dictionary] # スモークグレネードマーカー
+    var vision_points: Array[Dictionary]   # 視線マーカー { path_ratio, anchor, target_point }
+    var wait_points: Array[Dictionary]     # Waitポイント { path_ratio, anchor, wait_duration }
     var timestamp: int              # タイムスタンプ（msec）
 
     func to_dict() -> Dictionary
     func from_dict(data: Dictionary) -> void
 ```
+
+> **Note**: `run_segments`, `clear_points`, `grenade_points`, `door_points`, `smoke_grenade_points` はPathFollowingControllerが対応可能だが、現在PathServiceでUIからの追加がサポートされていないため、同期対象外。将来UIが実装されればPathConfirmMessageに追加予定。
 
 ### RoundStateMessage
 
@@ -58,15 +55,16 @@ class RoundStateMessage extends RefCounted:
 
 ```gdscript
 class CharacterStateMessage extends RefCounted:
-    var character_id: int       # キャラクターID
-    var position: Vector3       # ワールド座標
-    var rotation: float         # Y軸回転（ラジアン）
-    var current_health: int     # 現在のHP
-    var is_alive: bool          # 生存フラグ
-    var animation_state: String # アニメーション状態
-    var velocity: Vector3       # 移動速度（m/s）
-    var is_crouching: bool      # しゃがみ状態
-    var timestamp: int          # タイムスタンプ
+    var character_id: int            # キャラクターID
+    var position: Vector3            # ワールド座標
+    var rotation: float              # Y軸回転（ラジアン）
+    var current_health: int          # 現在のHP
+    var is_alive: bool               # 生存フラグ
+    var animation_state: String      # アニメーション状態
+    var velocity: Vector3            # 移動速度（m/s）
+    var character_preset_id: String  # キャラクタープリセットID（初期同期用）
+    var weapon_id: String            # 武器ID（初期同期用）
+    var timestamp: int               # タイムスタンプ
 
     func to_dict() -> Dictionary
     func from_dict(data: Dictionary) -> void
@@ -159,7 +157,7 @@ GameEventMessageを作成。
 # パス確定メッセージの作成
 var path: Array[Vector3] = [Vector3(0, 0, 0), Vector3(5, 0, 3)]
 var msg = NetworkMessages.create_path_confirm(1, 100, path)
-msg.vision_markers.append({
+msg.vision_points.append({
     "path_ratio": 0.5,
     "target_point": [10.0, 1.0, 5.0],
     "has_target": true
@@ -186,4 +184,4 @@ var damage_event = NetworkMessages.create_game_event(
 - [NetworkConstants](NetworkConstants.md) - ネットワーク定数
 - [SyncState](SyncState.md) - 同期状態クラス
 - [NetworkSerializer](NetworkSerializer.md) - シリアライズユーティリティ
-- [ActionMarkerData](ActionMarkerData.md) - マーカーデータ構造
+- [ActionPointData](ActionPointData.md) - マーカーデータ構造

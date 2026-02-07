@@ -20,13 +20,10 @@ const NODE_PATH_EXECUTION_MANAGER := "PathExecutionManager"
 const NODE_IDLE_MANAGER := "IdleCharacterManager"
 const NODE_PATH_DRAWER := "PathDrawer"
 const NODE_PATH_MODE_CONTROLLER := "PathModeController"
-const NODE_ROTATION_CONTROLLER := "RotationController"
 const NODE_VISION_SERVICE := "VisionService"
 const NODE_MAP_MANAGER := "MapManager"
-const NODE_CONTEXT_MENU := "ContextMenu"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
 const NODE_PATH_SERVICE := "PathService"
-const NODE_WEAPON_SHOP_MODAL := "WeaponShopModal"
 
 # ========================================================
 # Group Names
@@ -81,6 +78,16 @@ const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
 
 # ========================================================
+# Path Settings (パス描画・クリック判定)
+# ========================================================
+## パスの線幅（視覚的な太さ）
+const PATH_LINE_WIDTH: float = 0.15
+## パスのクリック判定エリア（PC向け、線幅と統一）
+const PATH_CLICK_THRESHOLD: float = 0.15
+## パスのクリック判定エリア（モバイル向け、タッチ精度を考慮して大きめ）
+const PATH_CLICK_THRESHOLD_MOBILE: float = 0.5
+
+# ========================================================
 # Round Settings
 # ========================================================
 const ROUND_TIME_LIMIT: float = 90.0      # ラウンド制限時間（秒）
@@ -91,3 +98,13 @@ const ROUND_END_DELAY: float = 3.0        # ラウンド終了後の遅延（秒
 # ========================================================
 const NODE_ROUND_MANAGER := "RoundManager"
 const NODE_ROUND_HUD := "RoundHUD"
+
+# ========================================================
+# UI Colors
+# ========================================================
+## チームカラー
+const CT_COLOR := Color(0.4, 0.6, 1.0)   # CT（青）
+const T_COLOR := Color(1.0, 0.6, 0.3)    # T（オレンジ）
+## ショップUI
+const AFFORDABLE_COLOR := Color(0.2, 0.6, 0.2)  # 購入可能時
+const SELECTED_COLOR := Color(0.3, 0.5, 0.7)    # 選択時

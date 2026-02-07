@@ -61,6 +61,7 @@ func _connect_network_events() -> void:
 	_game_manager.grenade_network_event.connect(_on_grenade_network_event)
 	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
+	_game_manager.damage_network_event.connect(_on_damage_network_event)
 
 	# リモートプレイヤーからのパス確定を処理
 	if sync_controller:
@@ -88,14 +89,110 @@ func register_character(game_manager: GameManager, character: GameCharacter, net
 	game_manager.register_character_with_network(character, owner_id, network_id)
 
 
+## マルチプレイヤー用キャラクタースポーン
+## peer_idでソートして確定的な順序でスポーン（ホストとクライアントで同じnetwork_idになるように）
+func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
+	if not game_manager.has_map():
+		push_warning("[MultiplayerModeProvider] Cannot spawn characters - no map loaded yet")
+		return true  # 処理済み扱い（エラー）
+
+	var preset = game_manager.get_current_map_preset()
+	if not preset:
+		push_error("[MultiplayerModeProvider] Cannot spawn characters - no map preset")
+		return true
+
+	var players := network_manager.get_players()
+
+	# peer_idでソートして確定的な順序でスポーン
+	var sorted_peer_ids: Array[int] = []
+	for pid in players.keys():
+		sorted_peer_ids.append(pid)
+	sorted_peer_ids.sort()
+
+	var network_id_counter: int = 1
+
+	for peer_id in sorted_peer_ids:
+		var info: Dictionary = players[peer_id]
+		var team: int = info.get("team", GameCharacter.Team.NONE)
+
+		# チームに基づいてキャラクターをスポーン
+		if team == GameCharacter.Team.COUNTER_TERRORIST:
+			network_id_counter = _spawn_team_characters_for_player(
+				game_screen, game_manager, preset,
+				peer_id, team,
+				preset.spawn_points_ct, preset.spawn_rotations_ct,
+				["alpha", "bravo"], "alpha",
+				network_id_counter
+			)
+		elif team == GameCharacter.Team.TERRORIST:
+			network_id_counter = _spawn_team_characters_for_player(
+				game_screen, game_manager, preset,
+				peer_id, team,
+				preset.spawn_points_t, preset.spawn_rotations_t,
+				["ares", "brim"], "ares",
+				network_id_counter
+			)
+
+	# IdleManagerにキャラクターリストを更新
+	if game_manager.idle_manager:
+		game_manager.idle_manager.set_characters(game_manager.characters)
+
+	return true  # スポーン処理完了
+
+
+## プレイヤー用のチームキャラクターをスポーン
+func _spawn_team_characters_for_player(
+	_screen: Node,
+	game_manager: GameManager,
+	_preset,
+	owner_peer_id: int,
+	team: int,
+	spawn_points: Array,
+	spawn_rotations: Array,
+	marker_names: Array,
+	preset_id: String,
+	network_id_counter: int
+) -> int:
+	var char_preset = CharacterRegistry.get_preset(preset_id)
+	if not char_preset:
+		push_error("[MultiplayerModeProvider] Character preset not found: %s" % preset_id)
+		return network_id_counter
+
+	var count := mini(2, spawn_points.size())  # 各プレイヤー2体
+
+	for i in range(count):
+		var spawn_pos: Vector3 = spawn_points[i]
+		var character = CharacterRegistry.create_character(char_preset.id, spawn_pos)
+		if character:
+			character.team = team
+			# マーカー名を設定
+			if i < marker_names.size():
+				character.marker_name = marker_names[i]
+			# add_child()前に向きを設定
+			if i < spawn_rotations.size():
+				var spawn_rot: float = spawn_rotations[i]
+				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
+				character._facing_direction = direction
+
+			var character_parent = game_manager.get_character_parent()
+			character_parent.add_child(character)
+
+			# 確定的なnetwork_idで登録
+			game_manager.register_character_with_network(character, owner_peer_id, network_id_counter)
+			network_id_counter += 1
+
+	return network_id_counter
+
+
 func on_path_confirmed() -> void:
 	if sync_controller:
 		sync_controller.send_state_sync()
 
 
-func on_execute_paths(count: int) -> void:
-	if count > 0 and sync_controller:
-		sync_controller.send_path_execute(false)
+func on_execute_paths(_count: int) -> void:
+	# 各プレイヤーは自分のキャラクターのみを操作するため、
+	# PATH_EXECUTEの送信は不要（各自がGOを押したときに自分のキャラクターのみ実行）
+	pass
 
 
 func on_round_ended(_winner: int, _reason: int) -> void:
@@ -126,7 +223,7 @@ func cleanup() -> void:
 			network_manager.message_received.disconnect(_on_network_message)
 		# WebSocket切断
 		network_manager.disconnect_from_game()
-		print("[MultiplayerModeProvider] WebSocket disconnected")
+		if Debug.enabled: print("[MultiplayerModeProvider] WebSocket disconnected")
 
 	if _game_manager and _game_manager.grenade_network_event.is_connected(_on_grenade_network_event):
 		_game_manager.grenade_network_event.disconnect(_on_grenade_network_event)
@@ -134,6 +231,8 @@ func cleanup() -> void:
 		_game_manager.grenade_explode_network_event.disconnect(_on_grenade_explode_network_event)
 	if _game_manager and _game_manager.door_kick_network_event.is_connected(_on_door_kick_network_event):
 		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
+	if _game_manager and _game_manager.damage_network_event.is_connected(_on_damage_network_event):
+		_game_manager.damage_network_event.disconnect(_on_damage_network_event)
 
 	if sync_controller and sync_controller.path_confirmed_remote.is_connected(_on_path_confirmed_remote):
 		sync_controller.path_confirmed_remote.disconnect(_on_path_confirmed_remote)
@@ -144,7 +243,7 @@ func cleanup() -> void:
 ## ========================================
 
 func _on_peer_disconnected(peer_id: int) -> void:
-	print("[MultiplayerModeProvider] Peer %d disconnected" % peer_id)
+	if Debug.enabled: print("[MultiplayerModeProvider] Peer %d disconnected" % peer_id)
 
 
 func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void:
@@ -204,9 +303,24 @@ func _on_door_kick_network_event(door_id: int, character_network_id: int) -> voi
 	sync_controller.send_game_event(event)
 
 
+func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool) -> void:
+	if not sync_controller:
+		return
+
+	var event := NetworkMessages.GameEventMessage.new()
+	event.event_type = NetworkConstants.GameEventType.DAMAGE
+	event.source_id = attacker_id
+	event.target_id = target_id
+	event.data = {
+		"damage": damage,
+		"is_headshot": is_headshot,
+	}
+	sync_controller.send_game_event(event)
+
+
 ## リモートプレイヤーからのパス確定を処理
 func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	if not _game_manager or not _game_manager.path_execution_manager:
+	if not _game_manager:
 		return
 
 	# 自分のパスはすでにローカルで登録済みなのでスキップ
@@ -216,10 +330,8 @@ func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathCon
 	# キャラクターを検索
 	var character := _game_manager.find_character_by_network_id(path_msg.character_id)
 	if not character:
-		print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
+		if Debug.enabled: print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
 		return
 
 	# リモートプレイヤーのパスを登録
-	_game_manager.path_execution_manager.confirm_path_for_player(
-		player_id, path_msg, character
-	)
+	_game_manager.confirm_path_for_player(player_id, path_msg, character)

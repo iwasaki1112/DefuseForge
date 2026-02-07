@@ -10,7 +10,7 @@ extends RefCounted
 # ============================================
 
 ## パス確定時に送信するメッセージ
-## キャラクターの移動パスと全マーカー情報を含む
+## キャラクターの移動パスと全ポイント情報を含む
 class PathConfirmMessage extends RefCounted:
 	## 送信元プレイヤーID（peer_id）
 	var player_id: int = 0
@@ -21,33 +21,13 @@ class PathConfirmMessage extends RefCounted:
 	## パス座標配列
 	var path: Array[Vector3] = []
 
-	## 視線マーカーデータ配列
+	## 視線ポイントデータ配列
 	## 各要素: { path_ratio, target_point/direction, has_target }
-	var vision_markers: Array[Dictionary] = []
+	var vision_points: Array[Dictionary] = []
 
-	## Run区間データ配列
-	## 各要素: { start_ratio, end_ratio }
-	var run_segments: Array[Dictionary] = []
-
-	## Clearマーカーデータ配列
-	## 各要素: { path_ratio, anchor }
-	var clear_markers: Array[Dictionary] = []
-
-	## グレネードマーカーデータ配列
-	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var grenade_markers: Array[Dictionary] = []
-
-	## ドアマーカーデータ配列
-	## 各要素: { path_ratio, anchor, door_id }
-	var door_markers: Array[Dictionary] = []
-
-	## Waitマーカーデータ配列
+	## Waitポイントデータ配列
 	## 各要素: { path_ratio, anchor, wait_duration }
-	var wait_markers: Array[Dictionary] = []
-
-	## スモークグレネードマーカーデータ配列
-	## 各要素: { path_ratio, anchor, target_pos, bounce_point?, bounce_normal?, has_bounce }
-	var smoke_grenade_markers: Array[Dictionary] = []
+	var wait_points: Array[Dictionary] = []
 
 	## メッセージ生成タイムスタンプ（msec）
 	var timestamp: int = 0
@@ -59,13 +39,8 @@ class PathConfirmMessage extends RefCounted:
 			"player_id": player_id,
 			"character_id": character_id,
 			"path": _path_to_array(),
-			"vision_markers": vision_markers,
-			"run_segments": run_segments,
-			"clear_markers": clear_markers,
-			"grenade_markers": grenade_markers,
-			"door_markers": door_markers,
-			"wait_markers": wait_markers,
-			"smoke_grenade_markers": smoke_grenade_markers,
+			"vision_points": vision_points,
+			"wait_points": wait_points,
 			"timestamp": timestamp,
 		}
 
@@ -75,13 +50,8 @@ class PathConfirmMessage extends RefCounted:
 		player_id = data.get("player_id", 0)
 		character_id = data.get("character_id", 0)
 		_array_to_path(data.get("path", []))
-		vision_markers.assign(data.get("vision_markers", []))
-		run_segments.assign(data.get("run_segments", []))
-		clear_markers.assign(data.get("clear_markers", []))
-		grenade_markers.assign(data.get("grenade_markers", []))
-		door_markers.assign(data.get("door_markers", []))
-		wait_markers.assign(data.get("wait_markers", []))
-		smoke_grenade_markers.assign(data.get("smoke_grenade_markers", []))
+		vision_points.assign(data.get("vision_points", []))
+		wait_points.assign(data.get("wait_points", []))
 		timestamp = data.get("timestamp", 0)
 
 
@@ -181,8 +151,11 @@ class CharacterStateMessage extends RefCounted:
 	## 移動速度（m/s）
 	var velocity: Vector3 = Vector3.ZERO
 
-	## しゃがみ状態
-	var is_crouching: bool = false
+	## キャラクタープリセットID（初期同期用）
+	var character_preset_id: String = ""
+
+	## 武器ID（初期同期用）
+	var weapon_id: String = ""
 
 	## タイムスタンプ
 	var timestamp: int = 0
@@ -197,7 +170,8 @@ class CharacterStateMessage extends RefCounted:
 			"is_alive": is_alive,
 			"animation_state": animation_state,
 			"velocity": [velocity.x, velocity.y, velocity.z],
-			"is_crouching": is_crouching,
+			"character_preset_id": character_preset_id,
+			"weapon_id": weapon_id,
 			"timestamp": timestamp,
 		}
 
@@ -214,7 +188,8 @@ class CharacterStateMessage extends RefCounted:
 		var vel = data.get("velocity", [0, 0, 0])
 		if vel is Array and vel.size() >= 3:
 			velocity = Vector3(vel[0], vel[1], vel[2])
-		is_crouching = data.get("is_crouching", false)
+		character_preset_id = data.get("character_preset_id", "")
+		weapon_id = data.get("weapon_id", "")
 		timestamp = data.get("timestamp", 0)
 
 

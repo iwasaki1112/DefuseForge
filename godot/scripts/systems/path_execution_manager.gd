@@ -2,17 +2,18 @@ extends Node
 class_name PathExecutionManager
 ## パス実行管理
 ## パス確定・実行・pending_paths管理を担当
+## PendingPathStore, PathMeshManager, PathPointMeshManagerに委譲
 
-const PathLineMeshScript = preload("res://scripts/effects/path_line_mesh.gd")
-const PathFollowingCtrl = preload("res://scripts/characters/path_following_controller.gd")
-const VisionMarkerScript = preload("res://scripts/effects/vision_marker.gd")
-const RunMarkerScript = preload("res://scripts/effects/run_marker.gd")
-const ClearMarkerScript = preload("res://scripts/effects/clear_marker.gd")
-const GrenadeMarkerScript = preload("res://scripts/effects/grenade_marker.gd")
-const SmokeGrenadeMarkerScript = preload("res://scripts/effects/smoke_grenade_marker.gd")
-const DoorMarkerScript = preload("res://scripts/effects/door_marker.gd")
-const WaitMarkerScript = preload("res://scripts/effects/wait_marker.gd")
-const ActionMarkerDataScript = preload("res://scripts/effects/action_marker_data.gd")
+## デバッグログ出力フラグ（運用時はfalseに設定）
+const DEBUG_PATH: bool = false
+
+## スクリプト参照（iOSビルドでのpreload問題を回避するためloadを使用）
+var PathLineMeshScript: GDScript = null
+var PathFollowingCtrl: GDScript = null
+
+func _init() -> void:
+	PathLineMeshScript = load("res://scripts/effects/path_line_mesh.gd")
+	PathFollowingCtrl = load("res://scripts/characters/path_following_controller.gd")
 
 ## パス確定時のシグナル
 signal path_confirmed(character_count: int)
@@ -24,26 +25,40 @@ signal all_paths_completed()
 signal paths_cleared()
 ## 個別キャラクターのパス完了シグナル
 signal character_path_completed(character: Node)
-## グレネードマーカー到達時のシグナル
-signal grenade_marker_reached(character: Node, marker_data: Dictionary)
-## スモークグレネードマーカー到達時のシグナル
-signal smoke_grenade_marker_reached(character: Node, marker_data: Dictionary)
-## ドアマーカー到達時のシグナル
-signal door_marker_reached(character: Node, door: Node3D)
+## Visionポイント到達時のシグナル（移動中パスポイント非表示用）
+signal vision_point_reached(character: Node, path_ratio: float)
+## パス進行更新シグナル（移動中パスポイント非表示用）
+signal path_progress_updated(character: Node)
+## 延長ポイントの比率がスケールされた時のシグナル
+signal extension_points_scaled(character: Node, scale: float)
+## 同期待機状態変更シグナル（HUD更新用）
+signal sync_wait_state_changed(has_waiting: bool)
 
-## 保留中のパス（キャラクターごと）
-## { character_id: { "character": Node, "path": Array[Vector3], "vision_points": Array, "run_segments": Array, "clear_points": Array,
-##                   "grenade_markers_data": Array, "smoke_grenade_markers_data": Array, "door_markers_data": Array, "wait_markers_data": Array,
-##                   "path_mesh": Node3D, "vision_markers": Array, "run_markers": Array, "clear_markers": Array,
-##                   "grenade_markers": Array, "smoke_grenade_markers": Array, "door_markers": Array, "wait_markers": Array } }
-var pending_paths: Dictionary = {}
+## ポイントタイプのエイリアス
+const PointType = ActionPointData.Type
 
-## プレイヤーごとの保留パス（マルチプレイヤー用）
-## { player_id: { character_id: PathConfirmMessage } }
-var _pending_paths_by_player: Dictionary = {}
+## ハンドラインスタンス
+var _path_store: PendingPathStore = null
+var _mesh_manager: PathMeshManager = null
+var _point_mesh_manager: PathPointMeshManager = null
+
+## pending_pathsへの後方互換アクセサ（外部からの直接参照をサポート）
+var pending_paths: Dictionary:
+	get:
+		return _path_store.pending_paths if _path_store else {}
+	set(value):
+		if _path_store:
+			_path_store.pending_paths = value
 
 ## パス追従コントローラー { character_id -> PathFollowingController }
 var _path_controllers: Dictionary = {}
+
+## 延長パスのメッシュ { character_id -> MeshInstance3D }
+var _extension_path_meshes: Dictionary = {}
+
+## アクティブパスメッシュ（延長後に切り替わったパス） { character_id -> Array[MeshInstance3D] }
+## 複数回延長した場合に全てのセグメントを保持
+var _active_path_meshes: Dictionary = {}
 
 ## パスメッシュを追加する親ノード
 var _mesh_parent: Node3D = null
@@ -56,14 +71,170 @@ var _execution_order_counter: int = 0
 func setup(mesh_parent: Node3D) -> void:
 	_mesh_parent = mesh_parent
 
+	# ハンドラを初期化
+	_path_store = PendingPathStore.new()
+	_path_store.setup(self)
 
-## パスを確定して保存
+	_mesh_manager = PathMeshManager.new()
+	_mesh_manager.setup(mesh_parent)
+
+	_point_mesh_manager = PathPointMeshManager.new()
+	_point_mesh_manager.setup(mesh_parent)
+
+
+## メッシュ親ノードを取得（内部状態を隠蔽するAPI）
+func get_mesh_parent() -> Node3D:
+	return _mesh_parent
+
+
+## パス開始時に呼ばれる（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param start_point: パスの開始点
+## @param is_continuation: 既存パスの継続かどうか（trueなら既存パスをクリアしない）
+func start_realtime_path(character: Node, start_point: Vector3, is_continuation: bool = false) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# 継続モードの場合は既存パスを維持
+	if is_continuation and _path_store.pending_paths.has(char_id):
+		return
+
+	# 既存のパスがあれば削除（新規開始）
+	_path_store.clear_pending_path_for_character(char_id)
+
+	# 新しいパスを開始
+	var path: Array[Vector3] = [start_point]
+	var path_mesh = _mesh_manager.create_path_mesh(path, character)
+
+	_path_store.pending_paths[char_id] = {
+		"character": character,
+		"path": path,
+		"vision_points_data": [],
+		"wait_points_data": [],
+		"path_mesh": path_mesh,
+		"vision_points": [],
+		"wait_points": []
+	}
+
+
+## パスにポイントを追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param point: 追加するポイント
+func add_realtime_path_point(character: Node, point: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_store.pending_paths.has(char_id):
+		# パスがまだ開始されていない場合は開始
+		start_realtime_path(character, point)
+		return
+
+	var data = _path_store.pending_paths[char_id]
+	var path: Array = data.get("path", [])
+	path.append(point)
+	data["path"] = path
+
+	# パスメッシュを更新
+	var path_mesh = data.get("path_mesh")
+	if path_mesh and is_instance_valid(path_mesh):
+		var packed_path = PackedVector3Array()
+		for p in path:
+			packed_path.append(p)
+		path_mesh.update_from_points(packed_path)
+
+
+## Vision Pointを確定済みパスに追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param anchor: アンカー位置
+## @param target_point: ターゲット位置
+## @param path_ratio: パス上の比率
+func add_realtime_vision_point(character: Node, anchor: Vector3, target_point: Vector3, path_ratio: float) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_store.pending_paths.has(char_id):
+		return
+
+	var data = _path_store.pending_paths[char_id]
+	if not data.has("vision_points_data"):
+		data["vision_points_data"] = []
+
+	var point_data = {
+		"anchor": anchor,
+		"target_point": target_point,
+		"path_ratio": path_ratio
+	}
+	data["vision_points_data"].append(point_data)
+
+
+## Wait Pointを確定済みパスに追加（リアルタイム確定用）
+## @param character: 対象キャラクター
+## @param anchor: アンカー位置
+## @param path_ratio: パス上の比率
+## @param wait_duration: 待機時間
+func add_realtime_wait_point(character: Node, anchor: Vector3, path_ratio: float, wait_duration: float) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_store.pending_paths.has(char_id):
+		return
+
+	var data = _path_store.pending_paths[char_id]
+	if not data.has("wait_points_data"):
+		data["wait_points_data"] = []
+
+	var point_data = {
+		"anchor": anchor,
+		"path_ratio": path_ratio,
+		"wait_duration": wait_duration
+	}
+	data["wait_points_data"].append(point_data)
+
+
+## 移動中パスにポイントを追加
+## @param character: 対象キャラクター
+## @param point: 追加するポイント
+func add_point_to_moving_path(character: Node, point: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return
+
+	controller.append_path_point(point)
+
+	# パスメッシュを更新（残りパスのみ、通過済み部分は含めない）
+	if _path_store.pending_paths.has(char_id):
+		var data = _path_store.pending_paths[char_id]
+		# 保存されているパスにも追加（同期維持）
+		var stored_path: Array = data.get("path", [])
+		stored_path.append(point)
+		data["path"] = stored_path
+
+		var path_mesh = data.get("path_mesh")
+		if path_mesh and is_instance_valid(path_mesh):
+			# 残りパス（現在位置から先）を取得してメッシュを更新
+			var remaining_path = controller.get_full_remaining_path()
+			path_mesh.update_from_points(remaining_path)
+
+
+## パスを確定して保存（後方互換用）
 func confirm_path(
 	target_characters: Array[Node],
 	path_drawer: Node,
 	_primary_character: Node
 ) -> bool:
-	if not path_drawer.has_pending_path():
+	if not path_drawer.has_path():
 		return false
 
 	if target_characters.is_empty():
@@ -74,183 +245,104 @@ func confirm_path(
 	var char_id = character.get_instance_id()
 	var char_pos = character.global_position
 
-	# 表示用パス（生パス）を取得
-	var display_path: Array[Vector3] = []
-	var drawn = path_drawer.get_drawn_path()
-	for point in drawn:
-		display_path.append(point)
+	var display_path := _copy_vector3_array(path_drawer.get_drawn_path())
+	var base_path := _copy_vector3_array(path_drawer.get_smoothed_path())
+	var point_data := _get_point_data_from_drawer(path_drawer)
 
-	# 移動用パス（スムージング済み）を取得
-	var base_path: Array[Vector3] = []
-	var pending = path_drawer.get_smoothed_path()
-	for point in pending:
-		base_path.append(point)
-
-	# マーカーデータを取得
-	var base_vision = path_drawer.get_vision_points().duplicate()
-	var base_run = path_drawer.get_run_segments().duplicate()
-	var base_clear = path_drawer.get_clear_points().duplicate()
-	var base_grenade = path_drawer.get_grenade_markers().duplicate()
-	var base_smoke_grenade = path_drawer.get_smoke_grenade_markers().duplicate()
-	var base_door = path_drawer.get_door_markers().duplicate()
-	var base_wait = path_drawer.get_wait_markers().duplicate()
-
-	# 元のマーカーメッシュを削除
-	free_marker_meshes(path_drawer.take_vision_markers())
-	free_marker_meshes(path_drawer.take_run_markers())
-	free_marker_meshes(path_drawer.take_clear_markers())
-	free_marker_meshes(path_drawer.take_grenade_markers())
-	if path_drawer.has_method("take_smoke_grenade_markers"):
-		free_marker_meshes(path_drawer.take_smoke_grenade_markers())
-	free_marker_meshes(path_drawer.take_door_markers())
-	free_marker_meshes(path_drawer.take_wait_markers())
-
-	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
-
-	# 元のパスの長さを計算
-	var base_length = _calculate_path_length(base_path)
+	# 元のポイントメッシュを削除
+	_free_drawer_point_meshes(path_drawer)
 
 	# 既存のパスがあれば削除
-	_clear_pending_path_for_character(char_id)
+	_path_store.clear_pending_path_for_character(char_id)
 
-	# キャラクター位置からパス開始点への接続を含むパスを作成
-	var full_path: Array[Vector3] = []  # 移動用（スムージング済み）
-	var full_display_path: Array[Vector3] = []  # 表示用（生パス）
-	var connect_length: float = 0.0
+	# 接続線を含むパスを作成
+	var connected := _build_connected_paths(char_pos, base_path, display_path)
+	var full_path: Array[Vector3] = connected.full_path
+	var full_display_path: Array[Vector3] = connected.full_display_path
+	var connect_length: float = connected.connect_length
+	var base_length: float = connected.base_length
 
-	if char_pos.distance_to(path_start) > 0.1:
-		# キャラクターがパス開始点にいない場合、接続線を追加
-		full_path.append(char_pos)
-		full_display_path.append(char_pos)
-		connect_length = char_pos.distance_to(path_start)
-	full_path.append_array(base_path)
-	full_display_path.append_array(display_path)
+	# ポイントの比率を再計算
+	var adjusted_points := _adjust_point_data_for_connection(point_data, connect_length, base_length)
 
-	# マーカーの比率を再計算
-	var adjusted_vision_points = _adjust_ratios_for_connection(base_vision, connect_length, base_length)
-	var adjusted_run_segments = _adjust_run_ratios_for_connection(base_run, connect_length, base_length)
-	var adjusted_clear_points = _adjust_clear_ratios_for_connection(base_clear, connect_length, base_length)
-	var adjusted_grenade_markers = _adjust_grenade_ratios_for_connection(base_grenade, connect_length, base_length)
-	var adjusted_smoke_grenade_markers = _adjust_grenade_ratios_for_connection(base_smoke_grenade, connect_length, base_length)
-	var adjusted_door_markers = _adjust_door_ratios_for_connection(base_door, connect_length, base_length)
-	var adjusted_wait_markers = _adjust_wait_ratios_for_connection(base_wait, connect_length, base_length)
+	# anchorが保存されているVisionポイントの比率を、実際のパス上の位置から再計算
+	adjusted_points["vision"] = _recalculate_vision_ratios_from_anchors(full_path, adjusted_points.get("vision", []))
 
 	# パスメッシュを作成（表示用の生パスを使用）
-	var path_mesh = _create_path_mesh(full_display_path, character)
+	var path_mesh = _mesh_manager.create_path_mesh(full_display_path, character)
 
-	# マーカーを新規生成
-	var char_vision_markers_nodes = _create_vision_markers_for_path(
-		full_path, adjusted_vision_points, character
-	)
-	var char_run_markers_nodes = _create_run_markers_for_path(
-		full_path, adjusted_run_segments, character
-	)
-	var char_clear_markers_nodes = _create_clear_markers_for_path(
-		full_path, adjusted_clear_points, character
-	)
-	var char_grenade_markers_nodes = _create_grenade_markers_for_path(
-		full_path, adjusted_grenade_markers, character
-	)
-	var char_smoke_grenade_markers_nodes = _create_smoke_grenade_markers_for_path(
-		full_path, adjusted_smoke_grenade_markers, character
-	)
-	var char_door_markers_nodes = _create_door_markers_for_path(
-		full_path, adjusted_door_markers, character
-	)
-	var char_wait_markers_nodes = _create_wait_markers_for_path(
-		full_path, adjusted_wait_markers, character
-	)
+	# ポイントを新規生成
+	var point_nodes := _create_point_nodes_for_path(full_path, adjusted_points, character)
 
-	pending_paths[char_id] = {
-		"character": character,
-		"path": full_path,
-		"vision_points": adjusted_vision_points,
-		"run_segments": adjusted_run_segments,
-		"clear_points": adjusted_clear_points,
-		"grenade_markers_data": adjusted_grenade_markers,
-		"smoke_grenade_markers_data": adjusted_smoke_grenade_markers,
-		"door_markers_data": adjusted_door_markers,
-		"wait_markers_data": adjusted_wait_markers,
-		"path_mesh": path_mesh,
-		"vision_markers": char_vision_markers_nodes,
-		"run_markers": char_run_markers_nodes,
-		"clear_markers": char_clear_markers_nodes,
-		"grenade_markers": char_grenade_markers_nodes,
-		"smoke_grenade_markers": char_smoke_grenade_markers_nodes,
-		"door_markers": char_door_markers_nodes,
-		"wait_markers": char_wait_markers_nodes
-	}
+	_path_store.register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh)
 
 	path_confirmed.emit(1)
 	return true
 
 
 ## 全キャラクターのパスを同時実行
-func execute_all_paths(run: bool) -> int:
-	if pending_paths.is_empty():
+## local_only: trueの場合、ローカルプレイヤーのキャラクターのみ実行
+func execute_all_paths(run: bool, local_only: bool = false) -> int:
+	if _path_store.pending_paths.is_empty():
 		return 0
 
 	# 優先度カウンターをリセット
 	_execution_order_counter = 0
 
 	var executed_count = 0
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
 		# 既に実行済み（characterキーなし）のエントリはスキップ
 		if not data.has("character"):
 			continue
 		var character = data["character"] as CharacterBody3D
 
-		# パスを明示的にArray[Vector3]に変換
-		var path: Array[Vector3] = []
-		if data.has("path"):
-			for p in data["path"]:
-				path.append(p)
+		# local_onlyモードの場合、リモートキャラクターはスキップ
+		if local_only:
+			var game_char := character as GameCharacter
+			if game_char and not game_char.is_local():
+				continue
 
-		# 視線ポイントを明示的にArray[Dictionary]に変換
-		var vision_points: Array[Dictionary] = []
-		if data.has("vision_points"):
-			for vp in data["vision_points"]:
-				vision_points.append(vp)
-
-		# Run区間を明示的にArray[Dictionary]に変換
-		var run_segments: Array[Dictionary] = []
-		if data.has("run_segments"):
-			for seg in data["run_segments"]:
-				run_segments.append(seg)
-
-		# Clearポイントを明示的にArray[Dictionary]に変換
-		var clear_points: Array[Dictionary] = []
-		if data.has("clear_points"):
-			for cp in data["clear_points"]:
-				clear_points.append(cp)
-
-		# グレネードマーカーを明示的にArray[Dictionary]に変換
-		var grenade_markers_data: Array[Dictionary] = []
-		if data.has("grenade_markers_data"):
-			for gm in data["grenade_markers_data"]:
-				grenade_markers_data.append(gm)
-
-		# スモークグレネードマーカーを明示的にArray[Dictionary]に変換
-		var smoke_grenade_markers_data: Array[Dictionary] = []
-		if data.has("smoke_grenade_markers_data"):
-			for sgm in data["smoke_grenade_markers_data"]:
-				smoke_grenade_markers_data.append(sgm)
-
-		# ドアマーカーを明示的にArray[Dictionary]に変換
-		var door_markers_data: Array[Dictionary] = []
-		if data.has("door_markers_data"):
-			for dm in data["door_markers_data"]:
-				door_markers_data.append(dm)
-
-		# Waitマーカーを明示的にArray[Dictionary]に変換
-		var wait_markers_data: Array[Dictionary] = []
-		if data.has("wait_markers_data"):
-			for wm in data["wait_markers_data"]:
-				wait_markers_data.append(wm)
+		var path := _copy_vector3_array(data.get("path", []))
+		var vision_points := _copy_dict_array(data.get("vision_points_data", []))
+		var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
 
 		if not is_instance_valid(character):
 			continue
+
+		# 既存マーカーをpoint_dataにリンク（リアルタイム確認フロー対応）
+		# pending_pathsの"vision_points"にマーカーが保存されている
+		var existing_vision_markers: Array = data.get("vision_points", [])
+		var existing_wait_markers: Array = data.get("wait_points", [])
+
+		# position-baseでマーカーとpoint_dataをマッチング
+		for vp in vision_points:
+			if vp.has("marker") and is_instance_valid(vp.get("marker")):
+				continue  # 既にリンク済み
+			var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+			var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+			for marker in existing_vision_markers:
+				if not is_instance_valid(marker):
+					continue
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.1:
+					vp["marker"] = marker
+					break
+
+		for wp in wait_points_data:
+			if wp.has("marker") and is_instance_valid(wp.get("marker")):
+				continue  # 既にリンク済み
+			var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
+			var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+			for marker in existing_wait_markers:
+				if not is_instance_valid(marker):
+					continue
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				if marker_pos.distance_to(anchor_flat) < 0.1:
+					wp["marker"] = marker
+					break
 
 		# コントローラーを取得または作成
 		var controller = _get_or_create_path_controller(character)
@@ -260,59 +352,152 @@ func execute_all_paths(run: bool) -> int:
 		controller.set_movement_priority(_execution_order_counter)
 		_execution_order_counter += 1
 
-		if controller.start_path(path, vision_points, run_segments, run, clear_points, grenade_markers_data, door_markers_data, wait_markers_data, smoke_grenade_markers_data):
+		var empty_run: Array[Dictionary] = []
+		var empty_clear: Array[Dictionary] = []
+		var empty_grenade: Array[Dictionary] = []
+		var empty_door: Array[Dictionary] = []
+		if controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data):
 			executed_count += 1
 
-	# パスデータのみクリア（メッシュは残す）
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
-		data.erase("path")
-		data.erase("vision_points")
-		data.erase("run_segments")
-		data.erase("clear_points")
-		data.erase("grenade_markers_data")
-		data.erase("smoke_grenade_markers_data")
-		data.erase("door_markers_data")
-		data.erase("wait_markers_data")
+	# ポイントデータのみクリア（パスとメッシュは残す）
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
+		# パスは進行状況表示のために残す
+		# NOTE: *_dataはデータ配列、*_pointsはメッシュ配列
+		# メッシュは通過時に非表示にするため残す
+		data.erase("vision_points_data")
+		data.erase("wait_points_data")
 		data.erase("character")
 
 	paths_execution_started.emit(executed_count)
 	return executed_count
 
 
+## 指定キャラクターのパスを実行
+## @param character: 対象キャラクター
+## @param run: 走るかどうか
+## @return: 成功したらtrue
+func execute_path_for_character(character: Node, run: bool) -> bool:
+	if not character:
+		return false
+
+	var char_id = character.get_instance_id()
+	if not _path_store.pending_paths.has(char_id):
+		return false
+
+	var data = _path_store.pending_paths[char_id]
+	# 既に実行済み（characterキーなし）のエントリはスキップ
+	if not data.has("character"):
+		return false
+
+	var path := _copy_vector3_array(data.get("path", []))
+	var vision_points := _copy_dict_array(data.get("vision_points_data", []))
+	var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
+
+	if not is_instance_valid(character):
+		return false
+
+	# 既存マーカーをpoint_dataにリンク（リアルタイム確認フロー対応）
+	var existing_vision_markers: Array = data.get("vision_points", [])
+	var existing_wait_markers: Array = data.get("wait_points", [])
+
+	for vp in vision_points:
+		if vp.has("marker") and is_instance_valid(vp.get("marker")):
+			continue
+		var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		for marker in existing_vision_markers:
+			if not is_instance_valid(marker):
+				continue
+			var marker_pos = marker.global_position
+			marker_pos.y = 0.0
+			if marker_pos.distance_to(anchor_flat) < 0.1:
+				vp["marker"] = marker
+				break
+
+	for wp in wait_points_data:
+		if wp.has("marker") and is_instance_valid(wp.get("marker")):
+			continue
+		var anchor: Vector3 = wp.get("anchor", Vector3.ZERO)
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		for marker in existing_wait_markers:
+			if not is_instance_valid(marker):
+				continue
+			var marker_pos = marker.global_position
+			marker_pos.y = 0.0
+			if marker_pos.distance_to(anchor_flat) < 0.1:
+				wp["marker"] = marker
+				break
+
+	# コントローラーを取得または作成
+	var controller = _get_or_create_path_controller(character)
+	controller.setup(character)
+
+	# 衝突回避用の優先度を設定
+	controller.set_movement_priority(_execution_order_counter)
+	_execution_order_counter += 1
+
+	var empty_run: Array[Dictionary] = []
+	var empty_clear: Array[Dictionary] = []
+	var empty_grenade: Array[Dictionary] = []
+	var empty_door: Array[Dictionary] = []
+	var success: bool = controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data)
+
+	if success:
+		# ポイントデータのみクリア（パスとメッシュは残す）
+		data.erase("vision_points_data")
+		data.erase("wait_points_data")
+		data.erase("character")
+		paths_execution_started.emit(1)
+
+	return success
+
+
 ## 全ての保留パスをクリア
 func clear_all_pending_paths() -> void:
 	_clear_all_path_meshes()
-	pending_paths.clear()
+	_path_store.pending_paths.clear()
 	paths_cleared.emit()
 
 
 ## 保留パス数を取得
 func get_pending_path_count() -> int:
-	return pending_paths.size()
+	return _path_store.get_pending_path_count()
 
 
 ## 指定キャラクターに保留パスがあるかチェック
 func has_pending_path_for_character(character: Node) -> bool:
-	if not character:
-		return false
-	return pending_paths.has(character.get_instance_id())
+	return _path_store.has_pending_path_for_character(character)
 
 
 ## 指定キャラクターの保留パスを編集用に取り出す
-## パスデータを返し、pending_pathsから削除する（メッシュ・マーカーは削除しない）
+## パスデータを返し、pending_pathsから削除する（メッシュ・ポイントは削除しない）
 ## @return: パスデータのDictionary、存在しない場合は空のDictionary
 func take_pending_path_for_editing(character: Node) -> Dictionary:
-	if not character:
-		return {}
+	return _path_store.take_pending_path_for_editing(character)
 
-	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
-		return {}
 
-	var data = pending_paths[char_id]
-	pending_paths.erase(char_id)
-	return data
+## 指定キャラクターの確定済みパスを取得（削除せずに参照のみ）
+## @param character: 対象キャラクター
+## @return: パスのVector3配列。見つからない場合は空配列
+func get_pending_path_for_character(character: Node) -> Array:
+	return _path_store.get_pending_path_for_character(character)
+
+
+## 指定位置近くにある確定済みパスの先端を検索
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, path_data: Dictionary} を返す。見つからない場合は空のDictionary
+func find_path_endpoint_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
+	return _path_store.find_path_endpoint_at_position(ground_pos, threshold)
+
+
+## 指定位置が確定済みパス上にあるかを検索（先端は除外）
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+func find_path_point_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
+	return _path_store.find_path_point_at_position(ground_pos, threshold)
 
 
 ## パス追従中のコントローラーがあるかチェック
@@ -323,6 +508,290 @@ func is_any_path_following_active() -> bool:
 	return false
 
 
+## 全ての確定済みパスへの距離を取得（他パスとの比較用）
+## @param ground_pos: 地面上の位置（y=0）
+## @return: { char_id: distance } の辞書
+func get_all_pending_path_distances(ground_pos: Vector3) -> Dictionary:
+	return _path_store.get_all_pending_path_distances(ground_pos)
+
+
+## 移動中パス上の点を検索（先端は除外）
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, char_id: int, path_ratio: float, point: Vector3, distance: float} を返す。見つからない場合は空のDictionary
+func find_moving_path_point_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	if DEBUG_PATH:
+		if Debug.enabled: print("[PointDebug] find_moving_path_point: controllers=%d, ground=%s" % [_path_controllers.size(), ground_pos])
+
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+
+		if not controller.is_following_path():
+			if DEBUG_PATH:
+				if Debug.enabled: print("[PointDebug] find_moving_path_point: char_id=%d not following path" % char_id)
+			continue
+
+		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
+		var character = controller.get_character() if controller.has_method("get_character") else null
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# 残りパスと延長パスを結合して取得
+		var full_path: PackedVector3Array = controller.get_full_remaining_path()
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] find_moving_path_point: char_id=%d, full_path_size=%d" % [char_id, full_path.size()])
+		if full_path.size() < 2:
+			continue
+
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var path_result := PathCalculator.find_closest_point_on_path(full_path, check_pos)
+		if path_result.is_empty():
+			if DEBUG_PATH:
+				if Debug.enabled: print("[PointDebug] find_moving_path_point: path_result is empty")
+			continue
+
+		var distance: float = path_result.distance
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] find_moving_path_point: distance=%.3f, threshold=%.3f, ratio=%.3f" % [distance, threshold, path_result.ratio])
+		if distance < closest_distance:
+			# 先端（終点）付近は除外（パス延長用に狭い範囲のみ除外）
+			var endpoint: Vector3 = full_path[full_path.size() - 1]
+			endpoint.y = 0.0
+			const ENDPOINT_EXCLUSION_THRESHOLD := 0.15  # パス延長用の除外範囲
+			var endpoint_dist: float = path_result.point.distance_to(endpoint)
+			if DEBUG_PATH:
+				if Debug.enabled: print("[PointDebug] find_moving_path_point: endpoint_dist=%.3f, exclusion=%.3f" % [endpoint_dist, ENDPOINT_EXCLUSION_THRESHOLD])
+			if endpoint_dist < ENDPOINT_EXCLUSION_THRESHOLD:
+				if DEBUG_PATH:
+					if Debug.enabled: print("[PointDebug] find_moving_path_point: EXCLUDED (too close to endpoint)")
+				continue
+
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"path_ratio": path_result.ratio,
+				"point": path_result.point,
+				"distance": distance
+			}
+
+	return result
+
+
+## 移動中パスにVisionポイントを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の比率
+## @param anchor: アンカー位置
+## @param target_point: 視線方向の目標点
+## @return: 成功した場合true
+func add_vision_point_to_moving_path(character: Node, path_ratio: float, anchor: Vector3, target_point: Vector3) -> bool:
+	if not is_instance_valid(character):
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] add_vision_point_to_moving_path: invalid character")
+		return false
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] add_vision_point_to_moving_path: no controller for char_id=%d" % char_id)
+		return false
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] add_vision_point_to_moving_path: not following path")
+		return false
+
+	if DEBUG_PATH:
+		if Debug.enabled: print("[PointDebug] add_vision_point_to_moving_path: ratio=%.3f, anchor=%s" % [path_ratio, str(anchor)])
+	controller.add_vision_point_to_extension(path_ratio, anchor, target_point)
+
+	# 視覚的なポイントメッシュを作成
+	var char_color = CharacterColorManager.get_character_color(character)
+	var visual_point = PointFactory.create_vision_point(anchor, target_point, Vector3.ZERO, char_color, _mesh_parent)
+	_point_mesh_manager.add_moving_path_point(char_id, PointType.VISION, visual_point)
+
+	return true
+
+
+## ========================================
+## 移動中パス延長機能
+## ========================================
+
+## 移動中パスの終点を検索
+## @param ground_pos: 地面上の位置（y=0）
+## @param threshold: 検出閾値
+## @return: {character: Node, endpoint: Vector3, distance: float, is_extending_extension: bool} を返す。見つからない場合は空のDictionary
+func find_moving_path_endpoint_at_position(ground_pos: Vector3, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> Dictionary:
+	var closest_distance: float = threshold
+	var result: Dictionary = {}
+
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+
+		if not controller.is_following_path():
+			continue
+
+		# キャラクターを取得（公開APIを使用して内部状態への直接アクセスを回避）
+		var character = controller.get_character() if controller.has_method("get_character") else null
+		if not is_instance_valid(character):
+			continue
+
+		# 敵キャラクターのパスは対象外
+		if PlayerState.is_enemy(character):
+			continue
+
+		# 延長パスがある場合はその終点を使用、なければ元のパス終点を使用
+		var endpoint: Vector3 = Vector3.ZERO
+		var is_extending_extension: bool = false
+		if controller.has_extension_path():
+			endpoint = controller.get_extension_path_endpoint()
+			is_extending_extension = true
+		else:
+			endpoint = controller.get_path_endpoint()
+
+		if endpoint == Vector3.ZERO:
+			continue
+
+		endpoint.y = 0.0
+		var check_pos := ground_pos
+		check_pos.y = 0.0
+
+		var distance := endpoint.distance_to(check_pos)
+
+		if distance < closest_distance:
+			closest_distance = distance
+			result = {
+				"character": character,
+				"char_id": char_id,
+				"endpoint": endpoint,
+				"distance": distance,
+				"is_extending_extension": is_extending_extension
+			}
+
+	return result
+
+
+## 移動中キャラクターの残りパスデータを取得
+## @param character: 対象キャラクター
+## @param get_extension: 延長パスのデータを取得するかどうか（延長の延長用）
+## @return: 残りパスデータのDictionary
+func get_remaining_path_for_character(character: Node, get_extension: bool = false) -> Dictionary:
+	if not character:
+		return {}
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return {}
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return {}
+
+	# 延長パスのデータを取得する場合
+	if get_extension and controller.has_extension_path():
+		return controller.get_extension_path_data()
+
+	return controller.get_remaining_path_data()
+
+
+## 移動中キャラクターの残りパス（延長含む）を配列で取得
+func get_full_remaining_path_array(character: Node) -> Array[Vector3]:
+	if not character:
+		return []
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return []
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		return []
+
+	var packed_path = controller.get_full_remaining_path()
+	var result: Array[Vector3] = []
+	for p in packed_path:
+		result.append(p)
+	return result
+
+
+## 移動中キャラクターに延長パスを設定
+## @param character: 対象キャラクター
+## @param extension_path: 延長パス
+## @param markers: ポイントデータ
+## @param append_to_existing: 既存の延長パスに追加するか（延長の延長用）
+## @return: 設定成功したらtrue
+func set_extension_path_for_character(character: Node, extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> bool:
+	if not character:
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] set_extension_path: failed (no character)")
+		return false
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] set_extension_path: failed (no controller)")
+		return false
+
+	var controller = _path_controllers[char_id]
+	if not controller.is_following_path():
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] set_extension_path: failed (not following)")
+		return false
+
+	if DEBUG_PATH:
+		if Debug.enabled: print("[PointDebug] set_extension_path: path_len=%d, append=%s, markers=%s" % [
+			extension_path.size(),
+			str(append_to_existing),
+			str(markers.keys())
+		])
+
+	# 既存の延長パスに追加する場合、現在のメッシュをアクティブメッシュに移動
+	if append_to_existing and controller.has_extension_path():
+		if _extension_path_meshes.has(char_id):
+			var old_mesh = _extension_path_meshes[char_id]
+			if is_instance_valid(old_mesh):
+				if not _active_path_meshes.has(char_id):
+					_active_path_meshes[char_id] = []
+				_active_path_meshes[char_id].append(old_mesh)
+			_extension_path_meshes.erase(char_id)
+
+	controller.set_extension_path(extension_path, markers, append_to_existing)
+
+	# 新しい延長パスのメッシュを作成
+	var mesh = _mesh_manager.create_path_mesh(extension_path, character)
+	if mesh:
+		_extension_path_meshes[char_id] = mesh
+
+	return true
+
+
+## 移動中キャラクターの延長パスをキャンセル
+## @param character: 対象キャラクター
+func cancel_extension_for_character(character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	if not _path_controllers.has(char_id):
+		return
+
+	var controller = _path_controllers[char_id]
+	controller.cancel_extension()
+
+	# 延長パスのメッシュも削除
+	_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
+
+
 ## 指定キャラクターがパス追従中かチェック
 func is_character_following_path(character: Node) -> bool:
 	if not character:
@@ -331,6 +800,14 @@ func is_character_following_path(character: Node) -> bool:
 	if _path_controllers.has(char_id):
 		return _path_controllers[char_id].is_following_path()
 	return false
+
+
+## 指定キャラクターのPathFollowingControllerを取得
+func get_controller_for_character(character: Node) -> Node:
+	if not character:
+		return null
+	var char_id = character.get_instance_id()
+	return _path_controllers.get(char_id, null)
 
 
 ## 指定キャラクターの進行率を取得 (0.0 ~ 1.0)
@@ -377,6 +854,63 @@ func get_all_progress() -> Dictionary:
 	return result
 
 
+## 全キャラクターの同期待機を解除
+func release_all_sync_waiting() -> void:
+	for controller in _path_controllers.values():
+		if controller.is_following_path() and controller.is_sync_waiting():
+			controller.release_sync_wait()
+
+
+## 同期待機中のキャラクターがいるか
+func has_sync_waiting_characters() -> bool:
+	for controller in _path_controllers.values():
+		if controller.is_following_path() and controller.is_sync_waiting():
+			return true
+	return false
+
+
+## 確認済みパスに同期Waitポイントを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: ポイントの3D位置
+func add_sync_wait_point_to_path(character: Node, path_ratio: float, anchor: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	var point_data = {
+		"path_ratio": path_ratio,
+		"anchor": anchor,
+		"wait_duration": -1.0
+	}
+
+	# 移動中のパスに追加
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.is_following_path():
+			controller.add_wait_point(point_data)
+
+			# 視覚的なポイントメッシュを作成
+			var char_color = CharacterColorManager.get_character_color(character)
+			var visual_point = PointFactory.create_wait_point(anchor, -1.0, char_color, _mesh_parent)
+			_point_mesh_manager.add_moving_path_point(char_id, PointType.WAIT, visual_point)
+			return
+
+	# 確定済み（未実行）のパスに追加
+	if _path_store.pending_paths.has(char_id):
+		var path_data = _path_store.pending_paths[char_id]
+		if not path_data.has("wait_points_data"):
+			path_data["wait_points_data"] = []
+		path_data["wait_points_data"].append(point_data)
+
+		# 視覚的なポイントメッシュを作成（既存のwait_pointsに追加）
+		if not path_data.has("wait_points"):
+			path_data["wait_points"] = []
+		var visual_point = _point_mesh_manager.create_single_wait_point(anchor, -1.0, character)
+		if visual_point:
+			path_data["wait_points"].append(visual_point)
+
+
 ## 全てのパス追従をキャンセル
 func cancel_all_path_following() -> void:
 	for controller in _path_controllers.values():
@@ -394,7 +928,10 @@ func cancel_path_following(character: Node, clear_pending: bool = true) -> void:
 		if controller.is_following_path():
 			controller.cancel()
 	if clear_pending:
-		_clear_pending_path_for_character(char_id)
+		_path_store.clear_pending_path_for_character(char_id)
+		# 延長パスとアクティブパスのメッシュも削除
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
 
 
 ## 全パス追従コントローラーを処理（毎フレーム呼ぶ）
@@ -406,17 +943,47 @@ func process_controllers(delta: float) -> void:
 
 ## パス追従完了時のコールバック（外部から呼ばれる）
 func on_path_following_completed(_character: Node) -> void:
+	if DEBUG_PATH:
+		var char_name := str(_character.name) if _character else "null"
+		if Debug.enabled: print("[PointDebug] on_path_following_completed: character=%s" % char_name)
 	# 全てのコントローラーが完了したかチェック
 	var any_active = false
 	for controller in _path_controllers.values():
 		if controller.is_following_path():
 			any_active = true
 			break
+	if DEBUG_PATH:
+		if Debug.enabled: print("[PointDebug] on_path_following_completed: any_active=%s, pending_paths count=%d" % [any_active, _path_store.pending_paths.size()])
 	if not any_active:
-		# 全員完了したのでパスメッシュを削除
-		_clear_all_path_meshes()
-		pending_paths.clear()
-		all_paths_completed.emit()
+		# 実行済みパスのみクリア（characterキーがないもの）
+		# まだ実行されていないパス（characterキーがあるもの）は保持
+		var chars_to_clear: Array[int] = []
+		var chars_to_keep: int = 0
+		for char_id in _path_store.pending_paths:
+			var data = _path_store.pending_paths[char_id]
+			if not data.has("character"):
+				# 実行済み（characterが削除されている）のでクリア対象
+				chars_to_clear.append(char_id)
+			else:
+				# まだ実行されていないので保持
+				chars_to_keep += 1
+
+		if DEBUG_PATH:
+			if Debug.enabled: print("[PointDebug] on_path_following_completed: clearing %d executed paths, keeping %d pending paths" % [chars_to_clear.size(), chars_to_keep])
+
+		# 実行済みパスのメッシュを解放してエントリを削除
+		for char_id in chars_to_clear:
+			_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
+			_path_store.pending_paths.erase(char_id)
+
+		# まだ未実行のパスがなければ完了シグナルを発行
+		if _path_store.pending_paths.is_empty():
+			if DEBUG_PATH:
+				if Debug.enabled: print("[PointDebug] on_path_following_completed: all paths completed, emitting signal")
+			all_paths_completed.emit()
+		else:
+			if DEBUG_PATH:
+				if Debug.enabled: print("[PointDebug] on_path_following_completed: %d pending paths remaining" % _path_store.pending_paths.size())
 
 
 ## キャラクター用のPathFollowingControllerを取得または作成
@@ -435,9 +1002,13 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	_mesh_parent.add_child(controller)
 	controller.path_completed.connect(_on_path_completed.bind(character))
 	controller.path_cancelled.connect(_on_path_cancelled.bind(character))
-	controller.grenade_marker_reached.connect(_on_grenade_marker_reached.bind(character))
-	controller.smoke_grenade_marker_reached.connect(_on_smoke_grenade_marker_reached.bind(character))
-	controller.door_marker_reached.connect(_on_door_marker_reached.bind(character))
+	controller.extension_path_activated.connect(_on_extension_path_activated.bind(character))
+	controller.path_progress_updated.connect(_on_path_progress_updated.bind(character))
+	controller.vision_point_reached.connect(_on_vision_point_reached.bind(character))
+	controller.extension_points_scaled.connect(_on_extension_points_scaled.bind(character))
+	controller.sync_wait_started.connect(_on_sync_wait_started)
+	controller.sync_wait_released.connect(_on_sync_wait_released)
+	controller.wait_point_reached.connect(_on_wait_point_reached.bind(character))
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -447,13 +1018,40 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	return controller
 
 
+## キャラクターのPathFollowingControllerをクリーンアップ
+func cleanup_controller_for_character(character: Node) -> void:
+	if not character:
+		return
+	var char_id = character.get_instance_id()
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if is_instance_valid(controller):
+			controller.queue_free()
+		_path_controllers.erase(char_id)
+
+
+## 全PathFollowingControllerをクリーンアップ
+func cleanup_all_controllers() -> void:
+	for char_id in _path_controllers:
+		var controller = _path_controllers[char_id]
+		if is_instance_valid(controller):
+			controller.queue_free()
+	_path_controllers.clear()
+
+
 func _on_path_completed(character: Node) -> void:
 	# 到着したキャラクターのパスメッシュを即座に削除
 	if character:
 		var char_id = character.get_instance_id()
-		if pending_paths.has(char_id):
-			_free_pending_path_data(pending_paths[char_id])
-			pending_paths.erase(char_id)
+		if _path_store.pending_paths.has(char_id):
+			_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
+			_path_store.pending_paths.erase(char_id)
+		# 延長パスのメッシュも削除
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
+		# アクティブパスメッシュも削除（複数回延長した場合の全セグメント）
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
+		# 移動中パスのポイントも削除（全タイプ）
+		_point_mesh_manager.free_moving_path_points(char_id)
 
 	character_path_completed.emit(character)
 	on_path_following_completed(character)
@@ -463,16 +1061,70 @@ func _on_path_cancelled(_character: Node) -> void:
 	pass
 
 
-func _on_grenade_marker_reached(_index: int, marker_data: Dictionary, character: Node) -> void:
-	grenade_marker_reached.emit(character, marker_data)
+## 同期待機開始時のコールバック
+func _on_sync_wait_started() -> void:
+	sync_wait_state_changed.emit(true)
 
 
-func _on_smoke_grenade_marker_reached(_index: int, marker_data: Dictionary, character: Node) -> void:
-	smoke_grenade_marker_reached.emit(character, marker_data)
+## 同期待機解放時のコールバック
+func _on_sync_wait_released() -> void:
+	# 他に同期待機中のキャラクターがいるか確認
+	var has_waiting := has_sync_waiting_characters()
+	sync_wait_state_changed.emit(has_waiting)
 
 
-func _on_door_marker_reached(_index: int, door: Node3D, character: Node) -> void:
-	door_marker_reached.emit(character, door)
+## パス進行状況更新時のコールバック
+## 通過したパス部分を削除してメッシュを更新
+func _on_path_progress_updated(path_index: int, character: Node) -> void:
+	if not character:
+		return
+
+	# 移動中パスポイント非表示用シグナルを発火
+	path_progress_updated.emit(character)
+
+	var char_id = character.get_instance_id()
+
+	# 通常のパスメッシュを更新（PathMeshManagerに委譲）
+	_mesh_manager.update_path_progress(path_index, _path_store.pending_paths, char_id)
+
+
+## 延長パスに切り替わった時のコールバック
+## 古いパスメッシュをクリアし、延長パスメッシュを新しいメインパスとして設定
+func _on_extension_path_activated(character: Node) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+
+	# PathMeshManagerに委譲
+	_mesh_manager.on_extension_path_activated(char_id, _path_store.pending_paths, _extension_path_meshes, _active_path_meshes)
+
+	# コントローラから新しいパスデータを取得して保存
+	if _path_controllers.has(char_id) and _path_store.pending_paths.has(char_id):
+		var controller = _path_controllers[char_id]
+		var new_path = controller.get_current_path()
+		_path_store.pending_paths[char_id]["path"] = new_path
+
+
+## Visionポイント到達時のコールバック
+## 通過したVisionポイントを非表示にする
+func _on_vision_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
+	_point_mesh_manager.on_point_reached(PointType.VISION, _index, point_data, character, _path_store.pending_paths)
+
+	# Visionポイント専用のシグナルを発行（移動中パスポイント非表示用）
+	var path_ratio: float = point_data.get("path_ratio", 0.0)
+	vision_point_reached.emit(character, path_ratio)
+
+
+## Waitポイント到達時のコールバック
+## 通過したWaitポイントを非表示にする
+func _on_wait_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
+	_point_mesh_manager.on_point_reached(PointType.WAIT, _index, point_data, character, _path_store.pending_paths)
+
+
+## 延長ポイントの比率がスケールされた時のコールバック
+func _on_extension_points_scaled(scale: float, character: Node) -> void:
+	extension_points_scaled.emit(character, scale)
 
 
 ## 直接パスを実行（UI経由せず、パスメッシュなし）
@@ -507,41 +1159,113 @@ func execute_direct_path(character: CharacterBody3D, target_pos: Vector3, run: b
 	controller.set_movement_priority(_execution_order_counter)
 	_execution_order_counter += 1
 
-	# 空のビジョン/Run/Clear/Grenade/Doorポイントでパス開始
+	# 空のビジョン/Waitポイントでパス開始
 	var empty_vision: Array[Dictionary] = []
+	var empty_wait: Array[Dictionary] = []
 	var empty_run: Array[Dictionary] = []
 	var empty_clear: Array[Dictionary] = []
 	var empty_grenade: Array[Dictionary] = []
 	var empty_door: Array[Dictionary] = []
 
-	return controller.start_path(path, empty_vision, empty_run, run, empty_clear, empty_grenade, empty_door)
+	return controller.start_path(path, empty_vision, empty_run, run, empty_clear, empty_grenade, empty_door, empty_wait)
 
 
-## 特定キャラクターの保留パスをクリア
-func _clear_pending_path_for_character(char_id: int) -> void:
-	if not pending_paths.has(char_id):
+## 特定キャラクターの保留パスをクリア（公開API）
+func clear_pending_path_for_character(character: Node) -> void:
+	if not character:
 		return
-
-	_free_pending_path_data(pending_paths[char_id])
-	pending_paths.erase(char_id)
+	_path_store.clear_pending_path_for_character(character.get_instance_id())
 
 
-## 全てのパスメッシュとマーカーを削除
+## 全てのパスメッシュとポイントを削除
 func _clear_all_path_meshes() -> void:
-	for char_id in pending_paths:
-		_free_pending_path_data(pending_paths[char_id])
+	for char_id in _path_store.pending_paths:
+		_path_store._free_pending_path_data(_path_store.pending_paths[char_id])
+	# 延長パスのメッシュも削除
+	for char_id in _extension_path_meshes.keys():
+		_mesh_manager.free_extension_mesh(char_id, _extension_path_meshes)
+	# アクティブパスメッシュも削除
+	for char_id in _active_path_meshes.keys():
+		_mesh_manager.free_active_meshes(char_id, _active_path_meshes)
+	# 移動中パスのポイントも削除（全タイプ）
+	for char_id in _point_mesh_manager._moving_path_points.keys():
+		_point_mesh_manager.free_moving_path_points(char_id)
 
 
-## pending_pathsのデータからメッシュとマーカーを解放
-func _free_pending_path_data(data: Dictionary) -> void:
-	if data.has("path_mesh") and is_instance_valid(data["path_mesh"]):
-		data["path_mesh"].queue_free()
+## PathDrawerからポイントデータを取得
+func _get_point_data_from_drawer(path_drawer: Node) -> Dictionary:
+	return {
+		"vision": path_drawer.get_vision_points().duplicate(),
+		"wait": path_drawer.get_wait_points().duplicate()
+	}
 
-	# 全マーカータイプを一括解放
-	var marker_keys = ["vision_markers", "run_markers", "clear_markers", "grenade_markers", "smoke_grenade_markers", "door_markers", "wait_markers"]
-	for key in marker_keys:
-		if data.has(key):
-			free_marker_meshes(data[key])
+
+## PathConfirmMessageからポイントデータを取得
+func _get_point_data_from_path_message(path_msg: NetworkMessages.PathConfirmMessage) -> Dictionary:
+	return {
+		"vision": _copy_dict_array(path_msg.vision_points),
+		"wait": _copy_dict_array(path_msg.wait_points)
+	}
+
+
+## 接続線を含むパスを構築
+func _build_connected_paths(char_pos: Vector3, base_path: Array[Vector3], display_path: Array[Vector3]) -> Dictionary:
+	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
+	var base_length = _calculate_path_length(base_path)
+
+	var full_path: Array[Vector3] = []
+	var full_display_path: Array[Vector3] = []
+	var connect_length: float = 0.0
+
+	if char_pos.distance_to(path_start) > 0.1:
+		full_path.append(char_pos)
+		full_display_path.append(char_pos)
+		connect_length = char_pos.distance_to(path_start)
+	full_path.append_array(base_path)
+	full_display_path.append_array(display_path)
+
+	return {
+		"full_path": full_path,
+		"full_display_path": full_display_path,
+		"connect_length": connect_length,
+		"base_length": base_length
+	}
+
+
+## 接続線を考慮してポイントデータを調整
+func _adjust_point_data_for_connection(point_data: Dictionary, connect_length: float, base_length: float) -> Dictionary:
+	return {
+		"vision": _adjust_ratios_for_connection(point_data.get("vision", []), connect_length, base_length),
+		"wait": _adjust_wait_ratios_for_connection(point_data.get("wait", []), connect_length, base_length)
+	}
+
+
+## ポイントを一括生成
+func _create_point_nodes_for_path(path: Array[Vector3], point_data: Dictionary, character: Node) -> Dictionary:
+	return {
+		"vision": _point_mesh_manager.create_vision_points(path, point_data.get("vision", []), character, _calculate_position_on_path),
+		"wait": _point_mesh_manager.create_wait_points(path, point_data.get("wait", []), character)
+	}
+
+
+## PathDrawer側のポイントメッシュを解放
+func _free_drawer_point_meshes(path_drawer: Node) -> void:
+	_point_mesh_manager.free_point_meshes(path_drawer.take_vision_points())
+	_point_mesh_manager.free_point_meshes(path_drawer.take_wait_points())
+
+
+func _copy_vector3_array(source) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	for item in source:
+		result.append(item)
+	return result
+
+
+func _copy_dict_array(source: Array) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for item in source:
+		result.append(item)
+	return result
 
 
 ## パスの長さを計算
@@ -590,44 +1314,21 @@ func _adjust_ratios_for_connection(vision_points: Array[Dictionary], connect_len
 	return adjusted
 
 
-## 接続線を考慮してRun区間の比率を調整
-func _adjust_run_ratios_for_connection(run_segments: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
+## 接続線を考慮してWaitポイントの比率を調整
+func _adjust_wait_ratios_for_connection(wait_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
 	if connect_length < 0.01 or base_length < 0.01:
-		return run_segments.duplicate()
+		return wait_points.duplicate()
 
 	var adjusted: Array[Dictionary] = []
 
-	for seg in run_segments:
+	for wp in wait_points:
 		adjusted.append({
-			"start_ratio": _adjust_single_ratio(seg.start_ratio, connect_length, base_length),
-			"end_ratio": _adjust_single_ratio(seg.end_ratio, connect_length, base_length)
+			"path_ratio": _adjust_single_ratio(wp.path_ratio, connect_length, base_length),
+			"anchor": wp.get("anchor", Vector3.ZERO),
+			"wait_duration": wp.get("wait_duration", 1.0)
 		})
 
 	return adjusted
-
-
-## パスメッシュを作成（キャラクター色対応）
-func _create_path_mesh(path: Array[Vector3], character: Node = null) -> MeshInstance3D:
-	var mesh = MeshInstance3D.new()
-	mesh.set_script(PathLineMeshScript)
-
-	# キャラクター色を適用（ない場合はデフォルト水色）
-	if character:
-		var char_color = CharacterColorManager.get_character_color(character)
-		mesh.line_color = Color(char_color.r, char_color.g, char_color.b, 0.8)
-	else:
-		mesh.line_color = Color(0.3, 0.8, 1.0, 0.8)
-
-	mesh.line_width = 0.04
-	_mesh_parent.add_child(mesh)
-
-	# パスを描画
-	var packed_path = PackedVector3Array()
-	for point in path:
-		packed_path.append(point)
-	mesh.update_from_points(packed_path)
-
-	return mesh
 
 
 ## path_ratioからパス上の絶対座標を計算
@@ -658,401 +1359,99 @@ func _calculate_position_on_path(path: Array[Vector3], ratio: float) -> Vector3:
 	return path[path.size() - 1]
 
 
-## 調整済み視線ポイントから新しいVisionMarkerを生成（ターゲットポイントモード対応）
-func _create_vision_markers_for_path(
-	path: Array[Vector3],
-	adjusted_vision_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for vp in adjusted_vision_points:
-		var ratio: float = vp.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# VisionMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(VisionMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# キャラクター色を取得
-		var char_color = CharacterColorManager.get_character_color(character)
-		var bg_color = Color(char_color.r * 0.3, char_color.g * 0.3, char_color.b * 0.3, 0.95)
-
-		# ターゲットポイントモードか固定方向モードかをチェック
-		if vp.has("target_point"):
-			# ターゲットポイントモード
-			marker.set_position_and_target(anchor, vp.target_point)
-			# ターゲット線の色を設定
-			marker.set_target_line_color(Color(char_color.r, char_color.g * 0.7, char_color.b * 0.5, 0.8))
-		elif vp.has("direction"):
-			# 後方互換: 固定方向モード
-			marker.set_position_and_direction(anchor, vp.direction)
-
-		# 背景は暗い色、矢印はキャラクター色
-		marker.set_colors(bg_color, char_color)
-
-		markers.append(marker)
-
-	return markers
-
-
-## 調整済みRun区間から新しいRunMarkerを生成
-func _create_run_markers_for_path(
-	path: Array[Vector3],
-	adjusted_run_segments: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for seg in adjusted_run_segments:
-		var start_ratio: float = seg.start_ratio
-		var end_ratio: float = seg.end_ratio
-
-		# パス上の位置を計算
-		var start_pos = _calculate_position_on_path(path, start_ratio)
-		var end_pos = _calculate_position_on_path(path, end_ratio)
-
-		# キャラクター色を取得
-		var char_color = CharacterColorManager.get_character_color(character)
-
-		# STARTマーカーを作成
-		var start_marker = MeshInstance3D.new()
-		start_marker.set_script(RunMarkerScript)
-		_mesh_parent.add_child(start_marker)
-		start_marker.set_position_and_type(start_pos, 0)  # 0 = MarkerType.START
-		start_marker.set_colors(char_color, Color.WHITE)
-		markers.append(start_marker)
-
-		# ENDマーカーを作成
-		var end_marker = MeshInstance3D.new()
-		end_marker.set_script(RunMarkerScript)
-		_mesh_parent.add_child(end_marker)
-		end_marker.set_position_and_type(end_pos, 1)  # 1 = MarkerType.END
-		# 終点は少し暗い色に
-		var end_bg_color = Color(char_color.r * 0.8, char_color.g * 0.5, char_color.b * 0.3, 0.95)
-		end_marker.set_colors(end_bg_color, Color.WHITE)
-		markers.append(end_marker)
-
-	return markers
-
-
-## 接続線を考慮してClearポイントの比率を調整
-func _adjust_clear_ratios_for_connection(clear_points: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return clear_points.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for cp in clear_points:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(cp.path_ratio, connect_length, base_length)
-		})
-
-	return adjusted
-
-
-## 調整済みClearポイントから新しいClearMarkerを生成
-func _create_clear_markers_for_path(
-	path: Array[Vector3],
-	adjusted_clear_points: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for cp in adjusted_clear_points:
-		var ratio: float = cp.path_ratio
-
-		# パス上の位置を計算
-		var pos = _calculate_position_on_path(path, ratio)
-
-		# ClearMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(ClearMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# 位置を設定
-		marker.set_marker_position(pos)
-
-		# キャラクター色を取得して適用
-		var char_color = CharacterColorManager.get_character_color(character)
-		marker.set_colors(char_color, Color.WHITE)
-
-		markers.append(marker)
-
-	return markers
-
-
-## 接続線を考慮してグレネードマーカーの比率を調整
-func _adjust_grenade_ratios_for_connection(grenade_markers: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return grenade_markers.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for gm in grenade_markers:
-		var new_marker: Dictionary = {
-			"path_ratio": _adjust_single_ratio(gm.path_ratio, connect_length, base_length),
-			"anchor": gm.anchor,
-			"target_pos": gm.target_pos
-		}
-		# バウンスポイントがある場合はコピー
-		if gm.has("bounce_point"):
-			new_marker["bounce_point"] = gm.bounce_point
-		if gm.has("bounce_normal"):
-			new_marker["bounce_normal"] = gm.bounce_normal
-		adjusted.append(new_marker)
-
-	return adjusted
-
-
-## 接続線を考慮してドアマーカーの比率を調整
-func _adjust_door_ratios_for_connection(door_markers: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return door_markers.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for dm in door_markers:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(dm.path_ratio, connect_length, base_length),
-			"door_node": dm.door_node if dm.has("door_node") else dm.get("door")
-		})
-
-	return adjusted
-
-
-## 調整済みグレネードマーカーから新しいGrenadeMarkerを生成
-func _create_grenade_markers_for_path(
-	path: Array[Vector3],
-	adjusted_grenade_markers: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for gm in adjusted_grenade_markers:
-		var ratio: float = gm.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# GrenadeMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(GrenadeMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# バウンスポイントがあるかチェック
-		var bounce_point = Vector3.ZERO
-		if gm.has("bounce_point"):
-			bounce_point = gm.bounce_point
-
-		# 位置とターゲットを設定
-		marker.set_position_and_target(anchor, gm.target_pos, bounce_point)
-
-		# キャラクター色を取得して適用（背景色は暗く、アイコン色はキャラクター色）
-		var char_color = CharacterColorManager.get_character_color(character)
-		marker.set_colors(Color(0.1, 0.1, 0.1, 0.95), char_color)
-
-		markers.append(marker)
-
-	return markers
-
-
-## 調整済みスモークグレネードマーカーから新しいSmokeGrenadeMarkerを生成
-func _create_smoke_grenade_markers_for_path(
-	path: Array[Vector3],
-	adjusted_smoke_grenade_markers: Array[Dictionary],
-	_character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for sgm in adjusted_smoke_grenade_markers:
-		var ratio: float = sgm.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# SmokeGrenadeMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(SmokeGrenadeMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# バウンスポイントがあるかチェック
-		var bounce_point = Vector3.ZERO
-		if sgm.has("bounce_point"):
-			bounce_point = sgm.bounce_point
-
-		# 位置とターゲットを設定
-		marker.set_position_and_target(anchor, sgm.target_pos, bounce_point)
-
-		# スモークグレネードは灰色/白色（デフォルト設定を使用）
-
-		markers.append(marker)
-
-	return markers
-
-
-## 調整済みドアマーカーから新しいDoorMarkerを生成
-func _create_door_markers_for_path(
-	path: Array[Vector3],
-	adjusted_door_markers: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for dm in adjusted_door_markers:
-		var ratio: float = dm.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# DoorMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(DoorMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# ドアノードを取得（door_nodeキー）
-		var door_node = dm.door_node if dm.has("door_node") else dm.get("door")
-
-		# 位置とドアを設定
-		marker.set_position_and_door(anchor, door_node)
-
-		# キャラクター色を取得して適用（背景色は暗く、アイコン色はキャラクター色）
-		var char_color = CharacterColorManager.get_character_color(character)
-		marker.set_colors(Color(0.1, 0.1, 0.1, 0.95), char_color)
-
-		markers.append(marker)
-
-	return markers
-
-
-## 接続線を考慮してWaitマーカーの比率を調整
-func _adjust_wait_ratios_for_connection(wait_markers: Array[Dictionary], connect_length: float, base_length: float) -> Array[Dictionary]:
-	if connect_length < 0.01 or base_length < 0.01:
-		return wait_markers.duplicate()
-
-	var adjusted: Array[Dictionary] = []
-
-	for wm in wait_markers:
-		adjusted.append({
-			"path_ratio": _adjust_single_ratio(wm.path_ratio, connect_length, base_length),
-			"anchor": wm.get("anchor", Vector3.ZERO),
-			"wait_duration": wm.get("wait_duration", 1.0)
-		})
-
-	return adjusted
-
-
-## 調整済みWaitマーカーから新しいWaitMarkerを生成
-func _create_wait_markers_for_path(
-	path: Array[Vector3],
-	adjusted_wait_markers: Array[Dictionary],
-	character: Node
-) -> Array[MeshInstance3D]:
-	var markers: Array[MeshInstance3D] = []
-
-	for wm in adjusted_wait_markers:
-		var ratio: float = wm.path_ratio
-
-		# パス上の位置を計算
-		var anchor = _calculate_position_on_path(path, ratio)
-
-		# WaitMarkerを作成
-		var marker = MeshInstance3D.new()
-		marker.set_script(WaitMarkerScript)
-		_mesh_parent.add_child(marker)
-
-		# 位置を設定
-		marker.set_marker_position(anchor)
-
-		# 待機時間を設定
-		var duration = wm.get("wait_duration", 1.0)
-		marker.set_wait_duration(duration)
-
-		# キャラクター色を取得して適用（背景色はキャラクター色、アイコン色は白）
-		var char_color = CharacterColorManager.get_character_color(character)
-		marker.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
-
-		markers.append(marker)
-
-	return markers
-
-
-#region 統一マーカーAPI
-## マーカータイプのエイリアス
-const MarkerType = ActionMarkerDataScript.Type
-
-
-## 指定タイプのマーカー比率を一括調整
-func adjust_marker_ratios_for_type(
-	marker_data: Array[Dictionary],
-	marker_type: int,
-	connect_length: float,
-	base_length: float
-) -> Array[Dictionary]:
-	match marker_type:
-		MarkerType.VISION:
-			return _adjust_ratios_for_connection(marker_data, connect_length, base_length)
-		MarkerType.RUN:
-			return _adjust_run_ratios_for_connection(marker_data, connect_length, base_length)
-		MarkerType.CLEAR:
-			return _adjust_clear_ratios_for_connection(marker_data, connect_length, base_length)
-		MarkerType.GRENADE:
-			return _adjust_grenade_ratios_for_connection(marker_data, connect_length, base_length)
-		MarkerType.DOOR:
-			return _adjust_door_ratios_for_connection(marker_data, connect_length, base_length)
-		_:
-			return marker_data.duplicate()
-
-
-## 指定タイプのマーカーを一括生成
-func create_markers_for_type(
-	path: Array[Vector3],
-	marker_data: Array[Dictionary],
-	marker_type: int,
-	character: Node
-) -> Array[MeshInstance3D]:
-	match marker_type:
-		MarkerType.VISION:
-			return _create_vision_markers_for_path(path, marker_data, character)
-		MarkerType.RUN:
-			return _create_run_markers_for_path(path, marker_data, character)
-		MarkerType.CLEAR:
-			return _create_clear_markers_for_path(path, marker_data, character)
-		MarkerType.GRENADE:
-			return _create_grenade_markers_for_path(path, marker_data, character)
-		MarkerType.DOOR:
-			return _create_door_markers_for_path(path, marker_data, character)
-		_:
-			return []
-
-
-## PathDrawerから統一APIでマーカーデータを取得
-func get_all_markers_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dictionary:
-	var result: Dictionary = {}
-
-	for type_value in MarkerType.values():
-		if is_multi_mode:
-			result[type_value] = {
-				"data": path_drawer.get_all_markers_by_type(type_value),
-				"meshes": path_drawer.take_all_markers_by_type(type_value)
-			}
-		else:
-			result[type_value] = {
-				"data": path_drawer.get_markers_by_type(type_value).duplicate(),
-				"meshes": path_drawer.take_markers_by_type(type_value)
-			}
+## anchorが保存されているVisionポイントの比率を、パス上の位置から再計算
+func _recalculate_vision_ratios_from_anchors(path: Array[Vector3], vision_points: Array[Dictionary]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+
+	for vp in vision_points:
+		var new_vp = vp.duplicate()
+
+		# anchorが保存されている場合、そこからpath_ratioを再計算
+		if vp.has("anchor") and vp.anchor != Vector3.ZERO:
+			var recalculated_ratio = _calculate_ratio_from_position(path, vp.anchor)
+			new_vp["path_ratio"] = recalculated_ratio
+
+		result.append(new_vp)
 
 	return result
 
 
-## マーカーメッシュを一括削除
-func free_marker_meshes(meshes: Array) -> void:
-	for mesh in meshes:
-		if mesh and is_instance_valid(mesh):
-			mesh.queue_free()
+## ワールド座標からパス上の比率を計算（最近点を使用）
+func _calculate_ratio_from_position(path: Array[Vector3], position: Vector3) -> float:
+	if path.is_empty():
+		return 0.0
+	if path.size() == 1:
+		return 0.0
+
+	var total_length = _calculate_path_length(path)
+	if total_length < 0.001:
+		return 0.0
+
+	# パス上の最近点を見つける
+	var best_ratio: float = 0.0
+	var best_distance: float = INF
+	var accumulated: float = 0.0
+
+	for i in range(1, path.size()):
+		var segment_start = path[i - 1]
+		var segment_end = path[i]
+		var segment_length = segment_start.distance_to(segment_end)
+
+		if segment_length < 0.001:
+			accumulated += segment_length
+			continue
+
+		# セグメント上の最近点を計算
+		var segment_dir = (segment_end - segment_start).normalized()
+		var to_pos = position - segment_start
+		var proj_length = to_pos.dot(segment_dir)
+		proj_length = clamp(proj_length, 0.0, segment_length)
+
+		var closest_point = segment_start + segment_dir * proj_length
+		var dist = position.distance_to(closest_point)
+
+		if dist < best_distance:
+			best_distance = dist
+			best_ratio = (accumulated + proj_length) / total_length
+
+		accumulated += segment_length
+
+	return clamp(best_ratio, 0.0, 1.0)
+
+
+#region 統一ポイントAPI（PathPointMeshManagerに委譲）
+
+## 指定タイプのポイント比率を一括調整
+func adjust_point_ratios_for_type(
+	point_data: Array[Dictionary],
+	point_type: int,
+	connect_length: float,
+	base_length: float
+) -> Array[Dictionary]:
+	return _point_mesh_manager.adjust_point_ratios_for_type(
+		point_data, point_type, connect_length, base_length,
+		_adjust_ratios_for_connection, _adjust_wait_ratios_for_connection
+	)
+
+
+## 指定タイプのポイントを一括生成
+func create_points_for_type(
+	path: Array[Vector3],
+	point_data: Array[Dictionary],
+	point_type: int,
+	character: Node
+) -> Array[MeshInstance3D]:
+	return _point_mesh_manager.create_points_for_type(path, point_data, point_type, character, _calculate_position_on_path)
+
+
+## PathDrawerから統一APIでポイントデータを取得
+func get_all_points_from_drawer(path_drawer: Node, is_multi_mode: bool) -> Dictionary:
+	return _point_mesh_manager.get_all_points_from_drawer(path_drawer, is_multi_mode)
+
+
+## ポイントメッシュを一括削除（PointFactory委譲）
+func free_point_meshes(meshes: Array) -> void:
+	_point_mesh_manager.free_point_meshes(meshes)
 #endregion
 
 
@@ -1073,95 +1472,36 @@ func confirm_path_for_player(
 	var char_id = character.get_instance_id()
 	var char_pos = character.global_position
 
-	# パスをArray[Vector3]に変換
-	var base_path: Array[Vector3] = []
-	for p in path_msg.path:
-		base_path.append(p)
-
-	var path_start = base_path[0] if base_path.size() > 0 else Vector3.ZERO
-	var base_length = _calculate_path_length(base_path)
+	var base_path := _copy_vector3_array(path_msg.path)
 
 	# 既存のパスがあれば削除
-	_clear_pending_path_for_character(char_id)
+	_path_store.clear_pending_path_for_character(char_id)
 
-	# キャラクター位置からパス開始点への接続を含むパスを作成
-	var full_path: Array[Vector3] = []
-	var connect_length: float = 0.0
+	# 接続線を含むパスを作成
+	var connected := _build_connected_paths(char_pos, base_path, base_path)
+	var full_path: Array[Vector3] = connected.full_path
+	var connect_length: float = connected.connect_length
+	var base_length: float = connected.base_length
 
-	if char_pos.distance_to(path_start) > 0.1:
-		full_path.append(char_pos)
-		connect_length = char_pos.distance_to(path_start)
-	full_path.append_array(base_path)
+	# ポイントデータを変換
+	var point_data := _get_point_data_from_path_message(path_msg)
 
-	# マーカーデータを変換
-	var vision_points: Array[Dictionary] = []
-	for vp in path_msg.vision_markers:
-		vision_points.append(vp)
-	var run_segments: Array[Dictionary] = []
-	for rs in path_msg.run_segments:
-		run_segments.append(rs)
-	var clear_points: Array[Dictionary] = []
-	for cp in path_msg.clear_markers:
-		clear_points.append(cp)
-	var grenade_markers: Array[Dictionary] = []
-	for gm in path_msg.grenade_markers:
-		grenade_markers.append(gm)
-	var smoke_grenade_markers: Array[Dictionary] = []
-	for sgm in path_msg.smoke_grenade_markers:
-		smoke_grenade_markers.append(sgm)
-	var door_markers: Array[Dictionary] = []
-	for dm in path_msg.door_markers:
-		door_markers.append(dm)
-	var wait_markers: Array[Dictionary] = []
-	for wm in path_msg.wait_markers:
-		wait_markers.append(wm)
+	# ポイントの比率を再計算
+	var adjusted_points := _adjust_point_data_for_connection(point_data, connect_length, base_length)
 
-	# マーカーの比率を再計算
-	var adjusted_vision = _adjust_ratios_for_connection(vision_points, connect_length, base_length)
-	var adjusted_run = _adjust_run_ratios_for_connection(run_segments, connect_length, base_length)
-	var adjusted_clear = _adjust_clear_ratios_for_connection(clear_points, connect_length, base_length)
-	var adjusted_grenade = _adjust_grenade_ratios_for_connection(grenade_markers, connect_length, base_length)
-	var adjusted_smoke_grenade = _adjust_grenade_ratios_for_connection(smoke_grenade_markers, connect_length, base_length)
-	var adjusted_door = _adjust_door_ratios_for_connection(door_markers, connect_length, base_length)
-	var adjusted_wait = _adjust_wait_ratios_for_connection(wait_markers, connect_length, base_length)
+	# anchorが保存されているVisionポイントの比率を、実際のパス上の位置から再計算
+	adjusted_points["vision"] = _recalculate_vision_ratios_from_anchors(full_path, adjusted_points.get("vision", []))
 
 	# パスメッシュを作成
-	var path_mesh = _create_path_mesh(full_path, character)
+	var path_mesh = _mesh_manager.create_path_mesh(full_path, character)
 
-	# マーカーを生成
-	var char_vision_markers_nodes = _create_vision_markers_for_path(full_path, adjusted_vision, character)
-	var char_run_markers_nodes = _create_run_markers_for_path(full_path, adjusted_run, character)
-	var char_clear_markers_nodes = _create_clear_markers_for_path(full_path, adjusted_clear, character)
-	var char_grenade_markers_nodes = _create_grenade_markers_for_path(full_path, adjusted_grenade, character)
-	var char_smoke_grenade_markers_nodes = _create_smoke_grenade_markers_for_path(full_path, adjusted_smoke_grenade, character)
-	var char_door_markers_nodes = _create_door_markers_for_path(full_path, adjusted_door, character)
-	var char_wait_markers_nodes = _create_wait_markers_for_path(full_path, adjusted_wait, character)
+	# ポイントを生成
+	var point_nodes := _create_point_nodes_for_path(full_path, adjusted_points, character)
 
-	pending_paths[char_id] = {
-		"character": character,
-		"player_id": player_id,
-		"path": full_path,
-		"vision_points": adjusted_vision,
-		"run_segments": adjusted_run,
-		"clear_points": adjusted_clear,
-		"grenade_markers_data": adjusted_grenade,
-		"smoke_grenade_markers_data": adjusted_smoke_grenade,
-		"door_markers_data": adjusted_door,
-		"wait_markers_data": adjusted_wait,
-		"path_mesh": path_mesh,
-		"vision_markers": char_vision_markers_nodes,
-		"run_markers": char_run_markers_nodes,
-		"clear_markers": char_clear_markers_nodes,
-		"grenade_markers": char_grenade_markers_nodes,
-		"smoke_grenade_markers": char_smoke_grenade_markers_nodes,
-		"door_markers": char_door_markers_nodes,
-		"wait_markers": char_wait_markers_nodes
-	}
+	_path_store.register_pending_path(char_id, character, full_path, adjusted_points, point_nodes, path_mesh, player_id)
 
 	# プレイヤーごとのパス管理に追加
-	if not _pending_paths_by_player.has(player_id):
-		_pending_paths_by_player[player_id] = {}
-	_pending_paths_by_player[player_id][char_id] = path_msg
+	_path_store.add_pending_path_for_player(player_id, char_id, path_msg)
 
 	path_confirmed.emit(1)
 	return true
@@ -1169,24 +1509,17 @@ func confirm_path_for_player(
 
 ## プレイヤーの保留パスを取得
 func get_pending_paths_for_player(player_id: int) -> Dictionary:
-	return _pending_paths_by_player.get(player_id, {}).duplicate()
+	return _path_store.get_pending_paths_for_player(player_id)
 
 
 ## 全プレイヤーの保留パスを取得
 func get_all_pending_paths_by_player() -> Dictionary:
-	return _pending_paths_by_player.duplicate()
+	return _path_store.get_all_pending_paths_by_player()
 
 
 ## プレイヤーの保留パスをクリア
 func clear_pending_paths_for_player(player_id: int) -> void:
-	if not _pending_paths_by_player.has(player_id):
-		return
-
-	var player_paths: Dictionary = _pending_paths_by_player[player_id]
-	for char_id in player_paths.keys():
-		_clear_pending_path_for_character(char_id)
-
-	_pending_paths_by_player.erase(player_id)
+	_path_store.clear_pending_paths_for_player(player_id)
 
 
 ## 保留パスをPathConfirmMessageに変換
@@ -1195,10 +1528,10 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 		return null
 
 	var char_id = character.get_instance_id()
-	if not pending_paths.has(char_id):
+	if not _path_store.pending_paths.has(char_id):
 		return null
 
-	var data: Dictionary = pending_paths[char_id]
+	var data: Dictionary = _path_store.pending_paths[char_id]
 	var msg := NetworkMessages.PathConfirmMessage.new()
 	msg.player_id = player_id
 	msg.character_id = char_id
@@ -1209,21 +1542,11 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 		for p in data["path"]:
 			msg.path.append(p)
 
-	# マーカーデータをコピー
-	if data.has("vision_points"):
-		msg.vision_markers.assign(data["vision_points"])
-	if data.has("run_segments"):
-		msg.run_segments.assign(data["run_segments"])
-	if data.has("clear_points"):
-		msg.clear_markers.assign(data["clear_points"])
-	if data.has("grenade_markers_data"):
-		msg.grenade_markers.assign(data["grenade_markers_data"])
-	if data.has("smoke_grenade_markers_data"):
-		msg.smoke_grenade_markers.assign(data["smoke_grenade_markers_data"])
-	if data.has("door_markers_data"):
-		msg.door_markers.assign(data["door_markers_data"])
-	if data.has("wait_markers_data"):
-		msg.wait_markers.assign(data["wait_markers_data"])
+	# ポイントデータをコピー
+	if data.has("vision_points_data"):
+		msg.vision_points.assign(data["vision_points_data"])
+	if data.has("wait_points_data"):
+		msg.wait_points.assign(data["wait_points_data"])
 
 	return msg
 
@@ -1232,8 +1555,8 @@ func to_path_confirm_message(character: Node, player_id: int) -> NetworkMessages
 func get_all_pending_paths_as_messages(player_id: int) -> Array[NetworkMessages.PathConfirmMessage]:
 	var result: Array[NetworkMessages.PathConfirmMessage] = []
 
-	for char_id in pending_paths:
-		var data = pending_paths[char_id]
+	for char_id in _path_store.pending_paths:
+		var data = _path_store.pending_paths[char_id]
 		if not data.has("character"):
 			continue
 
@@ -1263,8 +1586,9 @@ func get_path_snapshot(character: Node) -> SyncState.PathSnapshot:
 			snapshot.progress = controller.get_current_progress()
 
 	# 元のパスメッセージを参照
-	if _pending_paths_by_player.has(PlayerState.get_local_peer_id()):
-		var player_paths = _pending_paths_by_player[PlayerState.get_local_peer_id()]
+	var by_player = _path_store.get_all_pending_paths_by_player()
+	if by_player.has(PlayerState.get_local_peer_id()):
+		var player_paths = by_player[PlayerState.get_local_peer_id()]
 		if player_paths.has(char_id):
 			snapshot.path_message = player_paths[char_id]
 

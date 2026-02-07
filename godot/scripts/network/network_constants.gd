@@ -47,6 +47,7 @@ const SIMULATION_TICK_HZ: int = 60
 const NETWORK_SEND_HZ: int = 15
 
 ## 送信間隔（シミュレーションTickごと）
+@warning_ignore("integer_division")
 const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 4
 
 ## 同期レート（Hz）- 後方互換用（NETWORK_SEND_HZを使用推奨）
@@ -81,8 +82,8 @@ const ROTATION_PRECISION: int = 1000
 ## パス座標の最大数
 const MAX_PATH_POINTS: int = 256
 
-## マーカーの最大数（各種類ごと）
-const MAX_MARKERS_PER_TYPE: int = 32
+## ポイントの最大数（各種類ごと）
+const MAX_POINTS_PER_TYPE: int = 32
 
 # ============================================
 # リレーサーバー設定
@@ -170,10 +171,6 @@ enum AnimationEventType {
 	DEATH = 3,
 	## グレネード投擲アニメーション
 	GRENADE_THROW = 4,
-	## しゃがみ開始
-	CROUCH_START = 5,
-	## しゃがみ終了
-	CROUCH_END = 6,
 }
 
 # ============================================

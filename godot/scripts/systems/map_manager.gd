@@ -3,7 +3,6 @@ class_name MapManager
 ## マップライフサイクル管理
 ## マップのロード・アンロード・状態追跡・クリーンアップを一元管理
 
-const MapPresetScript = preload("res://scripts/resources/map_preset.gd")
 
 # ============================================
 # Signals
@@ -25,7 +24,7 @@ signal map_unloaded(map_id: String)
 ## 現在のマップインスタンス
 var current_map: Node3D = null
 ## 現在のマッププリセット
-var current_preset: MapPresetScript = null
+var current_preset: MapPreset = null
 ## 現在のマップID
 var current_map_id: String = ""
 
@@ -84,13 +83,11 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 	current_preset = preset
 	current_map_id = map_id
 
-	# FoWマップサイズ更新
-	if _game_manager:
-		_game_manager.fow_map_size = preset.map_size
-		if _game_manager.fog_of_war_system:
-			_game_manager.fog_of_war_system.set_map_size(preset.map_size)
+	# FoWマップサイズ更新はMapBase._notify_fow_system()で自動計算される
+	# GameManagerのfow_map_sizeフォールバック値は_on_map_loaded経由で設定される
+	# （循環参照を避けるため、ここでは直接GameManagerを参照しない）
 
-	# ロード完了シグナル
+	# ロード完了シグナル（map_sizeも通知）
 	map_loaded.emit(map_id, map_instance)
 
 	return map_instance

@@ -17,11 +17,18 @@
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` | 視線ポイント追加時（target_pointはターゲット地点） |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` | Run区間追加時 |
 | `clear_point_added` | `path_ratio: float` | Clearポイント追加時 |
-| `grenade_marker_added` | `path_ratio: float, target_pos: Vector3` | グレネードマーカー追加時 |
-| `door_marker_added` | `path_ratio: float, door: Node3D` | ドアマーカー追加時 |
-| `wait_marker_added` | `path_ratio: float, wait_duration: float` | Waitマーカー追加時 |
+| `grenade_point_added` | `path_ratio: float, target_pos: Vector3` | グレネードポイント追加時 |
+| `smoke_grenade_point_added` | `path_ratio: float, target_pos: Vector3` | スモークグレネードポイント追加時 |
+| `door_point_added` | `path_ratio: float, door: Node3D` | ドアポイント追加時 |
+| `wait_point_added` | `path_ratio: float, wait_duration: float` | Waitポイント追加時 |
+| `path_point_added` | `character: Node, point: Vector3` | パスポイント追加時（リアルタイム確定用） |
+| `path_started` | `character: Node, start_point: Vector3` | パス描画開始時 |
 | `path_undone` | なし | パス描画がUndoされた時 |
-| `mode_changed` | `mode: int` | モード変更時（0=MOVEMENT, 1=VISION_POINT, 2=RUN_MARKER, 3=CLEAR_MARKER, 4=GRENADE, 5=DOOR, 6=WAIT） |
+| `mode_changed` | `mode: int` | モード変更時 |
+| `off_path_tapped` | なし | マーカーモード中にパス外をタップした時 |
+| `path_tapped` | `screen_pos: Vector2, path_data: Dictionary` | パス上タップ時（コンテキストメニュー用） |
+| `endpoint_drag_detected` | `screen_pos: Vector2` | パス先端近くでのドラッグ検出時（パス延長用） |
+| `auto_confirm_requested` | なし | 自動確定リクエスト時 |
 
 ## Enums
 
@@ -32,13 +39,14 @@
 |----|------|
 | `MOVEMENT` | 移動パス描画モード |
 | `VISION_POINT` | 視線ポイント設定モード |
-| `RUN_MARKER` | Runマーカー設定モード |
-| `CLEAR_MARKER` | Clearマーカー設定モード |
-| `GRENADE_MARKER` | グレネードマーカー設定モード |
-| `DOOR_MARKER` | ドアマーカー設定モード |
-| `WAIT_MARKER` | 待機マーカー設定モード |
+| `RUN_MARKER` | Runポイント設定モード |
+| `CLEAR_MARKER` | Clearポイント設定モード |
+| `GRENADE_MARKER` | グレネードポイント設定モード |
+| `DOOR_MARKER` | ドアポイント設定モード |
+| `WAIT_MARKER` | 待機ポイント設定モード |
+| `SMOKE_GRENADE_MARKER` | スモークグレネードポイント設定モード |
 
-### MarkerType
+### PointType
 マーカー種別（Undo履歴用）。
 
 | 値 | 説明 |
@@ -47,16 +55,17 @@
 | `RUN` | Run区間 |
 | `CLEAR` | Clearポイント |
 | `PATH` | パス描画自体 |
-| `GRENADE` | グレネードマーカー |
-| `DOOR` | ドアマーカー |
-| `WAIT` | 待機マーカー |
+| `GRENADE` | グレネードポイント |
+| `DOOR` | ドアポイント |
 | `PATH_EXTENSION` | パス拡張（Undoで拡張前に戻る） |
+| `WAIT` | 待機ポイント |
+| `SMOKE_GRENADE` | スモークグレネードポイント |
 
 ## Export Properties
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `min_point_distance` | `float` | `0.2` | ポイント間の最小距離 |
+| `min_point_distance` | `float` | `0.35` | ポイント間の最小距離 |
 | `line_color` | `Color` | 白(0.9 alpha) | パスライン色 |
 | `vision_line_color` | `Color` | 紫(0.9 alpha) | 視線ライン色 |
 | `vision_line_length` | `float` | `2.0` | 視線ラインの長さ |
@@ -66,6 +75,8 @@
 | `path_click_threshold` | `float` | `0.5` | パスクリック判定距離 |
 | `path_endpoint_threshold` | `float` | `0.3` | パス終点タップ検出距離（継続描画用） |
 | `wall_collision_mask` | `int` | `2` | 壁検出用のコリジョンマスク |
+| `enable_wall_sliding` | `bool` | `true` | 壁沿いの自動スライド機能を有効化 |
+| `wall_slide_offset` | `float` | `0.5` | 壁スライド時の壁からのオフセット距離 |
 | `enable_smoothing` | `bool` | `true` | パススムージングを有効化 |
 | `smoothing_epsilon` | `float` | `0.15` | RDP間引き許容誤差（大きいほど間引き強） |
 | `smoothing_segments` | `int` | `4` | Catmull-Rom曲線の分割数（大きいほど滑らか） |
@@ -87,6 +98,13 @@ PathDrawerを有効化する。
 **引数:**
 - `character` - パス追従キャラクター
 
+#### enable_from_point(character: Node3D, start_point: Vector3) -> void
+指定した開始点からパス描画を開始する（移動中延長用）。
+
+**引数:**
+- `character` - パス追従キャラクター
+- `start_point` - パス開始点（キャラクターの現在位置ではなく、この点から描画開始）
+
 #### restore_pending_path(character: Node3D, path_data: Dictionary) -> bool
 既存の確定済みパスを読み込んで編集モードに入る。PathExecutionManagerから取得したパスデータを復元する。
 
@@ -99,7 +117,7 @@ PathDrawerを有効化する。
 **注意:**
 - 通常はPathService経由で自動的に呼び出される。直接呼び出す必要はない
 - データ配列とメッシュ配列は同期して復元される（Undo操作の整合性を保つため）
-- 無効なマーカーメッシュがある場合、対応するデータも復元されない
+- 無効なポイントメッシュがある場合、対応するデータも復元されない
 - 復元後に`drawing_finished`シグナルが遅延発火し、`PathModeController`が`path_ready`を通知する
 
 #### disable() -> void
@@ -138,10 +156,28 @@ PathDrawerを無効化する。
 
 **戻り値:** `path_click_threshold`（0.5m）以内なら`true`
 
-#### is_marker_mode() -> bool
+#### is_point_mode() -> bool
 マーカーモード（VISION_POINT, RUN_MARKER, CLEAR_MARKER）かどうかを確認する。
 
 **戻り値:** MOVEMENTモード以外なら`true`
+
+### Input Handling Methods (InputController連携)
+
+#### `handle_drawing_press(screen_pos: Vector2) -> void`
+描画開始（プレス）処理。InputControllerから呼び出される。
+
+#### `handle_drawing_release() -> void`
+描画終了（リリース）処理。
+
+#### `handle_movement_press(screen_pos: Vector2) -> bool`
+移動モードでのプレス処理（長押しVisionモード判定用）。
+**戻り値:** 長押しモードを開始した場合 `true`
+
+#### `handle_movement_release(screen_pos: Vector2) -> void`
+移動モードでのリリース処理。
+
+#### `handle_marker_release(screen_pos: Vector2) -> void`
+マーカーモードでのリリース処理。
 
 ### Path Extension API
 
@@ -182,7 +218,7 @@ if path_drawer.is_extending_path():
 ライン色を変更する。
 
 #### set_character_color(color: Color) -> void
-キャラクター色を設定する。パス線・VisionMarker・RunMarkerに適用される。
+キャラクター色を設定する。パス線・VisionPoint・RunPointに適用される。
 
 **引数:**
 - `color` - キャラクター固有色
@@ -221,13 +257,27 @@ path_drawer.set_character_color(char_color)
 #### remove_last_vision_point() -> void
 最後の視線ポイントを削除する。
 
-#### take_vision_markers() -> Array[MeshInstance3D]
-視線マーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+#### `take_vision_points() -> Array[MeshInstance3D]`
+視線ポイントの所有権を移譲する（呼び出し元が管理責任を持つ）。
+
+#### `transfer_vision_meshes_to(parent: Node3D) -> Array[MeshInstance3D]`
+視線ポイントメッシュを指定親ノードに転送し、データもクリアする。
+
+**引数:**
+- `parent` - 転送先の親ノード
+
+#### `start_vision_mode_with_anchor(anchor: Vector3, ratio: float, auto_confirm: bool = false) -> void`
+指定アンカー位置でVisionモードを開始する。
+
+**引数:**
+- `anchor` - アンカー位置
+- `ratio` - パス上の比率
+- `auto_confirm` - ポイント追加後に自動確定するかどうか
 
 ### Run Marker API
 
 #### start_run_mode() -> bool
-Runマーカー設定モードに切り替える。
+Runポイント設定モードに切り替える。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
@@ -248,13 +298,13 @@ Run区間数を取得する。
 #### has_incomplete_run_start() -> bool
 未完成のRun開始点があるか確認する。
 
-#### take_run_markers() -> Array[MeshInstance3D]
-Runマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+#### take_run_points() -> Array[MeshInstance3D]
+Runポイントの所有権を移譲する（呼び出し元が管理責任を持つ）。
 
 ### Clear Marker API
 
 #### start_clear_mode() -> bool
-Clearマーカー設定モードに切り替える。パス上をクリックでClearポイントを設定する。このポイント以降はVision/Runがクリアされ、キャラクターは進行方向を向く。
+Clearポイント設定モードに切り替える。パス上をクリックでClearポイントを設定する。このポイント以降はVision/Runがクリアされ、キャラクターは進行方向を向く。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
@@ -272,27 +322,27 @@ Clearポイント数を取得する。
 #### remove_last_clear_point() -> void
 最後のClearポイントを削除する。
 
-#### take_clear_markers() -> Array[MeshInstance3D]
-Clearマーカーの所有権を移譲する（呼び出し元が管理責任を持つ）。
+#### take_clear_points() -> Array[MeshInstance3D]
+Clearポイントの所有権を移譲する（呼び出し元が管理責任を持つ）。
 
 ### Unified Undo API
 
-#### undo_last_marker() -> int
-最後に追加したマーカーを種別を問わず削除する（統一Undo）。
+#### undo_last_point() -> int
+最後に追加したポイントを種別を問わず削除する（統一Undo）。
 
-**戻り値:** 削除したマーカーの種別（MarkerType）。何も削除しなかった場合は`-1`
+**戻り値:** 削除したマーカーの種別（PointType）。何も削除しなかった場合は`-1`
 
 ```gdscript
 # 使用例
-var removed_type = path_drawer.undo_last_marker()
+var removed_type = path_drawer.undo_last_point()
 match removed_type:
-    PathDrawer.MarkerType.VISION:
+    PathDrawer.PointType.VISION:
         print("Vision marker removed")
-    PathDrawer.MarkerType.RUN:
+    PathDrawer.PointType.RUN:
         print("Run marker removed")
-    PathDrawer.MarkerType.CLEAR:
+    PathDrawer.PointType.CLEAR:
         print("Clear marker removed")
-    PathDrawer.MarkerType.PATH:
+    PathDrawer.PointType.PATH:
         print("Path removed - back to initial state")
     -1:
         print("Nothing to undo")
@@ -314,43 +364,74 @@ PATHがUndoされると、パスとすべてのマーカーがクリアされ、
 ### Grenade Marker API
 
 #### start_grenade_mode() -> bool
-グレネードマーカー設定モードに切り替える。パス上をクリック→ドラッグでグレネード投擲位置と目標を設定。
+グレネードポイント設定モードに切り替える。パス上をクリック→ドラッグでグレネード投擲位置と目標を設定。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
-#### has_grenade_markers() -> bool
-グレネードマーカーがあるか確認する。
+#### has_grenade_points() -> bool
+グレネードポイントがあるか確認する。
 
-#### get_grenade_markers() -> Array[Dictionary]
-グレネードマーカーを取得する。
+#### get_grenade_points() -> Array[Dictionary]
+グレネードポイントを取得する。
 
 **戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_pos": Vector3, "bounce_point": Vector3 }` の配列
 
-#### take_grenade_markers() -> Array[MeshInstance3D]
-グレネードマーカーの所有権を移譲する。
+#### take_grenade_points() -> Array[MeshInstance3D]
+グレネードポイントの所有権を移譲する。
+
+### Smoke Grenade Marker API
+
+#### start_smoke_grenade_mode() -> bool
+スモークグレネードポイント設定モードに切り替える。パス上をクリック→ドラッグでスモークグレネード投擲位置と目標を設定。
+
+**戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
+
+#### has_smoke_grenade_points() -> bool
+スモークグレネードポイントがあるか確認する。
+
+#### get_smoke_grenade_points() -> Array[Dictionary]
+スモークグレネードポイントを取得する。
+
+**戻り値:** `{ "path_ratio": float, "anchor": Vector3, "target_pos": Vector3 }` の配列
+
+#### get_smoke_grenade_point_count() -> int
+スモークグレネードポイント数を取得する。
+
+#### take_smoke_grenade_points() -> Array[MeshInstance3D]
+スモークグレネードポイントの所有権を移譲する。
+
+#### get_all_smoke_grenade_points() -> Dictionary
+全キャラクターのスモークグレネードポイントを取得する。
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたスモークグレネードポイントの辞書
+
+#### take_all_smoke_grenade_points() -> Dictionary
+全キャラクターのスモークグレネードポイントの所有権を移譲する。
+
+**戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
 ### Door Marker API
 
 #### start_door_mode() -> bool
-ドアマーカー設定モードに切り替える。ドアをクリックしてキック位置を設定。
+ドアポイント設定モードに切り替える。ドアをクリックしてキック位置を設定。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
-#### has_door_markers() -> bool
-ドアマーカーがあるか確認する。
+#### has_door_points() -> bool
+ドアポイントがあるか確認する。
 
-#### get_door_markers() -> Array[Dictionary]
-ドアマーカーを取得する。
+#### get_door_points() -> Array[Dictionary]
+ドアポイントを取得する。
 
 **戻り値:** `{ "path_ratio": float, "anchor": Vector3, "door_node": Node3D }` の配列
 
-#### take_door_markers() -> Array[MeshInstance3D]
-ドアマーカーの所有権を移譲する。
+#### take_door_points() -> Array[MeshInstance3D]
+ドアポイントの所有権を移譲する。
 
 ### Wait Marker API
 
 #### start_wait_mode() -> bool
-待機マーカー設定モードに切り替える。パス上を長押しして待機位置と待機時間を設定。長押し時間が待機時間になる。
+待機ポイント設定モードに切り替える。パス上を長押しして待機位置と待機時間を設定。長押し時間が待機時間になる。
 
 **戻り値:** 成功なら`true`（パスが存在しない場合は`false`）
 
@@ -361,78 +442,84 @@ PATHがUndoされると、パスとすべてのマーカーがクリアされ、
 - 最小待機時間: 0.5秒（これ未満はキャンセル扱い）
 - 最大待機時間: 10.0秒
 
-#### has_wait_markers() -> bool
-Waitマーカーがあるか確認する。
+#### has_wait_points() -> bool
+Waitポイントがあるか確認する。
 
-#### get_wait_markers() -> Array[Dictionary]
-Waitマーカーを取得する。
+#### get_wait_points() -> Array[Dictionary]
+Waitポイントを取得する。
 
 **戻り値:** `{ "path_ratio": float, "anchor": Vector3, "wait_duration": float }` の配列
 
-#### get_wait_marker_count() -> int
-Waitマーカー数を取得する。
+#### get_wait_point_count() -> int
+Waitポイント数を取得する。
 
-#### take_wait_markers() -> Array[MeshInstance3D]
-Waitマーカーの所有権を移譲する。
+#### take_wait_points() -> Array[MeshInstance3D]
+Waitポイントの所有権を移譲する。
 
-#### get_wait_marker_count_for_character(character: Node) -> int
-指定キャラクターのWaitマーカー数を取得する。
+#### `transfer_wait_meshes_to(parent: Node3D) -> Array[MeshInstance3D]`
+Waitポイントメッシュを指定親ノードに転送し、データもクリアする。
 
-#### get_all_wait_markers() -> Dictionary
-全キャラクターのWaitマーカーを取得する。
+#### `add_sync_wait_point(path_ratio: float, anchor: Vector3) -> void`
+同期Waitポイントを追加する（コンテキストメニューから呼ばれる）。
 
-**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたWaitマーカーの辞書
+#### get_wait_point_count_for_character(character: Node) -> int
+指定キャラクターのWaitポイント数を取得する。
 
-#### take_all_wait_markers() -> Dictionary
-全キャラクターのWaitマーカーの所有権を移譲する。
+#### get_all_wait_points() -> Dictionary
+全キャラクターのWaitポイントを取得する。
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたWaitポイントの辞書
+
+#### take_all_wait_points() -> Dictionary
+全キャラクターのWaitポイントの所有権を移譲する。
 
 **戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
 ### Unified Marker API (新システム)
 
-マーカータイプを問わず統一的にアクセスするためのAPI。`ActionMarkerData.Type`列挙型を使用する。
+ポイントタイプを問わず統一的にアクセスするためのAPI。`ActionPointData.Type`列挙型を使用する。
 
-#### get_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[Dictionary]
-アクティブキャラクターの指定タイプのマーカーデータを取得する。
-
-**引数:**
-- `marker_type` - `ActionMarkerData.Type`の値（VISION, CLEAR, RUN, GRENADE, DOOR）
-
-**戻り値:** 指定タイプのマーカーデータ配列
-
-#### take_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[MeshInstance3D]
-アクティブキャラクターの指定タイプのマーカーメッシュを取得して所有権を移譲する。
+#### get_markers_by_type(point_type: ActionPointData.Type) -> Array[Dictionary]
+アクティブキャラクターの指定タイプのポイントデータを取得する。
 
 **引数:**
-- `marker_type` - `ActionMarkerData.Type`の値
+- `point_type` - `ActionPointData.Type`の値（VISION, CLEAR, RUN, GRENADE, DOOR）
 
-**戻り値:** マーカーメッシュ配列
+**戻り値:** 指定タイプのポイントデータ配列
 
-#### get_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary
-全キャラクターの指定タイプのマーカーデータを取得する。
-
-**引数:**
-- `marker_type` - `ActionMarkerData.Type`の値
-
-**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたマーカーデータの辞書
-
-#### take_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary
-全キャラクターの指定タイプのマーカーメッシュを取得して所有権を移譲する。
+#### take_markers_by_type(point_type: ActionPointData.Type) -> Array[MeshInstance3D]
+アクティブキャラクターの指定タイプのポイントメッシュを取得して所有権を移譲する。
 
 **引数:**
-- `marker_type` - `ActionMarkerData.Type`の値
+- `point_type` - `ActionPointData.Type`の値
+
+**戻り値:** ポイントメッシュ配列
+
+#### get_all_markers_by_type(point_type: ActionPointData.Type) -> Dictionary
+全キャラクターの指定タイプのポイントデータを取得する。
+
+**引数:**
+- `point_type` - `ActionPointData.Type`の値
+
+**戻り値:** `{ char_id: Array[Dictionary] }` - キャラクターIDをキーとしたポイントデータの辞書
+
+#### take_all_markers_by_type(point_type: ActionPointData.Type) -> Dictionary
+全キャラクターの指定タイプのポイントメッシュを取得して所有権を移譲する。
+
+**引数:**
+- `point_type` - `ActionPointData.Type`の値
 
 **戻り値:** `{ char_id: Array[MeshInstance3D] }`
 
-#### get_all_marker_types_data() -> Dictionary
-全タイプのマーカーデータを一括取得する。
+#### get_all_point_types_data() -> Dictionary
+全タイプのポイントデータを一括取得する。
 
-**戻り値:** `{ ActionMarkerData.Type: Array[Dictionary] }`
+**戻り値:** `{ ActionPointData.Type: Array[Dictionary] }`
 
-#### take_all_marker_types_meshes() -> Dictionary
-全タイプのマーカーメッシュを一括取得して所有権を移譲する。
+#### take_all_point_types_meshes() -> Dictionary
+全タイプのポイントメッシュを一括取得して所有権を移譲する。
 
-**戻り値:** `{ ActionMarkerData.Type: Array[MeshInstance3D] }`
+**戻り値:** `{ ActionPointData.Type: Array[MeshInstance3D] }`
 
 ### Execution API
 
@@ -478,12 +565,12 @@ path_drawer.run_segment_added.connect(_on_run_added)
 if path_drawer.start_vision_mode():
     print("Now in vision mode")
 
-# Runマーカーモードに切り替え
+# Runポイントモードに切り替え
 if path_drawer.start_run_mode():
     print("Now in run marker mode")
     # パス上をクリックして開始点、再度クリックして終点を設置
 
-# Clearマーカーモードに切り替え
+# Clearポイントモードに切り替え
 if path_drawer.start_clear_mode():
     print("Now in clear marker mode")
     # パス上をクリックでClearポイントを設置
@@ -537,10 +624,10 @@ path_drawer.execute_with_vision(false)  # 歩行で実行（Run区間だけ走�
 ## 内部動作
 
 - `PathLineMesh`でパスを描画（破線+終点ドーナツ）
-- `VisionMarker`で視線ポイントを可視化
-- `RunMarker`でRun区間の開始/終点を可視化
-- `ClearMarker`でClearポイントを可視化（リセットマーカー）
-- `WaitMarker`で待機ポイントを可視化（砂時計アイコン）
+- `VisionPoint`で視線ポイントを可視化
+- `RunPoint`でRun区間の開始/終点を可視化
+- `ClearPoint`でClearポイントを可視化（リセットマーカー）
+- `WaitPoint`で待機ポイントを可視化（砂時計アイコン）
 - パス上クリックで最近接点を計算し、そこから視線方向やRun区間、Clearポイント、待機ポイントを設定
 - **パススムージング**: 描画完了時に`PathSmoother`で手ブレを補正
 
@@ -576,12 +663,22 @@ path_drawer.smoothing_segments = 5   # より滑らかな曲線
 
 詳細は [PathSmoother](PathSmoother.md) を参照。
 
-## 障害物（壁）検出
+## 障害物（壁）検出と壁沿いスライド
 
-パス描画中に障害物を貫通しないよう、以下のレイキャストチェックを行う:
+パス描画中に障害物を貫通しないよう、以下のチェックと補正を行う:
 
-1. **描画開始時**: キャラクター位置→開始点間に壁があれば描画開始を拒否
-2. **ポイント追加時**: 直前のポイント→新ポイント間に壁があれば、壁直前で停止して描画終了
+1. **壁検出 (Wall Detection)**:
+    - 描画開始時: キャラクター位置→開始点間に壁があれば描画開始を拒否
+    - ポイント追加時: 直前のポイント→新ポイント間に壁があれば検出
+
+2. **壁沿いスライド (Wall Sliding)**:
+    - `enable_wall_sliding` が `true` の場合、壁に当たると自動的に「壁沿いモード」に移行
+    - ユーザーが壁に向かってドラッグし続けても、パスは壁に沿って滑らかに伸びる
+    - 壁の角（コーナー）を検出すると、自動的に角を曲がって描画を継続
+    - `wall_slide_offset` だけ壁から離れた位置にパスポイントを生成し、キャラクターが壁に埋まるのを防ぐ
+
+3. **壁手前停止**:
+    - スライドが無効または不可能な場合、壁の直前でパス描画が停止する
 
 壁検出は`wall_collision_mask`で指定されたコリジョンレイヤーを対象とする（デフォルト: レイヤー2）。
 
@@ -597,30 +694,35 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 |---------|------|
 | `drawing_finished` | `points: PackedVector3Array` |
 | `vision_point_added` | `anchor: Vector3, target_point: Vector3` |
-| `mode_changed` | `mode: int` |
 | `run_segment_added` | `start_ratio: float, end_ratio: float` |
 | `clear_point_added` | `path_ratio: float` |
-| `wait_marker_added` | `path_ratio: float, wait_duration: float` |
+| `grenade_point_added` | `path_ratio: float, target_pos: Vector3` |
+| `smoke_grenade_point_added` | `path_ratio: float, target_pos: Vector3` |
+| `door_point_added` | `path_ratio: float, door: Node3D` |
+| `wait_point_added` | `path_ratio: float, wait_duration: float` |
 | `path_undone` | なし |
+| `mode_changed` | `mode: int` |
+| `off_path_tapped` | なし |
 
 ### メソッド
 - `setup(camera: Camera3D, character: Node3D = null) -> void`
 - `clear() -> void`
-- `take_vision_markers() -> Array[MeshInstance3D]`
-- `take_run_markers() -> Array[MeshInstance3D]`
-- `take_clear_markers() -> Array[MeshInstance3D]`
+- `take_vision_points() -> Array[MeshInstance3D]`
+- `take_run_points() -> Array[MeshInstance3D]`
+- `take_clear_points() -> Array[MeshInstance3D]`
 - `get_drawn_path() -> PackedVector3Array`
 - `get_smoothed_path() -> PackedVector3Array`
 - `get_relative_path() -> PackedVector3Array`
 - `get_relative_vision_points() -> Array[Dictionary]`
 - `is_drawing() -> bool`
 - `is_point_on_path(ground_pos: Vector3) -> bool`
-- `is_marker_mode() -> bool`
+- `is_point_mode() -> bool`
 - `can_extend_path() -> bool`
 - `is_extending_path() -> bool`
 - `set_line_color(color: Color) -> void`
 - `set_character_color(color: Color) -> void`
 - `enable(character: Node3D) -> void`
+- `enable_from_point(character: Node3D, start_point: Vector3) -> void`
 - `restore_pending_path(character: Node3D, path_data: Dictionary) -> bool`
 - `disable() -> void`
 - `is_enabled() -> bool`
@@ -642,7 +744,7 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `get_clear_points() -> Array[Dictionary]`
 - `get_clear_point_count() -> int`
 - `remove_last_clear_point() -> void`
-- `undo_last_marker() -> int`
+- `undo_last_point() -> int`
 - `execute(run: bool = false) -> bool`
 - `execute_with_vision(run: bool = false) -> bool`
 - `has_pending_path() -> bool`
@@ -650,27 +752,34 @@ path_drawer.wall_collision_mask = 4  # レイヤー3を使用
 - `set_active_edit_character(character: Node) -> void`
 - `get_active_edit_character() -> Node`
 - `start_grenade_mode() -> bool`
-- `has_grenade_markers() -> bool`
-- `get_grenade_markers() -> Array[Dictionary]`
-- `take_grenade_markers() -> Array[MeshInstance3D]`
+- `has_grenade_points() -> bool`
+- `get_grenade_points() -> Array[Dictionary]`
+- `take_grenade_points() -> Array[MeshInstance3D]`
+- `start_smoke_grenade_mode() -> bool`
+- `has_smoke_grenade_points() -> bool`
+- `get_smoke_grenade_points() -> Array[Dictionary]`
+- `get_smoke_grenade_point_count() -> int`
+- `take_smoke_grenade_points() -> Array[MeshInstance3D]`
+- `get_all_smoke_grenade_points() -> Dictionary`
+- `take_all_smoke_grenade_points() -> Dictionary`
 - `start_door_mode() -> bool`
-- `has_door_markers() -> bool`
-- `get_door_markers() -> Array[Dictionary]`
-- `take_door_markers() -> Array[MeshInstance3D]`
+- `has_door_points() -> bool`
+- `get_door_points() -> Array[Dictionary]`
+- `take_door_points() -> Array[MeshInstance3D]`
 - `start_wait_mode() -> bool`
-- `has_wait_markers() -> bool`
-- `get_wait_markers() -> Array[Dictionary]`
-- `get_wait_marker_count() -> int`
-- `take_wait_markers() -> Array[MeshInstance3D]`
-- `get_wait_marker_count_for_character(character: Node) -> int`
-- `get_all_wait_markers() -> Dictionary`
-- `take_all_wait_markers() -> Dictionary`
-- `get_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[Dictionary]`
-- `take_markers_by_type(marker_type: ActionMarkerData.Type) -> Array[MeshInstance3D]`
-- `get_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary`
-- `take_all_markers_by_type(marker_type: ActionMarkerData.Type) -> Dictionary`
-- `get_all_marker_types_data() -> Dictionary`
-- `take_all_marker_types_meshes() -> Dictionary`
+- `has_wait_points() -> bool`
+- `get_wait_points() -> Array[Dictionary]`
+- `get_wait_point_count() -> int`
+- `take_wait_points() -> Array[MeshInstance3D]`
+- `get_wait_point_count_for_character(character: Node) -> int`
+- `get_all_wait_points() -> Dictionary`
+- `take_all_wait_points() -> Dictionary`
+- `get_markers_by_type(point_type: ActionPointData.Type) -> Array[Dictionary]`
+- `take_markers_by_type(point_type: ActionPointData.Type) -> Array[MeshInstance3D]`
+- `get_all_markers_by_type(point_type: ActionPointData.Type) -> Dictionary`
+- `take_all_markers_by_type(point_type: ActionPointData.Type) -> Dictionary`
+- `get_all_point_types_data() -> Dictionary`
+- `take_all_point_types_meshes() -> Dictionary`
 
 ## アーキテクチャ
 
@@ -680,20 +789,20 @@ PathDrawerは単一責任原則に従って責務分離された複数のヘル�
 
 ```
 godot/scripts/effects/
-├── path_drawer.gd                    # ファサード（Public API提供）
-├── path_state.gd                     # パス状態管理
-├── path_calculator.gd                # パス計算ユーティリティ（静的メソッド）
-├── path_raycast_helper.gd            # レイキャスト・壁検出（静的メソッド）
-├── path_input_handler.gd             # 入力処理統括
-├── marker_handler_base.gd            # マーカーハンドラ基底クラス
-└── marker_handlers/                  # マーカーハンドラ実装
-    ├── vision_marker_handler.gd      # 視線マーカー
-    ├── run_marker_handler.gd         # Runマーカー
-    ├── clear_marker_handler.gd       # Clearマーカー
-    ├── grenade_marker_handler.gd     # グレネードマーカー
-    ├── smoke_grenade_marker_handler.gd # スモークグレネードマーカー
-    ├── door_marker_handler.gd        # ドアマーカー
-    └── wait_marker_handler.gd        # Waitマーカー
+├── path_drawer.gd                      # ファサード（Public API提供）
+├── path_state.gd                       # パス状態管理
+├── path_calculator.gd                  # パス計算ユーティリティ（静的メソッド）
+├── path_raycast_helper.gd              # レイキャスト・壁検出（静的メソッド）
+├── path_input_handler.gd               # 入力処理統括
+├── marker_handler_base.gd              # ポイントハンドラ基底クラス
+└── marker_handlers/                    # ポイントハンドラ実装
+    ├── vision_point_handler.gd        # 視線ポイント
+    ├── run_point_handler.gd           # Runポイント
+    ├── clear_point_handler.gd         # Clearポイント
+    ├── grenade_point_handler.gd       # グレネードポイント
+    ├── smoke_grenade_point_handler.gd # スモークグレネードポイント
+    ├── door_point_handler.gd          # ドアポイント
+    └── wait_point_handler.gd          # Waitポイント
 ```
 
 ### PathCalculator
@@ -721,7 +830,7 @@ godot/scripts/effects/
 | `get_ground_position()` | 地面平面との交点を取得 |
 | `is_wall_hit()` | ヒット結果が壁かどうか判定 |
 
-### MarkerHandlerBase
+### PointHandlerBase
 
 各マーカー種別のハンドラの共通機能を提供する基底クラス。
 
@@ -731,12 +840,12 @@ godot/scripts/effects/
 | `create_marker()` | マーカー作成 |
 | `undo_last()` | 最後のマーカーをUndo |
 | `clear_all()` | 全マーカーをクリア |
-| `get_markers()` | マーカーデータを取得 |
-| `take_markers()` | マーカーメッシュの所有権を移譲 |
+| `get_markers()` | ポイントデータを取得 |
+| `take_markers()` | ポイントメッシュの所有権を移譲 |
 
 ### PathInputHandler
 
-入力処理を統括し、描画モードに応じて適切なマーカーハンドラに委譲する。
+入力処理を統括し、描画モードに応じて適切なポイントハンドラに委譲する。
 
 ```gdscript
 # 使用例（内部実装）
@@ -749,18 +858,18 @@ input_handler.handle_input(event, DrawingMode.VISION_POINT)
 
 ## 関連クラス
 
-- `ActionMarker` - アクションマーカーの基底クラス
-- `ActionMarkerData` - マーカーデータの統一基底クラス
-- `MarkerCollection` - マーカーの統一管理コレクション
-- `VisionMarker` - 視線マーカー（ActionMarker継承）
-- `ClearMarker` - クリアマーカー（ActionMarker継承）
-- `RunMarker` - ダッシュマーカー（ActionMarker継承）
-- `GrenadeMarker` - グレネードマーカー（ActionMarker継承）
-- `DoorMarker` - ドアマーカー（ActionMarker継承）
-- `WaitMarker` - 待機マーカー（ActionMarker継承）
+- `ActionPoint` - アクションポイントの基底クラス
+- `ActionPointData` - ポイントデータの統一基底クラス
+- `PointCollection` - マーカーの統一管理コレクション
+- `VisionPoint` - 視線ポイント（ActionPoint継承）
+- `ClearPoint` - クリアポイント（ActionPoint継承）
+- `RunPoint` - ダッシュポイント（ActionPoint継承）
+- `GrenadePoint` - グレネードポイント（ActionPoint継承）
+- `DoorPoint` - ドアポイント（ActionPoint継承）
+- `WaitPoint` - 待機ポイント（ActionPoint継承）
 - `PathLineMesh` - パス描画メッシュ
 - `PathSmoother` - パススムージング
 - `PathCalculator` - パス計算ユーティリティ
 - `PathRaycastHelper` - レイキャストユーティリティ
 - `PathInputHandler` - 入力処理統括
-- `MarkerHandlerBase` - マーカーハンドラ基底クラス
+- `PointHandlerBase` - ポイントハンドラ基底クラス

@@ -108,7 +108,7 @@ if character:
 
 1. プリセットの`model_scene`をインスタンス化
 2. `GameCharacter`を作成し、モデルを子として追加
-3. `CollisionShape3D`（カプセル）を追加
+3. `CollisionShape3D`（カプセル）を追加（Radius: 0.5, Height: 1.8）
 4. `AnimationPlayer`に共有アニメーションライブラリを設定
 5. `CharacterAnimationController`を追加・セットアップ
 

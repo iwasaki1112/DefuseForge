@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MapPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/maps/office.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_script")
+id = "office"
+display_name = "Office"
+description = "Small office building with lobby, two offices, corridor and garden"
+map_scene = ExtResource("2_scene")
+map_size = Vector2(24, 24)
+spawn_points_ct = Array[Vector3]([Vector3(9.5, 0, 5.0), Vector3(10.5, 0, 5.0), Vector3(9.0, 0, 6.0), Vector3(11.0, 0, 6.0)])
+spawn_points_t = Array[Vector3]([Vector3(2.5, 0, -2.5), Vector3(2.5, 0, -4.0), Vector3(6.5, 0, -2.5), Vector3(6.5, 0, -4.0)])
+spawn_rotations_ct = Array[float]([3.14159, 3.14159, 3.14159, 3.14159])
+spawn_rotations_t = Array[float]([0, 0, 0, 0])

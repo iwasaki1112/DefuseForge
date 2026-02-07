@@ -8,10 +8,24 @@ extends Node
 signal path_started()
 signal path_completed()
 signal path_cancelled()
-signal vision_point_reached(index: int, direction: Vector3)
-signal grenade_marker_reached(index: int, marker_data: Dictionary)
-signal smoke_grenade_marker_reached(index: int, marker_data: Dictionary)
-signal door_marker_reached(index: int, door: Node3D)
+signal vision_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
+signal grenade_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
+signal smoke_grenade_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
+signal door_point_reached(index: int, door: Node3D)
+@warning_ignore("unused_signal")
+signal wait_point_reached(index: int, point_data: Dictionary)
+@warning_ignore("unused_signal")
+signal extension_path_activated()  ## 延長パスに切り替わった時
+signal path_progress_updated(path_index: int)  ## パスの進行状況が更新された時
+@warning_ignore("unused_signal")
+signal extension_points_scaled(scale: float)  ## 延長ポイントの比率がスケールされた時
+@warning_ignore("unused_signal")
+signal sync_wait_started()  ## 同期待機開始時
+@warning_ignore("unused_signal")
+signal sync_wait_released()  ## 同期待機解放時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -19,14 +33,11 @@ signal door_marker_reached(index: int, door: Node3D)
 @export var final_destination_radius: float = 0.1  ## 最終目的地への到達判定半径
 @export var ally_collision_radius: float = 1.0  ## 味方との衝突検出半径
 
-## 衝突回避設定
-@export var collision_check_radius: float = 0.8  ## 前方衝突検出の半径
-@export var collision_check_distance: float = 1.5  ## 前方衝突検出の距離
-@export var avoidance_timeout: float = 3.0  ## 回避タイムアウト（この時間経過で強制解除）
+## 移動スムージング設定
+@export var direction_smoothing: float = 8.0  ## 移動方向のスムージング係数（大きいほど追従が速い）
 
 ## キャッシュ設定
 const CHARACTERS_CACHE_INTERVAL: float = 0.15  ## キャラクターキャッシュ更新間隔（150ms）
-const COLLISION_CHECK_INTERVAL: float = 0.1  ## 衝突検出間隔（100ms、モバイル最適化）
 
 ## 内部状態
 var _character: CharacterBody3D = null
@@ -34,64 +45,101 @@ var _is_following: bool = false
 var _is_running: bool = false
 var _current_path: Array[Vector3] = []
 var _path_index: int = 0
-var _vision_points: Array[Dictionary] = []
-var _vision_index: int = 0
 var _run_segments: Array[Dictionary] = []  # { start_ratio, end_ratio }
 var _clear_points: Array[Dictionary] = []  # { path_ratio }
-var _clear_index: int = 0
-var _grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
-var _grenade_index: int = 0
-var _smoke_grenade_markers: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
-var _smoke_grenade_index: int = 0
-var _door_markers: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
+var _grenade_points: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _smoke_grenade_points: Array[Dictionary] = []  # { path_ratio, anchor, target_pos, bounce_point? }
+var _door_points: Array[Dictionary] = []  # { path_ratio, anchor, door_node }
 var _door_index: int = 0
-var _is_waiting_for_door: bool = false  # ドアキック完了を待っている状態
-var _is_waiting_for_closed_door: bool = false  # 閉じたドアが開くのを待っている状態
-var _waiting_door: Node3D = null  # 待機中のドアノード
-var _wait_markers: Array[Dictionary] = []  # { path_ratio, anchor, wait_duration }
-var _wait_index: int = 0
-var _is_waiting_for_wait: bool = false  # Wait待機中状態
-var _wait_timer: float = 0.0  # 現在の待機経過時間
-var _current_wait_duration: float = 0.0  # 現在の待機時間目標
 var _forced_look_direction: Vector3 = Vector3.ZERO
 var _last_move_direction: Vector3 = Vector3.ZERO
+var _smoothed_move_direction: Vector3 = Vector3.ZERO  ## スムージングされた移動方向
 var _combat_awareness: Node = null  # CombatAwarenessComponent
 var _active_target_point: Vector3 = Vector3.ZERO  # ターゲットポイントモード用
+
+## ポイントチェッカー（PathPointCheckerを使用）
+var _vision_checker: PathPointChecker = null
+var _wait_checker: PathPointChecker = null
+var _extension_vision_checker: PathPointChecker = null
+var _extension_wait_checker: PathPointChecker = null
 
 ## スタック検出用
 var _last_position: Vector3 = Vector3.ZERO
 var _stuck_time: float = 0.0
 
-## 衝突回避状態
-var _is_avoiding_collision: bool = false  ## 衝突回避中フラグ（待機状態）
-var _is_sidestepping: bool = false  ## 側方回避中フラグ
-var _sidestep_direction: Vector3 = Vector3.ZERO  ## 側方回避の方向
-var _sidestep_timer: float = 0.0  ## 側方回避の経過時間
-var _avoidance_blocker: Node = null  ## 回避対象の相手キャラクター
-var _avoidance_timer: float = 0.0  ## 回避継続時間
-var _movement_priority: int = 0  ## 移動優先度（低いほど高優先）
-var _collision_check_timer: float = 0.0  ## 衝突検出タイマー
-var _avoidance_cooldown_timer: float = 0.0  ## 回避クールダウンタイマー
-
-## 側方回避設定
-const SIDESTEP_DURATION: float = 0.5  ## 側方回避の継続時間
-const SIDESTEP_DISTANCE: float = 0.8  ## 側方回避の距離
-const HEAD_ON_THRESHOLD: float = -0.5  ## Head-on判定の閾値（より正面のみ検出、約60度）
-const SIDESTEP_SPEED_FACTOR: float = 1.0  ## 側方移動の速度倍率（通常速度）
-const AVOIDANCE_COOLDOWN: float = 0.5  ## 回避後のクールダウン時間（再検出防止）
+## 距離計算の単調増加保証用（自己交差パス対策）
+var _last_distance_traveled: float = 0.0
 
 ## パス長キャッシュ（毎フレーム再計算を回避）
 var _cached_total_length: float = 0.0
 var _cached_segment_lengths: Array[float] = []  # 各セグメントの累積距離
 
+## 距離ベースのポイント検出用（_calculate_distance_traveled()で動的に計算）
+
+## 移動優先度（PathExecutionManagerが設定）
+var _movement_priority: int = 0  ## 移動優先度（低いほど高優先）
+
 ## キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
+
+## ハンドラーインスタンス
+var _collision_avoidance: CollisionAvoidanceController = null
+var _door_handler: DoorInteractionHandler = null
+var _point_handler: PathPointActionHandler = null
+var _extension_handler: ExtensionPathHandler = null
 
 
 ## セットアップ
 func setup(character: CharacterBody3D) -> void:
 	_character = character
+	_init_point_checkers()
+
+	# ハンドラーの初期化
+	_collision_avoidance = CollisionAvoidanceController.new()
+	_collision_avoidance.setup(self, character)
+	_door_handler = DoorInteractionHandler.new()
+	_door_handler.setup(self, character)
+	_point_handler = PathPointActionHandler.new()
+	_point_handler.setup(self, character)
+	_extension_handler = ExtensionPathHandler.new()
+	_extension_handler.setup(self)
+
+
+## 対象キャラクターを取得（内部状態を隠蔽するAPI）
+func get_character() -> CharacterBody3D:
+	return _character
+
+
+## ポイントチェッカーを初期化
+func _init_point_checkers() -> void:
+	_vision_checker = PathPointChecker.new()
+	_vision_checker.setup(
+		PathPointChecker.CheckMode.DISTANCE,
+		_calculate_distance_traveled,
+		_calculate_anchor_distance
+	)
+
+	_wait_checker = PathPointChecker.new()
+	_wait_checker.setup(
+		PathPointChecker.CheckMode.DISTANCE,
+		_calculate_distance_traveled,
+		_calculate_anchor_distance
+	)
+
+	_extension_vision_checker = PathPointChecker.new()
+	_extension_vision_checker.setup(
+		PathPointChecker.CheckMode.DISTANCE,
+		Callable(),  # 延長パス用は後で設定
+		Callable()
+	)
+
+	_extension_wait_checker = PathPointChecker.new()
+	_extension_wait_checker.setup(
+		PathPointChecker.CheckMode.DISTANCE,
+		Callable(),
+		Callable()
+	)
 
 
 ## Set combat awareness component for automatic enemy aiming
@@ -105,16 +153,16 @@ func set_combat_awareness(component: Node) -> void:
 ## @param run_segments: Run区間配列（start_ratio, end_ratioを含むDictionary）
 ## @param run: 走行モードか（全体を走る場合）
 ## @param clear_points: Clearポイント配列（path_ratioを含むDictionary）
-## @param grenade_markers: グレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
-## @param door_markers: ドアマーカー配列（path_ratio, door_nodeを含むDictionary）
-## @param wait_markers: Waitマーカー配列（path_ratio, wait_durationを含むDictionary）
-## @param smoke_grenade_markers: スモークグレネードマーカー配列（path_ratio, target_pos等を含むDictionary）
+## @param grenade_points: グレネードポイント配列（path_ratio, target_pos等を含むDictionary）
+## @param door_points: ドアポイント配列（path_ratio, door_nodeを含むDictionary）
+## @param wait_points: Waitポイント配列（path_ratio, wait_durationを含むDictionary）
+## @param smoke_grenade_points: スモークグレネードポイント配列（path_ratio, target_pos等を含むDictionary）
 ## @return: 開始成功したらtrue
 func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		run_segments: Array[Dictionary] = [], run: bool = false,
-		clear_points: Array[Dictionary] = [], grenade_markers: Array[Dictionary] = [],
-		door_markers: Array[Dictionary] = [], wait_markers: Array[Dictionary] = [],
-		smoke_grenade_markers: Array[Dictionary] = []) -> bool:
+		clear_points: Array[Dictionary] = [], grenade_points: Array[Dictionary] = [],
+		door_points: Array[Dictionary] = [], wait_points: Array[Dictionary] = [],
+		smoke_grenade_points: Array[Dictionary] = []) -> bool:
 	if not _character:
 		push_warning("[PathFollowingController] No character set")
 		return false
@@ -124,35 +172,35 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 		return false
 
 	_current_path = path.duplicate()
-	_vision_points = vision_points.duplicate()
 	_run_segments = run_segments.duplicate()
 	_clear_points = clear_points.duplicate()
-	_grenade_markers = grenade_markers.duplicate()
-	_smoke_grenade_markers = smoke_grenade_markers.duplicate()
-	_door_markers = door_markers.duplicate()
-	_wait_markers = wait_markers.duplicate()
-	_vision_index = 0
-	_clear_index = 0
-	_grenade_index = 0
-	_smoke_grenade_index = 0
+	_grenade_points = grenade_points.duplicate()
+	_smoke_grenade_points = smoke_grenade_points.duplicate()
+	_door_points = door_points.duplicate()
 	_door_index = 0
-	_wait_index = 0
 	_is_running = run
 	_is_following = true
-	_is_waiting_for_door = false
-	_is_waiting_for_closed_door = false
-	_is_waiting_for_wait = false
-	_wait_timer = 0.0
-	_current_wait_duration = 0.0
-	_waiting_door = null
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO  # ターゲットポイントをリセット
 	_last_move_direction = Vector3.ZERO
+	_smoothed_move_direction = Vector3.ZERO  # スムージング状態をリセット
 	_last_position = _character.global_position
 	_stuck_time = 0.0
+	_last_distance_traveled = 0.0  # 距離計算をリセット
+
+
+	# ハンドラーの状態をリセット
+	_point_handler.reset()
+	_door_handler.reset()
+	_collision_avoidance.reset()
 
 	# パス長キャッシュを構築
 	_build_path_length_cache()
+
+	# ポイントチェッカーにポイントを設定（自動でpath_distance計算とソート）
+	# パス開始時は char_dist=0 なのでインデックス再計算は不要
+	_vision_checker.set_points(vision_points, false)
+	_wait_checker.set_points(wait_points, false)
 
 	# キャラクターの現在位置に最も近いパスポイントから開始
 	# （接続線の最初のポイントはキャラクター位置なのでスキップ）
@@ -176,28 +224,23 @@ func cancel() -> void:
 		return
 
 	_is_following = false
-	_is_waiting_for_door = false
-	_is_waiting_for_closed_door = false
-	_is_waiting_for_wait = false
-	_is_avoiding_collision = false
-	_is_sidestepping = false
-	_wait_timer = 0.0
-	_current_wait_duration = 0.0
-	_waiting_door = null
-	_avoidance_blocker = null
-	_avoidance_timer = 0.0
-	_sidestep_direction = Vector3.ZERO
-	_sidestep_timer = 0.0
+	_smoothed_move_direction = Vector3.ZERO
 	_current_path.clear()
-	_vision_points.clear()
+	_vision_checker.clear()
 	_run_segments.clear()
 	_clear_points.clear()
-	_grenade_markers.clear()
-	_door_markers.clear()
-	_wait_markers.clear()
+	_grenade_points.clear()
+	_door_points.clear()
+	_wait_checker.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
+
+
+	# ハンドラーの状態をリセット
+	_point_handler.reset()
+	_door_handler.reset()
+	_collision_avoidance.reset()
 
 	path_cancelled.emit()
 
@@ -207,13 +250,27 @@ func is_following_path() -> bool:
 	return _is_following
 
 
+## 現在のパスを取得
+func get_current_path() -> Array[Vector3]:
+	return _current_path
+
+
+## 現在のパスインデックスを取得
+func get_current_path_index() -> int:
+	return _path_index
+
+
+## 現在のビジョンポイント配列を取得
+func get_vision_points() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for p in _vision_checker.get_all_points():
+		result.append(p)
+	return result
+
+
 ## 移動優先度を設定（PathExecutionManagerから呼ばれる）
 func set_movement_priority(priority: int) -> void:
 	_movement_priority = priority
-	# 優先度に基づいて衝突検出タイミングをずらす
-	# 高優先度（小さい数値）は早く検出し、先に行動を開始
-	# 低優先度は遅く検出し、相手が既に行動中ならスキップ
-	_collision_check_timer = COLLISION_CHECK_INTERVAL - float(priority) * 0.03
 
 
 ## 移動優先度を取得
@@ -227,67 +284,35 @@ func process(delta: float) -> void:
 		return
 
 	# ドアキック完了待ち状態の場合は処理しない
-	if _is_waiting_for_door:
+	if _door_handler.is_waiting_for_door:
 		return
 
-	# Wait待機中の場合
-	if _is_waiting_for_wait:
-		_wait_timer += delta
-		if _wait_timer >= _current_wait_duration:
-			# 待機完了、移動再開
-			_is_waiting_for_wait = false
-			_wait_timer = 0.0
-			_current_wait_duration = 0.0
-		else:
-			# アイドルアニメーションを維持
-			_update_idle_animation_while_waiting()
-			return
+	# 同期待機中の場合（Wボタンで解放されるまで待機）
+	if _point_handler.is_sync_waiting:
+		_point_handler._update_idle_animation_while_waiting()
+		return
+
+	# Wait待機中の場合（時間ベース）
+	if _point_handler.is_waiting_for_wait:
+		if _point_handler.process_wait(delta):
+			return  # まだ待機中
 
 	# 閉じたドアが開くのを待っている場合
-	if _is_waiting_for_closed_door:
-		if _check_waiting_door_opened():
+	if _door_handler.is_waiting_for_closed_door:
+		if _door_handler.check_waiting_door_opened():
 			# ドアが開いたので移動再開
-			_is_waiting_for_closed_door = false
-			_waiting_door = null
+			_door_handler.is_waiting_for_closed_door = false
+			_door_handler.waiting_door = null
 		else:
 			# アイドルアニメーションを維持
-			_update_idle_animation_while_waiting()
+			_point_handler._update_idle_animation_while_waiting()
 			return  # まだ閉じているので待機継続
-
-	# 側方回避中の場合
-	if _is_sidestepping:
-		_sidestep_timer += delta
-		# 終了条件: 時間経過、すれ違い完了、または衝突解消
-		if _sidestep_timer >= SIDESTEP_DURATION or _has_passed_blocker() or _check_avoidance_resolved():
-			_end_sidestep()
-		else:
-			# 側方移動を実行
-			_execute_sidestep(delta)
-			return  # 側方回避継続
-
-	# 衝突回避待機中の場合（低優先度キャラは停止して待つだけ）
-	if _is_avoiding_collision:
-		_avoidance_timer += delta
-		# タイムアウトまたは衝突解消で待機終了
-		if _avoidance_timer >= avoidance_timeout or _check_avoidance_resolved():
-			_end_collision_halt()
-		else:
-			# アイドルアニメーションを維持（sidestepはしない）
-			_update_idle_animation_while_waiting()
-			return  # 待機継続
 
 	# キャラクターキャッシュ更新（150ms間隔）
 	_characters_cache_timer += delta
 	if _characters_cache_timer >= CHARACTERS_CACHE_INTERVAL:
 		_characters_cache_timer = 0.0
 		_characters_cache = get_tree().get_nodes_in_group("characters")
-
-	# 衝突検出タイマー更新（100ms間隔）
-	_collision_check_timer += delta
-
-	# 回避クールダウンタイマー更新
-	if _avoidance_cooldown_timer > 0:
-		_avoidance_cooldown_timer -= delta
 
 	if not _character or _current_path.size() == 0:
 		_finish()
@@ -309,11 +334,14 @@ func process(delta: float) -> void:
 	to_final.y = 0
 	var distance_to_final = to_final.length()
 
-	# ドアマーカーのチェック（最終目的地到達前に優先チェック）
-	# ドアマーカーがある場合、パス完了より先に停止してドアキックを実行
+	# ドアポイントのチェック（最終目的地到達前に優先チェック）
+	# ドアポイントがある場合、パス完了より先に停止してドアキックを実行
 	var early_progress = _calculate_path_progress()
-	if _check_door_markers(early_progress):
-		return  # ドアマーカーに到達、処理を中断
+	var door_idx_arr: Array[int] = [_door_index]
+	if _door_handler.check_door_points(early_progress, _door_points, door_idx_arr):
+		_door_index = door_idx_arr[0]
+		return  # ドアポイントに到達、処理を中断
+	_door_index = door_idx_arr[0]
 
 	# 最終目的地に十分近ければ完了
 	if distance_to_final < final_destination_radius:
@@ -322,7 +350,7 @@ func process(delta: float) -> void:
 
 	# 味方衝突検出: 最終目的地付近に味方がいれば現在位置で停止
 	if distance_to_final < final_destination_radius + ally_collision_radius:
-		if _is_ally_at_destination():
+		if _point_handler.is_ally_at_destination(_current_path, _characters_cache, ally_collision_radius):
 			_finish()
 			return
 
@@ -334,6 +362,7 @@ func process(delta: float) -> void:
 			# 中間地点でスタック → 次のポイントにスキップ
 			_path_index += 1
 			_stuck_time = 0.0
+			path_progress_updated.emit(_path_index)
 			if _path_index >= _current_path.size():
 				_finish()
 				return
@@ -342,8 +371,9 @@ func process(delta: float) -> void:
 	_last_position = char_pos
 
 	# 目標点に到達したら次へ
-	if distance < 0.15:
+	if distance < 0.25:
 		_path_index += 1
+		path_progress_updated.emit(_path_index)
 		if _path_index >= _current_path.size():
 			_finish()
 			return
@@ -364,37 +394,28 @@ func process(delta: float) -> void:
 	var progress = _calculate_path_progress()
 	var in_run_segment = _is_in_run_segment(progress)
 
-	# 速度選択: Run区間内なら走る、そうでなければ既存ロジック
-	var speed: float
-	var is_running_now: bool
-	if in_run_segment:
-		speed = anim_ctrl.run_speed
-		is_running_now = true
-	elif _is_running:
-		speed = anim_ctrl.run_speed
-		is_running_now = true
-	else:
-		speed = anim_ctrl.get_current_speed()
-		is_running_now = false
+	# 速度選択: 常に歩行速度を使用
+	var speed: float = anim_ctrl.get_current_speed()
+	var is_running_now: bool = false
 
 	# 最後の移動方向を保存（完了時の向き保持用）
 	if move_dir.length_squared() > 0.1:
 		_last_move_direction = move_dir
 
 	# Clearポイントのチェック（視線・Runをリセット）
-	_check_clear_points(progress)
+	_point_handler.check_clear_points(progress, _clear_points)
 
-	# グレネードマーカーのチェック（投擲実行、移動は継続）
-	_check_grenade_markers(progress)
+	# グレネードポイントのチェック（投擲実行、移動は継続）
+	_point_handler.check_grenade_points(progress, _grenade_points)
 
-	# スモークグレネードマーカーのチェック（投擲実行、移動は継続）
-	_check_smoke_grenade_markers(progress)
+	# スモークグレネードポイントのチェック（投擲実行、移動は継続）
+	_point_handler.check_smoke_grenade_points(progress, _smoke_grenade_points)
 
-	# Waitマーカーのチェック（待機開始）
-	if _check_wait_markers(progress):
-		return  # Waitマーカーに到達、処理を中断
+	# Waitポイントのチェック（待機開始）
+	if _point_handler.check_wait_points(progress):
+		return  # Waitポイントに到達、処理を中断
 
-	# ドアマーカーは早期チェック済み（最終目的地到達前に処理）
+	# ドアポイントは早期チェック済み（最終目的地到達前に処理）
 
 	# 視線方向を更新（Run区間外のみ）
 	if not in_run_segment:
@@ -414,8 +435,9 @@ func process(delta: float) -> void:
 			look_dir = move_dir
 		else:
 			# 優先順位: 敵視認 > 視線ポイント > 移動方向
-			# 1. 敵視認チェック（最優先）
-			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+			# 1. 敵視認チェック（最優先、ただし手動回転中はスキップ）
+			var is_manual_rotating: bool = _character.is_manual_rotating() if _character.has_method("is_manual_rotating") else false
+			if not is_manual_rotating and _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
 				if _combat_awareness.is_tracking_enemy():
 					look_dir = _combat_awareness.get_override_look_direction()
 
@@ -430,47 +452,34 @@ func process(delta: float) -> void:
 			_character._facing_direction = look_dir.normalized()
 
 	# 閉じたドアチェック（移動方向に閉じたドアがあれば停止）
-	# ただし、Doorマーカーが設定されているドアは除外（Doorマーカーで処理される）
-	var closed_door = _check_closed_door_ahead(move_dir)
-	if closed_door and not _is_door_in_markers(closed_door):
-		_is_waiting_for_closed_door = true
-		_waiting_door = closed_door
+	# ただし、Doorポイントが設定されているドアは除外（Doorポイントで処理される）
+	var closed_door = _door_handler.check_closed_door_ahead(move_dir)
+	if closed_door and not _door_handler.is_door_in_points(closed_door, _door_points):
+		_door_handler.is_waiting_for_closed_door = true
+		_door_handler.waiting_door = closed_door
 		_character.velocity = Vector3.ZERO
 		# アイドルアニメーションに切り替え
-		_update_idle_animation_while_waiting()
+		_point_handler._update_idle_animation_while_waiting()
 		return
 
-	# 衝突回避チェック（100ms間隔、クールダウン中はスキップ）
-	if _collision_check_timer >= COLLISION_CHECK_INTERVAL and _avoidance_cooldown_timer <= 0:
-		_collision_check_timer = 0.0
-		var ally_ahead: Node = _detect_ally_ahead(move_dir)
-		if ally_ahead:
-			_avoidance_blocker = ally_ahead
-			var dist: float = _get_distance_to_ally(ally_ahead)
-			var head_on: bool = _is_head_on_collision()
-			var should_yield: bool = _should_yield_to(ally_ahead)
+	# 物理移動（スムージング適用）
+	# 移動方向をスムーズに補間してカーブ時のカクつきを軽減
+	if _smoothed_move_direction.length_squared() < 0.001:
+		_smoothed_move_direction = move_dir
+	else:
+		# 急カーブ検出: 現在方向と目標方向の角度が大きいほど追従を強化
+		var angle_dot = _smoothed_move_direction.dot(move_dir)
+		# angle_dot: 1.0=同方向, 0.0=直角, -1.0=逆方向
+		# 急カーブ（90度以上）では追従を3倍に強化
+		var sharp_turn_factor = 1.0
+		if angle_dot < 0.5:  # 約60度以上の曲がり
+			sharp_turn_factor = lerpf(1.0, 3.0, clampf((0.5 - angle_dot) / 1.5, 0.0, 1.0))
+		_smoothed_move_direction = _smoothed_move_direction.lerp(move_dir, direction_smoothing * sharp_turn_factor * delta)
+		if _smoothed_move_direction.length_squared() > 0.001:
+			_smoothed_move_direction = _smoothed_move_direction.normalized()
 
-			# 相手が sidestep 中なら、こちらは通常通り進む
-			if _is_other_sidestepping(ally_ahead):
-				_avoidance_blocker = null
-			# 相手との距離が非常に近い場合 or Head-on
-			elif dist < collision_check_radius * 1.2 or head_on:
-				# 低優先度が sidestep して避ける、高優先度はそのまま進む
-				if should_yield:
-					_start_sidestep()
-					return
-				else:
-					_avoidance_blocker = null
-			elif should_yield:
-				# 追いつきなど: 低優先度が sidestep
-				_start_sidestep()
-				return
-			else:
-				_avoidance_blocker = null  # 高優先度なので進む
-
-	# 物理移動
-	_character.velocity.x = move_dir.x * speed
-	_character.velocity.z = move_dir.z * speed
+	_character.velocity.x = _smoothed_move_direction.x * speed
+	_character.velocity.z = _smoothed_move_direction.z * speed
 
 	if not _character.is_on_floor():
 		_character.velocity.y -= 9.8 * delta
@@ -478,9 +487,10 @@ func process(delta: float) -> void:
 	_character.move_and_slide()
 
 
-## 視線方向を更新（ターゲットポイントモード対応）
+## 視線方向を更新（距離ベースの検出 + 物理的近接チェック）
 func _update_vision_direction() -> void:
-	if _vision_points.size() == 0:
+	var char_distance := _calculate_distance_traveled()
+	if not _vision_checker.has_points():
 		# ターゲットポイントが設定されている場合、動的に方向を計算
 		if _active_target_point.length_squared() > 0.001:
 			_calculate_direction_to_target()
@@ -488,25 +498,46 @@ func _update_vision_direction() -> void:
 			_forced_look_direction = Vector3.ZERO
 		return
 
-	var progress = _calculate_path_progress()
+	# キャラクター位置を取得
+	var char_pos := Vector3.ZERO
+	if _character:
+		char_pos = _character.global_position
+		char_pos.y = 0.0
 
-	while _vision_index < _vision_points.size():
-		var vp = _vision_points[_vision_index]
-		if progress >= vp.path_ratio:
-			# ターゲットポイントモードかどうかをチェック
-			if vp.has("target_point"):
-				# ターゲットポイントを保存（毎フレーム方向を再計算）
-				_active_target_point = vp.target_point
-				_calculate_direction_to_target()
-				vision_point_reached.emit(_vision_index, _forced_look_direction)
-			elif vp.has("direction"):
-				# 後方互換: 固定方向モード
-				_forced_look_direction = vp.direction
-				_active_target_point = Vector3.ZERO
-				vision_point_reached.emit(_vision_index, vp.direction)
-			_vision_index += 1
-		else:
+	# 物理的近接チェック付きの到達判定
+	# Q字型パスでは、パス距離を超えても物理的に離れている場合がある
+	const PHYSICAL_PROXIMITY_THRESHOLD := 0.3  # 物理的な近接判定しきい値（小さいほど正確）
+
+	while _vision_checker.get_current_index() < _vision_checker.get_count():
+		var idx := _vision_checker.get_current_index()
+		var vp: Dictionary = _vision_checker.get_point_at(idx)
+		var point_distance: float = vp.get("path_distance", 0.0)
+
+		# パス距離チェック
+		if char_distance < point_distance:
+			break  # まだこのポイントに到達していない
+
+		# 物理的近接チェック（Q字型パス対策）
+		var anchor: Vector3 = vp.get("anchor", Vector3.ZERO)
+		anchor.y = 0.0
+		var physical_dist := char_pos.distance_to(anchor)
+
+		if physical_dist > PHYSICAL_PROXIMITY_THRESHOLD:
+			# パス距離は超えたが物理的に離れている - 待機
 			break
+
+		# 両方の条件を満たした - ポイント到達
+		_vision_checker.set_current_index(idx + 1)
+
+		# ターゲットポイントモードかどうかをチェック
+		if vp.has("target_point"):
+			_active_target_point = vp.target_point
+			_calculate_direction_to_target()
+		elif vp.has("direction"):
+			_forced_look_direction = vp.direction
+			_active_target_point = Vector3.ZERO
+		# シグナル発火（point_dataを直接渡す - WaitPointと統一）
+		vision_point_reached.emit(idx, vp)
 
 	# ターゲットポイントが設定されている場合、毎フレーム方向を再計算
 	if _active_target_point.length_squared() > 0.001:
@@ -531,15 +562,18 @@ func _calculate_direction_to_target() -> void:
 ## パス完了時に残りの視線ポイントを全て処理
 ## 終点付近の視線ポイントを適用するため
 func _process_remaining_vision_points() -> void:
-	while _vision_index < _vision_points.size():
-		var vp = _vision_points[_vision_index]
+	# 残りの全ポイントを処理（パス完了時）
+	var remaining := _vision_checker.get_remaining_count()
+	for i in range(remaining):
+		var idx := _vision_checker.get_current_index()
+		var vp := _vision_checker.get_point_at(idx)
 		if vp.has("target_point"):
 			_active_target_point = vp.target_point
 			_calculate_direction_to_target()
 		elif vp.has("direction"):
 			_forced_look_direction = vp.direction
 			_active_target_point = Vector3.ZERO
-		_vision_index += 1
+		_vision_checker.set_current_index(idx + 1)
 
 
 ## パス長キャッシュを構築
@@ -554,6 +588,22 @@ func _build_path_length_cache() -> void:
 	for i in range(1, _current_path.size()):
 		_cached_total_length += _current_path[i - 1].distance_to(_current_path[i])
 		_cached_segment_lengths.append(_cached_total_length)
+
+
+## パスの先頭から最初の有効セグメント方向を取得
+## 重複点やゼロ長セグメントをスキップして最初の有効な方向を返す
+func _get_first_segment_direction(path: Array[Vector3], start_index: int = 0) -> Vector3:
+	if path.size() < 2:
+		return Vector3.ZERO
+
+	var start := clampi(start_index, 0, path.size() - 2)
+	for i in range(start + 1, path.size()):
+		var segment = path[i] - path[i - 1]
+		segment.y = 0
+		if segment.length_squared() > 0.001:
+			return segment.normalized()
+
+	return Vector3.ZERO
 
 
 ## パスの進行率を計算
@@ -598,219 +648,146 @@ func _calculate_path_progress() -> float:
 	return best_accumulated_length / _cached_total_length
 
 
+## キャラクターの移動距離を計算（パス開始点からの累積距離）
+## 自己交差するパス（Q字型など）での距離ジャンプを防ぐため、単調増加を保証
+func _calculate_distance_traveled() -> float:
+	if _current_path.size() < 2 or not _character:
+		return 0.0
+
+	var char_pos = _character.global_position
+	char_pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+	var start_segment := maxi(1, _path_index)
+
+	for i in range(start_segment, _current_path.size()):
+		var p1 = _current_path[i - 1]
+		var p2 = _current_path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var t = clampf((char_pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = char_pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			var segment_length = sqrt(segment_length_sq)
+			best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
+
+	# 自己交差パス対策: 距離が急激に増加した場合は制限
+	# キャラクターの最大移動速度を考慮（走行速度 ~8 units/sec → 60fpsで ~0.13/frame）
+	# 余裕を持って 0.5 units/frame を最大増加量とする
+	const MAX_DISTANCE_INCREASE := 0.5
+	if best_accumulated_length > _last_distance_traveled + MAX_DISTANCE_INCREASE:
+		# 急激なジャンプを検出 - 前回の位置から少しだけ進める
+		best_accumulated_length = _last_distance_traveled + MAX_DISTANCE_INCREASE
+
+	# 距離は減少しない（後退しない）
+	if best_accumulated_length < _last_distance_traveled:
+		best_accumulated_length = _last_distance_traveled
+
+	_last_distance_traveled = best_accumulated_length
+	return best_accumulated_length
+
+
+## anchor位置のパス上での距離を計算（パス開始点からの累積距離）
+func _calculate_anchor_distance(anchor: Vector3) -> float:
+	if _current_path.size() < 2:
+		return 0.0
+
+	var pos = anchor
+	pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+
+	for i in range(1, _current_path.size()):
+		var p1 = _current_path[i - 1]
+		var p2 = _current_path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var t = clampf((pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			var segment_length = sqrt(segment_length_sq)
+			best_accumulated_length = _cached_segment_lengths[i - 1] + segment_length * t
+
+	return best_accumulated_length
+
+
+## 指定したパス上でのanchor位置の距離を計算
+func _calculate_anchor_distance_on_path(path: Array, anchor: Vector3) -> float:
+	if path.size() < 2:
+		return 0.0
+
+	var pos = anchor
+	pos.y = 0
+
+	var best_distance = INF
+	var best_accumulated_length = 0.0
+	var accumulated_length = 0.0
+
+	for i in range(1, path.size()):
+		var p1 = path[i - 1]
+		var p2 = path[i]
+		p1.y = 0
+		p2.y = 0
+
+		var segment = p2 - p1
+		var segment_length_sq = segment.length_squared()
+		if segment_length_sq < 0.000001:
+			continue
+
+		var segment_length = sqrt(segment_length_sq)
+		var t = clampf((pos - p1).dot(segment) / segment_length_sq, 0.0, 1.0)
+		var point_on_segment = p1 + segment * t
+		var distance = pos.distance_to(point_on_segment)
+
+		if distance < best_distance:
+			best_distance = distance
+			best_accumulated_length = accumulated_length + segment_length * t
+
+		accumulated_length += segment_length
+
+	return best_accumulated_length
+
+
 ## Run区間内かどうかを判定
 func _is_in_run_segment(progress: float) -> bool:
 	for seg in _run_segments:
-		if progress >= seg.start_ratio and progress < seg.end_ratio:
-			return true
-	return false
-
-
-## Clearポイントのチェックと処理
-## Clearポイント到達時に視線・Runをリセットして進行方向を向く
-func _check_clear_points(progress: float) -> void:
-	while _clear_index < _clear_points.size():
-		var cp = _clear_points[_clear_index]
-		if progress >= cp.path_ratio:
-			# Clearポイントに到達: 視線とRun状態をリセット
-			_forced_look_direction = Vector3.ZERO
-			_active_target_point = Vector3.ZERO
-			_clear_index += 1
-		else:
-			break
-
-
-## グレネードマーカーのチェックと処理
-## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
-func _check_grenade_markers(progress: float) -> void:
-	while _grenade_index < _grenade_markers.size():
-		var gm = _grenade_markers[_grenade_index]
-		if progress >= gm.path_ratio:
-			# グレネードマーカーに到達: 投擲シグナルを発火
-			grenade_marker_reached.emit(_grenade_index, gm)
-			_grenade_index += 1
-		else:
-			break
-
-
-## スモークグレネードマーカーのチェックと処理
-## マーカー到達時に即座に投擲シグナルを発火（移動は継続）
-func _check_smoke_grenade_markers(progress: float) -> void:
-	while _smoke_grenade_index < _smoke_grenade_markers.size():
-		var sgm = _smoke_grenade_markers[_smoke_grenade_index]
-		if progress >= sgm.path_ratio:
-			# スモークグレネードマーカーに到達: 投擲シグナルを発火
-			smoke_grenade_marker_reached.emit(_smoke_grenade_index, sgm)
-			_smoke_grenade_index += 1
-		else:
-			break
-
-
-## ドアマーカーのチェックと処理
-## マーカー到達時にパスを一時停止してドアキックシグナルを発火
-## @return: ドアマーカーに到達してパスを停止した場合はtrue
-func _check_door_markers(progress: float) -> bool:
-	# パス終端付近のマーカーに対する許容範囲（進行率が完全に1.0に到達しないため）
-	const END_TOLERANCE: float = 0.03
-	# マーカー位置への到達判定距離
-	const MARKER_REACH_DISTANCE: float = 0.8
-
-	while _door_index < _door_markers.size():
-		var dm = _door_markers[_door_index]
-		var target_ratio = dm.path_ratio
-
-		# 終端付近（ratio > 0.97）のマーカーは許容範囲を持たせる
-		var ratio_reached = false
-		if target_ratio > 0.97:
-			# 終端マーカー: progress が target_ratio - END_TOLERANCE 以上で到達とみなす
-			ratio_reached = progress >= (target_ratio - END_TOLERANCE)
-		else:
-			ratio_reached = progress >= target_ratio
-
-		if ratio_reached:
-			# 進行率だけでなく、実際の距離もチェック
-			# キャラクターがマーカーのanchor位置に十分近いか確認
-			var actually_reached = true
-			if dm.has("anchor") and _character:
-				var char_pos = _character.global_position
-				char_pos.y = 0
-				var anchor = dm.anchor
-				anchor.y = 0
-				var distance = char_pos.distance_to(anchor)
-				actually_reached = distance < MARKER_REACH_DISTANCE
-
-			if actually_reached:
-				# ドアマーカーに到達: パスを一時停止
-				_is_waiting_for_door = true
-				_door_index += 1
-
-				# ドアノードを取得してシグナル発火
-				var door = dm.door_node if dm.has("door_node") else null
-				door_marker_reached.emit(_door_index - 1, door)
+		if seg.has("start_ratio") and seg.has("end_ratio"):
+			if progress >= seg.start_ratio and progress < seg.end_ratio:
 				return true
-			else:
-				# 進行率は超えているが、実際の位置はまだ遠い
-				# 次のフレームで再チェックするために break しない
-				break
-		else:
-			break
 	return false
-
-
-## ドアキック完了後にパス追従を再開
-func resume_after_door() -> void:
-	_is_waiting_for_door = false
-
-
-## Waitマーカーのチェックと処理
-## マーカー到達時にパスを一時停止して待機開始
-## @return: Waitマーカーに到達してパスを停止した場合はtrue
-func _check_wait_markers(progress: float) -> bool:
-	while _wait_index < _wait_markers.size():
-		var wm = _wait_markers[_wait_index]
-		if progress >= wm.path_ratio:
-			# Waitマーカーに到達: 待機開始
-			_is_waiting_for_wait = true
-			_wait_timer = 0.0
-			_current_wait_duration = wm.wait_duration if wm.has("wait_duration") else 1.0
-			_wait_index += 1
-
-			# キャラクターを停止
-			if _character:
-				_character.velocity = Vector3.ZERO
-
-			# アイドルアニメーションに切り替え
-			_update_idle_animation_while_waiting()
-			return true
-		else:
-			break
-	return false
-
-
-## 移動方向に閉じたドアがあるかチェック
-## @return: 閉じたドアがあればそのノード、なければnull
-func _check_closed_door_ahead(move_dir: Vector3) -> Node3D:
-	if not _character:
-		return null
-
-	# レイキャストで前方の閉じたドアを検出
-	var space_state = _character.get_world_3d().direct_space_state
-	if not space_state:
-		return null
-
-	var from = _character.global_position + Vector3(0, 0.5, 0)
-	var to = from + move_dir.normalized() * 0.8  # 0.8m先をチェック
-
-	# 壁レイヤー（2）をチェック
-	var query = PhysicsRayQueryParameters3D.create(from, to, 2)
-	query.exclude = [_character.get_rid()]
-	var result = space_state.intersect_ray(query)
-
-	if result.is_empty():
-		return null
-
-	var collider = result.collider
-	if not collider:
-		return null
-
-	# doorsグループに属していて、open_doorsグループに属していないドアを検出
-	var door = _find_closed_door_in_hierarchy(collider)
-	return door
-
-
-## ノード階層を遡って閉じたドアを探す
-func _find_closed_door_in_hierarchy(node: Node) -> Node3D:
-	while node:
-		if node.is_in_group("doors"):
-			# open_doorsグループに属していなければ閉じている
-			if not node.is_in_group("open_doors"):
-				return node as Node3D
-			else:
-				return null  # 開いているドア
-		node = node.get_parent()
-	return null
-
-
-## 待機中のドアが開いたかチェック
-func _check_waiting_door_opened() -> bool:
-	if not is_instance_valid(_waiting_door):
-		return true  # ドアが無効になった場合は通過可能
-
-	# open_doorsグループに属していれば開いている
-	return _waiting_door.is_in_group("open_doors")
-
-
-## 指定されたドアがDoorマーカーに設定されているかチェック
-func _is_door_in_markers(door: Node3D) -> bool:
-	if not door:
-		return false
-
-	for dm in _door_markers:
-		if dm.has("door_node") and dm.door_node == door:
-			return true
-	return false
-
-
-## 閉じたドア待機中のアイドルアニメーション更新
-func _update_idle_animation_while_waiting() -> void:
-	if not _character:
-		return
-
-	var anim_ctrl = _character.get_anim_controller()
-	if not anim_ctrl:
-		return
-
-	# 現在の視線方向または最後の移動方向を維持
-	var look_dir = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _last_move_direction
-	if look_dir.length_squared() < 0.1:
-		look_dir = Vector3.FORWARD
-
-	# アイドル状態（移動方向ゼロ）でアニメーション更新
-	anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, 0.016)
 
 
 ## パス追従完了
 func _finish() -> void:
+	# 延長パスがある場合は切り替えて移動継続
+	if _extension_handler.has_extension_path():
+		if _extension_handler.switch_to_extension_path():
+			# ハンドラーの状態をリセット（延長パスでは新しい状態で開始）
+			_point_handler.reset()
+			_door_handler.reset()
+			_collision_avoidance.reset()
+			return
+
 	# キャラクターの速度を停止
 	if _character:
 		_character.velocity = Vector3.ZERO
@@ -825,8 +802,9 @@ func _finish() -> void:
 		if anim_ctrl:
 			var final_dir: Vector3 = Vector3.ZERO
 
-			# 1. 敵を追跡中なら敵方向を維持（最優先）
-			if _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
+			# 1. 敵を追跡中なら敵方向を維持（最優先、ただし手動回転中はスキップ）
+			var is_manual_rotating: bool = _character.is_manual_rotating() if _character.has_method("is_manual_rotating") else false
+			if not is_manual_rotating and _combat_awareness and _combat_awareness.has_method("is_tracking_enemy"):
 				if _combat_awareness.is_tracking_enemy():
 					final_dir = _combat_awareness.get_override_look_direction()
 
@@ -844,459 +822,25 @@ func _finish() -> void:
 			_character._facing_direction = final_dir.normalized()
 
 	_is_following = false
-	_is_waiting_for_door = false
-	_is_waiting_for_closed_door = false
-	_is_waiting_for_wait = false
-	_is_avoiding_collision = false
-	_is_sidestepping = false
-	_wait_timer = 0.0
-	_current_wait_duration = 0.0
-	_waiting_door = null
-	_avoidance_blocker = null
-	_avoidance_timer = 0.0
-	_sidestep_direction = Vector3.ZERO
-	_sidestep_timer = 0.0
+	_smoothed_move_direction = Vector3.ZERO
 	_current_path.clear()
-	_vision_points.clear()
+	_vision_checker.clear()
 	_run_segments.clear()
 	_clear_points.clear()
-	_grenade_markers.clear()
-	_door_markers.clear()
-	_wait_markers.clear()
+	_grenade_points.clear()
+	_door_points.clear()
+	_wait_checker.clear()
 	_forced_look_direction = Vector3.ZERO
 	_active_target_point = Vector3.ZERO
 	_last_move_direction = Vector3.ZERO
 
+
+	# ハンドラーの状態をリセット
+	_point_handler.reset()
+	_door_handler.reset()
+	_collision_avoidance.reset()
+
 	path_completed.emit()
-
-
-## ========================================
-## 衝突回避ロジック（Door Kickers 2スタイル）
-## ========================================
-
-## 味方との距離を取得
-func _get_distance_to_ally(ally: Node) -> float:
-	if not _character or not ally:
-		return INF
-	var char_pos: Vector3 = _character.global_position
-	char_pos.y = 0
-	var ally_pos: Vector3 = ally.global_position
-	ally_pos.y = 0
-	return char_pos.distance_to(ally_pos)
-
-
-## 前方の味方キャラクターを検出
-## @param move_dir: 移動方向
-## @return: 前方に味方がいればそのNode、いなければnull
-func _detect_ally_ahead(move_dir: Vector3) -> Node:
-	if not _character or move_dir.length_squared() < 0.001:
-		return null
-
-	var char_pos: Vector3 = _character.global_position
-	char_pos.y = 0
-
-	# キャッシュを使用して味方をチェック
-	for other in _characters_cache:
-		if other == _character:
-			continue
-		if not is_instance_valid(other):
-			continue
-		if "is_alive" in other and not other.is_alive:
-			continue
-		if not _is_ally(other):
-			continue
-
-		var other_pos: Vector3 = other.global_position
-		other_pos.y = 0
-
-		# 距離チェック
-		var distance: float = char_pos.distance_to(other_pos)
-		if distance > collision_check_distance:
-			continue
-
-		# 方向チェック（前方にいるか）
-		var to_other: Vector3 = (other_pos - char_pos).normalized()
-		var dot: float = move_dir.normalized().dot(to_other)
-		if dot < 0.5:  # 前方60度以外は無視
-			continue
-
-		# 横方向の距離チェック（パス上の衝突判定）
-		var perpendicular: Vector3 = to_other - move_dir.normalized() * dot
-		if perpendicular.length() > collision_check_radius:
-			continue
-
-		return other
-
-	return null
-
-
-## 相手に道を譲るべきかを判定
-## @param other: 比較対象のキャラクター
-## @return: 自分が待機すべきならtrue
-func _should_yield_to(other: Node) -> bool:
-	if not other:
-		return false
-
-	# 相手のPathFollowingControllerを取得
-	var other_controller: Node = null
-	var other_id: int = other.get_instance_id()
-
-	# PathExecutionManagerからコントローラーを探す
-	var path_exec_manager = get_node_or_null("/root/GameScreen/PathExecutionManager")
-	if not path_exec_manager:
-		# fallback: 親ノードから探す
-		for sibling in get_parent().get_children():
-			if sibling.name.begins_with("PathFollowingController_") and sibling != self:
-				if sibling.name.ends_with(str(other_id)):
-					other_controller = sibling
-					break
-	else:
-		if path_exec_manager.has_method("_get_or_create_path_controller"):
-			# 直接アクセスできないので、_path_controllersを参照
-			if "_path_controllers" in path_exec_manager:
-				var controllers: Dictionary = path_exec_manager._path_controllers
-				if controllers.has(other_id):
-					other_controller = controllers[other_id]
-
-	if not other_controller:
-		# 相手がパス追従中でなければ、こちらが進む
-		return false
-
-	if not other_controller.is_following_path():
-		# 相手がパス追従中でなければ、こちらが進む
-		return false
-
-	var other_priority: int = other_controller.get_movement_priority()
-	var my_priority: int = _movement_priority
-
-	# 優先度ルール:
-	# 1. 優先度が低い数値 = 先に実行開始 = 高優先
-	# 2. 優先度が同じ場合はパス進行率で比較
-	# 3. それでも同じならキャラクターIDで決定
-	if my_priority != other_priority:
-		return my_priority > other_priority  # 自分の数値が大きい = 後から開始 = 譲る
-
-	# パス進行率で比較（進んでいる方が優先）
-	var my_progress: float = _calculate_path_progress()
-	var other_progress: float = 0.0
-	if other_controller.has_method("get_current_progress"):
-		other_progress = other_controller.get_current_progress()
-
-	if absf(my_progress - other_progress) > 0.05:
-		return my_progress < other_progress  # 相手の方が進んでいれば譲る
-
-	# 最終手段: キャラクターIDで決定（小さい方が優先）
-	return _character.get_instance_id() > other.get_instance_id()
-
-
-## 相手が既に回避行動中かチェック
-## 相手が迂回中 or 待機中なら、こちらは通常通り進む
-func _is_other_already_avoiding(other: Node) -> bool:
-	if not other:
-		return false
-
-	var other_id: int = other.get_instance_id()
-	var other_controller: Node = null
-
-	# 親ノードの兄弟から探す（PathFollowingControllerは同じ親の下にある）
-	for sibling in get_parent().get_children():
-		if sibling != self and sibling.has_method("is_following_path"):
-			if "_character" in sibling and sibling._character:
-				if sibling._character.get_instance_id() == other_id:
-					other_controller = sibling
-					break
-
-	if not other_controller:
-		return false
-
-	# 相手が迂回中または待機中なら true
-	return other_controller._is_sidestepping or other_controller._is_avoiding_collision
-
-
-## 相手が sidestep 中かチェック（停止ではなく実際に動いている）
-func _is_other_sidestepping(other: Node) -> bool:
-	if not other:
-		return false
-
-	var other_id: int = other.get_instance_id()
-	var other_controller: Node = null
-
-	for sibling in get_parent().get_children():
-		if sibling != self and sibling.has_method("is_following_path"):
-			if "_character" in sibling and sibling._character:
-				if sibling._character.get_instance_id() == other_id:
-					other_controller = sibling
-					break
-
-	if not other_controller:
-		return false
-
-	return other_controller._is_sidestepping
-
-
-## 衝突回避の待機を開始
-func _start_collision_halt(blocker: Node) -> void:
-	_is_avoiding_collision = true
-	_avoidance_blocker = blocker
-	_avoidance_timer = 0.0
-
-	# キャラクターを停止
-	if _character:
-		_character.velocity = Vector3.ZERO
-
-
-## 衝突回避の待機を終了
-func _end_collision_halt() -> void:
-	_is_avoiding_collision = false
-	_avoidance_blocker = null
-	_avoidance_timer = 0.0
-
-
-## 衝突が解消されたかチェック
-## @return: 解消されていればtrue
-func _check_avoidance_resolved() -> bool:
-	if not _avoidance_blocker:
-		return true
-
-	if not is_instance_valid(_avoidance_blocker):
-		return true
-
-	# 相手が死亡した場合
-	if "is_alive" in _avoidance_blocker and not _avoidance_blocker.is_alive:
-		return true
-
-	# 相手がパス追従を完了した場合
-	var other_id: int = _avoidance_blocker.get_instance_id()
-	var path_exec_manager = get_node_or_null("/root/GameScreen/PathExecutionManager")
-	if path_exec_manager and "_path_controllers" in path_exec_manager:
-		var controllers: Dictionary = path_exec_manager._path_controllers
-		if controllers.has(other_id):
-			var other_controller = controllers[other_id]
-			if not other_controller.is_following_path():
-				return true
-
-	# 相手との距離が離れた場合
-	if _character:
-		var char_pos: Vector3 = _character.global_position
-		char_pos.y = 0
-		var blocker_pos: Vector3 = _avoidance_blocker.global_position
-		blocker_pos.y = 0
-		if char_pos.distance_to(blocker_pos) > collision_check_distance * 1.5:
-			return true
-
-	return false
-
-
-## 相手がすれ違ったか判定
-## 相手が自分の背後にいる場合はすれ違い完了とみなす
-func _has_passed_blocker() -> bool:
-	if not _avoidance_blocker or not is_instance_valid(_avoidance_blocker):
-		return true
-
-	if not _character:
-		return false
-
-	var my_pos: Vector3 = _character.global_position
-	my_pos.y = 0
-	var blocker_pos: Vector3 = _avoidance_blocker.global_position
-	blocker_pos.y = 0
-
-	# 自分の進行方向を取得
-	var my_move_dir: Vector3 = Vector3.ZERO
-	if _path_index < _current_path.size():
-		var target = _current_path[_path_index]
-		target.y = 0
-		my_move_dir = (target - my_pos).normalized()
-
-	if my_move_dir.length_squared() < 0.001:
-		return false
-
-	var to_blocker: Vector3 = blocker_pos - my_pos
-	to_blocker.y = 0
-
-	# 相手が自分の背後にいる = すれ違い完了
-	# dot < -0.3 は相手が約107度以上後方にいる状態
-	return my_move_dir.dot(to_blocker.normalized()) < -0.3
-
-
-## Head-on（対面）衝突かどうかを判定
-## 両者が互いに向かって移動している場合にtrue
-func _is_head_on_collision() -> bool:
-	if not _avoidance_blocker or not _character:
-		return false
-
-	if not is_instance_valid(_avoidance_blocker):
-		return false
-
-	# 相手のコントローラーを取得
-	var other_id: int = _avoidance_blocker.get_instance_id()
-	var path_exec_manager = get_node_or_null("/root/GameScreen/PathExecutionManager")
-	if not path_exec_manager or not "_path_controllers" in path_exec_manager:
-		return false
-
-	var controllers: Dictionary = path_exec_manager._path_controllers
-	if not controllers.has(other_id):
-		return false
-
-	var other_controller = controllers[other_id]
-	if not other_controller.is_following_path():
-		return false
-
-	# 相手も衝突回避中（待機中）ならhead-on
-	if other_controller._is_avoiding_collision:
-		return true
-
-	# 相手が自分に向かって移動しているかチェック
-	if _check_moving_toward_each_other(other_controller):
-		return true
-
-	return false
-
-
-## 相手が自分に向かって移動しているかチェック
-func _check_moving_toward_each_other(other_controller: Node) -> bool:
-	if not _character or not _avoidance_blocker:
-		return false
-
-	var my_pos: Vector3 = _character.global_position
-	my_pos.y = 0
-	var other_pos: Vector3 = _avoidance_blocker.global_position
-	other_pos.y = 0
-
-	# 自分から相手への方向
-	var to_other: Vector3 = (other_pos - my_pos).normalized()
-
-	# 相手のパス上の次の目標点を取得
-	if other_controller._current_path.size() == 0:
-		return false
-
-	var other_path_index: int = other_controller._path_index
-	if other_path_index >= other_controller._current_path.size():
-		return false
-
-	var other_target: Vector3 = other_controller._current_path[other_path_index]
-	other_target.y = 0
-
-	# 相手の移動方向
-	var other_move_dir: Vector3 = (other_target - other_pos).normalized()
-
-	# 相手が自分の方に向かっているか（移動方向が自分への方向と逆）
-	var dot: float = other_move_dir.dot(to_other)
-	return dot < HEAD_ON_THRESHOLD  # -0.3以下なら対面移動
-
-
-## 側方回避を開始
-func _start_sidestep() -> void:
-	if not _character or not _avoidance_blocker:
-		return
-
-	# 側方回避方向を計算
-	_sidestep_direction = _calculate_sidestep_direction()
-	if _sidestep_direction.length_squared() < 0.001:
-		return  # 有効な回避方向がない
-
-	_is_sidestepping = true
-	_is_avoiding_collision = false  # 待機状態を解除
-	_sidestep_timer = 0.0
-
-
-## 側方回避方向を計算（右側通行ルール）
-## 進行方向の右側を優先し、壁がある場合は左側へ
-func _calculate_sidestep_direction() -> Vector3:
-	if not _character or not _avoidance_blocker:
-		return Vector3.ZERO
-
-	var char_pos: Vector3 = _character.global_position
-	char_pos.y = 0
-
-	# 自分の進行方向を取得
-	var my_move_dir: Vector3 = Vector3.ZERO
-	if _path_index < _current_path.size():
-		var target = _current_path[_path_index]
-		target.y = 0
-		my_move_dir = (target - char_pos).normalized()
-
-	if my_move_dir.length_squared() < 0.001:
-		return Vector3.ZERO
-
-	# 進行方向の右側（車線ルール）
-	# 右方向 = 進行方向ベクトルを時計回りに90度回転
-	var right: Vector3 = Vector3(my_move_dir.z, 0, -my_move_dir.x)
-
-	# 壁チェック: 右が空いていれば右、なければ左
-	if _is_direction_clear(right):
-		return right
-	elif _is_direction_clear(-right):
-		return -right
-
-	return Vector3.ZERO  # どちらも壁がある場合
-
-
-## 指定方向が壁に遮られていないかチェック
-func _is_direction_clear(direction: Vector3) -> bool:
-	if not _character:
-		return false
-
-	var space_state = _character.get_world_3d().direct_space_state
-	if not space_state:
-		return true  # チェックできない場合は通過可能と仮定
-
-	var from: Vector3 = _character.global_position + Vector3(0, 0.5, 0)
-	var to: Vector3 = from + direction.normalized() * SIDESTEP_DISTANCE
-
-	# 壁レイヤー（2）をチェック
-	var query = PhysicsRayQueryParameters3D.create(from, to, 2)
-	query.exclude = [_character.get_rid()]
-	var result = space_state.intersect_ray(query)
-
-	return result.is_empty()
-
-
-## 側方回避を実行（毎フレーム呼ばれる）
-func _execute_sidestep(delta: float) -> void:
-	if not _character:
-		return
-
-	var anim_ctrl = _character.get_anim_controller()
-	if not anim_ctrl:
-		return
-
-	var speed: float = anim_ctrl.get_current_speed() * SIDESTEP_SPEED_FACTOR
-
-	# 側方移動
-	_character.velocity.x = _sidestep_direction.x * speed
-	_character.velocity.z = _sidestep_direction.z * speed
-
-	if not _character.is_on_floor():
-		_character.velocity.y -= 9.8 * delta
-
-	_character.move_and_slide()
-
-	# 視線は相手またはパス方向を維持
-	var look_dir: Vector3 = _forced_look_direction if _forced_look_direction.length_squared() > 0.1 else _sidestep_direction
-	anim_ctrl.update_animation(_sidestep_direction, look_dir, false, delta)
-
-
-## 側方回避を終了
-func _end_sidestep() -> void:
-	_is_sidestepping = false
-	_sidestep_direction = Vector3.ZERO
-	_sidestep_timer = 0.0
-	_avoidance_blocker = null
-	_avoidance_timer = 0.0
-	_avoidance_cooldown_timer = AVOIDANCE_COOLDOWN  # クールダウン開始
-
-
-## 味方判定
-func _is_ally(other: Node) -> bool:
-	if not _character or not other:
-		return false
-	if _character is GameCharacter and other is GameCharacter:
-		return _character.team == other.team
-	var player_state = get_node_or_null("/root/PlayerState")
-	if player_state and player_state.has_method("is_friendly"):
-		return player_state.is_friendly(_character) == player_state.is_friendly(other)
-	return false
 
 
 ## ========================================
@@ -1313,19 +857,25 @@ func get_current_progress() -> float:
 ## 待機状態を取得
 ## @return: { is_waiting: bool, type: String, remaining: float }
 func get_waiting_state() -> Dictionary:
-	if _is_waiting_for_wait:
+	if _point_handler.is_sync_waiting:
+		return {
+			"is_waiting": true,
+			"type": "sync",
+			"remaining": -1.0  # 無期限
+		}
+	elif _point_handler.is_waiting_for_wait:
 		return {
 			"is_waiting": true,
 			"type": "wait",
-			"remaining": maxf(0.0, _current_wait_duration - _wait_timer)
+			"remaining": maxf(0.0, _point_handler.current_wait_duration - _point_handler.wait_timer)
 		}
-	elif _is_waiting_for_door:
+	elif _door_handler.is_waiting_for_door:
 		return {
 			"is_waiting": true,
 			"type": "door",
 			"remaining": 0.0  # ドアキック時間は外部で管理
 		}
-	elif _is_waiting_for_closed_door:
+	elif _door_handler.is_waiting_for_closed_door:
 		return {
 			"is_waiting": true,
 			"type": "closed_door",
@@ -1339,31 +889,126 @@ func get_waiting_state() -> Dictionary:
 		}
 
 
+## 同期待機中かどうか
+func is_sync_waiting() -> bool:
+	return _point_handler.is_sync_waiting
+
+
+## 同期待機を解除して移動を再開
+func release_sync_wait() -> void:
+	_point_handler.release_sync_wait()
+
+
 ## パス追従中かどうか（_is_followingの公開版）
 func is_active() -> bool:
 	return _is_following
 
 
-## 最終目的地付近に味方キャラクターがいるかチェック
-func _is_ally_at_destination() -> bool:
+## ドアキック完了後にパス追従を再開
+func resume_after_door() -> void:
+	_door_handler.resume_after_door()
+
+
+## ========================================
+## パス延長機能（移動中のパス延長）- ハンドラーへのデリゲーション
+## ========================================
+
+## 現在のパス終点を取得
+func get_path_endpoint() -> Vector3:
 	if _current_path.size() == 0:
-		return false
+		return Vector3.ZERO
+	return _current_path[_current_path.size() - 1]
 
-	var final_destination = _current_path[_current_path.size() - 1]
-	final_destination.y = 0
 
-	# キャッシュを使用（GC負荷削減）
-	for character in _characters_cache:
-		if character == _character:
-			continue
-		if "is_alive" in character and not character.is_alive:
-			continue
-		if not _is_ally(character):
-			continue
+## パスにポイントを追加（移動中の延長用）
+func append_path_point(point: Vector3) -> void:
+	_current_path.append(point)
+	# 新しいセグメントの長さをキャッシュに追加（全体再計算を避ける）
+	if _current_path.size() >= 2:
+		var new_segment_length = _current_path[_current_path.size() - 2].distance_to(point)
+		_cached_total_length += new_segment_length
+		_cached_segment_lengths.append(_cached_total_length)
 
-		var char_pos = character.global_position
-		char_pos.y = 0
-		if char_pos.distance_to(final_destination) < ally_collision_radius:
-			return true
 
-	return false
+## 現在の全パスをPackedVector3Arrayとして取得（メッシュ更新用）
+func get_current_path_packed() -> PackedVector3Array:
+	var result := PackedVector3Array()
+	for p in _current_path:
+		result.append(p)
+	return result
+
+
+## 残りパスと延長パスを結合して取得（Visionポイント配置用）
+## @return: PackedVector3Array（現在位置から先のパス全体）
+func get_full_remaining_path() -> PackedVector3Array:
+	var result := PackedVector3Array()
+
+	# 残りの元のパス（現在のインデックスから終点まで）
+	for i in range(_path_index, _current_path.size()):
+		result.append(_current_path[i])
+
+	# 延長パスがある場合は追加（最初の点は元のパス終点と重複するのでスキップ）
+	if _extension_handler.has_extension_path() and _extension_handler._extension_path.size() > 0:
+		var ext_path = _extension_handler._extension_path
+		var start_idx = 1 if ext_path[0].distance_to(_current_path[_current_path.size() - 1]) < 0.1 else 0
+		for i in range(start_idx, ext_path.size()):
+			result.append(ext_path[i])
+
+	return result
+
+
+## 残りのパスデータを取得（延長用）
+## @return: { path: Array[Vector3], vision_points: Array, run_segments: Array, ... }
+func get_remaining_path_data() -> Dictionary:
+	if not _is_following or _current_path.size() == 0:
+		return {}
+
+	# 現在のパス終点を返す（延長はパス終点から開始）
+	var endpoint := get_path_endpoint()
+
+	return {
+		"path": [endpoint],  # 延長開始点のみ
+		"endpoint": endpoint,
+		"vision_points": [],  # 延長パスでは新規ポイントのみ
+		"run_segments": [],
+		"clear_points": [],
+		"grenade_points_data": [],
+		"smoke_grenade_points_data": [],
+		"door_points_data": [],
+		"wait_points_data": []
+	}
+
+
+## 延長パスがあるか
+func has_extension_path() -> bool:
+	return _extension_handler.has_extension_path()
+
+
+## 延長パスの終点を取得
+func get_extension_path_endpoint() -> Vector3:
+	return _extension_handler.get_extension_path_endpoint()
+
+
+## 延長パスを設定
+func set_extension_path(extension_path: Array[Vector3], markers: Dictionary, append_to_existing: bool = false) -> void:
+	_extension_handler.set_extension_path(extension_path, markers, append_to_existing)
+
+
+## 延長パスをキャンセル
+func cancel_extension() -> void:
+	_extension_handler.cancel_extension()
+
+
+## 延長パスのデータを取得（さらなる延長用）
+func get_extension_path_data() -> Dictionary:
+	return _extension_handler.get_extension_path_data()
+
+
+## 移動中パスにVisionポイントを追加
+func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_point: Vector3) -> void:
+	_extension_handler.add_vision_point_to_extension(path_ratio, anchor, target_point)
+
+
+## Waitポイントを追加（実行中のパスに）
+func add_wait_point(point_data: Dictionary) -> void:
+	_extension_handler.add_wait_point(point_data)
