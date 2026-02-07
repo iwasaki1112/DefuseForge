@@ -75,7 +75,8 @@ func _initialize_game() -> void:
 	# Providerを初期化（ネットワーク接続などを行う）
 	_mode_provider.initialize(self, game_manager)
 
-	_mode_provider.determine_player_team()
+	# TPS: プレイヤーは常にCT（スポーンがCT固定のため）
+	PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 	_load_map()
 	_spawn_characters()
 	_setup_tps_hud()
