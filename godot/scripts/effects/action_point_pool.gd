@@ -128,6 +128,9 @@ func _reset_point(point: ActionPoint, type_id: int) -> void:
 		ActionPointData.Type.WAIT:
 			# WaitPointには特別なリセットは不要
 			pass
+		ActionPointData.Type.SMOKE_GRENADE:
+			# SmokeGrenadePointには特別なリセットは不要
+			pass
 
 
 ## プールの最大サイズを取得

@@ -16,9 +16,9 @@ signal exploded(position: Vector3)
 
 ## 物理設定
 @export var throw_gravity: float = 9.8  ## 重力
-@export var bounce_factor: float = 0.5  ## 跳ね返り係数
-@export var friction: float = 0.3  ## 摩擦係数
-@export var min_bounce_velocity: float = 0.5  ## バウンス判定の最小速度
+@export var bounce_factor: float = 0.15  ## 跳ね返り係数
+@export var friction: float = 0.5  ## 摩擦係数
+@export var min_bounce_velocity: float = 1.2  ## バウンス判定の最小速度
 @export var collision_radius: float = 0.08  ## 衝突判定の半径
 
 ## 内部状態

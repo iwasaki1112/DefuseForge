@@ -247,7 +247,7 @@ func _free_pending_path_data(data: Dictionary) -> void:
 		PathLineMeshPool.release(data["path_mesh"])
 
 	# ポイントメッシュを解放（プールに返却）
-	var mesh_keys = ["vision_points", "wait_points"]
+	var mesh_keys = ["vision_points", "wait_points", "smoke_grenade_points"]
 	for key in mesh_keys:
 		if data.has(key):
 			PointFactory.free_point_meshes(data[key])

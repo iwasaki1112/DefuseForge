@@ -48,6 +48,7 @@ const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
 # Note: death_left は存在しない → フォールバック処理で対応
 const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
 const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
+const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
 
 # ========================================================
 # Grenade Settings

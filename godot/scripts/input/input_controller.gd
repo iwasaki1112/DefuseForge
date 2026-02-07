@@ -131,6 +131,11 @@ func _handle_mouse_event(event: InputEvent) -> void:
 			_mouse_handler.handle_input(event)
 			return
 
+	# グレネードターゲットモードはパスモードより優先
+	if game_manager.is_grenade_target_mode():
+		_handle_mouse_event_normal_mode(event)
+		return
+
 	# パスモード中の処理
 	if game_manager.is_path_mode():
 		_path_handler.handle_mouse_event_path_mode(event, get_viewport())
@@ -142,6 +147,11 @@ func _handle_mouse_event(event: InputEvent) -> void:
 
 ## 非パスモードのマウス入力処理
 func _handle_mouse_event_normal_mode(event: InputEvent) -> void:
+	# グレネードターゲットモード中のモーション → プレビュー更新
+	if event is InputEventMouseMotion and game_manager.is_grenade_target_mode():
+		game_manager.update_grenade_target_preview(event.position)
+		return
+
 	# 左クリック
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var mouse_event := event as InputEventMouseButton
@@ -185,6 +195,11 @@ func _handle_touch_event(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
+	# グレネードターゲットモードはパスモードより優先
+	if game_manager.is_grenade_target_mode():
+		_handle_touch_event_normal_mode(event, touch_count_before)
+		return
+
 	# パスモード中の処理
 	if game_manager.is_path_mode():
 		_path_handler.handle_touch_event_path_mode(event, get_viewport())
@@ -204,9 +219,16 @@ func _handle_touch_event_normal_mode(event: InputEvent, touch_count_before: int)
 
 	if event is InputEventScreenTouch:
 		if event.pressed:
-			_path_handler.handle_normal_mode_press(event.position, true, get_viewport())
+			# グレネードターゲットモード中はプレビュー初回表示
+			if game_manager.is_grenade_target_mode():
+				game_manager.update_grenade_target_preview(event.position)
+			else:
+				_path_handler.handle_normal_mode_press(event.position, true, get_viewport())
 		else:
-			if _path_handler.handle_normal_mode_release(event.position, true):
+			# グレネードターゲットモード中はリリースで直接タップ確定
+			if game_manager.is_grenade_target_mode():
+				_handle_tap(event.position)
+			elif _path_handler.handle_normal_mode_release(event.position, true):
 				_handle_tap(event.position)
 		get_viewport().set_input_as_handled()
 		return
@@ -222,6 +244,11 @@ func _handle_touch_event_normal_mode(event: InputEvent, touch_count_before: int)
 
 ## 非パスモードのドラッグ処理
 func _handle_normal_mode_drag(position: Vector2, is_touch: bool) -> void:
+	# グレネードターゲットモード中はプレビュー更新のみ
+	if game_manager.is_grenade_target_mode():
+		game_manager.update_grenade_target_preview(position)
+		return
+
 	var should_update_camera = _path_handler.handle_normal_mode_drag(position, is_touch, get_viewport())
 
 	# カメラパン処理

@@ -33,6 +33,8 @@ signal path_progress_updated(character: Node)
 signal extension_points_scaled(character: Node, scale: float)
 ## 同期待機状態変更シグナル（HUD更新用）
 signal sync_wait_state_changed(has_waiting: bool)
+## グレネード投擲リリースシグナル（GrenadeService呼び出し用）
+signal grenade_throw_released(character: CharacterBody3D, target_pos: Vector3)
 
 ## ポイントタイプのエイリアス
 const PointType = ActionPointData.Type
@@ -113,6 +115,7 @@ func start_realtime_path(character: Node, start_point: Vector3, is_continuation:
 		"path": path,
 		"vision_points_data": [],
 		"wait_points_data": [],
+		"smoke_grenade_points_data": [],
 		"path_mesh": path_mesh,
 		"vision_points": [],
 		"wait_points": []
@@ -306,6 +309,7 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 		var path := _copy_vector3_array(data.get("path", []))
 		var vision_points := _copy_dict_array(data.get("vision_points_data", []))
 		var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
+		var smoke_grenade_points := _copy_dict_array(data.get("smoke_grenade_points_data", []))
 
 		if not is_instance_valid(character):
 			continue
@@ -314,6 +318,7 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 		# pending_pathsの"vision_points"にマーカーが保存されている
 		var existing_vision_markers: Array = data.get("vision_points", [])
 		var existing_wait_markers: Array = data.get("wait_points", [])
+		var existing_smoke_markers: Array = data.get("smoke_grenade_points", [])
 
 		# position-baseでマーカーとpoint_dataをマッチング
 		for vp in vision_points:
@@ -344,6 +349,25 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 					wp["marker"] = marker
 					break
 
+		for sgp in smoke_grenade_points:
+			if sgp.has("marker") and is_instance_valid(sgp.get("marker")):
+				continue
+			var anchor: Vector3 = sgp.get("anchor", Vector3.ZERO)
+			var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+			var target: Vector3 = sgp.get("target_pos", Vector3.ZERO)
+			var target_flat = Vector3(target.x, 0.0, target.z)
+			for marker in existing_smoke_markers:
+				if not is_instance_valid(marker):
+					continue
+				var marker_pos = marker.global_position
+				marker_pos.y = 0.0
+				# アンカーマーカー
+				if not sgp.has("marker") and marker_pos.distance_to(anchor_flat) < 0.1:
+					sgp["marker"] = marker
+				# 着弾マーカー
+				elif not sgp.has("target_marker") and target_flat != Vector3.ZERO and marker_pos.distance_to(target_flat) < 0.3:
+					sgp["target_marker"] = marker
+
 		# コントローラーを取得または作成
 		var controller = _get_or_create_path_controller(character)
 		controller.setup(character)
@@ -356,7 +380,7 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 		var empty_clear: Array[Dictionary] = []
 		var empty_grenade: Array[Dictionary] = []
 		var empty_door: Array[Dictionary] = []
-		if controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data):
+		if controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data, smoke_grenade_points):
 			executed_count += 1
 
 	# ポイントデータのみクリア（パスとメッシュは残す）
@@ -367,6 +391,7 @@ func execute_all_paths(run: bool, local_only: bool = false) -> int:
 		# メッシュは通過時に非表示にするため残す
 		data.erase("vision_points_data")
 		data.erase("wait_points_data")
+		data.erase("smoke_grenade_points_data")
 		data.erase("character")
 
 	paths_execution_started.emit(executed_count)
@@ -393,6 +418,7 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 	var path := _copy_vector3_array(data.get("path", []))
 	var vision_points := _copy_dict_array(data.get("vision_points_data", []))
 	var wait_points_data := _copy_dict_array(data.get("wait_points_data", []))
+	var smoke_grenade_points := _copy_dict_array(data.get("smoke_grenade_points_data", []))
 
 	if not is_instance_valid(character):
 		return false
@@ -429,6 +455,26 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 				wp["marker"] = marker
 				break
 
+	var existing_smoke_markers: Array = data.get("smoke_grenade_points", [])
+	for sgp in smoke_grenade_points:
+		if sgp.has("marker") and is_instance_valid(sgp.get("marker")):
+			continue
+		var anchor: Vector3 = sgp.get("anchor", Vector3.ZERO)
+		var anchor_flat = Vector3(anchor.x, 0.0, anchor.z)
+		var target: Vector3 = sgp.get("target_pos", Vector3.ZERO)
+		var target_flat = Vector3(target.x, 0.0, target.z)
+		for marker in existing_smoke_markers:
+			if not is_instance_valid(marker):
+				continue
+			var marker_pos = marker.global_position
+			marker_pos.y = 0.0
+			# アンカーマーカー
+			if not sgp.has("marker") and marker_pos.distance_to(anchor_flat) < 0.1:
+				sgp["marker"] = marker
+			# 着弾マーカー
+			elif not sgp.has("target_marker") and target_flat != Vector3.ZERO and marker_pos.distance_to(target_flat) < 0.3:
+				sgp["target_marker"] = marker
+
 	# コントローラーを取得または作成
 	var controller = _get_or_create_path_controller(character)
 	controller.setup(character)
@@ -441,12 +487,13 @@ func execute_path_for_character(character: Node, run: bool) -> bool:
 	var empty_clear: Array[Dictionary] = []
 	var empty_grenade: Array[Dictionary] = []
 	var empty_door: Array[Dictionary] = []
-	var success: bool = controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data)
+	var success: bool = controller.start_path(path, vision_points, empty_run, run, empty_clear, empty_grenade, empty_door, wait_points_data, smoke_grenade_points)
 
 	if success:
 		# ポイントデータのみクリア（パスとメッシュは残す）
 		data.erase("vision_points_data")
 		data.erase("wait_points_data")
+		data.erase("smoke_grenade_points_data")
 		data.erase("character")
 		paths_execution_started.emit(1)
 
@@ -911,6 +958,56 @@ func add_sync_wait_point_to_path(character: Node, path_ratio: float, anchor: Vec
 			path_data["wait_points"].append(visual_point)
 
 
+## 確認済みパスにスモークグレネードポイントを追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: ポイントの3D位置
+## @param target_pos: グレネードの落下地点
+func add_smoke_grenade_point_to_path(character: Node, path_ratio: float, anchor: Vector3, target_pos: Vector3) -> void:
+	if not character:
+		return
+
+	var char_id = character.get_instance_id()
+	var point_data = {
+		"path_ratio": path_ratio,
+		"anchor": anchor,
+		"target_pos": target_pos
+	}
+
+	# 移動中のパスに追加
+	if _path_controllers.has(char_id):
+		var controller = _path_controllers[char_id]
+		if controller.is_following_path():
+			controller.add_smoke_grenade_point(point_data)
+
+			# 視覚的なポイントメッシュを作成（アンカー + 着弾地点）
+			var char_color = CharacterColorManager.get_character_color(character)
+			var visual_point = PointFactory.create_smoke_grenade_point(anchor, target_pos, char_color, _mesh_parent)
+			_point_mesh_manager.add_moving_path_point(char_id, PointType.SMOKE_GRENADE, visual_point)
+			var target_marker = PointFactory.create_smoke_grenade_target_marker(target_pos, char_color, _mesh_parent)
+			_point_mesh_manager.add_moving_path_point(char_id, PointType.SMOKE_GRENADE, target_marker)
+			return
+
+	# 確定済み（未実行）のパスに追加
+	if _path_store.pending_paths.has(char_id):
+		var path_data = _path_store.pending_paths[char_id]
+		if not path_data.has("smoke_grenade_points_data"):
+			path_data["smoke_grenade_points_data"] = []
+		path_data["smoke_grenade_points_data"].append(point_data)
+
+		# 視覚的なポイントメッシュを作成（pending_pathsにも参照を保存）
+		if not path_data.has("smoke_grenade_points"):
+			path_data["smoke_grenade_points"] = []
+		var char_color = CharacterColorManager.get_character_color(character)
+		var visual_point = PointFactory.create_smoke_grenade_point(anchor, target_pos, char_color, _mesh_parent)
+		if visual_point:
+			path_data["smoke_grenade_points"].append(visual_point)
+		# 着弾地点マーカー
+		var target_marker = PointFactory.create_smoke_grenade_target_marker(target_pos, char_color, _mesh_parent)
+		if target_marker:
+			path_data["smoke_grenade_points"].append(target_marker)
+
+
 ## 全てのパス追従をキャンセル
 func cancel_all_path_following() -> void:
 	for controller in _path_controllers.values():
@@ -1009,6 +1106,8 @@ func _get_or_create_path_controller(character: Node) -> Node:
 	controller.sync_wait_started.connect(_on_sync_wait_started)
 	controller.sync_wait_released.connect(_on_sync_wait_released)
 	controller.wait_point_reached.connect(_on_wait_point_reached.bind(character))
+	controller.smoke_grenade_point_reached.connect(_on_smoke_grenade_point_reached.bind(character))
+	controller.grenade_throw_released.connect(_on_grenade_throw_released)
 
 	# Connect combat awareness for automatic enemy aiming during movement
 	if character.combat_awareness:
@@ -1120,6 +1219,17 @@ func _on_vision_point_reached(_index: int, point_data: Dictionary, character: No
 ## 通過したWaitポイントを非表示にする
 func _on_wait_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
 	_point_mesh_manager.on_point_reached(PointType.WAIT, _index, point_data, character, _path_store.pending_paths)
+
+
+## スモークグレネードポイント到達時のコールバック
+func _on_smoke_grenade_point_reached(_index: int, point_data: Dictionary, character: Node) -> void:
+	# マーカーを非表示にする
+	_point_mesh_manager.on_point_reached(PointType.SMOKE_GRENADE, _index, point_data, character, _path_store.pending_paths)
+
+
+## グレネード投擲リリース時のコールバック（GrenadeServiceに委譲）
+func _on_grenade_throw_released(character: CharacterBody3D, target_pos: Vector3) -> void:
+	grenade_throw_released.emit(character, target_pos)
 
 
 ## 延長ポイントの比率がスケールされた時のコールバック

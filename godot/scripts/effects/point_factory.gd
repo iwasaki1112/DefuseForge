@@ -133,6 +133,46 @@ static func create_wait_point_from_dict(
 	return create_wait_point(anchor, duration, char_color, parent)
 
 
+## SmokeGrenadePointを作成
+## @param anchor: パス上のアンカー位置
+## @param target_pos: グレネードの着弾位置
+## @param char_color: キャラクター色
+## @param parent: 親ノード（nullの場合はadd_childしない）
+## @return: 作成したSmokeGrenadePointメッシュ
+static func create_smoke_grenade_point(
+	anchor: Vector3,
+	target_pos: Vector3,
+	char_color: Color,
+	parent: Node = null
+) -> MeshInstance3D:
+	# プールから取得
+	var point = ActionPointPool.acquire(PointType.SMOKE_GRENADE)
+
+	if parent:
+		parent.add_child(point)
+
+	point.set_point_position(anchor)
+	point.set_colors(char_color, Color(1.0, 1.0, 1.0, 1.0))
+
+	return point
+
+
+## SmokeGrenadePointを作成（Dictionaryから）
+## @param data: { anchor, target_pos }
+## @param char_color: キャラクター色
+## @param parent: 親ノード（nullの場合はadd_childしない）
+## @return: 作成したSmokeGrenadePointメッシュ
+static func create_smoke_grenade_point_from_dict(
+	data: Dictionary,
+	char_color: Color,
+	parent: Node = null
+) -> MeshInstance3D:
+	var anchor: Vector3 = data.get("anchor", Vector3.ZERO)
+	var target_pos: Vector3 = data.get("target_pos", Vector3.ZERO)
+
+	return create_smoke_grenade_point(anchor, target_pos, char_color, parent)
+
+
 ## ポイントタイプに応じてポイントを作成
 ## @param point_type: PointType
 ## @param data: ポイントデータのDictionary
@@ -150,6 +190,8 @@ static func create_point_by_type(
 			return create_vision_point_from_dict(data, char_color, parent)
 		PointType.WAIT:
 			return create_wait_point_from_dict(data, char_color, parent)
+		PointType.SMOKE_GRENADE:
+			return create_smoke_grenade_point_from_dict(data, char_color, parent)
 		_:
 			push_warning("[PointFactory] Unknown point type: %d" % point_type)
 			return null
@@ -204,3 +246,74 @@ static func create_wait_point_preview(
 	point.set_colors(bg_color, fg_color)
 
 	return point
+
+
+## スモークグレネード着弾マーカーを作成（リング状）
+## @param target_pos: 着弾位置
+## @param char_color: キャラクター色
+## @param parent: 親ノード
+## @return: 作成したMeshInstance3D
+static func create_smoke_grenade_target_marker(
+	target_pos: Vector3,
+	char_color: Color,
+	parent: Node = null
+) -> MeshInstance3D:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = "SmokeGrenadeTarget"
+
+	if parent:
+		parent.add_child(mesh_instance)
+
+	# ノード位置を着弾地点にセット
+	mesh_instance.position = Vector3(target_pos.x, 0.15, target_pos.z)
+
+	# リングメッシュを作成（ローカル座標: 原点中心）
+	var ring_radius := 0.25
+	var ring_thickness := 0.05
+	var ring_segments := 24
+
+	var array_mesh := ArrayMesh.new()
+	var vertices := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	var inner_radius := ring_radius - ring_thickness
+
+	for i in range(ring_segments):
+		var angle := TAU * i / ring_segments
+		var cos_a := cos(angle)
+		var sin_a := sin(angle)
+		vertices.append(Vector3(cos_a * inner_radius, 0.0, sin_a * inner_radius))
+		vertices.append(Vector3(cos_a * ring_radius, 0.0, sin_a * ring_radius))
+
+	for i in range(ring_segments):
+		var ci := i * 2
+		var co := i * 2 + 1
+		var ni := ((i + 1) % ring_segments) * 2
+		var no := ((i + 1) % ring_segments) * 2 + 1
+		indices.append(ci)
+		indices.append(co)
+		indices.append(ni)
+		indices.append(co)
+		indices.append(no)
+		indices.append(ni)
+
+	if vertices.size() > 0:
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_INDEX] = indices
+		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(char_color.r, char_color.g, char_color.b, 0.7)
+		mat.emission_enabled = true
+		mat.emission = char_color
+		mat.emission_energy_multiplier = 1.2
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.render_priority = 2
+		array_mesh.surface_set_material(0, mat)
+
+	mesh_instance.mesh = array_mesh
+	return mesh_instance

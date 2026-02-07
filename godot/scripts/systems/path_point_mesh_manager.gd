@@ -140,6 +140,7 @@ func on_point_reached(point_type: int, _index: int, point_data: Dictionary, char
 		var marker = point_data.marker
 		if is_instance_valid(marker) and marker.visible:
 			marker.visible = false
+		# 着弾マーカーはグレネード爆発時に非表示にするためここでは触らない
 		return
 
 	# フォールバック: 移動中パスの動的ポイント（マーカー参照なし）
@@ -150,7 +151,14 @@ func on_point_reached(point_type: int, _index: int, point_data: Dictionary, char
 	var moving_points: Array = get_moving_path_points(char_id, point_type)
 
 	# ポイントタイプに応じたpending_pathsのキー名
-	var point_key: String = "vision_points" if point_type == PointType.VISION else "wait_points"
+	var point_key: String
+	match point_type:
+		PointType.VISION:
+			point_key = "vision_points"
+		PointType.SMOKE_GRENADE:
+			point_key = "smoke_grenade_points"
+		_:
+			point_key = "wait_points"
 
 	# フォールバック: 位置ベースマッチング（移動中パスなど）
 	if anchor != Vector3.ZERO:

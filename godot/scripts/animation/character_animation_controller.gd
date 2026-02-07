@@ -11,6 +11,8 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 signal fired()
 signal door_kick_impact()   # キックがドアに当たるタイミング（フレーム36/66）
 signal door_kick_finished() # アニメーション完了
+signal throw_release()      # グレネードをリリースするタイミング（フレーム50/120）
+signal throw_finished()     # 投擲アニメーション完了
 
 # Export settings
 @export_group("Movement Speed")
@@ -45,6 +47,7 @@ var _lean_modifier: SkeletonModifier3D
 var _weapon := Weapon.RIFLE
 var _is_dead := false
 var _is_door_kicking := false
+var _is_throwing := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
@@ -65,6 +68,10 @@ const DEATH_ANIM_RIGHT := GameConstants.ANIM_DEATH_RIGHT
 const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
 const PISTOL_DOOR_KICK_ANIM := GameConstants.ANIM_PISTOL_DOOR_KICK
 const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレーム36 / 30fps）
+
+# Throw animation
+const PISTOL_LOW_THROWING_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING
+const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50 / 30fps）
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -109,7 +116,7 @@ func update_animation(
 	_is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_door_kicking:
+	if _is_dead or _is_door_kicking or _is_throwing:
 		return
 
 	# エイム方向を保存（視界計算用）
@@ -169,7 +176,7 @@ func fire() -> void:
 ## Get current movement speed based on state and direction
 ## Returns the animation's visual speed for the current blend direction
 func get_current_speed() -> float:
-	if _is_dead or _is_door_kicking:
+	if _is_dead or _is_door_kicking or _is_throwing:
 		return 0.0
 	# Calculate direction-based speed from current blend position
 	return _get_directional_anim_speed()
@@ -375,13 +382,62 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 
 ## ドアキック後のAnimationTree再開
 func _resume_animation_tree() -> void:
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing:
 		_anim_tree.active = true
 
 
 ## Check if door kick animation is playing
 func is_door_kicking() -> bool:
 	return _is_door_kicking
+
+
+## Play throw animation (underhand grenade throw with pistol)
+func play_throw() -> void:
+	if _is_dead or _is_door_kicking or _is_throwing:
+		return
+
+	_is_throwing = true
+
+	# Stop AnimationTree during throw
+	if _anim_tree:
+		_anim_tree.active = false
+
+	# Play throw animation
+	if _anim_player.has_animation(PISTOL_LOW_THROWING_ANIM):
+		_anim_player.play(PISTOL_LOW_THROWING_ANIM)
+		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
+		# リリースタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(THROW_RELEASE_TIME).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Throw animation not found: %s" % PISTOL_LOW_THROWING_ANIM)
+		_is_throwing = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+func _on_throw_release() -> void:
+	if _is_throwing:
+		throw_release.emit()
+
+
+func _on_throw_finished(_anim_name: String) -> void:
+	_is_throwing = false
+
+	# スムーズにアイドルへ遷移してからAnimationTreeを再開
+	if _anim_player and not _is_dead:
+		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
+	throw_finished.emit()
+
+
+## Check if throw animation is playing
+func is_throwing() -> bool:
+	return _is_throwing
 
 
 ## Get current animation state for network synchronization
@@ -398,7 +454,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_door_kicking:
+	if _is_dead or _is_door_kicking or _is_throwing:
 		return
 
 	var parts := state.split(",")

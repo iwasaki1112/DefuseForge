@@ -16,7 +16,8 @@ extends RefCounted
 ## ポイントタイプ
 enum Type {
 	VISION,
-	WAIT
+	WAIT,
+	SMOKE_GRENADE
 }
 
 ## ポイントタイプ
@@ -101,6 +102,8 @@ static func create(point_type: Type) -> ActionPointData:
 			return VisionPointData.new()
 		Type.WAIT:
 			return WaitPointData.new()
+		Type.SMOKE_GRENADE:
+			return SmokeGrenadePointData.new()
 		_:
 			return ActionPointData.new()
 
@@ -229,4 +232,37 @@ class WaitPointData extends ActionPointData:
 		# PathFollowingControllerのpublicメソッドを使用
 		controller.apply_wait_effect(point_index, to_dict(), wait_duration)
 		return true
+#endregion
+
+
+#region Smoke Grenade Point Data
+class SmokeGrenadePointData extends ActionPointData:
+	## グレネードの着弾位置
+	var target_pos: Vector3 = Vector3.ZERO
+
+	func _init() -> void:
+		type = Type.SMOKE_GRENADE
+
+	func to_dict() -> Dictionary:
+		var data = super.to_dict()
+		data["target_pos"] = target_pos
+		return data
+
+	func from_dict(data: Dictionary) -> void:
+		super.from_dict(data)
+		if data.has("target_pos"):
+			target_pos = data.target_pos
+
+	func create_point_node() -> Node3D:
+		# SmokeGrenadePointはclass_name定義済みなので直接参照（iOS互換）
+		return SmokeGrenadePoint.new()
+
+	func get_reached_result() -> Dictionary:
+		var result = super.get_reached_result()
+		result["target_pos"] = target_pos
+		return result
+
+	func apply_reached_effect(_controller: Node, _point_index: int) -> bool:
+		# スモークグレネードは信号ベースで投擲処理を行うため、ここでは何もしない
+		return false
 #endregion

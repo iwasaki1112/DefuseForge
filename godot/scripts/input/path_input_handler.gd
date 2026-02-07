@@ -106,6 +106,15 @@ const DOUBLE_TAP_THRESHOLD_MS: int = 300
 #endregion
 
 
+#region コンテキストメニュー遅延表示
+
+var _context_menu_timer: SceneTreeTimer = null
+var _pending_context_menu_screen_pos: Vector2 = Vector2.ZERO
+var _pending_context_menu_path_data: Dictionary = {}
+
+#endregion
+
+
 #region 初期化
 
 func setup(manager: GameManager, cam_handler: CameraInputHandler) -> void:
@@ -517,6 +526,10 @@ func handle_normal_mode_press(position: Vector2, is_touch: bool, viewport: Viewp
 	left_click_start_pos = position
 	_long_press_timer = 0.0
 
+	# グレネードターゲット選択モード中はパス操作をバイパス
+	if game_manager.is_grenade_target_mode():
+		return
+
 	# キャラクターがクリックされたか確認
 	var clicked = game_manager.raycast_character(position)
 	if clicked and not PlayerState.is_enemy(clicked):
@@ -615,6 +628,10 @@ func handle_normal_mode_release(position: Vector2, is_touch: bool) -> bool:
 ## 非パスモードのドラッグ処理
 ## @return: カメラパン処理を実行すべきかどうか
 func handle_normal_mode_drag(position: Vector2, is_touch: bool, viewport: Viewport) -> bool:
+	# グレネードターゲットモード中はカメラパン/パス操作をバイパス
+	if game_manager.is_grenade_target_mode():
+		return false
+
 	var current_frame = Engine.get_process_frames()
 	var just_ended = (current_frame == _path_mode_ended_frame)
 	if Debug.enabled: print("[PointDebug] non-path_mode drag: frame=%d, ended_frame=%d, just_ended=%s, ext_pending=%s" % [
@@ -928,13 +945,17 @@ func _handle_path_tap_for_confirmed_path() -> void:
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
 		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: DOUBLE TAP DETECTED - adding wait point")
+		# ダブルタップ: コンテキストメニュータイマーをキャンセルしてWaitPoint直接追加
+		_cancel_context_menu_timer()
 		game_manager.add_sync_wait_point(_confirmed_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
-		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, saving for next")
+		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, starting context menu timer")
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _confirmed_path_tap_path_data.duplicate()
+		# シングルタップ: 300ms後にコンテキストメニュー表示
+		_start_context_menu_timer(_confirmed_path_longpress_screen_pos, _confirmed_path_tap_path_data)
 
 #endregion
 
@@ -1033,12 +1054,16 @@ func _handle_path_tap_for_moving_path() -> void:
 	var is_same_path := _is_same_path(_last_path_tap_path_data, _moving_path_tap_path_data)
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
+		# ダブルタップ: コンテキストメニュータイマーをキャンセルしてWaitPoint直接追加
+		_cancel_context_menu_timer()
 		game_manager.add_sync_wait_point(_moving_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _moving_path_tap_path_data.duplicate()
+		# シングルタップ: 300ms後にコンテキストメニュー表示
+		_start_context_menu_timer(_moving_path_longpress_screen_pos, _moving_path_tap_path_data)
 
 
 func _is_same_path(data1: Dictionary, data2: Dictionary) -> bool:
@@ -1092,6 +1117,39 @@ func _on_endpoint_drag_detected(screen_pos: Vector2) -> void:
 		if path_drawer:
 			path_drawer.handle_drawing_press(screen_pos)
 		if Debug.enabled: print("[PointDebug] _on_endpoint_drag_detected: path continuation started")
+
+#endregion
+
+
+#region コンテキストメニュータイマー
+
+## コンテキストメニュー表示の遅延タイマーを開始（300ms）
+func _start_context_menu_timer(screen_pos: Vector2, path_data: Dictionary) -> void:
+	_cancel_context_menu_timer()
+	_pending_context_menu_screen_pos = screen_pos
+	_pending_context_menu_path_data = path_data.duplicate()
+	if game_manager:
+		_context_menu_timer = game_manager.get_tree().create_timer(0.3)
+		_context_menu_timer.timeout.connect(_on_context_menu_timer_timeout, CONNECT_ONE_SHOT)
+
+
+## コンテキストメニュータイマーをキャンセル
+func _cancel_context_menu_timer() -> void:
+	if _context_menu_timer and _context_menu_timer.timeout.is_connected(_on_context_menu_timer_timeout):
+		_context_menu_timer.timeout.disconnect(_on_context_menu_timer_timeout)
+	_context_menu_timer = null
+	_pending_context_menu_screen_pos = Vector2.ZERO
+	_pending_context_menu_path_data = {}
+
+
+## コンテキストメニュータイマー完了時のコールバック
+func _on_context_menu_timer_timeout() -> void:
+	_context_menu_timer = null
+	if _pending_context_menu_path_data.is_empty() or not game_manager:
+		return
+	game_manager.show_path_context_menu(_pending_context_menu_screen_pos, _pending_context_menu_path_data)
+	_pending_context_menu_screen_pos = Vector2.ZERO
+	_pending_context_menu_path_data = {}
 
 #endregion
 
