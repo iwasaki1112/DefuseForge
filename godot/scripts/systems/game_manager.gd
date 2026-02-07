@@ -101,6 +101,9 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_path_drawer()
 	_setup_path_mode_controller()
 	_setup_vision_service()
+	# VisionService初期化後にFoWシステムをGrenadeServiceに渡す（リモートグレネードのFoW可視性用）
+	if grenade_service and fog_of_war_system:
+		grenade_service.set_fow_system(fog_of_war_system)
 	_setup_map_manager()
 	_setup_path_service()
 	_setup_round_manager()
@@ -1259,10 +1262,14 @@ func _on_grenade_throw_released(character: CharacterBody3D, target_pos: Vector3)
 
 	var result := grenade_service.spawn_and_throw_smoke_grenade(start_pos, target_pos, character)
 	var smoke_grenade = result[0]
+	var velocity: Vector3 = result[1]
+	var grenade_id: int = result[2]
 	if smoke_grenade:
 		if target_marker:
 			smoke_grenade.exploded.connect(_on_smoke_grenade_exploded_hide_marker.bind(target_marker))
 		smoke_grenade_thrown.emit(smoke_grenade, character)
+		# マルチプレイヤー同期: ネットワークイベントを送信
+		_emit_grenade_network_event(start_pos, velocity, true, grenade_id)
 
 
 ## スモークグレネード爆発時に着弾マーカーを非表示

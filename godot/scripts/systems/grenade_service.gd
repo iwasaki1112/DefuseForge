@@ -25,6 +25,7 @@ var _next_grenade_id: int = 1
 ## 外部参照
 var _mesh_parent: Node3D = null
 var _smoke_area_manager: SmokeAreaManager = null
+var _fow_system = null  ## FogOfWarSystem参照（リモートグレネードのFoW可視性用）
 
 
 func _init() -> void:
@@ -41,6 +42,11 @@ func setup(mesh_parent: Node3D, smoke_area_manager: SmokeAreaManager = null) -> 
 ## スモークエリアマネージャーを設定
 func set_smoke_area_manager(manager: SmokeAreaManager) -> void:
 	_smoke_area_manager = manager
+
+
+## FogOfWarSystemを設定（リモートグレネードのFoW可視性チェック用）
+func set_fow_system(fow) -> void:
+	_fow_system = fow
 
 
 ## グレネードを生成して投擲
@@ -121,6 +127,8 @@ func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_i
 	# リモートグレネードとしてマーク
 	grenade.is_remote = true
 	grenade.network_grenade_id = grenade_id
+	if _fow_system:
+		grenade.set_fow_system(_fow_system)
 
 	# 追跡（爆発イベント受信用）
 	if grenade_id > 0:
@@ -149,6 +157,8 @@ func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, gre
 	# リモートグレネードとしてマーク
 	smoke_grenade.is_remote = true
 	smoke_grenade.network_grenade_id = grenade_id
+	if _fow_system:
+		smoke_grenade.set_fow_system(_fow_system)
 
 	# 追跡（爆発イベント受信用）
 	if grenade_id > 0:

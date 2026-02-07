@@ -162,6 +162,10 @@ func _check_enemy_visibility(enemy: Node) -> void:
 	var enemy_pos: Vector3 = enemy_node3d.global_position
 	var is_visible := _is_position_visible_to_friendlies(enemy_pos)
 
+	# スモーク内の敵は常に非表示（FoWテクスチャだけではスモーク内部手前側が可視になるため）
+	if is_visible and _smoke_area_manager and _smoke_area_manager.is_position_in_smoke(enemy_pos):
+		is_visible = false
+
 	var instance_id := enemy.get_instance_id()
 
 	# Update only if changed
