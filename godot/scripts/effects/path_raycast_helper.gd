@@ -22,9 +22,9 @@ static func check_wall_between(
 	if not space_state:
 		return { "hit": false }
 
-	# 地面ギリギリを避けるため、少し高さを上げてレイキャスト
-	var check_from = from + Vector3(0, 0.5, 0)
-	var check_to = to + Vector3(0, 0.5, 0)
+	# 壁レイヤーのみ検出するため地面には当たらない。低い障害物も検出できるよう控えめに上げる
+	var check_from = from + Vector3(0, 0.1, 0)
+	var check_to = to + Vector3(0, 0.1, 0)
 
 	var query = PhysicsRayQueryParameters3D.create(check_from, check_to, wall_collision_mask)
 
