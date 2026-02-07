@@ -141,7 +141,7 @@ static func create_wait_point_from_dict(
 ## @return: 作成したSmokeGrenadePointメッシュ
 static func create_smoke_grenade_point(
 	anchor: Vector3,
-	target_pos: Vector3,
+	_target_pos: Vector3,
 	char_color: Color,
 	parent: Node = null
 ) -> MeshInstance3D:

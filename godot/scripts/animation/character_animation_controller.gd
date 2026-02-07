@@ -320,9 +320,9 @@ func _pick_death_anim(hit_direction: HitDirection) -> String:
 		_:
 			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
 
-	for name in candidates:
-		if _anim_player.has_animation(name):
-			return name
+	for anim_name in candidates:
+		if _anim_player.has_animation(anim_name):
+			return anim_name
 	return ""
 
 func _on_death_animation_finished(_anim_name: String) -> void:
