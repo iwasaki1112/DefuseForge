@@ -86,6 +86,7 @@ var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0
 var _weapon_blend := 0.0
 var _fire_cooldown := 0.0
+var _walk_time_scale := 1.0  # 移動速度に連動するアニメーション再生速度
 
 # Internal nodes
 
@@ -827,7 +828,8 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	var move_dir := movement_direction
 	move_dir.y = 0
 
-	if move_dir.length() > 0.1:
+	var move_len := move_dir.length()
+	if move_len > 0.1:
 		var char_forward := _model.global_transform.basis.z
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 		var target_blend := Vector2(-sin(angle), -cos(angle))
@@ -837,11 +839,16 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		var blend_speed := 12.0  # Higher = faster response
 		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
+
+		# TimeScaleを速度比に連動（0.3下限で極端なスロー再生を防ぐ）
+		var target_scale := clampf(move_len, 0.3, 1.0)
+		_walk_time_scale = lerpf(_walk_time_scale, target_scale, 1.0 - exp(-10.0 * delta))
 	else:
 		# Quick fade to idle when stopped
 		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
+		_walk_time_scale = lerpf(_walk_time_scale, 1.0, 1.0 - exp(-6.0 * delta))
 
 func _update_animation_tree() -> void:
 	if not _anim_tree or not _anim_tree.active:
@@ -852,11 +859,8 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 
-	# TimeScale = 1.0 for walk animations
-	# Movement speed is adjusted per-direction to match animation visual speed
-	# This ensures feet don't slide regardless of movement direction
-	var walk_scale: float = 1.0
-	_anim_tree.set("parameters/WalkSpeed/scale", walk_scale)
+	# TimeScale を移動速度比に連動（加減速時に足のテンポが追従）
+	_anim_tree.set("parameters/WalkSpeed/scale", _walk_time_scale)
 
 	# Update blend amounts
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
