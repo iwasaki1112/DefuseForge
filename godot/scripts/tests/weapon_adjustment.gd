@@ -49,6 +49,9 @@ extends Node3D
 @onready var muzzle_preview_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/MuzzlePreviewToggle
 @onready var camera: Camera3D = $Camera3D
 
+# Preset value display (bone-local values for copying to .tres)
+var _preset_label: Label = null
+
 # Data
 var character: GameCharacter
 var characters: Array[CharacterPreset] = []
@@ -279,20 +282,24 @@ func _select_weapon(idx: int) -> void:
 	if character:
 		character.update_muzzle_flash_preview()
 
-func _set_ui_values(pos: Vector3, rot: Vector3) -> void:
+func _set_ui_values(pos: Vector3, rot_bone_local: Vector3) -> void:
 	pos_x_spin.set_value_no_signal(pos.x)
 	pos_x_slider.set_value_no_signal(pos.x)
 	pos_y_spin.set_value_no_signal(pos.y)
 	pos_y_slider.set_value_no_signal(pos.y)
 	pos_z_spin.set_value_no_signal(pos.z)
 	pos_z_slider.set_value_no_signal(pos.z)
-	
-	rot_x_spin.set_value_no_signal(rot.x)
-	rot_x_slider.set_value_no_signal(rot.x)
-	rot_y_spin.set_value_no_signal(rot.y)
-	rot_y_slider.set_value_no_signal(rot.y)
-	rot_z_spin.set_value_no_signal(rot.z)
-	rot_z_slider.set_value_no_signal(rot.z)
+
+	# Convert bone-local rotation to model space for intuitive display
+	var rot_model := _bone_local_to_model_space(rot_bone_local)
+	rot_x_spin.set_value_no_signal(rot_model.x)
+	rot_x_slider.set_value_no_signal(rot_model.x)
+	rot_y_spin.set_value_no_signal(rot_model.y)
+	rot_y_slider.set_value_no_signal(rot_model.y)
+	rot_z_spin.set_value_no_signal(rot_model.z)
+	rot_z_slider.set_value_no_signal(rot_model.z)
+
+	_update_preset_display()
 
 
 func _set_muzzle_ui_values(pos: Vector3, scale: float, rot: Vector3) -> void:
@@ -318,12 +325,27 @@ func _update_transform() -> void:
 	var socket = character.get_weapon_socket()
 	if not socket:
 		return
-		
-	var pos = Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
-	var rot = Vector3(rot_x_spin.value, rot_y_spin.value, rot_z_spin.value)
-	
-	socket.position = pos
-	socket.rotation_degrees = rot
+
+	socket.position = Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
+
+	# UI values are in model space (intuitive: X=pitch, Y=yaw, Z=roll)
+	# Use ZYX Euler order so gimbal lock occurs at Y=±90° (not X=±90°)
+	# Weapons typically have large X rotation (~-90°) but moderate Y, so ZYX avoids the singularity
+	var rot_rad := Vector3(
+		deg_to_rad(rot_x_spin.value),
+		deg_to_rad(rot_y_spin.value),
+		deg_to_rad(rot_z_spin.value)
+	)
+	var model_space_basis := Basis.from_euler(rot_rad, EULER_ORDER_ZYX)
+
+	var bone_attachment := socket.get_parent() as Node3D
+	var model := character.find_child("CharacterModel") as Node3D
+	if bone_attachment and model:
+		socket.basis = bone_attachment.global_transform.basis.inverse() * model.global_transform.basis * model_space_basis
+	else:
+		socket.rotation_degrees = Vector3(rot_x_spin.value, rot_y_spin.value, rot_z_spin.value)
+
+	_update_preset_display()
 
 func _update_muzzle_flash() -> void:
 	var weapon = _get_current_weapon()
@@ -389,6 +411,15 @@ func _update_quad1_z() -> void:
 func _setup_camera_buttons() -> void:
 	var vbox = $UI/Panel/VBox
 
+	# Preset value display (bone-local values for .tres)
+	var preset_sep = HSeparator.new()
+	vbox.add_child(preset_sep)
+	_preset_label = Label.new()
+	_preset_label.text = "Preset: -"
+	_preset_label.add_theme_font_size_override("font_size", 11)
+	_preset_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	vbox.add_child(_preset_label)
+
 	# Add separator
 	var sep = HSeparator.new()
 	vbox.add_child(sep)
@@ -431,3 +462,49 @@ func _setup_camera_buttons() -> void:
 func _set_camera_yaw(yaw: float) -> void:
 	if camera:
 		camera.set_yaw(yaw)
+
+
+## Convert bone-local rotation (degrees) to model-space ZYX Euler (degrees)
+func _bone_local_to_model_space(rot_bone_deg: Vector3) -> Vector3:
+	if not character:
+		return rot_bone_deg
+	var socket := character.get_weapon_socket()
+	if not socket:
+		return rot_bone_deg
+	var bone_attachment := socket.get_parent() as Node3D
+	var model := character.find_child("CharacterModel") as Node3D
+	if not bone_attachment or not model:
+		return rot_bone_deg
+
+	# Preset stores bone-local Euler (default YXZ order)
+	var bone_local_basis := Basis.from_euler(Vector3(
+		deg_to_rad(rot_bone_deg.x), deg_to_rad(rot_bone_deg.y), deg_to_rad(rot_bone_deg.z)
+	))
+	# Convert to model space: desired = model_inv * bone_global * bone_local
+	var model_space_basis := model.global_transform.basis.inverse() * bone_attachment.global_transform.basis * bone_local_basis
+	# Decompose as ZYX (matching the composition order in _update_transform)
+	var euler := model_space_basis.get_euler(EULER_ORDER_ZYX)
+	return Vector3(rad_to_deg(euler.x), rad_to_deg(euler.y), rad_to_deg(euler.z))
+
+
+## Get current bone-local rotation (for preset) from the socket
+func _get_current_bone_local_rotation() -> Vector3:
+	if not character:
+		return Vector3.ZERO
+	var socket := character.get_weapon_socket()
+	if not socket:
+		return Vector3.ZERO
+	var euler := socket.basis.get_euler()
+	return Vector3(rad_to_deg(euler.x), rad_to_deg(euler.y), rad_to_deg(euler.z))
+
+
+## Update preset value display label
+func _update_preset_display() -> void:
+	if not _preset_label:
+		return
+	var pos := Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
+	var rot := _get_current_bone_local_rotation()
+	_preset_label.text = "Preset: offset=(%s, %s, %s) rotation=(%s, %s, %s)" % [
+		snapped(pos.x, 0.001), snapped(pos.y, 0.001), snapped(pos.z, 0.001),
+		snapped(rot.x, 0.01), snapped(rot.y, 0.01), snapped(rot.z, 0.01),
+	]

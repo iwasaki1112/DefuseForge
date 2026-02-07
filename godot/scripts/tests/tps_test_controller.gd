@@ -2,12 +2,13 @@ extends Node3D
 ## TPS テストシーン コントローラー
 ##
 ## WASD移動 + マウスエイム + バーチャルスティックのテストシーン。
-## TPSゲームへの移行に向けた検証用。
+## FoW（視界システム）+ 自動攻撃を統合し、TPS視点で全システムが正常動作することを検証する。
 ##
 ## 操作:
 ## - WASD / 左スティック: 移動
-## - マウス: エイム（キャラクターがカーソル方向を向く）
-## - 左クリック: 射撃
+## - マウス: エイム（キャラクターがカーソル方向を向く）（PC）
+## - モバイル: 移動方向 = 向き（敵検知時は自動で敵方向を向く）
+## - 射撃は完全自動（視界内の敵に対して自動発砲）
 ## - 画面左上プルダウン: 武器切り替え
 
 # ============================================
@@ -21,23 +22,39 @@ const GROUND_Y := 0.0
 const GROUND_SIZE := 50.0
 
 const CHARACTER_PRESET_ID := "alpha"
+const ENEMY_PRESET_ID := "ares"
 const DEFAULT_WEAPON_ID := "glock"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
+
+# Vision
+const VISION_FOV := 90.0
+const VISION_RANGE := 15.0
+const MAP_SIZE := Vector2(50.0, 50.0)
 
 # Joystick
 const STICK_RADIUS := 80.0
 const STICK_KNOB_RADIUS := 30.0
 const STICK_DEADZONE := 0.15
 
+# Enemy spawn positions
+const ENEMY_POSITIONS: Array[Vector3] = [
+	Vector3(8, 0, -3),
+	Vector3(-6, 0, 5),
+	Vector3(4, 0, 8),
+]
+
 # ============================================
 # References
 # ============================================
 var _character: GameCharacter = null
+var _enemies: Array[GameCharacter] = []
 var _camera: Camera3D = null
 var _animation_library: AnimationLibrary = null
+var _vision_service: VisionService = null
 var _weapon_option: OptionButton = null
 var _weapon_list: Array = []
+var _debug_vision_btn: Button = null
 
 # Joystick state
 var _stick_base: Control = null
@@ -47,14 +64,22 @@ var _stick_mouse_active: bool = false
 var _stick_input: Vector2 = Vector2.ZERO
 var _stick_center: Vector2 = Vector2.ZERO
 
+# Movement direction cache (for mobile facing)
+var _last_move_dir: Vector3 = Vector3.ZERO
+
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_setup_environment()
 	_create_ground()
+	_create_test_walls()
 	_animation_library = _load_animation_library()
+	PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 	_spawn_character()
 	_setup_camera()
+	_setup_vision_systems()
+	_spawn_enemies()
+	_register_characters_to_vision()
 	_setup_ui()
 
 
@@ -63,8 +88,9 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_handle_movement(delta)
-	_handle_aim()
-	_handle_fire()
+	_handle_aim(delta)
+	if _character.combat_awareness:
+		_character.combat_awareness.process(delta)
 	_update_camera(delta)
 
 
@@ -110,6 +136,57 @@ func _create_ground() -> void:
 	add_child(ground)
 
 
+func _create_test_walls() -> void:
+	var wall_data := [
+		{ "name": "Wall_0", "pos": Vector3(5, 1.5, 0), "size": Vector3(0.3, 3.0, 6.0) },
+		{ "name": "Wall_1", "pos": Vector3(-5, 1.5, 0), "size": Vector3(0.3, 3.0, 6.0) },
+		{ "name": "Wall_2", "pos": Vector3(0, 1.5, 5), "size": Vector3(6.0, 3.0, 0.3) },
+		{ "name": "Wall_3", "pos": Vector3(0, 1.5, -5), "size": Vector3(6.0, 3.0, 0.3) },
+	]
+	for data in wall_data:
+		var wall := StaticBody3D.new()
+		wall.name = data["name"]
+		wall.position = data["pos"]
+
+		var mesh_inst := MeshInstance3D.new()
+		var box_mesh := BoxMesh.new()
+		box_mesh.size = data["size"]
+		mesh_inst.mesh = box_mesh
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.6, 0.55, 0.5)
+		mesh_inst.material_override = mat
+		wall.add_child(mesh_inst)
+
+		var col := CollisionShape3D.new()
+		var box_shape := BoxShape3D.new()
+		box_shape.size = data["size"]
+		col.shape = box_shape
+		wall.add_child(col)
+
+		add_child(wall)
+
+
+func _setup_vision_systems() -> void:
+	_vision_service = VisionService.new()
+	_vision_service.name = "VisionService"
+	add_child(_vision_service)
+	_vision_service.setup(MAP_SIZE, true)
+	_vision_service.extract_occluders_from_map(self)
+
+
+func _register_characters_to_vision() -> void:
+	# call_deferredで登録（シーンツリーに追加後に実行するため）
+	call_deferred("_deferred_register_characters")
+
+
+func _deferred_register_characters() -> void:
+	if _vision_service and _character:
+		_vision_service.register_character(_character)
+	for enemy in _enemies:
+		if _vision_service and is_instance_valid(enemy):
+			_vision_service.register_character(enemy)
+
+
 func _spawn_character() -> void:
 	var presets = CharacterRegistry.get_counter_terrorists()
 	var preset: Resource = null
@@ -127,6 +204,34 @@ func _spawn_character() -> void:
 	_character = _create_character(preset, Vector3.ZERO)
 	if _character:
 		add_child(_character)
+		_character.setup_vision(VISION_FOV, VISION_RANGE)
+		_character.setup_combat_awareness()
+		_character.combat_awareness.enable_firing()
+
+
+func _spawn_enemies() -> void:
+	var presets = CharacterRegistry.get_terrorists()
+	var preset: Resource = null
+	for p in presets:
+		if p.id == ENEMY_PRESET_ID:
+			preset = p
+			break
+	if not preset:
+		if presets.size() > 0:
+			preset = presets[0]
+		else:
+			printerr("TPSTest: No enemy preset found")
+			return
+
+	for i in range(ENEMY_POSITIONS.size()):
+		var enemy := _create_character(preset, ENEMY_POSITIONS[i])
+		if enemy:
+			enemy.name = "Enemy_%d" % i
+			add_child(enemy)
+			enemy.setup_vision(VISION_FOV, VISION_RANGE)
+			enemy.setup_combat_awareness()
+			enemy.combat_awareness.enable_firing()
+			_enemies.append(enemy)
 
 
 func _setup_camera() -> void:
@@ -205,6 +310,18 @@ func _create_action_buttons(canvas: CanvasLayer) -> void:
 	btn_door_open.custom_minimum_size = Vector2(150, 50)
 	btn_door_open.pressed.connect(_on_door_open_pressed)
 	vbox.add_child(btn_door_open)
+
+	_debug_vision_btn = Button.new()
+	_debug_vision_btn.text = "Debug Vision"
+	_debug_vision_btn.toggle_mode = true
+	_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
+	_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
+	vbox.add_child(_debug_vision_btn)
+
+
+func _on_debug_vision_toggled(enabled: bool) -> void:
+	if _vision_service:
+		_vision_service.set_debug_draw(enabled)
 
 
 func _on_grenade_pressed() -> void:
@@ -368,6 +485,9 @@ func _handle_movement(delta: float) -> void:
 		input_dir = input_dir.normalized()
 		move_dir = Vector3(input_dir.x, 0, input_dir.y).normalized()
 
+	# Cache move direction for mobile facing
+	_last_move_dir = move_dir
+
 	var speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
 	_character.velocity = move_dir * speed
 	_character.move_and_slide()
@@ -377,33 +497,33 @@ func _handle_movement(delta: float) -> void:
 		_character.anim_ctrl.update_animation(move_dir, aim_dir, false, delta)
 
 
-func _handle_aim() -> void:
-	if not _camera:
-		return
+func _handle_aim(_delta: float) -> void:
+	# 1. CombatAwareness override — 敵検知時は自動で敵方向を向く
+	if _character.combat_awareness:
+		var override_dir := _character.combat_awareness.get_override_look_direction()
+		if override_dir != Vector3.ZERO:
+			_character.set_facing_direction_vec(override_dir)
+			return
 
-	var mouse_pos := get_viewport().get_mouse_position()
-	var ray_origin := _camera.project_ray_origin(mouse_pos)
-	var ray_normal := _camera.project_ray_normal(mouse_pos)
+	# 2. PC: マウスエイム（ジョイスティック非アクティブ時のみ）
+	if _camera and _stick_input.length() <= 0.01:
+		var mouse_pos := get_viewport().get_mouse_position()
+		var ray_origin := _camera.project_ray_origin(mouse_pos)
+		var ray_normal := _camera.project_ray_normal(mouse_pos)
 
-	if absf(ray_normal.y) < 0.001:
-		return
-	var t := (GROUND_Y - ray_origin.y) / ray_normal.y
-	if t < 0:
-		return
-	var ground_point := ray_origin + ray_normal * t
+		if absf(ray_normal.y) > 0.001:
+			var t := (GROUND_Y - ray_origin.y) / ray_normal.y
+			if t > 0:
+				var ground_point := ray_origin + ray_normal * t
+				var aim_dir := ground_point - _character.global_position
+				aim_dir.y = 0
+				if aim_dir.length_squared() > 0.01:
+					_character.set_facing_direction_vec(aim_dir.normalized())
+				return
 
-	var aim_dir := ground_point - _character.global_position
-	aim_dir.y = 0
-	if aim_dir.length_squared() > 0.01:
-		_character.set_facing_direction_vec(aim_dir.normalized())
-
-
-func _handle_fire() -> void:
-	if _stick_mouse_active:
-		return
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		if _character.anim_ctrl:
-			_character.anim_ctrl.fire()
+	# 3. モバイル: 移動方向 = 向き
+	if _last_move_dir.length_squared() > 0.01:
+		_character.set_facing_direction_vec(_last_move_dir)
 
 
 func _update_camera(delta: float) -> void:
