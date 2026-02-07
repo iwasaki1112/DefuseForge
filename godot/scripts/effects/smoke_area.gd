@@ -6,6 +6,7 @@ extends Node3D
 
 signal smoke_started
 signal smoke_ended
+signal radius_changed
 
 ## スモーク設定
 @export var max_radius: float = GameConstants.SMOKE_RADIUS
@@ -51,7 +52,10 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_elapsed_time += delta
+	var prev_radius := _current_radius
 	_update_radius()
+	if not is_equal_approx(prev_radius, _current_radius):
+		radius_changed.emit()
 	_update_particles()
 
 	# 持続時間終了
@@ -76,6 +80,10 @@ func _update_radius() -> void:
 		# 消滅フェーズ: max_radius → 0（線形）
 		var t := (_elapsed_time - fade_start) / fade_time
 		_current_radius = max_radius * (1.0 - t)
+		# フェード半ばでスモーク管理から解除（演出が消える前にキャラクターを表示）
+		if _smoke_manager and t >= 0.5:
+			_smoke_manager.unregister_area(self)
+			_smoke_manager = null
 
 
 ## パーティクルの更新（半径に応じてスケール調整）

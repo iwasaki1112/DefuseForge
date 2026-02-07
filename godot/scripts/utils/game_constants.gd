@@ -41,13 +41,14 @@ const BONE_SPINE_2 := "mixamorig_Spine2"
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "death_forward"  # デフォルト死亡アニメーション
-const ANIM_DEATH_FORWARD := "death_forward"  # 前から撃たれて後ろに倒れる
+const ANIM_DEATH := "death_backward"  # デフォルト死亡アニメーション（TODO: death_forward追加後に戻す）
+const ANIM_DEATH_FORWARD := "death_backward"  # 仮: death_backward（TODO: death_forward追加後に戻す）
 const ANIM_DEATH_BACKWARD := "death_backward"  # 後ろから撃たれて前に倒れる
 const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
 # Note: death_left は存在しない → フォールバック処理で対応
 const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
 const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
+const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
 
 # ========================================================
 # Grenade Settings

@@ -16,9 +16,9 @@ signal exploded(position: Vector3)
 
 ## 物理設定
 @export var throw_gravity: float = 9.8  ## 重力
-@export var bounce_factor: float = 0.5  ## 跳ね返り係数
-@export var friction: float = 0.3  ## 摩擦係数
-@export var min_bounce_velocity: float = 0.5  ## バウンス判定の最小速度
+@export var bounce_factor: float = 0.15  ## 跳ね返り係数
+@export var friction: float = 0.5  ## 摩擦係数
+@export var min_bounce_velocity: float = 1.2  ## バウンス判定の最小速度
 @export var collision_radius: float = 0.08  ## 衝突判定の半径
 
 ## 内部状態
@@ -27,6 +27,7 @@ var _thrower: Node3D = null  ## 投げたキャラクター（自傷判定用）
 var initial_velocity: Vector3 = Vector3.ZERO  ## 初速度（ネットワーク同期用）
 var network_grenade_id: int = 0  ## ネットワーク同期用ID
 var is_remote: bool = false  ## リモートから生成されたグレネードか
+var _fow_system = null  ## FogOfWarSystem参照（リモートグレネードのFoW可視性用）
 
 ## キネマティック状態
 var _velocity: Vector3 = Vector3.ZERO
@@ -42,11 +43,17 @@ func _ready() -> void:
 	_setup_fuse_timer()
 
 
+## FogOfWarSystemを設定（リモートグレネードのFoW可視性チェック用）
+func set_fow_system(fow) -> void:
+	_fow_system = fow
+
+
 func _physics_process(delta: float) -> void:
 	if not _is_active or _has_exploded:
 		return
 
 	_update_kinematic(delta)
+	_update_fow_visibility()
 
 
 ## 導火線タイマーをセットアップ
@@ -300,6 +307,13 @@ func _calculate_throw_velocity(start: Vector3, target: Vector3, arc_height: floa
 	var velocity: Vector3 = horizontal_dir * horizontal_speed + Vector3.UP * vy
 
 	return velocity
+
+
+## リモートグレネードのFoW可視性を更新
+func _update_fow_visibility() -> void:
+	if not is_remote or not _fow_system:
+		return
+	visible = _fow_system.is_position_visible_in_fow(global_position)
 
 
 ## 導火線タイムアウト時

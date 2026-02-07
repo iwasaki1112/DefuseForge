@@ -11,6 +11,8 @@ class_name LongPressProgressRing
 @export var ring_color: Color = Color(1.0, 1.0, 1.0, 0.9)  ## リングの色
 @export var background_color: Color = Color(0.3, 0.3, 0.3, 0.5)  ## 背景リングの色
 @export var segments: int = 64  ## 円の分割数（滑らかさ）
+## タッチ時の上方オフセット（指で隠れないように）
+var touch_offset: Vector2 = Vector2(0, -80)
 
 ## 内部状態
 var _progress: float = 0.0  ## 現在の進行率 (0.0 ~ 1.0)
@@ -103,8 +105,9 @@ func start(screen_pos: Vector2, duration: float, color: Color = Color.WHITE) -> 
 	if color != Color.WHITE:
 		ring_color = color
 
-	# 位置を設定（中央揃え）
-	position = screen_pos - size / 2.0
+	# 位置を設定（中央揃え + タッチオフセット）
+	var offset_pos := screen_pos + touch_offset
+	position = offset_pos - size / 2.0
 	visible = true
 	queue_redraw()
 
@@ -120,7 +123,8 @@ func start_manual(screen_pos: Vector2, color: Color = Color.WHITE) -> void:
 	if color != Color.WHITE:
 		ring_color = color
 
-	position = screen_pos - size / 2.0
+	var offset_pos := screen_pos + touch_offset
+	position = offset_pos - size / 2.0
 	visible = true
 	queue_redraw()
 
@@ -146,7 +150,8 @@ func update_progress(elapsed: float, duration: float) -> void:
 ## 位置を更新
 ## @param screen_pos: 新しい位置（スクリーン座標）
 func update_position(screen_pos: Vector2) -> void:
-	position = screen_pos - size / 2.0
+	var offset_pos := screen_pos + touch_offset
+	position = offset_pos - size / 2.0
 
 
 ## 長押しを完了（非表示にする）

@@ -71,6 +71,7 @@ var _confirmed_path_longpress_timer: float = 0.0
 var _confirmed_path_longpress_threshold: float = 0.5
 var _confirmed_path_longpress_screen_pos: Vector2 = Vector2.ZERO
 var _confirmed_path_longpress_ground_pos: Vector3 = Vector3.ZERO
+var _confirmed_path_longpress_is_touch: bool = false
 var _confirmed_path_tap_path_data: Dictionary = {}
 
 #endregion
@@ -105,6 +106,15 @@ const DOUBLE_TAP_THRESHOLD_MS: int = 300
 #endregion
 
 
+#region コンテキストメニュー遅延表示
+
+var _context_menu_timer: SceneTreeTimer = null
+var _pending_context_menu_screen_pos: Vector2 = Vector2.ZERO
+var _pending_context_menu_path_data: Dictionary = {}
+
+#endregion
+
+
 #region 初期化
 
 func setup(manager: GameManager, cam_handler: CameraInputHandler) -> void:
@@ -121,10 +131,10 @@ func _setup_progress_ring() -> void:
 	var ui_layer = game_manager.get_ui_layer()
 	if not ui_layer:
 		return
-	_progress_ring = LongPressProgressRing.create(ui_layer, 25.0)
-	_progress_ring.ring_width = 3.0
+	_progress_ring = LongPressProgressRing.create(ui_layer, 50.0)
+	_progress_ring.ring_width = 6.0
 	_progress_ring.ring_color = Color(1.0, 1.0, 1.0, 0.9)
-	_progress_ring.background_color = Color(0.2, 0.2, 0.2, 0.4)
+	_progress_ring.background_color = Color(0.3, 0.3, 0.3, 0.5)
 
 	# パス先端ドラッグシグナルを接続
 	var path_drawer = _get_path_drawer()
@@ -305,10 +315,12 @@ func handle_path_mode_mouse_press(position: Vector2, viewport: Viewport) -> void
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
+		var _gc := clicked as GameCharacter
+		var is_dead = _gc and not _gc.is_alive
 		var is_following = game_manager.is_character_following_path(clicked)
-		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] path_mode click: is_enemy=%s, is_dead=%s, is_following=%s" % [is_enemy, is_dead, is_following])
 
-		if not is_enemy:
+		if not is_enemy and not is_dead:
 			if is_following:
 				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
@@ -465,10 +477,12 @@ func handle_path_mode_touch_press(position: Vector2, path_drawer: PathDrawer, vi
 
 	if clicked:
 		var is_enemy = PlayerState.is_enemy(clicked)
+		var _gc := clicked as GameCharacter
+		var is_dead = _gc and not _gc.is_alive
 		var is_following = game_manager.is_character_following_path(clicked)
-		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_following=%s" % [is_enemy, is_following])
+		if Debug.enabled: print("[PointDebug] touch path_mode click: is_enemy=%s, is_dead=%s, is_following=%s" % [is_enemy, is_dead, is_following])
 
-		if not is_enemy:
+		if not is_enemy and not is_dead:
 			if is_following:
 				game_manager.cancel_path_following(clicked, true)
 				_auto_execute_character = clicked
@@ -515,6 +529,10 @@ func handle_normal_mode_press(position: Vector2, is_touch: bool, viewport: Viewp
 	left_button_pressed = true
 	left_click_start_pos = position
 	_long_press_timer = 0.0
+
+	# グレネードターゲット選択モード中はパス操作をバイパス
+	if game_manager.is_grenade_target_mode():
+		return
 
 	# キャラクターがクリックされたか確認
 	var clicked = game_manager.raycast_character(position)
@@ -614,6 +632,10 @@ func handle_normal_mode_release(position: Vector2, is_touch: bool) -> bool:
 ## 非パスモードのドラッグ処理
 ## @return: カメラパン処理を実行すべきかどうか
 func handle_normal_mode_drag(position: Vector2, is_touch: bool, viewport: Viewport) -> bool:
+	# グレネードターゲットモード中はカメラパン/パス操作をバイパス
+	if game_manager.is_grenade_target_mode():
+		return false
+
 	var current_frame = Engine.get_process_frames()
 	var just_ended = (current_frame == _path_mode_ended_frame)
 	if Debug.enabled: print("[PointDebug] non-path_mode drag: frame=%d, ended_frame=%d, just_ended=%s, ext_pending=%s" % [
@@ -721,6 +743,10 @@ func _try_start_immediate_path_mode(screen_pos: Vector2) -> bool:
 		return false
 	if PlayerState.is_enemy(clicked):
 		return false
+	# 死亡キャラクターはスキップ
+	var game_char := clicked as GameCharacter
+	if game_char and not game_char.is_alive:
+		return false
 
 	if game_manager.is_character_following_path(clicked):
 		game_manager.cancel_path_following(clicked, true)
@@ -788,8 +814,14 @@ func _process_rotation_drag(screen_pos: Vector2) -> void:
 
 #region プログレスリング
 
+## タップ時にリングが一瞬表示されるのを防ぐための遅延
+const PROGRESS_RING_DISPLAY_DELAY: float = 0.2
+
 func _update_progress_ring(screen_pos: Vector2, elapsed: float, threshold: float) -> void:
 	if not _progress_ring:
+		return
+	# 遅延未満はリングを表示しない（タップのチラつき防止）
+	if elapsed < PROGRESS_RING_DISPLAY_DELAY:
 		return
 	if not _progress_ring.is_active():
 		_progress_ring.start_manual(screen_pos)
@@ -856,6 +888,7 @@ func _try_start_confirmed_path_longpress(screen_pos: Vector2, is_touch: bool = f
 		_confirmed_path_longpress_timer = 0.0
 		_confirmed_path_longpress_screen_pos = screen_pos
 		_confirmed_path_longpress_ground_pos = ground_pos
+		_confirmed_path_longpress_is_touch = is_touch
 		_confirmed_path_tap_path_data = result
 		return true
 
@@ -878,16 +911,21 @@ func _start_vision_mode_on_confirmed_path() -> void:
 	_confirmed_path_longpress_pending = false
 	_confirmed_path_longpress_timer = 0.0
 
-	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting")
+	# 初回検出と同じ閾値を使用（モバイルでは0.5m、PCでは0.15m）
+	var threshold := GameConstants.PATH_CLICK_THRESHOLD_MOBILE if _confirmed_path_longpress_is_touch else GameConstants.PATH_CLICK_THRESHOLD
+
+	if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: attempting, threshold=%.2f" % threshold)
 	if game_manager.try_start_vision_point_on_confirmed_path(
 		_confirmed_path_longpress_screen_pos,
-		_confirmed_path_longpress_ground_pos
+		_confirmed_path_longpress_ground_pos,
+		threshold
 	):
 		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: success")
 		_path_endpoint_extension_pending = false
 		_path_endpoint_extension_started = false
 	else:
 		if Debug.enabled: print("[PointDebug] _start_vision_mode_on_confirmed_path: failed")
+		_reset_confirmed_path_longpress()
 
 
 func _reset_confirmed_path_longpress() -> void:
@@ -895,6 +933,7 @@ func _reset_confirmed_path_longpress() -> void:
 	_confirmed_path_longpress_timer = 0.0
 	_confirmed_path_longpress_screen_pos = Vector2.ZERO
 	_confirmed_path_longpress_ground_pos = Vector3.ZERO
+	_confirmed_path_longpress_is_touch = false
 	_confirmed_path_tap_path_data = {}
 	_hide_progress_ring()
 
@@ -914,13 +953,17 @@ func _handle_path_tap_for_confirmed_path() -> void:
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
 		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: DOUBLE TAP DETECTED - adding wait point")
+		# ダブルタップ: コンテキストメニュータイマーをキャンセルしてWaitPoint直接追加
+		_cancel_context_menu_timer()
 		game_manager.add_sync_wait_point(_confirmed_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
-		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, saving for next")
+		if Debug.enabled: print("[PointDebug] _handle_path_tap_for_confirmed_path: single tap, starting context menu timer")
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _confirmed_path_tap_path_data.duplicate()
+		# シングルタップ: 300ms後にコンテキストメニュー表示
+		_start_context_menu_timer(_confirmed_path_longpress_screen_pos, _confirmed_path_tap_path_data)
 
 #endregion
 
@@ -1019,12 +1062,16 @@ func _handle_path_tap_for_moving_path() -> void:
 	var is_same_path := _is_same_path(_last_path_tap_path_data, _moving_path_tap_path_data)
 
 	if time_diff <= DOUBLE_TAP_THRESHOLD_MS and is_same_path:
+		# ダブルタップ: コンテキストメニュータイマーをキャンセルしてWaitPoint直接追加
+		_cancel_context_menu_timer()
 		game_manager.add_sync_wait_point(_moving_path_tap_path_data)
 		_last_path_tap_time = 0
 		_last_path_tap_path_data = {}
 	else:
 		_last_path_tap_time = current_time
 		_last_path_tap_path_data = _moving_path_tap_path_data.duplicate()
+		# シングルタップ: 300ms後にコンテキストメニュー表示
+		_start_context_menu_timer(_moving_path_longpress_screen_pos, _moving_path_tap_path_data)
 
 
 func _is_same_path(data1: Dictionary, data2: Dictionary) -> bool:
@@ -1078,6 +1125,39 @@ func _on_endpoint_drag_detected(screen_pos: Vector2) -> void:
 		if path_drawer:
 			path_drawer.handle_drawing_press(screen_pos)
 		if Debug.enabled: print("[PointDebug] _on_endpoint_drag_detected: path continuation started")
+
+#endregion
+
+
+#region コンテキストメニュータイマー
+
+## コンテキストメニュー表示の遅延タイマーを開始（300ms）
+func _start_context_menu_timer(screen_pos: Vector2, path_data: Dictionary) -> void:
+	_cancel_context_menu_timer()
+	_pending_context_menu_screen_pos = screen_pos
+	_pending_context_menu_path_data = path_data.duplicate()
+	if game_manager:
+		_context_menu_timer = game_manager.get_tree().create_timer(0.3)
+		_context_menu_timer.timeout.connect(_on_context_menu_timer_timeout, CONNECT_ONE_SHOT)
+
+
+## コンテキストメニュータイマーをキャンセル
+func _cancel_context_menu_timer() -> void:
+	if _context_menu_timer and _context_menu_timer.timeout.is_connected(_on_context_menu_timer_timeout):
+		_context_menu_timer.timeout.disconnect(_on_context_menu_timer_timeout)
+	_context_menu_timer = null
+	_pending_context_menu_screen_pos = Vector2.ZERO
+	_pending_context_menu_path_data = {}
+
+
+## コンテキストメニュータイマー完了時のコールバック
+func _on_context_menu_timer_timeout() -> void:
+	_context_menu_timer = null
+	if _pending_context_menu_path_data.is_empty() or not game_manager:
+		return
+	game_manager.show_path_context_menu(_pending_context_menu_screen_pos, _pending_context_menu_path_data)
+	_pending_context_menu_screen_pos = Vector2.ZERO
+	_pending_context_menu_path_data = {}
 
 #endregion
 

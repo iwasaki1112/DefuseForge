@@ -102,6 +102,17 @@ func _initialize_default_definitions() -> void:
 	wait_def.max_pool_size = 30
 	_register(wait_def)
 
+	# Smoke Grenade Point
+	var smoke_def = PointDefinition.new()
+	smoke_def.type_id = ActionPointData.Type.SMOKE_GRENADE
+	smoke_def.point_class_name = "SmokeGrenadePoint"
+	smoke_def.handler_class_name = ""  # ハンドラー不要
+	smoke_def.bg_color_multiplier = 1.0
+	smoke_def.bg_color_alpha = 0.95
+	smoke_def.default_icon_color = Color(1.0, 1.0, 1.0, 1.0)
+	smoke_def.max_pool_size = 20
+	_register(smoke_def)
+
 	_initialized = true
 
 

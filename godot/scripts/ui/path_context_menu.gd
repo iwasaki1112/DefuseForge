@@ -60,8 +60,8 @@ func _build_ui() -> void:
 	_button_container.add_theme_constant_override("separation", 4)
 	margin.add_child(_button_container)
 
-	# WaitPointボタンを作成
-	_create_menu_button("WaitPoint", "wait_point")
+	# SmokeGrenadeボタンを作成
+	_create_menu_button("SmokeGrenade", "smoke_grenade")
 
 
 ## メニューボタンを作成

@@ -39,9 +39,9 @@ func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
 	# GameManagerをマルチプレイヤーモードに
 	game_manager.enable_multiplayer_mode(peer_id)
 
-	# Hostの場合、RoundManagerに権限を設定
-	if is_host and game_manager.round_manager:
-		game_manager.round_manager.set_authority(true)
+	# RoundManagerの権限を設定（Host=true, Client=false）
+	if game_manager.round_manager:
+		game_manager.round_manager.set_authority(is_host)
 
 
 func _process(_delta: float) -> void:

@@ -602,6 +602,11 @@ func _make_corpse_passable() -> void:
 	# Keep collision_mask unchanged so corpse still detects ground
 	collision_layer = 0
 
+	# タップ検出用Area3Dのcollision_layerも0にしてレイキャストに引っかからないようにする
+	var tap_area := get_node_or_null("TapArea") as Area3D
+	if tap_area:
+		tap_area.collision_layer = 0
+
 
 # ============================================
 # Multiplayer API

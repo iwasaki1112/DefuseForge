@@ -52,6 +52,12 @@ var _mesh_parent: Node3D = null
 var _map_container: Node3D = null
 var _ui_layer: CanvasLayer = null
 
+## スモークグレネードターゲット選択モード
+var _grenade_target_mode: bool = false
+var _context_menu_item_selected: bool = false
+var _grenade_origin_path_data: Dictionary = {}
+var _grenade_trajectory_preview: GrenadeTrajectoryPreview = null
+
 ## マルチプレイヤー状態
 var _is_multiplayer_mode: bool = false
 var _local_peer_id: int = 0
@@ -95,6 +101,9 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	_setup_path_drawer()
 	_setup_path_mode_controller()
 	_setup_vision_service()
+	# VisionService初期化後にFoWシステムをGrenadeServiceに渡す（リモートグレネードのFoW可視性用）
+	if grenade_service and fog_of_war_system:
+		grenade_service.set_fow_system(fog_of_war_system)
 	_setup_map_manager()
 	_setup_path_service()
 	_setup_round_manager()
@@ -177,6 +186,15 @@ func unregister_character(character: Node) -> void:
 
 ## マウス/タッチクリック処理（シーンから呼び出す）
 func handle_click(screen_pos: Vector2, button_index: int) -> bool:
+	# スモークグレネードターゲット選択モード中
+	if _grenade_target_mode:
+		var ground_pos = _screen_to_ground(screen_pos)
+		if ground_pos != null:
+			_complete_grenade_target_selection(ground_pos as Vector3)
+		else:
+			_cancel_grenade_target_mode()
+		return true
+
 	var clicked_character = raycast_character(screen_pos)
 
 	match button_index:
@@ -184,6 +202,10 @@ func handle_click(screen_pos: Vector2, button_index: int) -> bool:
 			if clicked_character:
 				# 敵キャラクターは無視
 				if PlayerState.is_enemy(clicked_character):
+					return false
+				# 死亡キャラクターは無視
+				var _gc := clicked_character as GameCharacter
+				if _gc and not _gc.is_alive:
 					return false
 				# 移動中キャラクターを選択したら、移動を停止してパスモード開始
 				if path_service and path_service.is_character_following_path(clicked_character):
@@ -374,7 +396,7 @@ func try_start_path_continuation_at_position(screen_pos: Vector2) -> bool:
 ## @param screen_pos: 画面座標
 ## @param ground_pos: 地面座標（既に計算済みの場合）
 ## @return: Visionポイント配置モードを開始した場合true
-func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO) -> bool:
+func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: Vector3 = Vector3.ZERO, threshold: float = GameConstants.PATH_CLICK_THRESHOLD) -> bool:
 	if not path_execution_manager or not camera:
 		return false
 
@@ -390,7 +412,7 @@ func try_start_vision_point_on_confirmed_path(screen_pos: Vector2, ground_pos: V
 		target_ground_pos = intersect as Vector3
 
 	# 確定済みパス上の点を検索（先端は除外 - 先端はパス延長用）
-	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, GameConstants.PATH_CLICK_THRESHOLD)
+	var path_result := path_execution_manager.find_path_point_at_position(target_ground_pos, threshold)
 	if path_result.is_empty():
 		return false
 
@@ -825,14 +847,18 @@ func is_path_context_menu_open() -> bool:
 
 ## コンテキストメニュー選択時のコールバック
 func _on_path_context_menu_selected(item_id: String, path_data: Dictionary) -> void:
+	_context_menu_item_selected = true
 	match item_id:
-		"wait_point":
-			add_sync_wait_point(path_data)
+		"smoke_grenade":
+			_start_grenade_target_mode(path_data)
 
 
 ## コンテキストメニュー閉じ時のコールバック
 func _on_path_context_menu_closed() -> void:
-	pass
+	# ボタン選択なしでメニューが閉じられた場合（オーバーレイタップ等）のみキャンセル
+	if not _context_menu_item_selected and _grenade_target_mode:
+		_cancel_grenade_target_mode()
+	_context_menu_item_selected = false
 
 
 ## 同期Waitポイントを追加（InputControllerから直接呼び出し可能）
@@ -855,6 +881,88 @@ func add_sync_wait_point(path_data: Dictionary) -> void:
 		# NOTE: 確認済みパスへの直接追加はシグナル経由ではないため、ここで履歴に追加
 		if path_service:
 			path_service.push_wait_point_to_history(character, path_ratio, -1.0)
+
+
+## スモークグレネードターゲット選択モード中か
+func is_grenade_target_mode() -> bool:
+	return _grenade_target_mode
+
+
+## グレネードターゲットプレビューを更新（ドラッグ/モーション時に呼ばれる）
+func update_grenade_target_preview(screen_pos: Vector2) -> void:
+	if not _grenade_target_mode or not _grenade_trajectory_preview:
+		return
+
+	var ground_pos = _screen_to_ground(screen_pos)
+	if ground_pos == null:
+		return
+
+	var anchor: Vector3 = _grenade_origin_path_data.get("point", Vector3.ZERO)
+	var start_pos := anchor + Vector3(0, 1.0, 0)  # キャラクター手元位置
+	_grenade_trajectory_preview.update(start_pos, ground_pos as Vector3)
+
+
+## スモークグレネードターゲット選択モードを開始
+func _start_grenade_target_mode(path_data: Dictionary) -> void:
+	_grenade_target_mode = true
+	_grenade_origin_path_data = path_data.duplicate()
+
+	# 軌道プレビューを生成
+	if _mesh_parent:
+		_grenade_trajectory_preview = GrenadeTrajectoryPreview.new()
+		_grenade_trajectory_preview.setup(_mesh_parent)
+
+
+## スモークグレネードターゲット選択モードをキャンセル
+func _cancel_grenade_target_mode() -> void:
+	_grenade_target_mode = false
+	_grenade_origin_path_data = {}
+
+	# 軌道プレビューを削除
+	if _grenade_trajectory_preview:
+		_grenade_trajectory_preview.destroy()
+		_grenade_trajectory_preview = null
+
+
+## スモークグレネードターゲット選択を完了（地面タップ時）
+func _complete_grenade_target_selection(target_pos: Vector3) -> void:
+	if _grenade_origin_path_data.is_empty():
+		_cancel_grenade_target_mode()
+		return
+
+	var path_ratio: float = _grenade_origin_path_data.get("path_ratio", 0.0)
+	var anchor: Vector3 = _grenade_origin_path_data.get("point", Vector3.ZERO)
+	var character = _grenade_origin_path_data.get("character", null)
+
+	if not is_instance_valid(character):
+		_cancel_grenade_target_mode()
+		return
+
+	add_smoke_grenade_point(character, path_ratio, anchor, target_pos)
+	_cancel_grenade_target_mode()
+
+
+## スモークグレネードポイントをパスに追加
+## @param character: 対象キャラクター
+## @param path_ratio: パス上の位置（0.0〜1.0）
+## @param anchor: パス上の3D位置
+## @param target_pos: グレネード着弾地点
+func add_smoke_grenade_point(character: Node, path_ratio: float, anchor: Vector3, target_pos: Vector3) -> void:
+	if not character or not path_execution_manager:
+		return
+
+	path_execution_manager.add_smoke_grenade_point_to_path(character, path_ratio, anchor, target_pos)
+
+
+## 画面座標から地面座標に変換（ヘルパー）
+func _screen_to_ground(screen_pos: Vector2) -> Variant:
+	if not camera:
+		return null
+	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ray_origin := camera.project_ray_origin(screen_pos)
+	var ray_dir := camera.project_ray_normal(screen_pos)
+	var intersect = ground_plane.intersects_ray(ray_origin, ray_dir)
+	return intersect
 
 
 ## 全キャラクターの同期待機を解除
@@ -888,6 +996,8 @@ func _setup_path_execution_manager(mesh_parent: Node3D) -> void:
 		path_execution_manager.path_progress_updated.connect(_on_path_progress_updated)
 		# 延長ポイントの比率がスケールされた時に移動中パスポイントの比率を更新
 		path_execution_manager.extension_points_scaled.connect(_on_extension_points_scaled)
+		# グレネード投擲リリース時にGrenadeServiceでスモークグレネードを生成
+		path_execution_manager.grenade_throw_released.connect(_on_grenade_throw_released)
 
 
 func _setup_idle_manager() -> void:
@@ -1136,6 +1246,67 @@ func _calculate_ratio_from_position_on_path(path: Array[Vector3], position: Vect
 
 func _on_paths_execution_started(count: int) -> void:
 	SignalBus.paths_execution_started.emit(count)
+
+
+## グレネード投擲リリース時のコールバック
+## キャラクターの手元位置からターゲットに向けてスモークグレネードを生成
+func _on_grenade_throw_released(character: CharacterBody3D, target_pos: Vector3) -> void:
+	if not grenade_service or not is_instance_valid(character):
+		return
+
+	# 投擲開始位置（キャラクターの手元付近）
+	var start_pos := character.global_position + Vector3(0, 1.0, 0)
+
+	# 着弾マーカーを探して爆発時に非表示にする
+	var target_marker := _find_smoke_target_marker(character, target_pos)
+
+	var result := grenade_service.spawn_and_throw_smoke_grenade(start_pos, target_pos, character)
+	var smoke_grenade = result[0]
+	var velocity: Vector3 = result[1]
+	var grenade_id: int = result[2]
+	if smoke_grenade:
+		if target_marker:
+			smoke_grenade.exploded.connect(_on_smoke_grenade_exploded_hide_marker.bind(target_marker))
+		smoke_grenade_thrown.emit(smoke_grenade, character)
+		# マルチプレイヤー同期: ネットワークイベントを送信
+		_emit_grenade_network_event(start_pos, velocity, true, grenade_id)
+
+
+## スモークグレネード爆発時に着弾マーカーを非表示
+func _on_smoke_grenade_exploded_hide_marker(_position: Vector3, marker: MeshInstance3D) -> void:
+	if is_instance_valid(marker):
+		marker.visible = false
+
+
+## 着弾マーカーを位置ベースで探す
+func _find_smoke_target_marker(character: Node, target_pos: Vector3) -> MeshInstance3D:
+	var char_id = character.get_instance_id()
+	var target_flat = Vector3(target_pos.x, 0.0, target_pos.z)
+
+	# pending_pathsから探す
+	if path_execution_manager and path_execution_manager._path_store.pending_paths.has(char_id):
+		var data = path_execution_manager._path_store.pending_paths[char_id]
+		var markers: Array = data.get("smoke_grenade_points", [])
+		for marker in markers:
+			if not is_instance_valid(marker) or not marker.visible:
+				continue
+			var pos = marker.global_position
+			pos.y = 0.0
+			if pos.distance_to(target_flat) < 0.3:
+				return marker
+
+	# moving_path_pointsから探す
+	if path_execution_manager:
+		var moving = path_execution_manager._point_mesh_manager.get_moving_path_points(char_id, ActionPointData.Type.SMOKE_GRENADE)
+		for marker in moving:
+			if not is_instance_valid(marker) or not marker.visible:
+				continue
+			var pos = marker.global_position
+			pos.y = 0.0
+			if pos.distance_to(target_flat) < 0.3:
+				return marker
+
+	return null
 
 
 func _on_paths_cleared() -> void:

@@ -26,6 +26,8 @@ signal extension_points_scaled(scale: float)  ## 延長ポイントの比率が�
 signal sync_wait_started()  ## 同期待機開始時
 @warning_ignore("unused_signal")
 signal sync_wait_released()  ## 同期待機解放時
+@warning_ignore("unused_signal")
+signal grenade_throw_released(character: CharacterBody3D, target_pos: Vector3)  ## グレネード投擲リリース時
 
 ## スタック検出設定
 @export var stuck_threshold: float = 0.01  ## この距離以下の移動をスタックとみなす
@@ -88,6 +90,7 @@ var _collision_avoidance: CollisionAvoidanceController = null
 var _door_handler: DoorInteractionHandler = null
 var _point_handler: PathPointActionHandler = null
 var _extension_handler: ExtensionPathHandler = null
+var _grenade_throw_handler: GrenadeThrowHandler = null
 
 
 ## セットアップ
@@ -104,6 +107,11 @@ func setup(character: CharacterBody3D) -> void:
 	_point_handler.setup(self, character)
 	_extension_handler = ExtensionPathHandler.new()
 	_extension_handler.setup(self)
+	_grenade_throw_handler = GrenadeThrowHandler.new()
+	_grenade_throw_handler.setup(self, character)
+	_grenade_throw_handler.grenade_released.connect(
+		func(ch: CharacterBody3D, target: Vector3): grenade_throw_released.emit(ch, target)
+	)
 
 
 ## 対象キャラクターを取得（内部状態を隠蔽するAPI）
@@ -176,6 +184,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	_clear_points = clear_points.duplicate()
 	_grenade_points = grenade_points.duplicate()
 	_smoke_grenade_points = smoke_grenade_points.duplicate()
+	_smoke_grenade_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)
 	_door_points = door_points.duplicate()
 	_door_index = 0
 	_is_running = run
@@ -192,6 +201,7 @@ func start_path(path: Array[Vector3], vision_points: Array[Dictionary] = [],
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
 	_door_handler.reset()
+	_grenade_throw_handler.reset()
 	_collision_avoidance.reset()
 
 	# パス長キャッシュを構築
@@ -230,6 +240,7 @@ func cancel() -> void:
 	_run_segments.clear()
 	_clear_points.clear()
 	_grenade_points.clear()
+	_smoke_grenade_points.clear()
 	_door_points.clear()
 	_wait_checker.clear()
 	_forced_look_direction = Vector3.ZERO
@@ -240,6 +251,7 @@ func cancel() -> void:
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
 	_door_handler.reset()
+	_grenade_throw_handler.reset()
 	_collision_avoidance.reset()
 
 	path_cancelled.emit()
@@ -285,6 +297,10 @@ func process(delta: float) -> void:
 
 	# ドアキック完了待ち状態の場合は処理しない
 	if _door_handler.is_waiting_for_door:
+		return
+
+	# グレネード投擲中の場合は処理しない
+	if _grenade_throw_handler.is_throwing:
 		return
 
 	# 同期待機中の場合（Wボタンで解放されるまで待機）
@@ -408,8 +424,10 @@ func process(delta: float) -> void:
 	# グレネードポイントのチェック（投擲実行、移動は継続）
 	_point_handler.check_grenade_points(progress, _grenade_points)
 
-	# スモークグレネードポイントのチェック（投擲実行、移動は継続）
+	# スモークグレネードポイントのチェック（投擲実行、移動を停止）
 	_point_handler.check_smoke_grenade_points(progress, _smoke_grenade_points)
+	if _grenade_throw_handler.is_throwing:
+		return  # 投擲開始されたので移動を中断
 
 	# Waitポイントのチェック（待機開始）
 	if _point_handler.check_wait_points(progress):
@@ -785,6 +803,7 @@ func _finish() -> void:
 			# ハンドラーの状態をリセット（延長パスでは新しい状態で開始）
 			_point_handler.reset()
 			_door_handler.reset()
+			_grenade_throw_handler.reset()
 			_collision_avoidance.reset()
 			return
 
@@ -828,6 +847,7 @@ func _finish() -> void:
 	_run_segments.clear()
 	_clear_points.clear()
 	_grenade_points.clear()
+	_smoke_grenade_points.clear()
 	_door_points.clear()
 	_wait_checker.clear()
 	_forced_look_direction = Vector3.ZERO
@@ -838,6 +858,7 @@ func _finish() -> void:
 	# ハンドラーの状態をリセット
 	_point_handler.reset()
 	_door_handler.reset()
+	_grenade_throw_handler.reset()
 	_collision_avoidance.reset()
 
 	path_completed.emit()
@@ -1012,3 +1033,12 @@ func add_vision_point_to_extension(path_ratio: float, anchor: Vector3, target_po
 ## Waitポイントを追加（実行中のパスに）
 func add_wait_point(point_data: Dictionary) -> void:
 	_extension_handler.add_wait_point(point_data)
+
+
+## スモークグレネードポイントを追加（実行中のパスに）
+func add_smoke_grenade_point(point_data: Dictionary) -> void:
+	if not _is_following:
+		return
+
+	_smoke_grenade_points.append(point_data)
+	_smoke_grenade_points.sort_custom(func(a, b): return a.path_ratio < b.path_ratio)

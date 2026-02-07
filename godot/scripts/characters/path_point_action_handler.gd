@@ -63,13 +63,21 @@ func check_grenade_points(progress: float, grenade_points: Array[Dictionary]) ->
 
 
 ## スモークグレネードポイントのチェックと処理
+## 投擲ハンドラが投擲中の場合は次のポイントをスキップ（1つずつ処理）
 func check_smoke_grenade_points(progress: float, smoke_grenade_points: Array[Dictionary]) -> void:
+	if _controller and _controller._grenade_throw_handler and _controller._grenade_throw_handler.is_throwing:
+		return  # 投擲中は次のポイントを処理しない
+
 	while smoke_grenade_index < smoke_grenade_points.size():
 		var sgp = smoke_grenade_points[smoke_grenade_index]
 		if progress >= sgp.path_ratio:
 			if _controller:
 				_controller.smoke_grenade_point_reached.emit(smoke_grenade_index, sgp)
+				# 投擲ハンドラで投擲シーケンスを開始
+				if _controller._grenade_throw_handler:
+					_controller._grenade_throw_handler.start_throw(sgp)
 			smoke_grenade_index += 1
+			return  # 1つ投擲したら中断（投擲完了後に次のポイントを処理）
 		else:
 			break
 

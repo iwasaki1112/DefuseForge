@@ -52,6 +52,8 @@ func create_point_instance() -> ActionPoint:
 			return VisionPoint.new()
 		"WaitPoint":
 			return WaitPoint.new()
+		"SmokeGrenadePoint":
+			return SmokeGrenadePoint.new()
 		_:
 			push_error("[PointDefinition] Unknown point class: %s" % point_class_name)
 			return null
@@ -65,6 +67,9 @@ func create_handler_instance() -> PointHandlerBase:
 			return VisionPointHandler.new()
 		"WaitPointHandler":
 			return WaitPointHandler.new()
+		"":
+			# ハンドラーなし（SmokeGrenadePoint等）
+			return null
 		_:
 			push_error("[PointDefinition] Unknown handler class: %s" % handler_class_name)
 			return null
