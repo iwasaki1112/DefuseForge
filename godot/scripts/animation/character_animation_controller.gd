@@ -13,6 +13,7 @@ signal door_kick_impact()   # キックがドアに当たるタイミング（�
 signal door_kick_finished() # アニメーション完了
 signal throw_release()      # グレネードをリリースするタイミング（フレーム50/120）
 signal throw_finished()     # 投擲アニメーション完了
+signal door_open_finished() # ドアそっと開けアニメーション完了
 
 # Export settings
 @export_group("Movement Speed")
@@ -48,6 +49,7 @@ var _weapon := Weapon.RIFLE
 var _is_dead := false
 var _is_door_kicking := false
 var _is_throwing := false
+var _is_opening_door := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
@@ -72,6 +74,9 @@ const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレー
 # Throw animation
 const PISTOL_LOW_THROWING_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING
 const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50 / 30fps）
+
+# Door open animation
+const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -116,7 +121,7 @@ func update_animation(
 	_is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return
 
 	# エイム方向を保存（視界計算用）
@@ -181,7 +186,7 @@ func fire() -> void:
 ## Get current movement speed based on state and direction
 ## Returns the animation's visual speed for the current blend direction
 func get_current_speed() -> float:
-	if _is_dead or _is_door_kicking or _is_throwing:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return 0.0
 	# Calculate direction-based speed from current blend position
 	return _get_directional_anim_speed()
@@ -336,7 +341,7 @@ func _on_death_animation_finished(_anim_name: String) -> void:
 
 ## Play door kick animation (weapon-appropriate version)
 func play_door_kick() -> void:
-	if _is_dead or _is_door_kicking:
+	if _is_dead or _is_door_kicking or _is_opening_door:
 		return
 
 	_is_door_kicking = true
@@ -393,7 +398,7 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 
 ## ドアキック後のAnimationTree再開
 func _resume_animation_tree() -> void:
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door:
 		_anim_tree.active = true
 
 
@@ -404,7 +409,7 @@ func is_door_kicking() -> bool:
 
 ## Play throw animation (underhand grenade throw with pistol)
 func play_throw() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return
 
 	_is_throwing = true
@@ -451,6 +456,45 @@ func is_throwing() -> bool:
 	return _is_throwing
 
 
+## Play door open animation (quietly open door)
+func play_door_open() -> void:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+		return
+
+	_is_opening_door = true
+
+	if _anim_tree:
+		_anim_tree.active = false
+
+	if _anim_player.has_animation(RIFLE_OPEN_DOOR_ANIM):
+		_anim_player.play(RIFLE_OPEN_DOOR_ANIM)
+		_anim_player.animation_finished.connect(_on_door_open_finished, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Door open animation not found: %s" % RIFLE_OPEN_DOOR_ANIM)
+		_is_opening_door = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+func _on_door_open_finished(_anim_name: String) -> void:
+	_is_opening_door = false
+
+	if _anim_player and not _is_dead:
+		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
+	door_open_finished.emit()
+
+
+## Check if door open animation is playing
+func is_opening_door() -> bool:
+	return _is_opening_door
+
+
 ## Get current animation state for network synchronization
 ## Returns encoded state: "is_moving,is_firing,blend_x,blend_y"
 ## Example: "1,1,-50,100" = moving, firing, blend(-0.5, 1.0)
@@ -465,7 +509,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return
 
 	var parts := state.split(",")

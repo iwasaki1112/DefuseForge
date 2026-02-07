@@ -49,6 +49,7 @@ const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
 const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
 const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
 const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
+const ANIM_RIFLE_OPEN_DOOR := "rifle_open_door"
 
 # ========================================================
 # Grenade Settings

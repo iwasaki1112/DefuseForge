@@ -175,6 +175,52 @@ func _setup_ui() -> void:
 	# Virtual joystick (bottom-left)
 	_create_joystick(canvas)
 
+	# Action buttons (right side)
+	_create_action_buttons(canvas)
+
+
+func _create_action_buttons(canvas: CanvasLayer) -> void:
+	var vbox := VBoxContainer.new()
+	vbox.name = "ActionButtons"
+	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	vbox.position = Vector2(-170, -80)
+	vbox.add_theme_constant_override("separation", 12)
+	canvas.add_child(vbox)
+
+	var btn_grenade := Button.new()
+	btn_grenade.text = "Grenade"
+	btn_grenade.custom_minimum_size = Vector2(150, 50)
+	btn_grenade.pressed.connect(_on_grenade_pressed)
+	vbox.add_child(btn_grenade)
+
+	var btn_door_kick := Button.new()
+	btn_door_kick.text = "Door Kick"
+	btn_door_kick.custom_minimum_size = Vector2(150, 50)
+	btn_door_kick.pressed.connect(_on_door_kick_pressed)
+	vbox.add_child(btn_door_kick)
+
+	var btn_door_open := Button.new()
+	btn_door_open.text = "Door Open"
+	btn_door_open.custom_minimum_size = Vector2(150, 50)
+	btn_door_open.pressed.connect(_on_door_open_pressed)
+	vbox.add_child(btn_door_open)
+
+
+func _on_grenade_pressed() -> void:
+	if _character and _character.anim_ctrl:
+		_character.anim_ctrl.play_throw()
+
+
+func _on_door_kick_pressed() -> void:
+	if _character and _character.anim_ctrl:
+		_character.anim_ctrl.play_door_kick()
+
+
+func _on_door_open_pressed() -> void:
+	if _character and _character.anim_ctrl:
+		_character.anim_ctrl.play_door_open()
+
 
 func _create_joystick(canvas: CanvasLayer) -> void:
 	var margin := 40.0
