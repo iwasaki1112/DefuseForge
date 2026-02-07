@@ -358,9 +358,9 @@ func play_door_kick() -> void:
 		_:
 			anim_name = RIFLE_DOOR_KICK_ANIM
 
-	# Play door kick animation
+	# Play door kick animation (crossfade from current pose)
 	if _anim_player.has_animation(anim_name):
-		_anim_player.play(anim_name)
+		_anim_player.play(anim_name, 0.15)
 		_anim_player.animation_finished.connect(_on_door_kick_finished, CONNECT_ONE_SHOT)
 		# インパクトタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(DOOR_KICK_IMPACT_TIME).timeout.connect(_on_door_kick_impact, CONNECT_ONE_SHOT)
@@ -418,9 +418,9 @@ func play_throw() -> void:
 	if _anim_tree:
 		_anim_tree.active = false
 
-	# Play throw animation
+	# Play throw animation (crossfade from current pose)
 	if _anim_player.has_animation(PISTOL_LOW_THROWING_ANIM):
-		_anim_player.play(PISTOL_LOW_THROWING_ANIM)
+		_anim_player.play(PISTOL_LOW_THROWING_ANIM, 0.15)
 		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
 		# リリースタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(THROW_RELEASE_TIME).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
@@ -467,7 +467,7 @@ func play_door_open() -> void:
 		_anim_tree.active = false
 
 	if _anim_player.has_animation(RIFLE_OPEN_DOOR_ANIM):
-		_anim_player.play(RIFLE_OPEN_DOOR_ANIM)
+		_anim_player.play(RIFLE_OPEN_DOOR_ANIM, 0.15)
 		_anim_player.animation_finished.connect(_on_door_open_finished, CONNECT_ONE_SHOT)
 	else:
 		push_warning("CharacterAnimationController: Door open animation not found: %s" % RIFLE_OPEN_DOOR_ANIM)
