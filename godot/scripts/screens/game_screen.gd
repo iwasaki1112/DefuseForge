@@ -250,7 +250,7 @@ func _setup_tps_hud() -> void:
 	#_create_hp_bar()  # TODO: 一時的に無効化
 
 	# クロスヘア（画面中央）
-	_create_crosshair()
+	#_create_crosshair()  # TODO: 一時的に無効化
 
 
 func _create_hp_bar() -> void:
