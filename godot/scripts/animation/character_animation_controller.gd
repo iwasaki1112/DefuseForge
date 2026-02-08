@@ -232,6 +232,8 @@ func get_model() -> Node3D:
 	return _model
 
 
+
+
 ## Set aim direction directly (for rotation mode)
 ## 非推奨: GameCharacter.set_facing_direction_vec()を使用してください
 func set_look_direction(direction: Vector3) -> void:
@@ -820,17 +822,29 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	move_dir.y = 0
 
 	if move_dir.length() > 0.1:
-		var char_forward := _model.global_transform.basis.z
+		# ターゲットのエイム方向を使用（SLERP途中のモデル回転ではなく）
+		# モデル回転は毎フレーム少しずつ変化するため、basis.zを使うとブレンド位置が振動してカクつく
+		var char_forward := _aim_direction
+		char_forward.y = 0
+		if char_forward.length_squared() < 0.001:
+			char_forward = _model.global_transform.basis.z
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 		var target_blend := Vector2(-sin(angle), -cos(angle))
 
-		# Smooth but fast interpolation for direction changes
-		# This prevents "popping" when changing direction while keeping responsiveness
-		var blend_speed := 12.0  # Higher = faster response
-		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+		# ブレンド補間速度を変化量に応じて適応的に調整
+		# 大きな変化（エイム急変時）は即座に反映し、足が違う方向になるのを防ぐ
+		# 小さな変化はスムーズに補間してポッピングを防ぐ
+		var blend_diff := target_blend.distance_to(_input_dir)
+		if blend_diff > 1.0:
+			# 大きな方向変化（~90°以上）: 即座に切り替え
+			_input_dir = target_blend
+		else:
+			# 小〜中の変化: 差分に応じたスムーズ補間
+			var blend_speed := lerpf(12.0, 40.0, clampf(blend_diff * 2.0, 0.0, 1.0))
+			_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
-		# Quick fade to idle when stopped
+		# 停止時: アイドルへフェード
 		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
@@ -844,7 +858,6 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 
-	# TimeScale = 1.0（アニメーション速度と移動速度は定数で同期済み）
 	_anim_tree.set("parameters/WalkSpeed/scale", 1.0)
 
 	# Update blend amounts

@@ -18,11 +18,12 @@ extends Node
 # ============================================
 # Constants
 # ============================================
-const CAMERA_HEIGHT := 14.0
-const CAMERA_PITCH_DEG := -70.0
+const CAMERA_HEIGHT := 20.0
+const CAMERA_PITCH_DEG := -90.0
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
 const GROUND_Y := 0.0
+
 
 # Move stick (left)
 const STICK_RADIUS := 80.0
@@ -58,6 +59,7 @@ var _aim_stick_center: Vector2 = Vector2.ZERO
 var _last_move_dir: Vector3 = Vector3.ZERO
 
 
+
 # ============================================
 # Public API
 # ============================================
@@ -89,10 +91,12 @@ func process(delta: float) -> void:
 	if not _character or not _character.is_alive:
 		return
 
-	_handle_movement(delta)
-	_handle_aim(delta)
+	# 実行順序: 敵検知 → エイム反映 → 移動+アニメーション
+	# この順序により、同一フレーム内で敵検知結果がアニメーションに反映される
 	if _character.combat_awareness:
 		_character.combat_awareness.process(delta)
+	_handle_aim(delta)
+	_handle_movement(delta)
 	_update_camera(delta)
 
 
@@ -126,14 +130,14 @@ func _handle_movement(delta: float) -> void:
 		input_dir = input_dir.normalized()
 
 	var move_dir := Vector3.ZERO
-	if input_dir.length() > 0.01:
+	var has_input := input_dir.length() > 0.01
+	if has_input:
 		input_dir = input_dir.normalized()
 		move_dir = Vector3(input_dir.x, 0, input_dir.y).normalized()
+		_last_move_dir = move_dir
 
-	_last_move_dir = move_dir
-
-	var speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
-	_character.velocity = move_dir * speed
+	var base_speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
+	_character.velocity = move_dir * base_speed
 	_character.move_and_slide()
 
 	if _character.anim_ctrl:
@@ -201,24 +205,15 @@ func _update_camera(delta: float) -> void:
 # ============================================
 
 func _create_move_stick(canvas: CanvasLayer) -> void:
-	var margin := 40.0
 	var base_size := STICK_RADIUS * 2
 
 	_stick_base = Control.new()
 	_stick_base.name = "MoveStickBase"
 	_stick_base.custom_minimum_size = Vector2(base_size, base_size)
 	_stick_base.size = Vector2(base_size, base_size)
-	_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_stick_base.position = Vector2(margin, -margin - base_size)
 	_stick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stick_base.visible = false
 	canvas.add_child(_stick_base)
-
-	var base_draw := ColorRect.new()
-	base_draw.name = "BaseBG"
-	base_draw.size = Vector2(base_size, base_size)
-	base_draw.color = Color(1, 1, 1, 0.0)
-	base_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stick_base.add_child(base_draw)
 
 	var base_circle := _create_circle_control(STICK_RADIUS, Color(0.5, 0.5, 0.5, 0.3))
 	base_circle.position = Vector2(STICK_RADIUS, STICK_RADIUS)
@@ -230,32 +225,21 @@ func _create_move_stick(canvas: CanvasLayer) -> void:
 	_stick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stick_base.add_child(_stick_knob)
 
-	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-
 
 # ============================================
 # Aim Stick (Right Side)
 # ============================================
 
 func _create_aim_stick(canvas: CanvasLayer) -> void:
-	var margin := 40.0
 	var base_size := AIM_STICK_RADIUS * 2
 
 	_aim_stick_base = Control.new()
 	_aim_stick_base.name = "AimStickBase"
 	_aim_stick_base.custom_minimum_size = Vector2(base_size, base_size)
 	_aim_stick_base.size = Vector2(base_size, base_size)
-	_aim_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_aim_stick_base.position = Vector2(-margin - base_size, -margin - base_size)
 	_aim_stick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_aim_stick_base.visible = false
 	canvas.add_child(_aim_stick_base)
-
-	var base_draw := ColorRect.new()
-	base_draw.name = "AimBaseBG"
-	base_draw.size = Vector2(base_size, base_size)
-	base_draw.color = Color(1, 1, 1, 0.0)
-	base_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_aim_stick_base.add_child(base_draw)
 
 	var base_circle := _create_circle_control(AIM_STICK_RADIUS, Color(0.5, 0.5, 0.5, 0.3))
 	base_circle.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
@@ -266,8 +250,6 @@ func _create_aim_stick(canvas: CanvasLayer) -> void:
 	_aim_stick_knob.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
 	_aim_stick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_aim_stick_base.add_child(_aim_stick_knob)
-
-	_aim_stick_center = _aim_stick_base.global_position + Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
 
 
 # ============================================
@@ -295,16 +277,18 @@ func _handle_touch_input(event: InputEvent) -> void:
 		var screen_half_x := _character.get_viewport().get_visible_rect().size.x * 0.5
 
 		if touch.pressed:
-			# 左半分 → 移動スティック
+			# 左半分 → 移動スティック（タッチ位置に出現）
 			if _stick_touch_idx < 0 and touch.position.x < screen_half_x:
 				_stick_touch_idx = touch.index
-				_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-				_update_move_stick_position(touch.position)
-			# 右半分 → エイムスティック
+				_stick_center = touch.position
+				_stick_base.position = touch.position - Vector2(STICK_RADIUS, STICK_RADIUS)
+				_stick_base.visible = true
+			# 右半分 → エイムスティック（タッチ位置に出現）
 			elif _aim_stick_touch_idx < 0 and touch.position.x >= screen_half_x:
 				_aim_stick_touch_idx = touch.index
-				_aim_stick_center = _aim_stick_base.global_position + Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
-				_update_aim_stick_position(touch.position)
+				_aim_stick_center = touch.position
+				_aim_stick_base.position = touch.position - Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+				_aim_stick_base.visible = true
 		else:
 			if touch.index == _stick_touch_idx:
 				_release_move_stick()
@@ -328,6 +312,8 @@ func _release_move_stick() -> void:
 	_stick_input = Vector2.ZERO
 	if _stick_knob:
 		_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
+	if _stick_base:
+		_stick_base.visible = false
 
 
 func _update_move_stick_position(touch_pos: Vector2) -> void:
@@ -354,6 +340,8 @@ func _release_aim_stick() -> void:
 	_aim_stick_input = Vector2.ZERO
 	if _aim_stick_knob:
 		_aim_stick_knob.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+	if _aim_stick_base:
+		_aim_stick_base.visible = false
 
 
 func _update_aim_stick_position(touch_pos: Vector2) -> void:

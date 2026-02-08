@@ -116,7 +116,7 @@ func _setup_game_manager() -> void:
 		add_child(game_manager)
 
 		# UIコンポーネントをGameScreenが作成してGameManagerに注入
-		_setup_label_manager()
+		#_setup_label_manager()  # TODO: 一時的に無効化（頭上ラベル非表示）
 
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
@@ -247,7 +247,7 @@ func _setup_tps_hud() -> void:
 	_create_action_buttons()
 
 	# HPバー（左下、ジョイスティックの上）
-	_create_hp_bar()
+	#_create_hp_bar()  # TODO: 一時的に無効化
 
 	# クロスヘア（画面中央）
 	_create_crosshair()
