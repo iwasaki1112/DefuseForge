@@ -54,6 +54,9 @@ var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 
+# 全体速度倍率（移動速度とアニメーション再生速度の両方に適用）
+const SPEED_SCALE := 1.3
+
 # Animation visual speeds at 1x playback
 # ピストル歩行はライフル歩行と同じアニメーションを使用するため共通定数
 const ANIM_SPEED_FORWARD := 2.0
@@ -188,8 +191,8 @@ func fire() -> void:
 func get_current_speed() -> float:
 	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return 0.0
-	# Calculate direction-based speed from current blend position
-	return _get_directional_anim_speed()
+	# Calculate direction-based speed from current blend position, scaled
+	return _get_directional_anim_speed() * SPEED_SCALE
 
 ## Calculate animation visual speed based on blend direction
 ## _input_dir: y<0 = forward, y>0 = backward, x = strafe
@@ -858,7 +861,7 @@ func _update_animation_tree() -> void:
 		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
 		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
 
-	_anim_tree.set("parameters/WalkSpeed/scale", 1.0)
+	_anim_tree.set("parameters/WalkSpeed/scale", SPEED_SCALE)
 
 	# Update blend amounts
 	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
