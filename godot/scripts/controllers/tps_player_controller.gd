@@ -3,8 +3,9 @@ extends Node
 ## TPS操作コントローラー
 ##
 ## GameScreenで使用する再利用可能なTPSプレイヤー制御。
-## WASD + バーチャルジョイスティック移動、マウスエイム、カメラフォロー、
-## CombatAwareness連携を提供する。
+## ツインスティック（左: 移動、右: 向き/エイム）+ WASD + マウス操作。
+## 左スティックで移動しつつ、右スティックで任意の方向を向ける。
+## CombatAwareness連携（敵検知時は自動で敵を向く）。
 ##
 ## 使用方法:
 ##   var ctrl = TPSPlayerController.new()
@@ -18,15 +19,19 @@ extends Node
 # Constants
 # ============================================
 const CAMERA_HEIGHT := 14.0
-const CAMERA_PITCH_DEG := -50.0
+const CAMERA_PITCH_DEG := -70.0
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
 const GROUND_Y := 0.0
 
-# Joystick
+# Move stick (left)
 const STICK_RADIUS := 80.0
 const STICK_KNOB_RADIUS := 30.0
 const STICK_DEADZONE := 0.15
+
+# Aim stick (right)
+const AIM_STICK_RADIUS := 80.0
+const AIM_STICK_KNOB_RADIUS := 30.0
 
 # ============================================
 # References
@@ -35,15 +40,21 @@ var _character: GameCharacter = null
 var _camera: Camera3D = null
 var _ui_layer: CanvasLayer = null
 
-# Joystick state
+# Move stick state (left side)
 var _stick_base: Control = null
 var _stick_knob: Control = null
 var _stick_touch_idx: int = -1
-var _stick_mouse_active: bool = false
 var _stick_input: Vector2 = Vector2.ZERO
 var _stick_center: Vector2 = Vector2.ZERO
 
-# Movement direction cache (for mobile facing)
+# Aim stick state (right side)
+var _aim_stick_base: Control = null
+var _aim_stick_knob: Control = null
+var _aim_stick_touch_idx: int = -1
+var _aim_stick_input: Vector2 = Vector2.ZERO
+var _aim_stick_center: Vector2 = Vector2.ZERO
+
+# Movement direction cache
 var _last_move_dir: Vector3 = Vector3.ZERO
 
 
@@ -67,9 +78,10 @@ func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer) -> void
 			var offset_z := CAMERA_HEIGHT / tan(-pitch_rad)
 			_camera.global_position = _character.global_position + Vector3(0, CAMERA_HEIGHT, offset_z)
 
-	# ジョイスティックUI作成
+	# ジョイスティックUI作成（左: 移動、右: 向き）
 	if _ui_layer:
-		_create_joystick(_ui_layer)
+		_create_move_stick(_ui_layer)
+		_create_aim_stick(_ui_layer)
 
 
 ## 毎フレーム処理（_physics_processから呼ぶ）
@@ -86,7 +98,7 @@ func process(delta: float) -> void:
 
 ## 入力処理（_inputから呼ぶ）
 func handle_input(event: InputEvent) -> void:
-	_handle_stick_input(event)
+	_handle_touch_input(event)
 
 
 ## 操作対象のキャラクターを返す
@@ -106,7 +118,7 @@ func _handle_movement(delta: float) -> void:
 	input_dir.x -= Input.get_action_strength("move_left")
 	input_dir.x += Input.get_action_strength("move_right")
 
-	# Combine with joystick
+	# Combine with move joystick (left)
 	input_dir.x += _stick_input.x
 	input_dir.y += _stick_input.y
 
@@ -130,7 +142,7 @@ func _handle_movement(delta: float) -> void:
 
 
 # ============================================
-# Aim
+# Aim (Facing Direction)
 # ============================================
 
 func _handle_aim(_delta: float) -> void:
@@ -141,8 +153,15 @@ func _handle_aim(_delta: float) -> void:
 			_character.set_facing_direction_vec(override_dir)
 			return
 
-	# 2. PC: マウスエイム（ジョイスティック非アクティブ時のみ）
-	if _camera and _stick_input.length() <= 0.01:
+	# 2. 右スティック — エイム方向を直接指定
+	if _aim_stick_input.length() > STICK_DEADZONE:
+		# スティックの2D入力をワールド3D方向に変換（X→X, Y→Z）
+		var aim_dir := Vector3(_aim_stick_input.x, 0, _aim_stick_input.y).normalized()
+		_character.set_facing_direction_vec(aim_dir)
+		return
+
+	# 3. PC: マウスエイム（地面レイキャスト）
+	if _camera:
 		var viewport := _character.get_viewport()
 		if viewport:
 			var mouse_pos := viewport.get_mouse_position()
@@ -159,13 +178,13 @@ func _handle_aim(_delta: float) -> void:
 						_character.set_facing_direction_vec(aim_dir.normalized())
 					return
 
-	# 3. モバイル: 移動方向 = 向き
+	# 4. フォールバック: 移動方向 = 向き
 	if _last_move_dir.length_squared() > 0.01:
 		_character.set_facing_direction_vec(_last_move_dir)
 
 
 # ============================================
-# Camera
+# Camera (Fixed Follow)
 # ============================================
 
 func _update_camera(delta: float) -> void:
@@ -178,15 +197,15 @@ func _update_camera(delta: float) -> void:
 
 
 # ============================================
-# Joystick
+# Move Stick (Left Side)
 # ============================================
 
-func _create_joystick(canvas: CanvasLayer) -> void:
+func _create_move_stick(canvas: CanvasLayer) -> void:
 	var margin := 40.0
 	var base_size := STICK_RADIUS * 2
 
 	_stick_base = Control.new()
-	_stick_base.name = "StickBase"
+	_stick_base.name = "MoveStickBase"
 	_stick_base.custom_minimum_size = Vector2(base_size, base_size)
 	_stick_base.size = Vector2(base_size, base_size)
 	_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -214,6 +233,47 @@ func _create_joystick(canvas: CanvasLayer) -> void:
 	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
 
 
+# ============================================
+# Aim Stick (Right Side)
+# ============================================
+
+func _create_aim_stick(canvas: CanvasLayer) -> void:
+	var margin := 40.0
+	var base_size := AIM_STICK_RADIUS * 2
+
+	_aim_stick_base = Control.new()
+	_aim_stick_base.name = "AimStickBase"
+	_aim_stick_base.custom_minimum_size = Vector2(base_size, base_size)
+	_aim_stick_base.size = Vector2(base_size, base_size)
+	_aim_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_aim_stick_base.position = Vector2(-margin - base_size, -margin - base_size)
+	_aim_stick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(_aim_stick_base)
+
+	var base_draw := ColorRect.new()
+	base_draw.name = "AimBaseBG"
+	base_draw.size = Vector2(base_size, base_size)
+	base_draw.color = Color(1, 1, 1, 0.0)
+	base_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_aim_stick_base.add_child(base_draw)
+
+	var base_circle := _create_circle_control(AIM_STICK_RADIUS, Color(0.5, 0.5, 0.5, 0.3))
+	base_circle.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+	base_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_aim_stick_base.add_child(base_circle)
+
+	_aim_stick_knob = _create_circle_control(AIM_STICK_KNOB_RADIUS, Color(0.8, 0.8, 0.8, 0.6))
+	_aim_stick_knob.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+	_aim_stick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_aim_stick_base.add_child(_aim_stick_knob)
+
+	_aim_stick_center = _aim_stick_base.global_position + Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+
+
+# ============================================
+# Shared UI Helper
+# ============================================
+
 func _create_circle_control(radius: float, color: Color) -> Control:
 	var ctrl := Control.new()
 	ctrl.custom_minimum_size = Vector2(radius * 2, radius * 2)
@@ -225,60 +285,54 @@ func _create_circle_control(radius: float, color: Color) -> Control:
 	return ctrl
 
 
-func _is_in_stick_area(pos: Vector2) -> bool:
-	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-	return pos.distance_to(_stick_center) <= STICK_RADIUS * 1.5
+# ============================================
+# Touch Input (Mobile)
+# ============================================
 
-
-func _handle_stick_input(event: InputEvent) -> void:
-	if not _stick_base:
-		return
-
-	# Touch input (mobile)
+func _handle_touch_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		var screen_half_x := _character.get_viewport().get_visible_rect().size.x * 0.5
+
 		if touch.pressed:
-			if _stick_touch_idx < 0 and touch.position.x < _character.get_viewport().get_visible_rect().size.x * 0.5:
+			# 左半分 → 移動スティック
+			if _stick_touch_idx < 0 and touch.position.x < screen_half_x:
 				_stick_touch_idx = touch.index
 				_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-				_update_stick_position(touch.position)
+				_update_move_stick_position(touch.position)
+			# 右半分 → エイムスティック
+			elif _aim_stick_touch_idx < 0 and touch.position.x >= screen_half_x:
+				_aim_stick_touch_idx = touch.index
+				_aim_stick_center = _aim_stick_base.global_position + Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+				_update_aim_stick_position(touch.position)
 		else:
 			if touch.index == _stick_touch_idx:
-				_release_stick()
+				_release_move_stick()
+			if touch.index == _aim_stick_touch_idx:
+				_release_aim_stick()
 
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		if drag.index == _stick_touch_idx:
-			_update_stick_position(drag.position)
-
-	# Mouse input (PC)
-	elif event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed and _is_in_stick_area(mb.position):
-				_stick_mouse_active = true
-				_update_stick_position(mb.position)
-			elif not mb.pressed and _stick_mouse_active:
-				_stick_mouse_active = false
-				_release_stick()
-
-	elif event is InputEventMouseMotion:
-		if _stick_mouse_active:
-			_update_stick_position(event.position)
+			_update_move_stick_position(drag.position)
+		if drag.index == _aim_stick_touch_idx:
+			_update_aim_stick_position(drag.position)
 
 
-func _release_stick() -> void:
+# ============================================
+# Move Stick Helpers
+# ============================================
+
+func _release_move_stick() -> void:
 	_stick_touch_idx = -1
 	_stick_input = Vector2.ZERO
 	if _stick_knob:
 		_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
 
 
-func _update_stick_position(touch_pos: Vector2) -> void:
+func _update_move_stick_position(touch_pos: Vector2) -> void:
 	var offset := touch_pos - _stick_center
-	var dist := offset.length()
-
-	if dist > STICK_RADIUS:
+	if offset.length() > STICK_RADIUS:
 		offset = offset.normalized() * STICK_RADIUS
 
 	if _stick_knob:
@@ -289,3 +343,29 @@ func _update_stick_position(touch_pos: Vector2) -> void:
 		_stick_input = Vector2.ZERO
 	else:
 		_stick_input = normalized
+
+
+# ============================================
+# Aim Stick Helpers
+# ============================================
+
+func _release_aim_stick() -> void:
+	_aim_stick_touch_idx = -1
+	_aim_stick_input = Vector2.ZERO
+	if _aim_stick_knob:
+		_aim_stick_knob.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+
+
+func _update_aim_stick_position(touch_pos: Vector2) -> void:
+	var offset := touch_pos - _aim_stick_center
+	if offset.length() > AIM_STICK_RADIUS:
+		offset = offset.normalized() * AIM_STICK_RADIUS
+
+	if _aim_stick_knob:
+		_aim_stick_knob.position = Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS) + offset
+
+	var normalized := offset / AIM_STICK_RADIUS
+	if normalized.length() < STICK_DEADZONE:
+		_aim_stick_input = Vector2.ZERO
+	else:
+		_aim_stick_input = normalized

@@ -16,14 +16,10 @@ const NODE_ANIMATION_TREE := "AnimationTree"
 const NODE_VISION_COMPONENT := "VisionComponent"
 const NODE_COMBAT_AWARENESS := "CombatAwarenessComponent"
 const NODE_SELECTION_MANAGER := "SelectionManager"
-const NODE_PATH_EXECUTION_MANAGER := "PathExecutionManager"
 const NODE_IDLE_MANAGER := "IdleCharacterManager"
-const NODE_PATH_DRAWER := "PathDrawer"
-const NODE_PATH_MODE_CONTROLLER := "PathModeController"
 const NODE_VISION_SERVICE := "VisionService"
 const NODE_MAP_MANAGER := "MapManager"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
-const NODE_PATH_SERVICE := "PathService"
 
 # ========================================================
 # Group Names
@@ -78,16 +74,6 @@ const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
 const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
-
-# ========================================================
-# Path Settings (パス描画・クリック判定)
-# ========================================================
-## パスの線幅（視覚的な太さ）
-const PATH_LINE_WIDTH: float = 0.15
-## パスのクリック判定エリア（PC向け、線幅と統一）
-const PATH_CLICK_THRESHOLD: float = 0.15
-## パスのクリック判定エリア（モバイル向け、タッチ精度を考慮して大きめ）
-const PATH_CLICK_THRESHOLD_MOBILE: float = 0.5
 
 # ========================================================
 # Round Settings

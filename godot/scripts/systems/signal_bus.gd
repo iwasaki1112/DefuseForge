@@ -20,41 +20,6 @@ signal selection_changed(selected: Array[Node], primary: Node)
 signal primary_changed(character: Node)
 
 # ============================================
-# Path Signals
-# ============================================
-
-## パスモードが開始された
-@warning_ignore("unused_signal")
-signal path_mode_started(character: Node)
-## パスモードが終了した
-@warning_ignore("unused_signal")
-signal path_mode_ended()
-## パスモードがキャンセルされた
-@warning_ignore("unused_signal")
-signal path_mode_cancelled()
-## パスが準備完了
-@warning_ignore("unused_signal")
-signal path_ready()
-## パスが確定された
-@warning_ignore("unused_signal")
-signal path_confirmed(count: int)
-## 全パスの実行が開始された
-@warning_ignore("unused_signal")
-signal paths_execution_started(count: int)
-## 全パスの実行が完了した
-@warning_ignore("unused_signal")
-signal all_paths_completed()
-## パスがクリアされた
-@warning_ignore("unused_signal")
-signal paths_cleared()
-## パスモードが変更された（MOVE, VISION, WAIT等）
-@warning_ignore("unused_signal")
-signal path_mode_changed(mode: int)
-## 視線ポイントが追加された
-@warning_ignore("unused_signal")
-signal vision_point_added(anchor: Vector3, direction: Vector3)
-
-# ============================================
 # Combat Signals
 # ============================================
 

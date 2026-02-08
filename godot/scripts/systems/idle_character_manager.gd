@@ -1,13 +1,10 @@
 extends Node
 class_name IdleCharacterManager
 ## アイドルキャラクター管理
-## パス追従していないキャラクターの状態更新を担当
+## TPS操作対象以外のキャラクターの状態更新を担当
 
 ## 管理対象キャラクターリスト
 var characters: Array[Node] = []
-
-## パス追従中チェック用のコールバック
-var is_following_path_callback: Callable
 
 ## プライマリキャラクター取得用のコールバック
 var get_primary_callback: Callable
@@ -16,11 +13,10 @@ var get_primary_callback: Callable
 ## セットアップ
 func setup(
 	char_list: Array[Node],
-	following_check: Callable,
+	_following_check: Callable,
 	primary_getter: Callable
 ) -> void:
 	characters = char_list
-	is_following_path_callback = following_check
 	get_primary_callback = primary_getter
 
 
@@ -53,12 +49,7 @@ func process_idle_characters(delta: float) -> void:
 		if not game_char.is_local():
 			continue
 
-		var is_following: bool = is_following_path_callback.is_valid() and is_following_path_callback.call(character)
-
-		# パス追従中はスキップ
-		if is_following:
-			continue
-		# プライマリキャラクターはスキップ（別処理）
+		# プライマリキャラクターはスキップ（TPSPlayerControllerが制御）
 		if character == primary:
 			continue
 		# 死亡中はスキップ

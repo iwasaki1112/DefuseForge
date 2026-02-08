@@ -5,7 +5,6 @@ class_name MultiplayerSyncController
 
 ## 同期イベントシグナル
 signal sync_state_received(snapshot: SyncState.GameStateSnapshot)
-signal path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage)
 signal character_updated_remote(char_state: NetworkMessages.CharacterStateMessage)
 signal round_state_updated(round_state: NetworkMessages.RoundStateMessage)
 signal game_event_received(event: NetworkMessages.GameEventMessage)
@@ -160,37 +159,6 @@ func _has_significant_change(old_state: NetworkMessages.CharacterStateMessage, n
 	return false
 
 
-## パス確定を送信
-func send_path_confirm(path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	var data := _path_message_to_dict(path_msg)
-
-	if is_host:
-		# Hostは全Clientへブロードキャスト
-		network_bus.broadcast_from_host(
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-	else:
-		# ClientはHostへ送信
-		network_bus.send_message(
-			peer_id,
-			LocalNetworkBus.HOST_PEER_ID,
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-
-
-## パス実行を送信（Host→Client）
-func send_path_execute(run: bool) -> void:
-	if not is_host:
-		return
-
-	network_bus.broadcast_from_host(
-		NetworkConstants.MessageType.PATH_EXECUTE,
-		{"run": run}
-	)
-
-
 ## キャラクター更新を送信
 func send_character_update(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var data := _char_state_to_dict(char_state)
@@ -329,10 +297,6 @@ func _on_message_received(from_peer: int, to_peer: int, msg_type: int, data: Dic
 	match msg_type:
 		NetworkConstants.MessageType.GAME_STATE_SYNC:
 			_handle_state_sync(data)
-		NetworkConstants.MessageType.PATH_CONFIRM:
-			_handle_path_confirm(from_peer, data)
-		NetworkConstants.MessageType.PATH_EXECUTE:
-			_handle_path_execute(data)
 		NetworkConstants.MessageType.CHARACTER_UPDATE:
 			_handle_character_update(data)
 		NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY:
@@ -354,32 +318,6 @@ func _handle_state_sync(data: Dictionary) -> void:
 	var snapshot := _dict_to_snapshot(data)
 	game_manager.apply_game_state_snapshot(snapshot)
 	sync_state_received.emit(snapshot)
-
-
-func _handle_path_confirm(from_peer: int, data: Dictionary) -> void:
-	var path_msg := _dict_to_path_message(data)
-
-	if is_host:
-		# HostはClientからのパス確定を受け取り、全体に転送
-		var character := game_manager.find_character_by_network_id(path_msg.character_id)
-		if character:
-			game_manager.confirm_path_for_player(from_peer, path_msg, character)
-		# 全Clientへ転送
-		network_bus.broadcast_from_host(
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-	else:
-		# Clientはパス確定を適用
-		path_confirmed_remote.emit(from_peer, path_msg)
-
-
-func _handle_path_execute(data: Dictionary) -> void:
-	if is_host:
-		return
-
-	var run: bool = data.get("run", false)
-	game_manager.execute_all_paths(run)
 
 
 func _handle_character_update(data: Dictionary) -> void:
@@ -715,34 +653,6 @@ func _dict_to_char_snapshot(data: Dictionary) -> SyncState.CharacterSnapshot:
 	snap.animation_state = data.get("animation_state", "")
 
 	return snap
-
-
-func _path_message_to_dict(msg: NetworkMessages.PathConfirmMessage) -> Dictionary:
-	var path_array: Array[Dictionary] = []
-	for p in msg.path:
-		path_array.append({"x": p.x, "y": p.y, "z": p.z})
-
-	return {
-		"player_id": msg.player_id,
-		"character_id": msg.character_id,
-		"path": path_array,
-		"vision_points": msg.vision_points.duplicate(true),
-		"wait_points": msg.wait_points.duplicate(true),
-	}
-
-
-func _dict_to_path_message(data: Dictionary) -> NetworkMessages.PathConfirmMessage:
-	var msg := NetworkMessages.PathConfirmMessage.new()
-	msg.player_id = data.get("player_id", 0)
-	msg.character_id = data.get("character_id", 0)
-
-	for p in data.get("path", []):
-		msg.path.append(Vector3(p.get("x", 0), p.get("y", 0), p.get("z", 0)))
-
-	msg.vision_points = data.get("vision_points", []).duplicate(true)
-	msg.wait_points = data.get("wait_points", []).duplicate(true)
-
-	return msg
 
 
 func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictionary:

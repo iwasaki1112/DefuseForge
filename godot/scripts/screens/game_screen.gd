@@ -32,6 +32,9 @@ var _weapon_list: Array = []
 var _timer_label: Label = null
 var _money_label: Label = null
 var _debug_vision_btn: Button = null
+var _hp_bar: ProgressBar = null
+var _crosshair: Control = null
+var _crosshair_color: Color = Color.WHITE
 
 ## UI要素
 var _round_hud: RoundHUD = null
@@ -114,7 +117,6 @@ func _setup_game_manager() -> void:
 
 		# UIコンポーネントをGameScreenが作成してGameManagerに注入
 		_setup_label_manager()
-		_setup_path_context_menu()
 
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
@@ -244,6 +246,59 @@ func _setup_tps_hud() -> void:
 	# アクションボタン（右中央）
 	_create_action_buttons()
 
+	# HPバー（左下、ジョイスティックの上）
+	_create_hp_bar()
+
+	# クロスヘア（画面中央）
+	_create_crosshair()
+
+
+func _create_hp_bar() -> void:
+	_hp_bar = ProgressBar.new()
+	_hp_bar.name = "HPBar"
+	_hp_bar.custom_minimum_size = Vector2(200, 16)
+	_hp_bar.size = Vector2(200, 16)
+	_hp_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_hp_bar.position = Vector2(40, -220)
+	_hp_bar.min_value = 0.0
+	_hp_bar.max_value = 1.0
+	_hp_bar.value = 1.0
+	_hp_bar.show_percentage = false
+	# スタイル設定
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = Color(0.2, 0.8, 0.2)
+	fill_style.corner_radius_top_left = 3
+	fill_style.corner_radius_top_right = 3
+	fill_style.corner_radius_bottom_left = 3
+	fill_style.corner_radius_bottom_right = 3
+	_hp_bar.add_theme_stylebox_override("fill", fill_style)
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.2, 0.2, 0.2, 0.6)
+	bg_style.corner_radius_top_left = 3
+	bg_style.corner_radius_top_right = 3
+	bg_style.corner_radius_bottom_left = 3
+	bg_style.corner_radius_bottom_right = 3
+	_hp_bar.add_theme_stylebox_override("background", bg_style)
+	ui_layer.add_child(_hp_bar)
+
+
+func _create_crosshair() -> void:
+	_crosshair = Control.new()
+	_crosshair.name = "Crosshair"
+	_crosshair.custom_minimum_size = Vector2(12, 12)
+	_crosshair.size = Vector2(12, 12)
+	_crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	_crosshair.position = Vector2(-6, -6)
+	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_crosshair_color = Color.WHITE
+	_crosshair.draw.connect(func():
+		# 小さなドット
+		_crosshair.draw_circle(Vector2.ZERO, 3.0, _crosshair_color)
+		# 外側リング
+		_crosshair.draw_arc(Vector2.ZERO, 6.0, 0, TAU, 24, Color(_crosshair_color, 0.5), 1.0)
+	)
+	ui_layer.add_child(_crosshair)
+
 
 func _create_action_buttons() -> void:
 	var vbox := VBoxContainer.new()
@@ -297,16 +352,6 @@ func _setup_label_manager() -> void:
 	game_manager.set_label_manager(lm)
 
 
-func _setup_path_context_menu() -> void:
-	var menu := PathContextMenu.new()
-	menu.name = "PathContextMenu"
-	if ui_layer:
-		ui_layer.add_child(menu)
-	else:
-		game_manager.add_child(menu)
-	game_manager.set_path_context_menu(menu)
-
-
 func _setup_money() -> void:
 	PlayerState.reset_money()
 	if not PlayerState.money_changed.is_connected(_on_money_changed):
@@ -332,11 +377,46 @@ func _physics_process(delta: float) -> void:
 		game_manager.process_frame(delta)
 	if _tps_controller:
 		_tps_controller.process(delta)
+	_update_tps_hud()
 
 
 func _input(event: InputEvent) -> void:
 	if _tps_controller:
 		_tps_controller.handle_input(event)
+
+
+## ========================================
+## TPS HUD更新
+## ========================================
+
+func _update_tps_hud() -> void:
+	if not _player_character:
+		return
+
+	# HPバー更新
+	if _hp_bar:
+		var ratio := _player_character.get_health_ratio()
+		_hp_bar.value = ratio
+		# HP割合に応じて色変更
+		var fill := _hp_bar.get_theme_stylebox("fill") as StyleBoxFlat
+		if fill:
+			if ratio > 0.5:
+				fill.bg_color = Color(0.2, 0.8, 0.2)  # 緑
+			elif ratio > 0.25:
+				fill.bg_color = Color(0.9, 0.7, 0.1)  # 黄色
+			else:
+				fill.bg_color = Color(0.9, 0.2, 0.2)  # 赤
+
+	# クロスヘア色更新（敵追跡中は赤）
+	if _crosshair and _player_character.combat_awareness:
+		var new_color: Color
+		if _player_character.combat_awareness.is_tracking_enemy():
+			new_color = Color(1.0, 0.2, 0.2)
+		else:
+			new_color = Color.WHITE
+		if new_color != _crosshair_color:
+			_crosshair_color = new_color
+			_crosshair.queue_redraw()
 
 
 ## ========================================

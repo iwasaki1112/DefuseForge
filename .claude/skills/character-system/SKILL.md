@@ -15,7 +15,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
 |---------|--------|------|
 | `scripts/characters/game_character.gd` | GameCharacter | HP、死亡状態、チーム、武器、向き管理 |
 | `scripts/animation/character_animation_controller.gd` | CharacterAnimationController | アニメーション制御 |
-| `scripts/characters/path_following_controller.gd` | PathFollowingController | パス追従（76KB、大規模） |
+| `scripts/controllers/tps_player_controller.gd` | TPSPlayerController | TPS直接操作（ツインスティック） |
 
 ### 視界システム
 | ファイル | クラス | 責務 |
@@ -87,20 +87,10 @@ character._facing_direction = dir  # 同期漏れ
   小さく(50ms): レスポンス良、カクつき増
 ```
 
-### 衝突回避
-```gdscript
-_detect_ally_ahead()  # 前方球体キャスト
-_is_head_on_collision()  # 相互接近判定
-_start_collision_halt()  # 待機
-_start_sidestep()  # 側方0.8m回避
-_should_yield_to(other)  # 優先度比較
-```
-
 ## 変更時の注意点
 
 1. **向き制御は `set_facing_direction_vec()` 経由必須**
-2. **PathFollowingController内も同様** - 直接更新禁止
-3. **死亡時の壁検出** - `_detect_nearby_walls()` で安全な方向選択
+2. **死亡時の壁検出** - `_detect_nearby_walls()` で安全な方向選択
 4. **VisionComponentのFOV計算** - XZ平面で距離・角度計算（Y軸無視）
 5. **コンポーネント遅延セットアップ** - `call_deferred()` でパフォーマンス最適化
 6. **iOS互換** - `load()` で動的ロード
@@ -126,9 +116,6 @@ func _complete_character_setup(character: Node) -> void:
 ### カスタム視界ロジック
 `VisionComponent.is_position_in_view()` を拡張または新メソッド追加
 
-### パス追従中のカスタム動作
-`PathFollowingController` のシグナル（`vision_point_reached` 等）を監視
-
 ### マルチプレイヤー状態同期
 ```gdscript
 var snapshot = character.to_character_snapshot()
@@ -147,9 +134,8 @@ game_character.gd
   ├→ bullet_trail_component.gd
   └→ muzzle_flash_component.gd
 
-path_following_controller.gd
+tps_player_controller.gd
   ├→ game_character.gd (参照)
-  ├→ path_point_checker.gd
   └→ character_animation_controller.gd (参照)
 ```
 

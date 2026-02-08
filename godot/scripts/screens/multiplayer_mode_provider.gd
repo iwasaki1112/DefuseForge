@@ -63,9 +63,7 @@ func _connect_network_events() -> void:
 	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
 	_game_manager.damage_network_event.connect(_on_damage_network_event)
 
-	# リモートプレイヤーからのパス確定を処理
-	if sync_controller:
-		sync_controller.path_confirmed_remote.connect(_on_path_confirmed_remote)
+
 
 
 func determine_player_team() -> void:
@@ -184,17 +182,6 @@ func _spawn_team_characters_for_player(
 	return network_id_counter
 
 
-func on_path_confirmed() -> void:
-	if sync_controller:
-		sync_controller.send_state_sync()
-
-
-func on_execute_paths(_count: int) -> void:
-	# 各プレイヤーは自分のキャラクターのみを操作するため、
-	# PATH_EXECUTEの送信は不要（各自がGOを押したときに自分のキャラクターのみ実行）
-	pass
-
-
 func on_round_ended(_winner: int, _reason: int) -> void:
 	if _is_host and sync_controller:
 		sync_controller.send_round_state()
@@ -233,9 +220,6 @@ func cleanup() -> void:
 		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
 	if _game_manager and _game_manager.damage_network_event.is_connected(_on_damage_network_event):
 		_game_manager.damage_network_event.disconnect(_on_damage_network_event)
-
-	if sync_controller and sync_controller.path_confirmed_remote.is_connected(_on_path_confirmed_remote):
-		sync_controller.path_confirmed_remote.disconnect(_on_path_confirmed_remote)
 
 
 ## ========================================
@@ -316,22 +300,3 @@ func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, i
 		"is_headshot": is_headshot,
 	}
 	sync_controller.send_game_event(event)
-
-
-## リモートプレイヤーからのパス確定を処理
-func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	if not _game_manager:
-		return
-
-	# 自分のパスはすでにローカルで登録済みなのでスキップ
-	if player_id == _local_peer_id:
-		return
-
-	# キャラクターを検索
-	var character := _game_manager.find_character_by_network_id(path_msg.character_id)
-	if not character:
-		if Debug.enabled: print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
-		return
-
-	# リモートプレイヤーのパスを登録
-	_game_manager.confirm_path_for_player(player_id, path_msg, character)
