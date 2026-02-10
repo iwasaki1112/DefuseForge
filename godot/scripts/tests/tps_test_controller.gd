@@ -23,8 +23,8 @@ const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
 
 # Vision
-const VISION_FOV := 90.0
-const VISION_RANGE := 15.0
+const VISION_FOV := 75.0
+const VISION_RANGE := 7.0
 const MAP_SIZE := Vector2(50.0, 50.0)
 
 # Enemy spawn positions

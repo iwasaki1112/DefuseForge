@@ -8,8 +8,8 @@ var fog_of_war_system: Node3D = null
 var label_manager: CharacterLabelManager = null
 var default_weapon_id: String = "ak47"
 var is_vision_enabled: bool = false
-var default_vision_fov: float = 90.0
-var default_vision_range: float = 15.0
+var default_vision_fov: float = 75.0
+var default_vision_range: float = 7.0
 
 
 func setup(

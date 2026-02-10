@@ -234,7 +234,7 @@ func get_vision_component() -> VisionComponent:
 	return vision
 
 ## Setup vision component (auto-create if not exists)
-func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent:
+func setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent:
 	if vision == null:
 		vision = VisionComponent.new()
 		vision.name = GameConstants.NODE_VISION_COMPONENT

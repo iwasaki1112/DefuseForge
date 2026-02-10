@@ -181,12 +181,7 @@ func _handle_aim(_delta: float) -> void:
 			_character.set_facing_direction_vec(override_dir)
 			return
 
-	# 3. 移動方向 — 移動中は進行方向を向く
-	if _last_move_dir.length_squared() > 0.01:
-		_character.set_facing_direction_vec(_last_move_dir)
-		return
-
-	# 4. PC: マウスエイム（地面レイキャスト）— 停止中のみ
+	# 3. PC: マウスエイム（地面レイキャスト）
 	if _camera:
 		var viewport := _character.get_viewport()
 		if viewport:
@@ -202,6 +197,11 @@ func _handle_aim(_delta: float) -> void:
 					aim_dir.y = 0
 					if aim_dir.length_squared() > 0.01:
 						_character.set_facing_direction_vec(aim_dir.normalized())
+						return
+
+	# 4. 移動方向 — フォールバック
+	if _last_move_dir.length_squared() > 0.01:
+		_character.set_facing_direction_vec(_last_move_dir)
 
 
 # ============================================
