@@ -15,8 +15,7 @@
 ```gdscript
 enum MessageType {
     GAME_STATE_SYNC = 0,           # ゲーム状態の同期
-    PATH_CONFIRM = 1,              # パス確定メッセージ
-    PATH_EXECUTE = 2,              # パス実行開始メッセージ
+    # Historical: Values 1-2 were PATH_CONFIRM/PATH_EXECUTE (removed in TPS migration)
     CHARACTER_UPDATE = 3,          # キャラクター状態更新
     ROUND_STATE = 4,               # ラウンド状態
     GAME_EVENT = 5,                # ゲームイベント（ダメージ、死亡等）
@@ -76,7 +75,6 @@ enum AnimationEventType {
 | `SYNC_INTERVAL` | 0.067 | 同期間隔（秒） |
 | `POSITION_PRECISION` | 100 | 位置精度（1cm単位） |
 | `ROTATION_PRECISION` | 1000 | 回転精度（0.001ラジアン単位） |
-| `MAX_PATH_POINTS` | 256 | パス座標の最大数 |
 | `MAX_MARKERS_PER_TYPE` | 32 | マーカーの最大数（各種類ごと） |
 
 ## 補間設定
@@ -137,8 +135,8 @@ GameEventTypeを文字列に変換。デバッグ用。
 
 ```gdscript
 # メッセージタイプの使用
-var msg_type = NetworkConstants.MessageType.PATH_CONFIRM
-print(NetworkConstants.message_type_to_string(msg_type))  # "PATH_CONFIRM"
+var msg_type = NetworkConstants.MessageType.CHARACTER_UPDATE
+print(NetworkConstants.message_type_to_string(msg_type))  # "CHARACTER_UPDATE"
 
 # 同期間隔の使用
 var timer := Timer.new()

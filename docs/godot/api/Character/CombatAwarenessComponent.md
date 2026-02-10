@@ -116,18 +116,6 @@ func _on_enemy_lost(enemy: Node) -> void:
     print("%s lost sight of %s" % [character.name, enemy.name])
 ```
 
-### PathFollowingControllerとの連携
-
-```gdscript
-# コントローラーに連携
-var controller = PathFollowingController.new()
-controller.setup(character)
-controller.set_combat_awareness(character.combat_awareness)
-
-# パス追従開始（移動中も敵を自動追跡）
-controller.start_path(path, vision_points, false)
-```
-
 ### アイドル中の敵追跡
 
 ```gdscript

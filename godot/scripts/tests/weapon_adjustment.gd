@@ -47,7 +47,18 @@ extends Node3D
 @onready var quad1_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/Quad1Z/SpinBox
 @onready var quad1_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/Quad1Z/HSlider
 @onready var muzzle_preview_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/MuzzlePreviewToggle
+@onready var grip_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/GripToggle
+@onready var grip_x_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripX/SpinBox
+@onready var grip_x_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripX/HSlider
+@onready var grip_y_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripY/SpinBox
+@onready var grip_y_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripY/HSlider
+@onready var grip_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripZ/SpinBox
+@onready var grip_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripZ/HSlider
+@onready var grip_preset_label: Label = $UI/PanelLeft/VBoxLeft/GripPresetLabel
 @onready var camera: Camera3D = $Camera3D
+
+# Preset value display (bone-local values for copying to .tres)
+var _preset_label: Label = null
 
 # Data
 var character: GameCharacter
@@ -57,6 +68,7 @@ var current_character_idx: int = -1
 var current_weapon_idx: int = -1
 var _environment_setup: Node = null
 var _animation_library: AnimationLibrary = null
+var _grip_node: Node3D = null  # 武器モデル内のLeftHandGripノード
 
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
@@ -139,7 +151,7 @@ func _setup_scene(preset: CharacterPreset) -> void:
 
 ## Load shared animation library from GLB file
 func _load_animation_library() -> AnimationLibrary:
-	const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
+	const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
 	if not ResourceLoader.exists(ANIMATION_SOURCE):
 		printerr("Animation source not found: %s" % ANIMATION_SOURCE)
 		return null
@@ -244,6 +256,15 @@ func _setup_ui() -> void:
 	quad1_z_spin.value_changed.connect(func(v): quad1_z_slider.value = v; _update_quad1_z())
 	muzzle_preview_toggle.toggled.connect(_on_muzzle_preview_toggled)
 
+	# Connect signals for Left Hand Grip
+	grip_x_slider.value_changed.connect(func(v): grip_x_spin.value = v; _update_grip_position())
+	grip_x_spin.value_changed.connect(func(v): grip_x_slider.value = v; _update_grip_position())
+	grip_y_slider.value_changed.connect(func(v): grip_y_spin.value = v; _update_grip_position())
+	grip_y_spin.value_changed.connect(func(v): grip_y_slider.value = v; _update_grip_position())
+	grip_z_slider.value_changed.connect(func(v): grip_z_spin.value = v; _update_grip_position())
+	grip_z_spin.value_changed.connect(func(v): grip_z_slider.value = v; _update_grip_position())
+	grip_toggle.toggled.connect(_on_grip_toggle)
+
 func _select_character(idx: int) -> void:
 	if idx < 0 or idx >= characters.size():
 		return
@@ -276,23 +297,28 @@ func _select_weapon(idx: int) -> void:
 
 	_set_ui_values(weapon.attach_offset, weapon.attach_rotation)
 	_set_muzzle_ui_values(weapon.muzzle_flash_offset, weapon.muzzle_flash_scale, weapon.muzzle_flash_rotation)
+	_setup_grip_ui(weapon)
 	if character:
 		character.update_muzzle_flash_preview()
 
-func _set_ui_values(pos: Vector3, rot: Vector3) -> void:
+func _set_ui_values(pos: Vector3, rot_bone_local: Vector3) -> void:
 	pos_x_spin.set_value_no_signal(pos.x)
 	pos_x_slider.set_value_no_signal(pos.x)
 	pos_y_spin.set_value_no_signal(pos.y)
 	pos_y_slider.set_value_no_signal(pos.y)
 	pos_z_spin.set_value_no_signal(pos.z)
 	pos_z_slider.set_value_no_signal(pos.z)
-	
-	rot_x_spin.set_value_no_signal(rot.x)
-	rot_x_slider.set_value_no_signal(rot.x)
-	rot_y_spin.set_value_no_signal(rot.y)
-	rot_y_slider.set_value_no_signal(rot.y)
-	rot_z_spin.set_value_no_signal(rot.z)
-	rot_z_slider.set_value_no_signal(rot.z)
+
+	# Convert bone-local rotation to model space for intuitive display
+	var rot_model := _bone_local_to_model_space(rot_bone_local)
+	rot_x_spin.set_value_no_signal(rot_model.x)
+	rot_x_slider.set_value_no_signal(rot_model.x)
+	rot_y_spin.set_value_no_signal(rot_model.y)
+	rot_y_slider.set_value_no_signal(rot_model.y)
+	rot_z_spin.set_value_no_signal(rot_model.z)
+	rot_z_slider.set_value_no_signal(rot_model.z)
+
+	_update_preset_display()
 
 
 func _set_muzzle_ui_values(pos: Vector3, scale: float, rot: Vector3) -> void:
@@ -318,12 +344,27 @@ func _update_transform() -> void:
 	var socket = character.get_weapon_socket()
 	if not socket:
 		return
-		
-	var pos = Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
-	var rot = Vector3(rot_x_spin.value, rot_y_spin.value, rot_z_spin.value)
-	
-	socket.position = pos
-	socket.rotation_degrees = rot
+
+	socket.position = Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
+
+	# UI values are in model space (intuitive: X=pitch, Y=yaw, Z=roll)
+	# Use ZYX Euler order so gimbal lock occurs at Y=±90° (not X=±90°)
+	# Weapons typically have large X rotation (~-90°) but moderate Y, so ZYX avoids the singularity
+	var rot_rad := Vector3(
+		deg_to_rad(rot_x_spin.value),
+		deg_to_rad(rot_y_spin.value),
+		deg_to_rad(rot_z_spin.value)
+	)
+	var model_space_basis := Basis.from_euler(rot_rad, EULER_ORDER_ZYX)
+
+	var bone_attachment := socket.get_parent() as Node3D
+	var model := character.find_child("CharacterModel") as Node3D
+	if bone_attachment and model:
+		socket.basis = bone_attachment.global_transform.basis.inverse() * model.global_transform.basis * model_space_basis
+	else:
+		socket.rotation_degrees = Vector3(rot_x_spin.value, rot_y_spin.value, rot_z_spin.value)
+
+	_update_preset_display()
 
 func _update_muzzle_flash() -> void:
 	var weapon = _get_current_weapon()
@@ -389,6 +430,15 @@ func _update_quad1_z() -> void:
 func _setup_camera_buttons() -> void:
 	var vbox = $UI/Panel/VBox
 
+	# Preset value display (bone-local values for .tres)
+	var preset_sep = HSeparator.new()
+	vbox.add_child(preset_sep)
+	_preset_label = Label.new()
+	_preset_label.text = "Preset: -"
+	_preset_label.add_theme_font_size_override("font_size", 11)
+	_preset_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	vbox.add_child(_preset_label)
+
 	# Add separator
 	var sep = HSeparator.new()
 	vbox.add_child(sep)
@@ -431,3 +481,114 @@ func _setup_camera_buttons() -> void:
 func _set_camera_yaw(yaw: float) -> void:
 	if camera:
 		camera.set_yaw(yaw)
+
+
+## Convert bone-local rotation (degrees) to model-space ZYX Euler (degrees)
+func _bone_local_to_model_space(rot_bone_deg: Vector3) -> Vector3:
+	if not character:
+		return rot_bone_deg
+	var socket := character.get_weapon_socket()
+	if not socket:
+		return rot_bone_deg
+	var bone_attachment := socket.get_parent() as Node3D
+	var model := character.find_child("CharacterModel") as Node3D
+	if not bone_attachment or not model:
+		return rot_bone_deg
+
+	# Preset stores bone-local Euler (default YXZ order)
+	var bone_local_basis := Basis.from_euler(Vector3(
+		deg_to_rad(rot_bone_deg.x), deg_to_rad(rot_bone_deg.y), deg_to_rad(rot_bone_deg.z)
+	))
+	# Convert to model space: desired = model_inv * bone_global * bone_local
+	var model_space_basis := model.global_transform.basis.inverse() * bone_attachment.global_transform.basis * bone_local_basis
+	# Decompose as ZYX (matching the composition order in _update_transform)
+	var euler := model_space_basis.get_euler(EULER_ORDER_ZYX)
+	return Vector3(rad_to_deg(euler.x), rad_to_deg(euler.y), rad_to_deg(euler.z))
+
+
+## Get current bone-local rotation (for preset) from the socket
+func _get_current_bone_local_rotation() -> Vector3:
+	if not character:
+		return Vector3.ZERO
+	var socket := character.get_weapon_socket()
+	if not socket:
+		return Vector3.ZERO
+	var euler := socket.basis.get_euler()
+	return Vector3(rad_to_deg(euler.x), rad_to_deg(euler.y), rad_to_deg(euler.z))
+
+
+## Update preset value display label
+func _update_preset_display() -> void:
+	if not _preset_label:
+		return
+	var pos := Vector3(pos_x_spin.value, pos_y_spin.value, pos_z_spin.value)
+	var rot := _get_current_bone_local_rotation()
+	_preset_label.text = "Preset: offset=(%s, %s, %s) rotation=(%s, %s, %s)" % [
+		snapped(pos.x, 0.001), snapped(pos.y, 0.001), snapped(pos.z, 0.001),
+		snapped(rot.x, 0.01), snapped(rot.y, 0.01), snapped(rot.z, 0.01),
+	]
+
+
+# ============================================
+# Left Hand Grip
+# ============================================
+
+## 武器切替時にグリップUI初期化
+func _setup_grip_ui(weapon: WeaponPreset) -> void:
+	_grip_node = null
+	if character and character._weapon_model:
+		_grip_node = character._weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
+
+	if _grip_node and weapon.left_hand_grip_enabled:
+		grip_toggle.set_pressed_no_signal(true)
+		var pos := _grip_node.position
+		grip_x_spin.set_value_no_signal(pos.x)
+		grip_x_slider.set_value_no_signal(pos.x)
+		grip_y_spin.set_value_no_signal(pos.y)
+		grip_y_slider.set_value_no_signal(pos.y)
+		grip_z_spin.set_value_no_signal(pos.z)
+		grip_z_slider.set_value_no_signal(pos.z)
+	else:
+		grip_toggle.set_pressed_no_signal(false)
+		grip_x_spin.set_value_no_signal(0)
+		grip_x_slider.set_value_no_signal(0)
+		grip_y_spin.set_value_no_signal(0)
+		grip_y_slider.set_value_no_signal(0)
+		grip_z_spin.set_value_no_signal(0)
+		grip_z_slider.set_value_no_signal(0)
+
+	_update_grip_preset_display()
+
+
+## グリップ位置スライダー変更時
+func _update_grip_position() -> void:
+	if not _grip_node:
+		return
+	_grip_node.position = Vector3(grip_x_spin.value, grip_y_spin.value, grip_z_spin.value)
+	_update_grip_preset_display()
+
+
+## グリップIK有効/無効トグル
+func _on_grip_toggle(enabled: bool) -> void:
+	if not character:
+		return
+	var anim_ctrl := character.get_anim_controller()
+	if not anim_ctrl:
+		return
+	if enabled and _grip_node:
+		anim_ctrl.set_left_hand_grip(_grip_node)
+	else:
+		anim_ctrl.set_left_hand_grip(null)
+
+
+## グリップ位置のプリセット表示更新
+func _update_grip_preset_display() -> void:
+	if not grip_preset_label:
+		return
+	if _grip_node:
+		var pos := _grip_node.position
+		grip_preset_label.text = "Grip: (%s, %s, %s)" % [
+			snapped(pos.x, 0.001), snapped(pos.y, 0.001), snapped(pos.z, 0.001),
+		]
+	else:
+		grip_preset_label.text = "Grip: (no LeftHandGrip node)"

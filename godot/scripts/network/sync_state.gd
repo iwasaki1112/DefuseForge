@@ -23,9 +23,6 @@ class GameStateSnapshot extends RefCounted:
 	## 全キャラクターの状態
 	var characters: Array[NetworkMessages.CharacterStateMessage] = []
 
-	## 確定済みパス（プレイヤーID -> PathConfirmMessage）
-	var pending_paths: Dictionary = {}
-
 	## 現在のラウンド番号
 	var round_number: int = 1
 
@@ -42,17 +39,11 @@ class GameStateSnapshot extends RefCounted:
 		for char_state in characters:
 			chars_array.append(char_state.to_dict())
 
-		var paths_dict: Dictionary = {}
-		for player_id in pending_paths:
-			var path_msg: NetworkMessages.PathConfirmMessage = pending_paths[player_id]
-			paths_dict[str(player_id)] = path_msg.to_dict()
-
 		return {
 			"timestamp": timestamp,
 			"is_game_started": is_game_started,
 			"round_state": round_state.to_dict() if round_state else {},
 			"characters": chars_array,
-			"pending_paths": paths_dict,
 			"round_number": round_number,
 		}
 
@@ -76,13 +67,6 @@ class GameStateSnapshot extends RefCounted:
 			char_state.from_dict(char_dict)
 			characters.append(char_state)
 
-		# 確定済みパス
-		pending_paths.clear()
-		var paths_data = data.get("pending_paths", {})
-		for player_id_str in paths_data:
-			var path_msg := NetworkMessages.PathConfirmMessage.new()
-			path_msg.from_dict(paths_data[player_id_str])
-			pending_paths[int(player_id_str)] = path_msg
 
 
 # ============================================
@@ -318,45 +302,3 @@ class CharacterSnapshot extends RefCounted:
 		result.animation_state = to_snap.animation_state
 		result.timestamp = int(lerp(float(from_snap.timestamp), float(to_snap.timestamp), t))
 		return result
-
-
-# ============================================
-# PathSnapshot - パス状態のスナップショット
-# ============================================
-
-## パス実行状態のスナップショット
-class PathSnapshot extends RefCounted:
-	## 対象キャラクターID
-	var character_id: int = 0
-
-	## パス上の現在位置（0.0 ~ 1.0）
-	var progress: float = 0.0
-
-	## パス実行中かどうか
-	var is_executing: bool = false
-
-	## 元のパス確定メッセージ
-	var path_message: NetworkMessages.PathConfirmMessage = null
-
-	## タイムスタンプ
-	var timestamp: int = 0
-
-
-	func to_dict() -> Dictionary:
-		return {
-			"character_id": character_id,
-			"progress": progress,
-			"is_executing": is_executing,
-			"path_message": path_message.to_dict() if path_message else {},
-			"timestamp": timestamp,
-		}
-
-
-	func from_dict(data: Dictionary) -> void:
-		character_id = data.get("character_id", 0)
-		progress = data.get("progress", 0.0)
-		is_executing = data.get("is_executing", false)
-		if data.has("path_message") and not data.path_message.is_empty():
-			path_message = NetworkMessages.PathConfirmMessage.new()
-			path_message.from_dict(data.path_message)
-		timestamp = data.get("timestamp", 0)

@@ -14,7 +14,7 @@
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `spine_bone_name` | `String` | `"mixamorig_Spine2"` | リコイル適用ボーン名 |
+| `spine_bone_name` | `String` | `"UpperChest"` | リコイル適用ボーン名 |
 | `recoil_strength` | `float` | `0.1` | リコイル強度（デフォルト） |
 | `recovery_speed` | `float` | `10.0` | リコイル回復速度 |
 
@@ -31,7 +31,7 @@
 ```gdscript
 # Skeleton3Dの子として追加
 var recoil = RecoilModifier.new()
-recoil.spine_bone_name = "mixamorig_Spine2"
+recoil.spine_bone_name = "UpperChest"
 recoil.recoil_strength = 0.1
 recoil.recovery_speed = 10.0
 skeleton.add_child(recoil)
@@ -55,7 +55,7 @@ var recoil_rotation = Quaternion(Vector3.RIGHT, -_current_recoil)
 skeleton.set_bone_pose_rotation(bone_idx, current_pose * recoil_rotation)
 ```
 
-Mixamoリグの場合、Spine2ボーンに適用することで自然な反動表現が可能。
+ARPリグの場合、UpperChestボーンに適用することで自然な反動表現が可能。
 
 ## APIリファレンス
 

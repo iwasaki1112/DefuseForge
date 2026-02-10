@@ -148,10 +148,10 @@ func sync_transform() -> void:
 	if _light:
 		_light.position = _current_position
 		# 3D Y軸回転 → 2D回転
-		# Mixamoモデルの前方向は+Z
+		# モデルの前方向は+Z
 		# ビューポート座標系: X=WorldX, Y=WorldZ
 		# FOVテクスチャ: 上方向(-Y)が0度（rotation=0でビューポート上向き）
-		# +Z（Mixamo前方）= ビューポート+Y（下）→ rotation=PI必要
+		# +Z（モデル前方）= ビューポート+Y（下）→ rotation=PI必要
 		var facing := _get_facing_direction()
 		# atan2(z, x)で3D角度を取得し、PI/2加算してビューポート座標に変換
 		var target_angle := atan2(facing.z, facing.x) + PI / 2.0

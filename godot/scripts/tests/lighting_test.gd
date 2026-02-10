@@ -220,7 +220,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 
 
 func _load_animation_library() -> AnimationLibrary:
-	const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
+	const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
 	if not ResourceLoader.exists(ANIMATION_SOURCE):
 		return null
 

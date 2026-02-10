@@ -24,7 +24,6 @@
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `sync_state_received` | `snapshot: GameStateSnapshot` | 状態同期受信時 |
-| `path_confirmed_remote` | `player_id: int, path_msg: PathConfirmMessage` | リモートパス確定受信時 |
 | `character_updated_remote` | `char_state: CharacterStateMessage` | キャラクター更新受信時 |
 | `round_state_updated` | `round_state: RoundStateMessage` | ラウンド状態更新時 |
 | `game_event_received` | `event: GameEventMessage` | ゲームイベント受信時 |
@@ -56,16 +55,6 @@ func set_auto_sync_enabled(enabled: bool) -> void
 
 # 同期間隔を設定
 func set_sync_interval(interval: float) -> void
-```
-
-### パス同期
-
-```gdscript
-# パス確定を送信
-func send_path_confirm(path_msg: PathConfirmMessage) -> void
-
-# パス実行を送信（Host→Client）
-func send_path_execute(run: bool) -> void
 ```
 
 ### キャラクター・イベント
@@ -113,22 +102,17 @@ client_sync.sync_state_received.connect(func(snapshot):
 
 # 手動同期（Host）
 host_sync.send_state_sync()
-
-# パス実行通知（Host）
-host_sync.send_path_execute(false)  # 歩き
 ```
 
 ## 同期フロー
 
 ### Host → Client
 1. `send_state_sync()` - 定期的な全体同期（15Hz）
-2. `send_path_execute()` - パス実行指示
-3. `send_round_state()` - ラウンド状態変更
+2. `send_round_state()` - ラウンド状態変更
 
 ### Client → Host
-1. `send_path_confirm()` - パス確定リクエスト
-2. `send_local_character_states()` - キャラクター状態変更（15Hz）
-3. `send_game_event()` - ゲームイベント（グレネード、スモーク、ドアキック等）
+1. `send_local_character_states()` - キャラクター状態変更（15Hz）
+2. `send_game_event()` - ゲームイベント（グレネード、スモーク、ドアキック等）
 
 ### 双方向
 - `send_selection_update()` - 選択状態（表示用）
@@ -173,7 +157,7 @@ host_sync.send_path_execute(false)  # 歩き
 
 - [LocalNetworkBus](LocalNetworkBus.md) - ローカルネットワークシミュレーター
 - [NetworkBusAdapter](NetworkBusAdapter.md) - WebSocketアダプター
-- [GameManager](../GameManager.md) - ゲーム管理
+- [GameManager](../System/GameManager.md) - ゲーム管理
 - [NetworkMessages](NetworkMessages.md) - メッセージ型
 - [NetworkConstants](NetworkConstants.md) - 定数定義
 - [SyncState](SyncState.md) - 同期状態

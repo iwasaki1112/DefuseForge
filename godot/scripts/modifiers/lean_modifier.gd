@@ -4,7 +4,7 @@ class_name LeanModifier
 
 ## Applies procedural lean (roll) to upper body bones
 
-@export var spine_bone_name := "mixamorig_Spine2"
+@export var spine_bone_name := "UpperChest"
 @export var recovery_speed := 10.0
 
 var _spine_bone_idx := -1

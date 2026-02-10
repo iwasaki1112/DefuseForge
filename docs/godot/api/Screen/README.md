@@ -5,11 +5,14 @@
 ## 概要
 
 ゲーム画面はProviderパターンを採用し、TrainingモードとMultiplayerモードの共通処理を統合しています。
+TPS直接操作モードで、プレイヤー1体をWASD/ジョイスティックで操作します。
 
 ## アーキテクチャ
 
 ```
 GameScreen (統合されたゲーム画面)
+    │
+    ├── TPSPlayerController (TPS操作: 移動/エイム/カメラ)
     │
     └── GameModeProvider (モード抽象化)
           ├── TrainingModeProvider (シングルプレイヤー)
@@ -20,8 +23,7 @@ GameScreen (統合されたゲーム画面)
 
 | クラス | 説明 |
 |--------|------|
-| [GameScreen](./GameScreen.md) | 統合されたゲーム画面 |
-| [GameHUD](./GameHUD.md) | ゲーム画面のUIパネル（タイマー、マーカー等） |
+| [GameScreen](./GameScreen.md) | 統合されたゲーム画面（TPS版） |
 | [GameModeProvider](./GameModeProvider.md) | モードプロバイダー基底クラス |
 | [TrainingModeProvider](./TrainingModeProvider.md) | Trainingモード用プロバイダー |
 | [MultiplayerModeProvider](./MultiplayerModeProvider.md) | Multiplayerモード用プロバイダー |

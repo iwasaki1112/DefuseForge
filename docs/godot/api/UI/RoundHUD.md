@@ -1,7 +1,6 @@
 # RoundHUD
 
 ラウンドHUD。生存者数とラウンド結果を表示するUI。
-（タイマー表示機能は `GameHUD` に移動しました）
 
 ## 基本情報
 
@@ -75,5 +74,4 @@ func _setup_round_hud() -> void:
 ## 関連クラス
 
 - [RoundManager](../System/RoundManager.md)
-- [GameHUD](GameHUD.md)
 - [GameScreen](../Screen/GameScreen.md)

@@ -63,6 +63,13 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var muzzle_flash_rotation: Vector3 = Vector3.ZERO  ## Muzzle flash rotation in degrees
 
 # ============================================
+# Left Hand Grip (IK)
+# ============================================
+@export_group("Left Hand Grip")
+@export var left_hand_grip_enabled: bool = false  ## 左手IKグリップを有効化（ライフル等の両手持ち武器用）
+@export var left_hand_grip_offset: Vector3 = Vector3.ZERO  ## フォールバック用：LeftHandGripノードがない場合のオフセット
+
+# ============================================
 # Auto Firing Mode (RIFLE/SMG only)
 # ============================================
 @export_group("Auto Firing Mode")

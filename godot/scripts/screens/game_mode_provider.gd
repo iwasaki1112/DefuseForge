@@ -30,16 +30,6 @@ func spawn_characters(_game_screen: Node, _game_manager: GameManager) -> bool:
 	return false  # デフォルトはGameScreenの処理を使用
 
 
-## パス確定時のコールバック
-func on_path_confirmed() -> void:
-	pass
-
-
-## パス実行時のコールバック
-func on_execute_paths(_count: int) -> void:
-	pass
-
-
 ## ラウンド終了時のコールバック
 func on_round_ended(_winner: int, _reason: int) -> void:
 	pass

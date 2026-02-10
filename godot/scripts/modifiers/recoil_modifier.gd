@@ -4,7 +4,7 @@ class_name RecoilModifier
 
 ## Applies procedural recoil to upper body bones
 
-@export var spine_bone_name := "mixamorig_Spine2"
+@export var spine_bone_name := "UpperChest"
 @export var recoil_strength := 0.1
 @export var recovery_speed := 10.0
 

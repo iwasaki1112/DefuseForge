@@ -156,8 +156,7 @@ selection_manager.from_selection_dict(data, func(id): return game_manager.find_c
 
 ## 関連クラス
 
-- [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
-- [GameCharacter](GameCharacter.md) - キャラクター管理
+- [GameCharacter](../Character/GameCharacter.md) - キャラクター管理
 - [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
 
 ## APIリファレンス

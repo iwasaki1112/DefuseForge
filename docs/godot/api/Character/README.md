@@ -8,6 +8,4 @@
 | [MuzzleFlashComponent](MuzzleFlashComponent.md) | 射撃時のマズルフラッシュエフェクト表示 |
 | [BulletTrailComponent](BulletTrailComponent.md) | 射撃時の弾道トレイルエフェクト表示 |
 | [RemoteInterpolationComponent](RemoteInterpolationComponent.md) | マルチプレイヤーでのリモートキャラクター補間 |
-| [PathFollowingController](PathFollowingController.md) | パス追従＋視線ポイント＋Run/Clear/Grenade/Doorポイント処理＋スタック検出を行う再利用可能コントローラー |
-| [PathPointChecker](PathPointChecker.md) | パスポイント到達判定の共通ロジック |
 | [VisionLight](VisionLight.md) | 視界（Fog of War）光源管理 |

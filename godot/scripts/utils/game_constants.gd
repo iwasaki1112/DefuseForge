@@ -16,14 +16,10 @@ const NODE_ANIMATION_TREE := "AnimationTree"
 const NODE_VISION_COMPONENT := "VisionComponent"
 const NODE_COMBAT_AWARENESS := "CombatAwarenessComponent"
 const NODE_SELECTION_MANAGER := "SelectionManager"
-const NODE_PATH_EXECUTION_MANAGER := "PathExecutionManager"
 const NODE_IDLE_MANAGER := "IdleCharacterManager"
-const NODE_PATH_DRAWER := "PathDrawer"
-const NODE_PATH_MODE_CONTROLLER := "PathModeController"
 const NODE_VISION_SERVICE := "VisionService"
 const NODE_MAP_MANAGER := "MapManager"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
-const NODE_PATH_SERVICE := "PathService"
 
 # ========================================================
 # Group Names
@@ -32,23 +28,39 @@ const GROUP_CHARACTERS := "characters"
 const GROUP_DOORS := "doors"
 
 # ========================================================
-# Bone Names (Mixamo Standard)
+# Bone Names (ARP / Unity Humanoid)
 # ========================================================
-const BONE_RIGHT_HAND := "mixamorig_RightHand"
-const BONE_SPINE_1 := "mixamorig_Spine1"
-const BONE_SPINE_2 := "mixamorig_Spine2"
+const BONE_RIGHT_HAND := "RightHand"
+const BONE_SPINE := "Spine"
+const BONE_UPPER_CHEST := "UpperChest"
+const BONE_LEFT_ARM := "LeftUpperArm"
+const BONE_LEFT_FOREARM := "LeftLowerArm"
+const BONE_LEFT_HAND := "LeftHand"
+# 後方互換エイリアス
+const BONE_SPINE_1 := BONE_SPINE
+const BONE_SPINE_2 := BONE_UPPER_CHEST
+
+# ========================================================
+# Node Names (Left Hand IK)
+# ========================================================
+const NODE_LEFT_HAND_GRIP := "LeftHandGrip"
+const NODE_LEFT_HAND_IK_TARGET := "LeftHandIKTarget"
 
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "death_backward"  # デフォルト死亡アニメーション（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_FORWARD := "death_backward"  # 仮: death_backward（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_BACKWARD := "death_backward"  # 後ろから撃たれて前に倒れる
-const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
-# Note: death_left は存在しない → フォールバック処理で対応
-const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
-const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
-const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
+const ANIM_DEATH := "Rifle_Death_3"
+const ANIM_DEATH_FORWARD := "Rifle_Death_3"
+const ANIM_DEATH_BACKWARD := "Rifle_Death_3"
+const ANIM_DEATH_LEFT := "Rifle_Death_L"
+const ANIM_DEATH_RIGHT := "Rifle_Death_R"
+const ANIM_RIFLE_DOOR_KICK := "Rifle_Melee_Kick"
+const ANIM_PISTOL_DOOR_KICK := "Pistol_Melee_Kick"
+const ANIM_PISTOL_LOW_THROWING := "Pistol_Grenade_Throw_Single"
+const ANIM_PISTOL_GRENADE_THROW_CLOSE := "Pistol_Grenade_Throw_Close"
+const ANIM_RIFLE_GRENADE_THROW_FAR := "Rifle_Grenade_Throw_Far"
+const ANIM_RIFLE_GRENADE_THROW_CLOSE := "Rifle_Grenade_Throw_Close"
+const ANIM_RIFLE_OPEN_DOOR := "Rifle_OpenDoor"
 
 # ========================================================
 # Grenade Settings
@@ -77,16 +89,6 @@ const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
 const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
-
-# ========================================================
-# Path Settings (パス描画・クリック判定)
-# ========================================================
-## パスの線幅（視覚的な太さ）
-const PATH_LINE_WIDTH: float = 0.15
-## パスのクリック判定エリア（PC向け、線幅と統一）
-const PATH_CLICK_THRESHOLD: float = 0.15
-## パスのクリック判定エリア（モバイル向け、タッチ精度を考慮して大きめ）
-const PATH_CLICK_THRESHOLD_MOBILE: float = 0.5
 
 # ========================================================
 # Round Settings

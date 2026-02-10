@@ -174,6 +174,13 @@ func get_anim_controller() -> CharacterAnimationController:
 # Facing Direction API (一元管理)
 # ============================================
 
+## 初期向きを設定（scene tree追加前に使用）
+## set_facing_direction_vec()はanim_ctrl依存のため、add_child前はこちらを使用
+func set_initial_facing(direction: Vector3) -> void:
+	if direction.length_squared() > 0.001:
+		_facing_direction = direction.normalized()
+
+
 ## キャラクターの向きを設定（ベクトル）
 ## Animation、Visionすべてがこの向きを参照する
 func set_facing_direction_vec(direction: Vector3) -> void:
@@ -189,7 +196,7 @@ func set_facing_direction_vec(direction: Vector3) -> void:
 
 ## キャラクターの向きを設定（Y軸回転、ラジアン）
 func set_facing_direction(y_rotation: float) -> void:
-	# y_rotation=0 → +Z方向（Mixamoモデルの前方向）
+	# y_rotation=0 → +Z方向（モデルの前方向）
 	var direction := Vector3(sin(y_rotation), 0, cos(y_rotation))
 	set_facing_direction_vec(direction)
 
@@ -290,7 +297,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 
 	var bone_idx = skeleton.find_bone(GameConstants.BONE_RIGHT_HAND)
 	if bone_idx < 0:
-		push_warning("GameCharacter: mixamorig_RightHand bone not found")
+		push_warning("GameCharacter: RightHand bone not found")
 		return null
 
 	_weapon_attachment = BoneAttachment3D.new()
@@ -347,24 +354,42 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	_weapon_model.name = GameConstants.NODE_WEAPON_MODEL
 	socket.add_child(_weapon_model)
 
-	# Mixamo skeleton is 0.01 scale, so weapon needs 100x scale
-	_weapon_model.scale = Vector3.ONE * 100.0
+	# ARP skeleton is 1.0 scale, weapon at 1:1
+	_weapon_model.scale = Vector3.ONE
 	_weapon_model.position = Vector3.ZERO
 	_weapon_model.rotation_degrees = Vector3.ZERO
 
-	# Apply offset from WeaponPreset (use defaults for Mixamo if not set)
+	# Apply offset from WeaponPreset (use defaults for ARP if not set)
 	if weapon.attach_offset != Vector3.ZERO:
 		socket.position = weapon.attach_offset
 	else:
-		# Default offset for Mixamo right hand
-		socket.position = Vector3(1, 7, 2)
+		# Default offset for ARP right hand (要実機調整)
+		socket.position = Vector3(0.01, 0.07, 0.02)
 
 	if weapon.attach_rotation != Vector3.ZERO:
 		socket.rotation_degrees = weapon.attach_rotation
 	else:
-		# Default rotation for Mixamo right hand
+		# Default rotation for ARP right hand (要実機調整)
 		socket.rotation_degrees = Vector3(-79, -66, -28)
 
+	# 左手IKグリップ設定
+	_update_left_hand_ik(weapon)
+
+
+
+## 左手IKグリップを武器モデルから検出してAnimationControllerに通知
+func _update_left_hand_ik(weapon: WeaponPreset) -> void:
+	if not anim_ctrl:
+		return
+	if not weapon or not weapon.left_hand_grip_enabled or not _weapon_model:
+		anim_ctrl.set_left_hand_grip(null)
+		return
+
+	var grip_node := _weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
+	if grip_node:
+		anim_ctrl.set_left_hand_grip(grip_node)
+	else:
+		anim_ctrl.set_left_hand_grip(null)
 
 
 ## Equip a weapon from WeaponPreset

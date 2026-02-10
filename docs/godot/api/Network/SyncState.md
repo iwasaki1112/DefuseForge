@@ -4,7 +4,7 @@
 
 ## 概要
 
-ゲーム状態のスナップショットを表現し、ネットワーク同期に使用する。ゲーム全体、プレイヤー、キャラクター、パスそれぞれの状態をカプセル化する。
+ゲーム状態のスナップショットを表現し、ネットワーク同期に使用する。ゲーム全体、プレイヤー、キャラクターそれぞれの状態をカプセル化する。
 
 ## ファイル
 
@@ -22,7 +22,6 @@ class GameStateSnapshot extends RefCounted:
     var is_game_started: bool                               # ゲーム開始済みか
     var round_state: NetworkMessages.RoundStateMessage      # ラウンド状態
     var characters: Array[NetworkMessages.CharacterStateMessage]  # 全キャラクター状態
-    var pending_paths: Dictionary                           # 確定済みパス（player_id -> PathConfirmMessage）
     var round_number: int                                   # ラウンド番号
 
     func to_dict() -> Dictionary
@@ -40,7 +39,7 @@ class PlayerStateData extends RefCounted:
     var team: int                 # 所属チーム（GameCharacter.Team相当）
     var money: int                # 所持金
     var is_ready: bool            # 準備完了フラグ
-    var is_connected: bool        # 接続済みフラグ
+    var connection_active: bool   # 接続済みフラグ
     var last_active_time: int     # 最終アクティブ時刻（msec）
     var wins: int                 # 勝利ラウンド数
     var losses: int               # 敗北ラウンド数
@@ -80,22 +79,6 @@ class CharacterSnapshot extends RefCounted:
     func to_dict() -> Dictionary
     func from_dict(data: Dictionary) -> void
     static func interpolate(from_snap: CharacterSnapshot, to_snap: CharacterSnapshot, t: float) -> CharacterSnapshot
-```
-
-### PathSnapshot
-
-パス実行状態のスナップショット。
-
-```gdscript
-class PathSnapshot extends RefCounted:
-    var character_id: int          # 対象キャラクターID
-    var progress: float            # パス上の現在位置（0.0 ~ 1.0）
-    var is_executing: bool         # パス実行中かどうか
-    var path_message: NetworkMessages.PathConfirmMessage  # 元のパス確定メッセージ
-    var timestamp: int             # タイムスタンプ
-
-    func to_dict() -> Dictionary
-    func from_dict(data: Dictionary) -> void
 ```
 
 ## 使用例
@@ -163,4 +146,4 @@ character.set_facing_direction(interpolated.rotation)
 - [NetworkConstants](NetworkConstants.md) - ネットワーク定数
 - [NetworkMessages](NetworkMessages.md) - メッセージ型定義
 - [NetworkSerializer](NetworkSerializer.md) - シリアライズユーティリティ
-- [PlayerState](PlayerState.md) - プレイヤー状態管理（Autoload）
+- [PlayerState](../System/PlayerState.md) - プレイヤー状態管理（Autoload）

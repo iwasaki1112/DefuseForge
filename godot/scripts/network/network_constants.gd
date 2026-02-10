@@ -12,10 +12,7 @@ extends RefCounted
 enum MessageType {
 	## ゲーム状態の同期
 	GAME_STATE_SYNC = 0,
-	## パス確定メッセージ
-	PATH_CONFIRM = 1,
-	## パス実行開始メッセージ
-	PATH_EXECUTE = 2,
+	## Historical: Values 1-2 were PATH_CONFIRM/PATH_EXECUTE (removed in TPS migration)
 	## キャラクター状態更新
 	CHARACTER_UPDATE = 3,
 	## ラウンド状態
@@ -79,11 +76,6 @@ const POSITION_PRECISION: int = 100
 ## 回転精度（0.001ラジアン単位 = 1000）
 const ROTATION_PRECISION: int = 1000
 
-## パス座標の最大数
-const MAX_PATH_POINTS: int = 256
-
-## ポイントの最大数（各種類ごと）
-const MAX_POINTS_PER_TYPE: int = 32
 
 # ============================================
 # リレーサーバー設定
@@ -182,10 +174,6 @@ static func message_type_to_string(msg_type: MessageType) -> String:
 	match msg_type:
 		MessageType.GAME_STATE_SYNC:
 			return "GAME_STATE_SYNC"
-		MessageType.PATH_CONFIRM:
-			return "PATH_CONFIRM"
-		MessageType.PATH_EXECUTE:
-			return "PATH_EXECUTE"
 		MessageType.CHARACTER_UPDATE:
 			return "CHARACTER_UPDATE"
 		MessageType.ROUND_STATE:

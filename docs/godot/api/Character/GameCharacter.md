@@ -118,7 +118,7 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 > **重要: キャラクターの向きを変更する場合**
 >
-> `CharacterBody3D.look_at()`を直接使用しないでください。Mixamoモデルは+Z方向が前方ですが、Godotの`look_at()`は-Z軸をターゲットに向けるため、180度ずれます。
+> `CharacterBody3D.look_at()`を直接使用しないでください。ARPモデルは+Z方向が前方ですが、Godotの`look_at()`は-Z軸をターゲットに向けるため、180度ずれます。
 >
 > 代わりに以下のメソッドを使用してください：
 > - `face_towards(target_pos)` - ターゲット位置を向く
@@ -138,7 +138,7 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 - `y_rotation` - Y軸回転（0 = +Z方向）
 
 #### face_towards(target_pos: Vector3) -> void
-指定位置の方向を向く。内部で`set_facing_direction_vec()`を呼び出し、Mixamoモデルの向きを正しく処理する。
+指定位置の方向を向く。内部で`set_facing_direction_vec()`を呼び出し、ARPモデルの向きを正しく処理する。
 
 **引数:**
 - `target_pos` - ターゲット位置
@@ -157,8 +157,6 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** 正規化された向きベクトル
 
-**重要**: PathFollowingControllerは移動中に`_facing_direction`を直接更新する。これにより、移動中も視界の向きが正しく追従する。
-
 ### Weapon API
 
 #### equip_weapon(weapon: Resource) -> void
@@ -168,7 +166,7 @@ character.face_towards(enemy.global_position)
 - `weapon` - WeaponPresetリソース
 
 **動作:**
-- 武器モデルを`mixamorig_RightHand`ボーンにBoneAttachment3Dでアタッチ
+- 武器モデルを`RightHand`ボーンにBoneAttachment3Dでアタッチ
 - WeaponPresetの`attach_offset`/`attach_rotation`でオフセット調整
 - WeaponCategoryをCharacterAnimationController.Weaponに変換
 - PISTOL → Weapon.PISTOL、それ以外 → Weapon.RIFLE
@@ -176,7 +174,7 @@ character.face_towards(enemy.global_position)
 
 **前提条件:**
 - キャラクターモデルに`CharacterModel`ノードが存在すること
-- Mixamo標準のSkeleton（`mixamorig_RightHand`ボーン）
+- ARP標準のSkeleton（`RightHand`ボーン）
 
 #### get_current_weapon() -> Resource
 装備中の武器を取得する。

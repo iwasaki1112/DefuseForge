@@ -10,10 +10,8 @@ signal primary_changed(character: Node)
 
 ## 選択中の全キャラクター
 var selected_characters: Array[Node] = []
-## 最後に選択したキャラクター（コンテキストメニュー・パス描画基準）
+## 最後に選択したキャラクター
 var primary_character: Node = null
-## パス適用対象キャラクター（MOVEモード開始時に確定）
-var path_target_characters: Array[Node] = []
 
 ## アウトライン適用中のメッシュ { character_id: Array[MeshInstance3D] }
 var _outlined_meshes_by_character: Dictionary = {}
@@ -94,26 +92,6 @@ func has_selection() -> bool:
 ## 選択数を取得
 func get_selection_count() -> int:
 	return selected_characters.size()
-
-
-## パス適用対象を確定（MOVEモード開始時に呼ぶ）
-func capture_path_targets() -> void:
-	path_target_characters = selected_characters.duplicate()
-
-
-## パス適用対象をクリア
-func clear_path_targets() -> void:
-	path_target_characters.clear()
-
-
-## パス適用対象を取得
-func get_path_targets() -> Array[Node]:
-	return path_target_characters.duplicate()
-
-
-## パス適用対象がいるか
-func has_path_targets() -> bool:
-	return not path_target_characters.is_empty()
 
 
 ## アウトラインを適用（ステンシル方式）
