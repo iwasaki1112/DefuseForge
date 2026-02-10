@@ -113,13 +113,13 @@ func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
 		var info: Dictionary = players[peer_id]
 		var team: int = info.get("team", GameCharacter.Team.NONE)
 
-		# チームに基づいてキャラクターをスポーン
+		# チームに基づいてキャラクターをスポーン（TPS: 1プレイヤー1体）
 		if team == GameCharacter.Team.COUNTER_TERRORIST:
 			network_id_counter = _spawn_team_characters_for_player(
 				game_screen, game_manager, preset,
 				peer_id, team,
 				preset.spawn_points_ct, preset.spawn_rotations_ct,
-				["alpha", "bravo"], "alpha",
+				["alpha"], "alpha",
 				network_id_counter
 			)
 		elif team == GameCharacter.Team.TERRORIST:
@@ -127,7 +127,7 @@ func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
 				game_screen, game_manager, preset,
 				peer_id, team,
 				preset.spawn_points_t, preset.spawn_rotations_t,
-				["ares", "brim"], "ares",
+				["ares"], "ares",
 				network_id_counter
 			)
 
@@ -156,7 +156,7 @@ func _spawn_team_characters_for_player(
 		push_error("[MultiplayerModeProvider] Character preset not found: %s" % preset_id)
 		return network_id_counter
 
-	var count := mini(2, spawn_points.size())  # 各プレイヤー2体
+	var count := mini(marker_names.size(), spawn_points.size())
 
 	for i in range(count):
 		var spawn_pos: Vector3 = spawn_points[i]

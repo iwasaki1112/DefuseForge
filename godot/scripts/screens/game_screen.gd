@@ -78,8 +78,8 @@ func _initialize_game() -> void:
 	# Providerを初期化（ネットワーク接続などを行う）
 	_mode_provider.initialize(self, game_manager)
 
-	# TPS: プレイヤーは常にCT（スポーンがCT固定のため）
-	PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
+	# プレイヤーチームを決定（マルチプレイ: ロビーの割り当て、トレーニング: CT固定）
+	_mode_provider.determine_player_team()
 	_load_map()
 	_spawn_characters()
 	_setup_tps_hud()
@@ -136,8 +136,10 @@ func _load_map() -> void:
 
 
 func _spawn_characters() -> void:
-	# モードプロバイダーがキャラクタースポーンを処理する場合はスキップ
+	# モードプロバイダーがキャラクタースポーンを処理する場合
 	if _mode_provider.spawn_characters(self, game_manager):
+		# マルチプレイ: ローカルプレイヤーのキャラクターを特定
+		_find_local_player_character()
 		return
 
 	# デフォルトのスポーン処理
@@ -186,6 +188,16 @@ func _spawn_characters() -> void:
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
 		game_manager.idle_manager.set_characters(game_manager.characters)
+
+
+## マルチプレイ時にローカルプレイヤーのキャラクターを特定
+func _find_local_player_character() -> void:
+	var local_peer_id := PlayerState.get_local_peer_id()
+	var my_characters := game_manager.find_characters_by_owner(local_peer_id)
+	if my_characters.size() > 0:
+		_player_character = my_characters[0]
+	else:
+		push_warning("[GameScreen] No characters found for local peer %d" % local_peer_id)
 
 
 func _setup_tps_controller() -> void:
@@ -493,10 +505,15 @@ func _on_round_ended(winner: int, reason: int) -> void:
 	_cleanup_before_transition()
 
 	# モードによって遷移先を変える
+	var next_scene: String
 	if _mode_provider.get_mode_name() == "multiplayer":
-		get_tree().change_scene_to_file("res://scenes/screens/main_menu.tscn")
+		next_scene = "res://scenes/screens/main_menu.tscn"
 	else:
-		get_tree().change_scene_to_file("res://scenes/screens/map_selection.tscn")
+		next_scene = "res://scenes/screens/map_selection.tscn"
+
+	get_tree().change_scene_to_file(next_scene)
+	# GameScreenはroot.add_child()で追加されているため、change_scene_to_fileでは破棄されない
+	queue_free()
 
 
 ## ========================================
