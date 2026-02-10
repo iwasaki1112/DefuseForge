@@ -262,6 +262,11 @@ func _scan_for_enemies() -> void:
 			if Debug.enabled: print("[CAC] Skip dead enemy: ", enemy.name)
 			continue
 
+		# Skip enemies not visible on screen (EnemyVisibilitySystem が非表示にしている敵は無視)
+		if enemy is Node3D and not enemy.visible:
+			if Debug.enabled: print("[CAC] Skip hidden enemy: ", enemy.name)
+			continue
+
 		# 敵の胴体中心の位置を使用（足元ではなく）
 		# レイキャストが目線から敵の足元に向かうと、近距離で検知できない問題がある
 		var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
@@ -415,12 +420,18 @@ func _is_facing_target() -> bool:
 func _try_fire() -> bool:
 	if not _character:
 		return false
+	# 投擲・ドアキック・ドア開放中は射撃しない（アニメーション完了まで待機）
+	var anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
+	if anim_ctrl:
+		if anim_ctrl.is_throwing() or anim_ctrl.is_door_kicking() or anim_ctrl.is_opening_door():
+			return false
 	if not _is_facing_target():
 		return false
 	# ダメージ計算を先に行い、命中/外れ結果をセットしてからシグナルを発火
 	# これによりBulletTrailComponentが正しい射撃結果を取得できる
 	_apply_damage_to_target()
-	var anim_ctrl = _character.get_anim_controller()
+	if not anim_ctrl:
+		anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
 	if anim_ctrl and anim_ctrl.has_method("fire"):
 		anim_ctrl.fire()  # Trigger recoil animation + fired signal
 	return true
