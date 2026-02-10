@@ -15,7 +15,7 @@ INFO_PLIST="$PROJECT_ROOT/godot/builds/ios/RescueForge/RescueForge-Info.plist"
 # === 設定 ===
 TEAM_ID="NSB57DVW9V"
 DEVICE_ID="7C46939D-68A2-58E9-8850-FDA526502428"  # iwasaki (iPhone 12 mini)
-BUNDLE_ID="com.example.supportrategame"
+BUNDLE_ID="jp.kater.rescue-forge"
 SCHEME="RescueForge"
 CONFIGURATION="Debug"
 
