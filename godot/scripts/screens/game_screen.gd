@@ -54,6 +54,7 @@ var _grenade_light: PointLight2D = null
 var _grenade_occluder_mgr: OccluderManager = null
 var _grenade_mesh: MeshInstance3D = null
 var _grenade_mat: ShaderMaterial = null
+var _grenade_map_size: Vector2 = Vector2.ZERO
 
 ## 設定
 var _map_id: String = ""
@@ -538,6 +539,7 @@ func _setup_grenade_indicator() -> void:
 		return
 
 	var fow_map_size: Vector2 = fow.map_size
+	_grenade_map_size = fow_map_size
 	var q: Dictionary = fow.get_quality_settings()
 	var resolution: int = q["resolution"]
 	var throw_range := GameConstants.GRENADE_THROW_MAX_DISTANCE
@@ -685,16 +687,21 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 		ground_point = char_pos + to_target
 		distance = max_dist
 
-	# 視線チェック（壁の向こうには投げられない）
-	var space_state := _player_character.get_world_3d().direct_space_state
-	if space_state:
-		var eye_pos := char_pos + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
-		var target_eye := ground_point + Vector3(0, 0.5, 0)
-		var query := PhysicsRayQueryParameters3D.create(eye_pos, target_eye, 2)  # mask=2: 壁レイヤー
-		query.exclude = [_player_character.get_rid()]
-		var result := space_state.intersect_ray(query)
-		if not result.is_empty():
-			return  # 壁に遮られている
+	# visibility textureでグリーン領域内かチェック
+	if _grenade_viewport and _grenade_map_size != Vector2.ZERO:
+		var img := _grenade_viewport.get_texture().get_image()
+		if img:
+			var half := _grenade_map_size / 2.0
+			var uv_x := (ground_point.x + half.x) / _grenade_map_size.x
+			var uv_y := (ground_point.z + half.y) / _grenade_map_size.y
+			if uv_x >= 0.0 and uv_x <= 1.0 and uv_y >= 0.0 and uv_y <= 1.0:
+				var px := int(uv_x * float(img.get_width() - 1))
+				var py := int(uv_y * float(img.get_height() - 1))
+				var vis := img.get_pixel(px, py).r
+				if vis < 0.5:
+					return  # グリーン領域外（不可視）
+			else:
+				return  # マップ範囲外
 
 	# エイミングモード終了
 	_exit_grenade_aiming()
