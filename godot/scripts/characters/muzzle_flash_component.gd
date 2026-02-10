@@ -53,6 +53,12 @@ func setup(character: Node3D, weapon_socket: Node3D) -> void:
 func set_weapon_socket(socket: Node3D) -> void:
 	_weapon_socket = socket
 
+
+## ウォームアップ: ノード生成とマテリアル作成を事前に行う
+func warm_up() -> void:
+	if not _muzzle_flash or not is_instance_valid(_muzzle_flash):
+		_create()
+
 # ============================================
 # Public API
 # ============================================

@@ -323,12 +323,14 @@ func _ensure_weapon_socket(attachment: BoneAttachment3D) -> Node3D:
 	return _weapon_socket
 
 
-## エフェクトコンポーネントの武器ソケット参照を更新
+## エフェクトコンポーネントの武器ソケット参照を更新し、事前生成する
 func _update_effect_component_sockets() -> void:
 	if muzzle_flash:
 		muzzle_flash.set_weapon_socket(_weapon_socket)
+		muzzle_flash.warm_up()
 	if bullet_trail:
 		bullet_trail.set_weapon_socket(_weapon_socket)
+		bullet_trail.warm_up()
 
 
 ## Attach weapon model to right hand

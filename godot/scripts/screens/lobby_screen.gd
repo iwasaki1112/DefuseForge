@@ -69,9 +69,9 @@ func _process(delta: float) -> void:
 			# ゲーム開始を全員に通知
 			_network_manager.broadcast_message(
 				NetworkConstants.MessageType.ROUND_STATE,
-				{"action": "start_game", "map_id": "office"}
+				{"action": "start_game", "map_id": "home"}
 			)
-			_start_game("office")
+			_start_game("home")
 		else:
 			# カウントダウン表示更新
 			var seconds := ceili(_countdown_time)
@@ -573,7 +573,7 @@ func _on_network_message(_from_peer: int, msg_type: int, data: Dictionary) -> vo
 		var action: String = data.get("action", "")
 		match action:
 			"start_game":
-				var map_id: String = data.get("map_id", "office")
+				var map_id: String = data.get("map_id", "home")
 				_start_game(map_id)
 			"countdown_start":
 				_start_countdown()
