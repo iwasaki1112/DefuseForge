@@ -50,7 +50,7 @@ var _local_peer_id: int = 0
 var fow_map_size: Vector2 = Vector2(50, 50)
 var default_vision_fov: float = 90.0
 var default_vision_range: float = 15.0
-var default_weapon_id: String = "glock"
+var default_weapon_id: String = "ak47"
 var is_vision_enabled: bool = false
 
 

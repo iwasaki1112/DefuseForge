@@ -61,7 +61,7 @@ func process_idle_characters(delta: float) -> void:
 
 ## 単一キャラクターのアイドル状態を更新
 func _update_idle_character(character: Node, delta: float) -> void:
-	# Combat awarenessを処理（アイドル中も敵を追跡）
+	# フェーズ1: 敵検知（ターゲット特定のみ）
 	if character.combat_awareness and character.combat_awareness.has_method("process"):
 		character.combat_awareness.process(delta)
 
@@ -83,7 +83,12 @@ func _update_idle_character(character: Node, delta: float) -> void:
 	if look_dir.length_squared() < 0.1:
 		look_dir = anim_ctrl.get_look_direction()
 
+	# フェーズ2: アニメーション更新（SLERP回転を進める）
 	anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
+
+	# フェーズ3: 射撃判定（回転後に向き完了チェック）
+	if character.combat_awareness and character.combat_awareness.has_method("process_firing"):
+		character.combat_awareness.process_firing(delta)
 
 
 ## プライマリキャラクターのアイドル処理（手動操作無効時）
@@ -96,7 +101,7 @@ func process_primary_idle(character: Node, delta: float) -> void:
 	if game_char and not game_char.is_local():
 		return
 
-	# Combat awarenessを処理
+	# フェーズ1: 敵検知（ターゲット特定のみ）
 	if character.combat_awareness and character.combat_awareness.has_method("process"):
 		character.combat_awareness.process(delta)
 
@@ -118,7 +123,12 @@ func process_primary_idle(character: Node, delta: float) -> void:
 	if look_dir.length_squared() < 0.1:
 		look_dir = anim_ctrl.get_look_direction()
 
+	# フェーズ2: アニメーション更新（SLERP回転を進める）
 	anim_ctrl.update_animation(Vector3.ZERO, look_dir, false, delta)
+
+	# フェーズ3: 射撃判定（回転後に向き完了チェック）
+	if character.combat_awareness and character.combat_awareness.has_method("process_firing"):
+		character.combat_awareness.process_firing(delta)
 
 	# 重力適用
 	character.velocity.x = 0

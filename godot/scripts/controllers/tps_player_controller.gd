@@ -101,11 +101,15 @@ func process(delta: float) -> void:
 	if not _character or not _character.is_alive:
 		return
 
-	# 実行順序: 敵検知 → エイム反映 → 移動+アニメーション
-	# この順序により、同一フレーム内で敵検知結果がアニメーションに反映される
+	# 3フェーズ実行: 検知 → エイム → 射撃
+	# フェーズ1: 敵検知（ターゲット特定のみ、射撃しない）
 	if _character.combat_awareness:
 		_character.combat_awareness.process(delta)
+	# フェーズ2: エイム更新（検知結果で向きを即座に設定）
 	_handle_aim(delta)
+	# フェーズ3: 射撃判定（向き完了後に発砲）
+	if _character.combat_awareness:
+		_character.combat_awareness.process_firing(delta)
 	_handle_movement(delta)
 	_update_camera(delta)
 

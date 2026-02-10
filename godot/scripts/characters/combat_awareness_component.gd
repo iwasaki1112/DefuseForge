@@ -23,6 +23,7 @@ const CHARACTERS_CACHE_INTERVAL: float = 0.2  ## キャラクターキャッシ�
 const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
 const MOVEMENT_ACCURACY_PENALTY: float = 0.3  ## Accuracy penalty when moving
 const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
+const FACING_ANGLE_THRESHOLD: float = 0.866  ## cos(30°) — 射撃許可の角度閾値
 
 # ============================================
 # State
@@ -148,7 +149,8 @@ func get_last_shot_result() -> Dictionary:
 	}
 
 
-## Process function - call from owner's _physics_process
+## 検知・追跡フェーズ（エイム更新前に呼ぶ）
+## 射撃ロジックは process_firing() に分離されている
 func process(delta: float) -> void:
 	if not _character:
 		return
@@ -172,11 +174,16 @@ func process(delta: float) -> void:
 		_scan_timer = 0.0
 		_scan_for_enemies()
 
-	# Firing logic (when tracking enemy and firing is enabled)
+
+## 射撃フェーズ（エイム更新後に呼ぶ）
+## process() で検知 → 呼び出し側でエイム更新 → この関数で射撃判定
+func process_firing(delta: float) -> void:
+	if not _character:
+		return
 	if _firing_enabled and _current_target and is_instance_valid(_current_target):
 		_process_firing(delta)
 	else:
-		_reset_firing_state()  # Reset state when not firing
+		_reset_firing_state()
 
 
 # ============================================
@@ -354,16 +361,44 @@ func _get_enemy_characters() -> Array[Node]:
 	return enemies
 
 
+## キャラクターが現在のターゲット方向を向いているかチェック
+## モデルの実際の回転状態（SLERP途中を含む）を使って判定する
+func _is_facing_target() -> bool:
+	if not _current_target or not is_instance_valid(_current_target):
+		return false
+	var to_target: Vector3 = _current_target.global_position - _character.global_position
+	to_target.y = 0
+	if to_target.length_squared() < 0.01:
+		return true
+	to_target = to_target.normalized()
+	# モデルの実際の向きを取得（SLERP途中の状態を反映）
+	var facing_dir := Vector3.ZERO
+	var anim_ctrl = _character.get_anim_controller()
+	if anim_ctrl:
+		var model = anim_ctrl.get_model()
+		if model:
+			facing_dir = model.global_transform.basis.orthonormalized().z
+			facing_dir.y = 0
+	if facing_dir.length_squared() < 0.001:
+		facing_dir = _character.get_facing_direction()
+	facing_dir = facing_dir.normalized()
+	return facing_dir.dot(to_target) >= FACING_ANGLE_THRESHOLD
+
+
 ## Attempt to fire at current target
-func _try_fire() -> void:
+## Returns true if shot was taken, false if blocked (e.g. not facing target)
+func _try_fire() -> bool:
 	if not _character:
-		return
+		return false
+	if not _is_facing_target():
+		return false
 	# ダメージ計算を先に行い、命中/外れ結果をセットしてからシグナルを発火
 	# これによりBulletTrailComponentが正しい射撃結果を取得できる
 	_apply_damage_to_target()
 	var anim_ctrl = _character.get_anim_controller()
 	if anim_ctrl and anim_ctrl.has_method("fire"):
 		anim_ctrl.fire()  # Trigger recoil animation + fired signal
+	return true
 
 
 ## Calculate hit chance based on weapon stats, distance, and movement
@@ -616,8 +651,11 @@ func _process_firing(delta: float) -> void:
 func _process_legacy_firing(delta: float) -> void:
 	_fire_timer += delta
 	if _fire_timer >= FIRE_INTERVAL:
-		_fire_timer = 0.0
-		_try_fire()
+		if _try_fire():
+			_fire_timer = 0.0
+		else:
+			# 向き未完了：タイマーを維持し、次フレームで即リトライ
+			_fire_timer = FIRE_INTERVAL
 
 
 ## Start a new burst sequence
@@ -633,8 +671,9 @@ func _start_burst() -> void:
 	elif _current_firing_mode == WeaponPreset.FiringMode.SINGLE or shots == 1:
 		# Single shot mode
 		_is_in_burst = false
-		_try_fire()
-		_post_burst_pause_timer = _get_current_pause_after_burst()
+		if _try_fire():
+			_post_burst_pause_timer = _get_current_pause_after_burst()
+		# 発射失敗時はpauseを設定しない→次フレームで再度_start_burst()が呼ばれる
 	else:
 		# Burst mode
 		_is_in_burst = true
@@ -648,14 +687,16 @@ func _fire_burst_shot() -> void:
 		_end_burst()
 		return
 
-	_try_fire()
-	_burst_shots_remaining -= 1
-
-	if _burst_shots_remaining <= 0 or (_current_firing_mode != WeaponPreset.FiringMode.FULL_AUTO and _burst_shots_remaining <= 0):
-		_end_burst()
+	if _try_fire():
+		_burst_shots_remaining -= 1
+		if _burst_shots_remaining <= 0 or (_current_firing_mode != WeaponPreset.FiringMode.FULL_AUTO and _burst_shots_remaining <= 0):
+			_end_burst()
+		else:
+			# Schedule next shot in burst
+			_burst_interval_timer = _get_current_burst_interval()
 	else:
-		# Schedule next shot in burst
-		_burst_interval_timer = _get_current_burst_interval()
+		# 向き未完了：ショット数を消費せず次フレームで即リトライ
+		_burst_interval_timer = 0.0
 
 
 ## End the current burst

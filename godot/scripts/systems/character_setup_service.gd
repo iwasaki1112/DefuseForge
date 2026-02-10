@@ -6,7 +6,7 @@ extends RefCounted
 var enemy_visibility_system: Node = null
 var fog_of_war_system: Node3D = null
 var label_manager: CharacterLabelManager = null
-var default_weapon_id: String = "glock"
+var default_weapon_id: String = "ak47"
 var is_vision_enabled: bool = false
 var default_vision_fov: float = 90.0
 var default_vision_range: float = 15.0
@@ -76,7 +76,7 @@ func _complete_character_setup(character: Node) -> void:
 	# デフォルト武器を装備
 	var anim_ctrl = character.get_anim_controller()
 	if anim_ctrl:
-		anim_ctrl.set_weapon(CharacterAnimationController.Weapon.PISTOL)
+		anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
 
 	var default_weapon = WeaponRegistry.get_preset(default_weapon_id)
 	if default_weapon:

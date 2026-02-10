@@ -211,10 +211,11 @@ func _setup_tps_controller() -> void:
 
 
 func _setup_tps_hud() -> void:
-	# 武器セレクター（左上）
+	# 武器セレクター（左上）— 一旦非表示
 	var hbox := HBoxContainer.new()
 	hbox.name = "WeaponSelector"
 	hbox.position = Vector2(10, 10)
+	hbox.visible = false
 	ui_layer.add_child(hbox)
 
 	var label := Label.new()
@@ -230,7 +231,7 @@ func _setup_tps_hud() -> void:
 	for i in range(_weapon_list.size()):
 		var w: WeaponPreset = _weapon_list[i]
 		_weapon_option.add_item(w.display_name, i)
-		if w.id == "glock":
+		if w.id == "ak47":
 			default_idx = i
 	_weapon_option.selected = default_idx
 	_weapon_option.item_selected.connect(_on_weapon_selected)
@@ -319,6 +320,7 @@ func _create_action_buttons() -> void:
 	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	vbox.position = Vector2(-100, -120)
 	vbox.add_theme_constant_override("separation", 16)
+	vbox.visible = false  # 一旦非表示（ドア・グレネードボタン）
 	ui_layer.add_child(vbox)
 
 	# Open Door ボタン
