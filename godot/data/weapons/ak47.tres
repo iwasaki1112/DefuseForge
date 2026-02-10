@@ -15,7 +15,6 @@ spread = 0.15
 effective_range = 25.0
 recoil_strength = 0.15
 recoil_recovery = 8.0
-price = 2700
 model_scene = ExtResource("2")
 attach_offset = Vector3(0.0, 0.1, 0.0)
 attach_rotation = Vector3(-73.5, 52.0, 29.5)

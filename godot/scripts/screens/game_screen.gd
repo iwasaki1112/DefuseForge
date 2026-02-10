@@ -30,7 +30,6 @@ var _player_character: GameCharacter = null
 var _weapon_option: OptionButton = null
 var _weapon_list: Array = []
 var _timer_label: Label = null
-var _money_label: Label = null
 var _debug_vision_btn: Button = null
 var _hp_bar: ProgressBar = null
 var _crosshair: Control = null
@@ -102,7 +101,6 @@ func _initialize_game() -> void:
 	_spawn_characters()
 	_setup_tps_hud()
 	_setup_round_hud()
-	_setup_money()
 	_setup_tps_controller()
 
 	# 視界システムを初期化（FoW ON）
@@ -270,16 +268,6 @@ func _setup_tps_hud() -> void:
 	_timer_label.text = "2:00"
 	ui_layer.add_child(_timer_label)
 
-	# マネー（タイマーの下）
-	_money_label = Label.new()
-	_money_label.name = "MoneyLabel"
-	_money_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_money_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_money_label.position = Vector2(-120, 45)
-	_money_label.add_theme_font_size_override("font_size", 18)
-	_money_label.text = "$0"
-	ui_layer.add_child(_money_label)
-
 	# アクションボタン（右中央）
 	_create_action_buttons()
 
@@ -395,22 +383,6 @@ func _setup_label_manager() -> void:
 	lm.name = GameConstants.NODE_LABEL_MANAGER
 	game_manager.add_child(lm)
 	game_manager.set_label_manager(lm)
-
-
-func _setup_money() -> void:
-	PlayerState.reset_money()
-	if not PlayerState.money_changed.is_connected(_on_money_changed):
-		PlayerState.money_changed.connect(_on_money_changed)
-	_update_money_display()
-
-
-## ========================================
-## UI更新
-## ========================================
-
-func _update_money_display() -> void:
-	if _money_label:
-		_money_label.text = "$%d" % PlayerState.get_money()
 
 
 ## ========================================
@@ -760,10 +732,6 @@ func _on_debug_vision_toggled(enabled: bool) -> void:
 ## シグナルハンドラ
 ## ========================================
 
-func _on_money_changed(_new_amount: int) -> void:
-	_update_money_display()
-
-
 func _on_round_timer_updated(time: float) -> void:
 	if _timer_label:
 		var minutes := int(time) / 60
@@ -877,10 +845,6 @@ func _cleanup_before_transition() -> void:
 			SignalBus.survivor_count_changed.disconnect(_round_hud.update_survivor_counts)
 		if SignalBus.round_ended.is_connected(_round_hud.show_result):
 			SignalBus.round_ended.disconnect(_round_hud.show_result)
-
-	# PlayerStateのシグナル切断
-	if PlayerState.money_changed.is_connected(_on_money_changed):
-		PlayerState.money_changed.disconnect(_on_money_changed)
 
 	# HUDを明示的に削除
 	if _round_hud and is_instance_valid(_round_hud):

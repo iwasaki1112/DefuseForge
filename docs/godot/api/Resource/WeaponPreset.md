@@ -60,11 +60,6 @@
 | `recoil_strength` | `float` | `0.08` | リコイルアニメーション強度 |
 | `recoil_recovery` | `float` | `10.0` | リコイル回復速度 |
 
-### Economy
-| プロパティ | 型 | デフォルト | 説明 |
-|-----------|-----|----------|------|
-| `price` | `int` | `0` | 購入価格 |
-
 ### Visual
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
@@ -144,7 +139,6 @@ weapon.damage = 33.0
 weapon.fire_rate = 0.09
 weapon.accuracy = 0.85
 weapon.recoil_strength = 0.08
-weapon.price = 3100
 ```
 
 ### .tresファイル（エディタで作成）
@@ -160,7 +154,6 @@ damage = 33.0
 fire_rate = 0.09
 accuracy = 0.85
 recoil_strength = 0.08
-price = 3100
 ```
 
 ## WeaponRegistryとの連携

@@ -37,13 +37,12 @@ class PlayerStateData extends RefCounted:
     var peer_id: int              # ネットワークpeer_id
     var player_name: String       # プレイヤー名
     var team: int                 # 所属チーム（GameCharacter.Team相当）
-    var money: int                # 所持金
     var is_ready: bool            # 準備完了フラグ
     var connection_active: bool   # 接続済みフラグ
     var last_active_time: int     # 最終アクティブ時刻（msec）
     var wins: int                 # 勝利ラウンド数
     var losses: int               # 敗北ラウンド数
-    var loss_streak: int          # 連敗数（敗北報酬計算用）
+    var loss_streak: int          # 連敗数
 
     func _init(p_peer_id: int = 0, p_name: String = "")
     func to_dict() -> Dictionary
@@ -114,7 +113,6 @@ var dict = snapshot.to_dict()
 # プレイヤー状態の作成
 var player = SyncState.PlayerStateData.new(1, "Player1")
 player.team = GameCharacter.Team.COUNTER_TERRORIST
-player.money = 5000
 
 # 準備完了をトグル
 player.toggle_ready()

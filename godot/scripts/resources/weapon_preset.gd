@@ -35,12 +35,6 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var recoil_recovery: float = 10.0  ## Recoil recovery speed
 
 # ============================================
-# Economy
-# ============================================
-@export_group("Economy")
-@export var price: int = 0  ## Purchase price
-
-# ============================================
 # Visual
 # ============================================
 @export_group("Visual")

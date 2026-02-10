@@ -86,7 +86,6 @@ _ready()  ※setup_multiplayer()はadd_child前に呼ばれ、Providerを設定�
     ├── _spawn_characters()          # キャラクタースポーン
     ├── _setup_tps_hud()             # TPS HUD設定（HP、クロスヘア）
     ├── _setup_round_hud()           # ラウンドHUD設定
-    ├── _setup_money()               # 所持金設定
     ├── _setup_tps_controller()      # TPSPlayerController初期化
     └── game_manager.set_vision_enabled(true) # 視界有効化
 ```

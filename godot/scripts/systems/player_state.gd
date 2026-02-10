@@ -7,20 +7,16 @@ class_name PlayerStateClass
 # ============================================
 # Constants
 # ============================================
-const INITIAL_MONEY: int = 99999  ## 初期資金（ゲーム開始時）※デバッグ用
-
 # ============================================
 # Signals
 # ============================================
 signal team_changed(new_team: GameCharacter.Team)
-signal money_changed(new_amount: int)
 signal player_state_changed(peer_id: int)  ## マルチプレイヤー用
 
 # ============================================
 # State
 # ============================================
 var _player_team: GameCharacter.Team = GameCharacter.Team.COUNTER_TERRORIST
-var _money: int = INITIAL_MONEY
 
 ## ローカルプレイヤーのpeer_id（マルチプレイヤー用、シングルプレイ時は0）
 var _local_peer_id: int = 0
@@ -96,68 +92,6 @@ func filter_enemies(characters: Array) -> Array[Node]:
 
 
 # ============================================
-# Money API
-# ============================================
-
-## Get current money
-func get_money() -> int:
-	return _money
-
-
-## Set money directly
-func set_money(amount: int) -> void:
-	var clamped := maxi(0, amount)
-	if _money == clamped:
-		return
-	_money = clamped
-	money_changed.emit(_money)
-
-
-## Add money (e.g., round reward, kill reward)
-func add_money(amount: int) -> void:
-	if amount <= 0:
-		return
-	set_money(_money + amount)
-
-
-## Spend money if sufficient funds available
-## Returns true if successful, false if insufficient funds
-func spend_money(amount: int) -> bool:
-	if amount <= 0:
-		return true
-	if _money < amount:
-		return false
-	set_money(_money - amount)
-	return true
-
-
-## Check if player can afford amount
-func can_afford(amount: int) -> bool:
-	return _money >= amount
-
-
-## Reset money to initial amount (e.g., game start)
-func reset_money() -> void:
-	set_money(INITIAL_MONEY)
-
-
-## Add round reward
-func add_round_reward(won: bool, loss_streak: int = 0) -> void:
-	var reward: int
-	if won:
-		reward = 3250  # 勝利報酬
-	else:
-		# 敗北報酬（連敗ボーナス）
-		match loss_streak:
-			0: reward = 1400
-			1: reward = 1900
-			2: reward = 2400
-			3: reward = 2900
-			_: reward = 3400  # 最大
-	add_money(reward)
-
-
-# ============================================
 # Multiplayer API
 # ============================================
 
@@ -168,7 +102,6 @@ func set_local_peer_id(peer_id: int) -> void:
 	if peer_id != 0 and not _players.has(peer_id):
 		var player_data := SyncState.PlayerStateData.new(peer_id)
 		player_data.team = _player_team
-		player_data.money = _money
 		_players[peer_id] = player_data
 
 
@@ -183,7 +116,6 @@ func register_player(peer_id: int, player_name: String = "") -> SyncState.Player
 		return _players[peer_id]
 
 	var player_data := SyncState.PlayerStateData.new(peer_id, player_name)
-	player_data.money = INITIAL_MONEY
 	_players[peer_id] = player_data
 	player_state_changed.emit(peer_id)
 	return player_data
@@ -236,7 +168,6 @@ func are_all_players_ready() -> bool:
 func reset_all_players() -> void:
 	for peer_id in _players:
 		var state: SyncState.PlayerStateData = _players[peer_id]
-		state.money = INITIAL_MONEY
 		state.is_ready = false
 		state.wins = 0
 		state.losses = 0
@@ -252,7 +183,6 @@ func reset_all_players() -> void:
 func to_dict() -> Dictionary:
 	return {
 		"player_team": _player_team,
-		"money": _money,
 		"local_peer_id": _local_peer_id,
 	}
 
@@ -261,8 +191,6 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	if data.has("player_team"):
 		set_player_team(data.player_team)
-	if data.has("money"):
-		set_money(data.money)
 	if data.has("local_peer_id"):
 		_local_peer_id = data.local_peer_id
 
@@ -271,7 +199,6 @@ func from_dict(data: Dictionary) -> void:
 func to_player_state_data() -> SyncState.PlayerStateData:
 	var data := SyncState.PlayerStateData.new(_local_peer_id)
 	data.team = _player_team
-	data.money = _money
 	return data
 
 
@@ -279,7 +206,6 @@ func to_player_state_data() -> SyncState.PlayerStateData:
 func from_player_state_data(data: SyncState.PlayerStateData) -> void:
 	if data.peer_id == _local_peer_id or _local_peer_id == 0:
 		set_player_team(data.team as GameCharacter.Team)
-		set_money(data.money)
 
 
 ## マルチプレイヤーセッションをクリア（ゲーム終了時）

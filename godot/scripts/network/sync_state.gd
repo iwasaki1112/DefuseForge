@@ -85,9 +85,6 @@ class PlayerStateData extends RefCounted:
 	## 所属チーム（GameCharacter.Team相当）
 	var team: int = 0
 
-	## 所持金
-	var money: int = 0
-
 	## 準備完了フラグ
 	var is_ready: bool = false
 
@@ -120,7 +117,6 @@ class PlayerStateData extends RefCounted:
 			"peer_id": peer_id,
 			"player_name": player_name,
 			"team": team,
-			"money": money,
 			"is_ready": is_ready,
 			"connection_active": connection_active,
 			"last_active_time": last_active_time,
@@ -135,7 +131,6 @@ class PlayerStateData extends RefCounted:
 		peer_id = data.get("peer_id", 0)
 		player_name = data.get("player_name", "")
 		team = data.get("team", 0)
-		money = data.get("money", 0)
 		is_ready = data.get("is_ready", false)
 		connection_active = data.get("connection_active", true)
 		last_active_time = data.get("last_active_time", 0)
