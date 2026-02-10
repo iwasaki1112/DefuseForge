@@ -42,6 +42,10 @@ var _fire_timer: float = 0.0  ## 発砲タイマー
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
 
+# FoWシステムキャッシュ（FoW表示との整合性確保）
+var _fow_system_cache: Node3D = null
+var _fow_system_checked: bool = false
+
 # 命中判定結果（最後の射撃）
 var _last_shot_hit: bool = true
 var _last_shot_miss_offset: Vector3 = Vector3.ZERO
@@ -320,15 +324,21 @@ func _handle_no_enemy_in_sight() -> void:
 
 
 ## 敵が視界内にいるかを判定
-## 戦闘ターゲティングでは、このキャラクター自身が見える敵だけを攻撃対象にする
-## （FoWテクスチャは全味方の視界を合成しているため、ここでは使用しない）
+## 二重チェック: VisionComponent（個別レイキャスト）AND FoWテクスチャ（画面表示と一致）
+## これにより、画面上で見えない敵を攻撃することを防ぐ
 func _is_enemy_visible(enemy_pos: Vector3, vision: VisionComponent) -> bool:
-	# 各キャラクターは自分自身のVisionComponentで判定
-	# これにより、壁越しに敵を攻撃することを防ぐ
-	if vision:
-		return vision.is_position_in_view(enemy_pos)
+	# 1. VisionComponentで個別キャラクターの視線チェック（レイキャスト）
+	if not vision or not vision.is_position_in_view(enemy_pos):
+		return false
 
-	return false
+	# 2. FoWテクスチャで画面表示との整合性チェック
+	# FoWはXZ平面投影のため、レイキャストでは通過するがFoWでは遮蔽される場合がある
+	var fow := _get_fog_of_war_system()
+	if fow and fow.has_method("is_position_visible_in_fow"):
+		return fow.is_position_visible_in_fow(enemy_pos)
+
+	# FoWシステムが利用できない場合はVisionComponentの結果のみで判定
+	return true
 
 
 ## Get all enemy characters
@@ -359,6 +369,20 @@ func _get_enemy_characters() -> Array[Node]:
 			enemies.append(character)
 
 	return enemies
+
+
+## FogOfWarSystemを取得（キャッシュ版）
+## VisionComponentのSmokeAreaManager取得と同じパターン
+func _get_fog_of_war_system() -> Node3D:
+	if _fow_system_checked:
+		return _fow_system_cache
+	_fow_system_checked = true
+	var game_screen := get_tree().get_first_node_in_group("game_screen")
+	if game_screen and game_screen.has_method("get_vision_service"):
+		var vision_service = game_screen.get_vision_service()
+		if vision_service:
+			_fow_system_cache = vision_service.fog_of_war_system
+	return _fow_system_cache
 
 
 ## キャラクターが現在のターゲット方向を向いているかチェック
