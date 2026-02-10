@@ -3,7 +3,7 @@ extends Node
 ## Use as Autoload singleton (CharacterRegistry)
 
 ## Shared animation library source (GLB with character and all animations)
-const ANIMATION_SOURCE := "res://assets/animations/character_anims.glb"
+const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
 var _animation_library: AnimationLibrary = null
 
 # ============================================

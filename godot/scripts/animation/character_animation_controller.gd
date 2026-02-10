@@ -2,6 +2,7 @@ extends Node
 class_name CharacterAnimationController
 ## Character Animation Controller API
 ## Provides simple interface for character animations (movement, aiming, combat, death)
+## ARP rig + in-place animation system with TimeScale speed sync
 
 # Enums
 enum Weapon { NONE, RIFLE, PISTOL }
@@ -9,9 +10,9 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Signals
 signal fired()
-signal door_kick_impact()   # キックがドアに当たるタイミング（フレーム36/66）
+signal door_kick_impact()   # キックがドアに当たるタイミング
 signal door_kick_finished() # アニメーション完了
-signal throw_release()      # グレネードをリリースするタイミング（フレーム50/120）
+signal throw_release()      # グレネードをリリースするタイミング
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
 
@@ -53,20 +54,33 @@ var _is_opening_door := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
+var _is_sprinting := false
 
-# 全体速度倍率（移動速度とアニメーション再生速度の両方に適用）
-const SPEED_SCALE := 1.3
+# Speed constants
+const WALK_SPEED := 2.0
+const SPRINT_SPEED := 6.0
 
-# Animation visual speeds at 1x playback
-# ピストル歩行はライフル歩行と同じアニメーションを使用するため共通定数
-const ANIM_SPEED_FORWARD := 2.0
-const ANIM_SPEED_BACKWARD := 1.3   # 後退は足交差で遅い
-const ANIM_SPEED_STRAFE := 1.2
+# Per-direction natural walk speeds (m/s) from root motion data
+const PISTOL_ANIM_SPEEDS := {
+	"fwd": 1.008, "bwd": 0.906,
+	"left": 0.831, "right": 1.071,
+	"fwd_left": 0.811, "fwd_right": 0.982,
+	"bwd_left": 0.831, "bwd_right": 0.811,
+	"sprint": 4.3,
+}
+const RIFLE_ANIM_SPEEDS := {
+	"fwd": 2.016, "bwd": 1.845,
+	"left": 1.663, "right": 2.142,
+	"fwd_left": 1.724, "fwd_right": 2.016,
+	"bwd_left": 1.663, "bwd_right": 1.724,
+	"sprint": 4.299,
+}
 
 # Death animation names
 const DEATH_ANIM := GameConstants.ANIM_DEATH
 const DEATH_ANIM_FORWARD := GameConstants.ANIM_DEATH_FORWARD
 const DEATH_ANIM_BACKWARD := GameConstants.ANIM_DEATH_BACKWARD
+const DEATH_ANIM_LEFT := GameConstants.ANIM_DEATH_LEFT
 const DEATH_ANIM_RIGHT := GameConstants.ANIM_DEATH_RIGHT
 
 # Door kick animation names
@@ -83,11 +97,12 @@ const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
 
 # Blend values
 var _input_dir := Vector2.ZERO
-var _movement_blend := 0.0
-var _weapon_blend := 0.0
+var _movement_blend := 0.0  # 0=idle, 1=walking
+var _speed_blend := 0.0     # 0=walk, 1=sprint
 var _fire_cooldown := 0.0
 
-# Internal nodes
+# Blend smoothing
+const BLEND_SMOOTH := 10.0
 
 
 #region Public API
@@ -112,7 +127,6 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 
 	_setup_animation_loops()
 	_setup_animation_tree()
-	_update_weapon_idle_blend()
 
 	# 注意: 初期の向きはGameCharacter.set_facing_direction()で設定される
 	# ここでは_aim_directionを初期化しない（デフォルトのVector3.FORWARDを使用）
@@ -121,11 +135,14 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 func update_animation(
 	movement_direction: Vector3,
 	aim_direction: Vector3,
-	_is_running: bool,
+	is_running: bool,
 	delta: float
 ) -> void:
 	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return
+
+	# is_running パラメータをスプリントとして使用
+	_is_sprinting = is_running and movement_direction.length() > 0.1
 
 	# エイム方向を保存（視界計算用）
 	if aim_direction.length_squared() > 0.001:
@@ -143,20 +160,14 @@ func update_animation(
 	_fire_cooldown -= delta
 
 	# Update animation tree parameters
-	_update_animation_tree()
+	_update_animation_tree(delta)
 
 ## Set weapon type
 func set_weapon(weapon: Weapon) -> void:
-	_weapon = weapon
-	_update_weapon_idle_blend()
-
-## Update weapon-based idle blend (rifle uses aiming pose, pistol uses normal idle)
-func _update_weapon_idle_blend() -> void:
-	if not _anim_tree:
+	if _weapon == weapon:
 		return
-	# 0 = rifle idle (aiming pose), 1 = normal idle
-	var blend_value := 1.0 if _weapon != Weapon.RIFLE else 0.0
-	_anim_tree.set("parameters/WeaponIdleBlend/blend_amount", blend_value)
+	_weapon = weapon
+	_switch_weapon_animations()
 
 ## Trigger fire action (recoil)
 func fire() -> void:
@@ -187,33 +198,14 @@ func fire() -> void:
 	fired.emit()
 
 ## Get current movement speed based on state and direction
-## Returns the animation's visual speed for the current blend direction
 func get_current_speed() -> float:
 	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return 0.0
-	# Calculate direction-based speed from current blend position, scaled
-	return _get_directional_anim_speed() * SPEED_SCALE
-
-## Calculate animation visual speed based on blend direction
-## _input_dir: y<0 = forward, y>0 = backward, x = strafe
-func _get_directional_anim_speed() -> float:
-	if _input_dir.length() < 0.01:
-		return ANIM_SPEED_FORWARD  # Default when idle
-
-	var dir := _input_dir.normalized()
-
-	# 前進(y<0)と後退(y>0)を区別
-	var longitudinal_speed := ANIM_SPEED_BACKWARD if dir.y > 0.0 else ANIM_SPEED_FORWARD
-	var longitudinal_weight := absf(dir.y)
-	var strafe_weight := absf(dir.x)
-
-	var speed := longitudinal_speed * longitudinal_weight + ANIM_SPEED_STRAFE * strafe_weight
-
-	var total_weight := longitudinal_weight + strafe_weight
-	if total_weight > 0.01:
-		speed /= total_weight
-
-	return speed
+	if _is_sprinting:
+		return SPRINT_SPEED
+	if _movement_blend > 0.1:
+		return WALK_SPEED
+	return 0.0
 
 ## Check if character is dead
 func is_dead() -> bool:
@@ -235,8 +227,6 @@ func get_model() -> Node3D:
 	return _model
 
 
-
-
 ## Set aim direction directly (for rotation mode)
 ## 非推奨: GameCharacter.set_facing_direction_vec()を使用してください
 func set_look_direction(direction: Vector3) -> void:
@@ -244,7 +234,7 @@ func set_look_direction(direction: Vector3) -> void:
 		_aim_direction = direction.normalized()
 		_aim_direction.y = 0
 		if _model:
-			# -_aim_direction 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
+			# -_aim_direction 必須！（モデル+Z前方向 vs looking_at -Z前方向）
 			var target_basis := Basis.looking_at(-_aim_direction, Vector3.UP)
 			_model.transform.basis = target_basis
 
@@ -253,7 +243,7 @@ func set_look_direction(direction: Vector3) -> void:
 ## directionはキャラクターが向きたい方向（正規化済み）
 ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ## !! 警告: -direction を変更しないこと！                            !!
-## !! Mixamoモデルは+Zが前方向、looking_at()は-Zをターゲットに向ける !!
+## !! モデルは+Zが前方向、looking_at()は-Zをターゲットに向ける      !!
 ## !! この反転は必須。削除するとモデルが逆方向を向く                 !!
 ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 func set_model_direction(direction: Vector3) -> void:
@@ -268,9 +258,6 @@ func set_model_direction(direction: Vector3) -> void:
 const REMOTE_ROTATION_SPEED: float = 20.0
 
 ## リモートキャラクター用の回転更新（四元数SLERPで滑らかに補間）
-## ローカルキャラクターと同じ補間方式を使用し、滑らかで一貫した回転を実現
-## target_direction: ターゲット方向（正規化不要、内部で処理）
-## delta: フレーム時間
 func update_model_rotation_smooth(target_direction: Vector3, delta: float) -> void:
 	if not _model or target_direction.length_squared() < 0.001:
 		return
@@ -281,8 +268,8 @@ func update_model_rotation_smooth(target_direction: Vector3, delta: float) -> vo
 	if look_dir.length_squared() < 0.001:
 		return
 
-	# 四元数SLERPで滑らかに補間（ローカルの_update_model_rotationと同じ方式）
-	# -look_dir 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
+	# 四元数SLERPで滑らかに補間
+	# -look_dir 必須！（モデル+Z前方向 vs looking_at -Z前方向）
 	var target_basis := Basis.looking_at(-look_dir, Vector3.UP)
 	var target_quat := target_basis.get_rotation_quaternion()
 	var current_quat := Quaternion(_model.transform.basis)
@@ -315,21 +302,19 @@ func play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: boo
 
 
 ## 被弾方向に応じた死亡アニメーション候補を優先度順に探索
-## 存在するアニメーションの中から最適なものを返す
 func _pick_death_anim(hit_direction: HitDirection) -> String:
 	var candidates: Array[String]
 	match hit_direction:
 		HitDirection.FRONT:
-			candidates = [DEATH_ANIM_FORWARD, DEATH_ANIM_BACKWARD, DEATH_ANIM_RIGHT]
+			candidates = [DEATH_ANIM_FORWARD, DEATH_ANIM_BACKWARD, DEATH_ANIM_RIGHT, DEATH_ANIM_LEFT]
 		HitDirection.BACK:
-			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT, DEATH_ANIM_LEFT]
 		HitDirection.RIGHT:
-			candidates = [DEATH_ANIM_RIGHT, DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD]
+			candidates = [DEATH_ANIM_RIGHT, DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_LEFT]
 		HitDirection.LEFT:
-			# death_leftがないので後方→前方→右の順でフォールバック
-			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+			candidates = [DEATH_ANIM_LEFT, DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
 		_:
-			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT]
+			candidates = [DEATH_ANIM_BACKWARD, DEATH_ANIM_FORWARD, DEATH_ANIM_RIGHT, DEATH_ANIM_LEFT]
 
 	for anim_name in candidates:
 		if _anim_player.has_animation(anim_name):
@@ -382,15 +367,10 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 
 	# スムーズにアイドルへ遷移してからAnimationTreeを再開
 	if _anim_player and not _is_dead:
-		# 武器に応じたアイドルアニメーションを選択
-		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
-
-		# クロスフェードでアイドルへ遷移（0.3秒）
+		var idle_anim_name := _get_idle_anim_name()
 		var crossfade_time := 0.3
 		if _anim_player.has_animation(idle_anim_name):
 			_anim_player.play(idle_anim_name, crossfade_time)
-
-		# クロスフェード完了後にAnimationTreeを再開
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
 
@@ -442,7 +422,7 @@ func _on_throw_finished(_anim_name: String) -> void:
 
 	# スムーズにアイドルへ遷移してからAnimationTreeを再開
 	if _anim_player and not _is_dead:
-		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
+		var idle_anim_name := _get_idle_anim_name()
 		var crossfade_time := 0.3
 		if _anim_player.has_animation(idle_anim_name):
 			_anim_player.play(idle_anim_name, crossfade_time)
@@ -481,7 +461,7 @@ func _on_door_open_finished(_anim_name: String) -> void:
 	_is_opening_door = false
 
 	if _anim_player and not _is_dead:
-		var idle_anim_name := "rifle_idle" if _weapon == Weapon.RIFLE else "pistol_idle"
+		var idle_anim_name := _get_idle_anim_name()
 		var crossfade_time := 0.3
 		if _anim_player.has_animation(idle_anim_name):
 			_anim_player.play(idle_anim_name, crossfade_time)
@@ -497,14 +477,18 @@ func is_opening_door() -> bool:
 
 
 ## Get current animation state for network synchronization
-## Returns encoded state: "is_moving,is_firing,blend_x,blend_y"
-## Example: "1,1,-50,100" = moving, firing, blend(-0.5, 1.0)
+## Returns encoded state: "move_state,is_firing,blend_x,blend_y"
+## move_state: 0=idle, 1=walking, 2=sprinting
 func get_animation_state() -> String:
-	var is_moving := 1 if _movement_blend > 0.1 else 0
+	var move_state := 0
+	if _is_sprinting:
+		move_state = 2
+	elif _movement_blend > 0.1:
+		move_state = 1
 	var is_firing := 1 if _fire_cooldown > 0 else 0
 	var blend_x := int(_input_dir.x * 100)
 	var blend_y := int(_input_dir.y * 100)
-	return "%d,%d,%d,%d" % [is_moving, is_firing, blend_x, blend_y]
+	return "%d,%d,%d,%d" % [move_state, is_firing, blend_x, blend_y]
 
 
 ## Apply animation state from network (for remote characters)
@@ -517,16 +501,19 @@ func apply_animation_state(state: String, delta: float) -> void:
 	if parts.size() < 4:
 		return
 
-	var is_moving := parts[0].to_int() == 1
+	var move_state := parts[0].to_int()
 	var is_firing := parts[1].to_int() == 1
 	var blend_x := parts[2].to_int() / 100.0
 	var blend_y := parts[3].to_int() / 100.0
+
+	# 後方互換: 旧フォーマットの0/1をidle/walkingとして扱う
+	var is_moving := move_state > 0
+	_is_sprinting = move_state >= 2
 
 	# リモートキャラクター用のcooldown減算（update_animation()が呼ばれないため）
 	_fire_cooldown -= delta
 
 	# リモートキャラクターの射撃エフェクト再生
-	# is_firing=true が続く間、_fire_cooldownが0になったタイミングでfire()を呼び出す
 	if is_firing and _fire_cooldown <= 0:
 		fire()
 	_remote_last_fire_state = is_firing
@@ -534,6 +521,10 @@ func apply_animation_state(state: String, delta: float) -> void:
 	# Smooth interpolation for blend values
 	var target_movement := 1.0 if is_moving else 0.0
 	_movement_blend = lerpf(_movement_blend, target_movement, 1.0 - exp(-10.0 * delta))
+
+	# Sprint blend
+	var target_speed := 1.0 if _is_sprinting else 0.0
+	_speed_blend = lerpf(_speed_blend, target_speed, 1.0 - exp(-8.0 * delta))
 
 	if is_moving:
 		var target_blend := Vector2(blend_x, blend_y)
@@ -543,12 +534,57 @@ func apply_animation_state(state: String, delta: float) -> void:
 			_input_dir = Vector2.ZERO
 
 	# Update animation tree
-	_update_animation_tree()
+	_update_animation_tree(delta)
 
 
 #endregion
 
 #region Internal Implementation
+
+## 武器プレフィックスを取得
+func _get_weapon_prefix() -> String:
+	return "Rifle" if _weapon != Weapon.PISTOL else "Pistol"
+
+## 現在の武器のアイドルアニメーション名
+func _get_idle_anim_name() -> String:
+	return _get_weapon_prefix() + "_Idle"
+
+## 現在の武器のアニメーション速度テーブル
+func _get_anim_speeds() -> Dictionary:
+	return RIFLE_ANIM_SPEEDS if _weapon != Weapon.PISTOL else PISTOL_ANIM_SPEEDS
+
+## ブレンド位置から方向別アニメーション速度を計算（重み付き補間）
+func _get_blended_anim_speed(blend_pos: Vector2) -> float:
+	var dir := blend_pos.normalized() if blend_pos.length() > 0.01 else Vector2.ZERO
+	var s := _get_anim_speeds()
+	if dir == Vector2.ZERO:
+		return s["fwd"]
+
+	var directions: Array[Vector2] = [
+		Vector2(0, 1), Vector2(0, -1),
+		Vector2(-1, 0), Vector2(1, 0),
+		Vector2(-0.707, 0.707), Vector2(0.707, 0.707),
+		Vector2(-0.707, -0.707), Vector2(0.707, -0.707),
+	]
+	var speeds: Array[float] = [
+		s["fwd"], s["bwd"],
+		s["left"], s["right"],
+		s["fwd_left"], s["fwd_right"],
+		s["bwd_left"], s["bwd_right"],
+	]
+
+	var total_weight := 0.0
+	var blended_speed := 0.0
+	for i in range(directions.size()):
+		var w := maxf(0.0, dir.dot(directions[i].normalized()))
+		w = w * w
+		total_weight += w
+		blended_speed += w * speeds[i]
+
+	if total_weight > 0.001:
+		return blended_speed / total_weight
+	return s["fwd"]
+
 
 func _find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:
@@ -574,14 +610,19 @@ func _setup_lean_modifier() -> void:
 func _setup_animation_loops() -> void:
 	var loop_anims := [
 		# Idle animations
-		"rifle_idle",
-		"pistol_idle",
-		# Rifle walk
-		"rifle_walk_forward", "rifle_walk_backward", "rifle_walk_left", "rifle_walk_right",
-		"rifle_walk_forward_left", "rifle_walk_forward_right", "rifle_walk_backward_left", "rifle_walk_backward_right",
-		# Pistol walk
-		"pistol_walk_forward", "pistol_walk_backward", "pistol_walk_left", "pistol_walk_right",
-		"pistol_walk_forward_left", "pistol_walk_forward_right", "pistol_walk_backward_left", "pistol_walk_backward_right",
+		"Rifle_Idle", "Pistol_Idle",
+		# Rifle walk (8 directions)
+		"Rifle_WalkFwdLoop", "Rifle_WalkBwdLoop",
+		"Rifle_StrafeLeftLoop", "Rifle_StrafeRightLoop",
+		"Rifle_StrafeLeft45Loop", "Rifle_StrafeRight45Loop",
+		"Rifle_StrafeLeft135Loop", "Rifle_StrafeRight135Loop",
+		# Pistol walk (8 directions)
+		"Pistol_WalkFwdLoop", "Pistol_WalkBwdLoop",
+		"Pistol_StrafeLeftLoop", "Pistol_StrafeRightLoop",
+		"Pistol_StrafeLeft45Loop", "Pistol_StrafeRight45Loop",
+		"Pistol_StrafeLeft135Loop", "Pistol_StrafeRight135Loop",
+		# Sprint
+		"Rifle_SprintLoop", "Pistol_SprintLoop",
 	]
 
 	var anim_lib = _anim_player.get_animation_library("")
@@ -591,6 +632,12 @@ func _setup_animation_loops() -> void:
 			if anim:
 				anim.loop_mode = Animation.LOOP_LINEAR
 
+
+## AnimationTree構造:
+## output → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
+##                                       └→ Sprint(単一アニメーション)
+##            └→ ShootAnim（上半身フィルター付き）
+## ShootOneShotはTimeScaleの上流 = 射撃アニメーション速度がTimeScaleに影響されない
 func _setup_animation_tree() -> void:
 	# Create or get AnimationTree
 	_anim_tree = _model.get_node_or_null(GameConstants.NODE_ANIMATION_TREE) as AnimationTree
@@ -601,98 +648,61 @@ func _setup_animation_tree() -> void:
 
 	var blend_tree := AnimationNodeBlendTree.new()
 
-	# Walk animations - Rifle
-	var rifle_walk_blend_space := _create_blend_space({
-		Vector2(0, -1): "rifle_walk_forward",
-		Vector2(0, 1): "rifle_walk_backward",
-		Vector2(-1, 0): "rifle_walk_left",
-		Vector2(1, 0): "rifle_walk_right",
-		Vector2(-0.707, -0.707): "rifle_walk_forward_left",
-		Vector2(0.707, -0.707): "rifle_walk_forward_right",
-		Vector2(-0.707, 0.707): "rifle_walk_backward_left",
-		Vector2(0.707, 0.707): "rifle_walk_backward_right",
-	})
+	# --- Walk BlendSpace2D (単一、武器切替時にアニメーション名を動的スワップ) ---
+	var prefix := _get_weapon_prefix()
+	var walk_blend_space := _create_walk_blend_space(prefix)
 
-	# Walk animations - Pistol (fallback to rifle if not available)
-	var pistol_walk_blend_space := _create_blend_space_with_fallback({
-		Vector2(0, -1): ["pistol_walk_forward", "rifle_walk_forward"],
-		Vector2(0, 1): ["pistol_walk_backward", "rifle_walk_backward"],
-		Vector2(-1, 0): ["pistol_walk_left", "rifle_walk_left"],
-		Vector2(1, 0): ["pistol_walk_right", "rifle_walk_right"],
-		Vector2(-0.707, -0.707): ["pistol_walk_forward_left", "rifle_walk_forward_left"],
-		Vector2(0.707, -0.707): ["pistol_walk_forward_right", "rifle_walk_forward_right"],
-		Vector2(-0.707, 0.707): ["pistol_walk_backward_left", "rifle_walk_backward_left"],
-		Vector2(0.707, 0.707): ["pistol_walk_backward_right", "rifle_walk_backward_right"],
-	})
-
-	# Weapon walk blend node
-	var walk_weapon_blend := AnimationNodeBlend2.new()
-
+	# --- Idle animation ---
 	var idle_anim := AnimationNodeAnimation.new()
-	idle_anim.animation = "pistol_idle"
+	idle_anim.animation = prefix + "_Idle"
 
-	# Rifle idle
-	var rifle_idle_anim := AnimationNodeAnimation.new()
-	rifle_idle_anim.animation = "rifle_idle"
+	# --- Sprint animation ---
+	var sprint_anim := AnimationNodeAnimation.new()
+	sprint_anim.animation = prefix + "_SprintLoop"
 
-	# TimeScale node for walk animations
-	var walk_speed_node := AnimationNodeTimeScale.new()
+	# --- IdleBlend: 0=Idle, 1=Walk ---
+	var idle_blend := AnimationNodeBlend2.new()
 
-	# Blend nodes
-	var idle_move_blend := AnimationNodeBlend2.new()
+	# --- SpeedBlend: 0=Idle+Walk, 1=Sprint ---
+	var speed_blend := AnimationNodeBlend2.new()
 
-	# Weapon idle blend node (switches idle based on weapon type)
-	var weapon_idle_blend := AnimationNodeBlend2.new()
+	# --- TimeScale: 移動アニメーション速度同期 ---
+	var time_scale := AnimationNodeTimeScale.new()
 
-	# Add nodes
-	blend_tree.add_node("Idle", idle_anim, Vector2(-600, -200))
-	blend_tree.add_node("RifleIdle", rifle_idle_anim, Vector2(-600, -50))
-	blend_tree.add_node("WeaponIdleBlend", weapon_idle_blend, Vector2(-400, -100))
-	# Rifle/Pistol walk
-	blend_tree.add_node("RifleWalkBlend", rifle_walk_blend_space, Vector2(-800, 100))
-	blend_tree.add_node("PistolWalkBlend", pistol_walk_blend_space, Vector2(-800, 150))
-	# Weapon-based walk blend
-	blend_tree.add_node("WalkWeaponBlend", walk_weapon_blend, Vector2(-600, 100))
-	blend_tree.add_node("WalkSpeed", walk_speed_node, Vector2(-400, 100))
-	blend_tree.add_node("IdleMoveBlend", idle_move_blend, Vector2(0, 0))
-
-	# Connect nodes
-	# Weapon-based idle blend (0 = rifle idle, 1 = normal idle; controlled by weapon type)
-	blend_tree.connect_node("WeaponIdleBlend", 0, "RifleIdle")
-	blend_tree.connect_node("WeaponIdleBlend", 1, "Idle")
-
-	# Connect weapon-based walk (0 = rifle, 1 = pistol)
-	blend_tree.connect_node("WalkWeaponBlend", 0, "RifleWalkBlend")
-	blend_tree.connect_node("WalkWeaponBlend", 1, "PistolWalkBlend")
-	blend_tree.connect_node("WalkSpeed", 0, "WalkWeaponBlend")
-	blend_tree.connect_node("IdleMoveBlend", 0, "WeaponIdleBlend")
-	blend_tree.connect_node("IdleMoveBlend", 1, "WalkSpeed")
-
-	# Fire animation OneShot (weapon-based)
-	var rifle_shoot_anim := AnimationNodeAnimation.new()
-	rifle_shoot_anim.animation = "rifle_shoot" if _anim_player.has_animation("rifle_shoot") else ""
-
-	var pistol_shoot_anim := AnimationNodeAnimation.new()
-	pistol_shoot_anim.animation = "pistol_shoot" if _anim_player.has_animation("pistol_shoot") else ""
-
-	var shoot_weapon_blend := AnimationNodeBlend2.new()
+	# --- Shoot OneShot (上半身フィルター) ---
+	var shoot_anim := AnimationNodeAnimation.new()
+	shoot_anim.animation = prefix + "_Shoot" if _anim_player.has_animation(prefix + "_Shoot") else ""
 	var shoot_oneshot := AnimationNodeOneShot.new()
 	shoot_oneshot.fadein_time = 0.05
 	shoot_oneshot.fadeout_time = 0.15
-
-	# Upper body filter: shoot animation only affects spine and above
 	_apply_upper_body_filter(shoot_oneshot)
 
-	blend_tree.add_node("RifleShoot", rifle_shoot_anim, Vector2(100, 150))
-	blend_tree.add_node("PistolShoot", pistol_shoot_anim, Vector2(100, 200))
-	blend_tree.add_node("ShootWeaponBlend", shoot_weapon_blend, Vector2(200, 150))
-	blend_tree.add_node("ShootOneShot", shoot_oneshot, Vector2(300, 0))
+	# --- Add nodes to blend tree ---
+	blend_tree.add_node("Idle", idle_anim, Vector2(-400, 100))
+	blend_tree.add_node("WalkBlend", walk_blend_space, Vector2(-400, 300))
+	blend_tree.add_node("IdleBlend", idle_blend, Vector2(-50, 200))
+	blend_tree.add_node("Sprint", sprint_anim, Vector2(-50, 500))
+	blend_tree.add_node("SpeedBlend", speed_blend, Vector2(200, 300))
+	blend_tree.add_node("TimeScale", time_scale, Vector2(400, 200))
+	blend_tree.add_node("ShootAnim", shoot_anim, Vector2(500, 400))
+	blend_tree.add_node("ShootOneShot", shoot_oneshot, Vector2(600, 200))
 
-	blend_tree.connect_node("ShootWeaponBlend", 0, "RifleShoot")
-	blend_tree.connect_node("ShootWeaponBlend", 1, "PistolShoot")
-	blend_tree.connect_node("ShootOneShot", 0, "IdleMoveBlend")
-	blend_tree.connect_node("ShootOneShot", 1, "ShootWeaponBlend")
+	# --- Connect: IdleBlend(0=Idle, 1=WalkBlend) ---
+	blend_tree.connect_node("IdleBlend", 0, "Idle")
+	blend_tree.connect_node("IdleBlend", 1, "WalkBlend")
 
+	# --- Connect: SpeedBlend(0=IdleBlend, 1=Sprint) ---
+	blend_tree.connect_node("SpeedBlend", 0, "IdleBlend")
+	blend_tree.connect_node("SpeedBlend", 1, "Sprint")
+
+	# --- Connect: TimeScale → SpeedBlend ---
+	blend_tree.connect_node("TimeScale", 0, "SpeedBlend")
+
+	# --- Connect: ShootOneShot(base=TimeScale, oneshot=ShootAnim) ---
+	blend_tree.connect_node("ShootOneShot", 0, "TimeScale")
+	blend_tree.connect_node("ShootOneShot", 1, "ShootAnim")
+
+	# --- Connect: output → ShootOneShot ---
 	blend_tree.connect_node("output", 0, "ShootOneShot")
 
 	_anim_tree.tree_root = blend_tree
@@ -700,17 +710,32 @@ func _setup_animation_tree() -> void:
 	_anim_tree.active = true
 
 
-func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
+## WalkBlend用BlendSpace2D作成
+## Forward=(0,1), Backward=(0,-1) (animation_testの座標系)
+func _create_walk_blend_space(prefix: String) -> AnimationNodeBlendSpace2D:
 	var blend_space := AnimationNodeBlendSpace2D.new()
 	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
 	blend_space.auto_triangles = true
 	blend_space.min_space = Vector2(-1, -1)
 	blend_space.max_space = Vector2(1, 1)
-	# Enable sync to keep animation phase synchronized across blend positions
 	blend_space.sync = true
 
-	for pos in anims:
-		var anim_name: String = anims[pos]
+	# 8方向: position → animation name
+	# Forward=(0,1), FwdRight=(0.707,0.707), Right=(1,0), BwdRight=(0.707,-0.707)
+	# Backward=(0,-1), BwdLeft=(-0.707,-0.707), Left=(-1,0), FwdLeft=(-0.707,0.707)
+	var walk_points := {
+		Vector2(0, 1): prefix + "_WalkFwdLoop",
+		Vector2(0.707, 0.707): prefix + "_StrafeRight45Loop",
+		Vector2(1, 0): prefix + "_StrafeRightLoop",
+		Vector2(0.707, -0.707): prefix + "_StrafeRight135Loop",
+		Vector2(0, -1): prefix + "_WalkBwdLoop",
+		Vector2(-0.707, -0.707): prefix + "_StrafeLeft135Loop",
+		Vector2(-1, 0): prefix + "_StrafeLeftLoop",
+		Vector2(-0.707, 0.707): prefix + "_StrafeLeft45Loop",
+	}
+
+	for pos in walk_points:
+		var anim_name: String = walk_points[pos]
 		if _anim_player.has_animation(anim_name):
 			var anim_node := AnimationNodeAnimation.new()
 			anim_node.animation = anim_name
@@ -718,31 +743,54 @@ func _create_blend_space(anims: Dictionary) -> AnimationNodeBlendSpace2D:
 
 	return blend_space
 
-func _create_blend_space_with_fallback(anims: Dictionary) -> AnimationNodeBlendSpace2D:
-	var blend_space := AnimationNodeBlendSpace2D.new()
-	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
-	blend_space.auto_triangles = true
-	blend_space.min_space = Vector2(-1, -1)
-	blend_space.max_space = Vector2(1, 1)
-	# Enable sync to keep animation phase synchronized across blend positions
-	blend_space.sync = true
 
-	for pos in anims:
-		var anim_names: Array = anims[pos]
-		var found_anim := ""
-		for anim_name in anim_names:
-			if _anim_player.has_animation(anim_name):
-				found_anim = anim_name
-				break
-		if not found_anim.is_empty():
-			var anim_node := AnimationNodeAnimation.new()
-			anim_node.animation = found_anim
-			blend_space.add_blend_point(anim_node, pos)
+## 武器切替時にアニメーション名を動的スワップ
+func _switch_weapon_animations() -> void:
+	if not _anim_tree or not _anim_tree.active:
+		return
 
-	return blend_space
+	var bt := _anim_tree.tree_root as AnimationNodeBlendTree
+	if not bt:
+		return
+
+	var prefix := _get_weapon_prefix()
+
+	# Idle
+	var idle_node := bt.get_node("Idle") as AnimationNodeAnimation
+	if idle_node:
+		idle_node.animation = prefix + "_Idle"
+
+	# Sprint
+	var sprint_node := bt.get_node("Sprint") as AnimationNodeAnimation
+	if sprint_node:
+		sprint_node.animation = prefix + "_SprintLoop"
+
+	# Shoot
+	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation
+	if shoot_node:
+		var shoot_name := prefix + "_Shoot"
+		shoot_node.animation = shoot_name if _anim_player.has_animation(shoot_name) else ""
+
+	# WalkBlend (BlendSpace2D) - 8方向のアニメーション名を更新
+	var walk_blend := bt.get_node("WalkBlend") as AnimationNodeBlendSpace2D
+	if walk_blend:
+		var walk_anims := [
+			prefix + "_WalkFwdLoop",
+			prefix + "_StrafeRight45Loop",
+			prefix + "_StrafeRightLoop",
+			prefix + "_StrafeRight135Loop",
+			prefix + "_WalkBwdLoop",
+			prefix + "_StrafeLeft135Loop",
+			prefix + "_StrafeLeftLoop",
+			prefix + "_StrafeLeft45Loop",
+		]
+		for i in range(mini(walk_anims.size(), walk_blend.get_blend_point_count())):
+			var anim_node := walk_blend.get_blend_point_node(i) as AnimationNodeAnimation
+			if anim_node:
+				anim_node.animation = walk_anims[i]
+
 
 ## Apply upper body bone filter to an AnimationNode (e.g. OneShot)
-## Only filtered bones will play the one-shot; unfiltered bones continue the base animation
 func _apply_upper_body_filter(node: AnimationNode) -> void:
 	if not _skeleton:
 		return
@@ -753,7 +801,13 @@ func _apply_upper_body_filter(node: AnimationNode) -> void:
 		return
 
 	# Get all upper body bones (Spine and its descendants)
-	var spine_idx := _skeleton.find_bone("mixamorig_Spine")
+	var spine_idx := _skeleton.find_bone("Spine")
+	if spine_idx < 0:
+		# Fallback: try other bone names
+		for bone_name in ["UpperChest", "Chest", "Spine1"]:
+			spine_idx = _skeleton.find_bone(bone_name)
+			if spine_idx >= 0:
+				break
 	if spine_idx < 0:
 		return
 
@@ -769,13 +823,16 @@ func _apply_upper_body_filter(node: AnimationNode) -> void:
 ## Detect the skeleton path prefix from animation track data
 func _detect_bone_track_prefix() -> String:
 	var anim_lib = _anim_player.get_animation_library("")
+	# ARP/Unity Humanoidボーン名で検索
+	var search_bones := [":Spine", ":Chest", ":RightHand", ":Hips", ":UpperChest"]
 	for anim_name in anim_lib.get_animation_list():
 		var anim := anim_lib.get_animation(anim_name)
 		for i in range(anim.get_track_count()):
 			var path_str := str(anim.track_get_path(i))
-			var colon_idx := path_str.find(":mixamorig_")
-			if colon_idx >= 0:
-				return path_str.substr(0, colon_idx)
+			for search_bone in search_bones:
+				var colon_idx := path_str.find(search_bone)
+				if colon_idx >= 0:
+					return path_str.substr(0, colon_idx)
 	return ""
 
 
@@ -794,7 +851,7 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	look_dir.y = 0
 
 	if look_dir.length() > 0.1:
-		# -look_dir 必須！（Mixamo+Z前方向 vs looking_at -Z前方向）
+		# -look_dir 必須！（モデル+Z前方向 vs looking_at -Z前方向）
 		var target_basis := Basis.looking_at(-look_dir.normalized(), Vector3.UP)
 		var target_quat := target_basis.get_rotation_quaternion()
 		var current_quat := Quaternion(_model.transform.basis)
@@ -826,23 +883,23 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 
 	if move_dir.length() > 0.1:
 		# ターゲットのエイム方向を使用（SLERP途中のモデル回転ではなく）
-		# モデル回転は毎フレーム少しずつ変化するため、basis.zを使うとブレンド位置が振動してカクつく
 		var char_forward := _aim_direction
 		char_forward.y = 0
 		if char_forward.length_squared() < 0.001:
 			char_forward = _model.global_transform.basis.z
 		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
-		var target_blend := Vector2(-sin(angle), -cos(angle))
+
+		# 45度量子化（ジッターアニメーション切替防止）
+		angle = round(angle / (PI / 4.0)) * (PI / 4.0)
+
+		# Forward=(0,1) 座標系（signed_angle_toはatan2と符号が逆のためX反転）
+		var target_blend := Vector2(-sin(angle), cos(angle))
 
 		# ブレンド補間速度を変化量に応じて適応的に調整
-		# 大きな変化（エイム急変時）は即座に反映し、足が違う方向になるのを防ぐ
-		# 小さな変化はスムーズに補間してポッピングを防ぐ
 		var blend_diff := target_blend.distance_to(_input_dir)
 		if blend_diff > 1.0:
-			# 大きな方向変化（~90°以上）: 即座に切り替え
 			_input_dir = target_blend
 		else:
-			# 小〜中の変化: 差分に応じたスムーズ補間
 			var blend_speed := lerpf(12.0, 40.0, clampf(blend_diff * 2.0, 0.0, 1.0))
 			_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
@@ -852,25 +909,55 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
 
-func _update_animation_tree() -> void:
+func _update_animation_tree(delta: float = 0.016) -> void:
 	if not _anim_tree or not _anim_tree.active:
 		return
 
-	# Update blend positions
+	# Update walk blend position
 	if _movement_blend > 0.01:
-		_anim_tree.set("parameters/RifleWalkBlend/blend_position", _input_dir)
-		_anim_tree.set("parameters/PistolWalkBlend/blend_position", _input_dir)
+		_anim_tree.set("parameters/WalkBlend/blend_position", _input_dir)
 
-	_anim_tree.set("parameters/WalkSpeed/scale", SPEED_SCALE)
+	# IdleBlend: 0=idle, 1=walk (スプリント中はIdleBlend=0にして、SpeedBlendで切替)
+	var target_idle := 1.0 if _movement_blend > 0.1 and not _is_sprinting else 0.0
+	var current_idle: float = _anim_tree.get("parameters/IdleBlend/blend_amount")
+	_anim_tree.set("parameters/IdleBlend/blend_amount", lerpf(current_idle, target_idle, 8.0 * delta))
 
-	# Update blend amounts
-	var target_weapon := 1.0 if _weapon == Weapon.PISTOL else 0.0
-	_weapon_blend = lerp(_weapon_blend, target_weapon, 0.2)
+	# SpeedBlend: 0=idle+walk, 1=sprint
+	var target_speed := 1.0 if _is_sprinting else 0.0
+	_speed_blend = lerpf(_speed_blend, target_speed, 1.0 - exp(-8.0 * delta))
+	_anim_tree.set("parameters/SpeedBlend/blend_amount", _speed_blend)
 
-	_anim_tree.set("parameters/IdleMoveBlend/blend_amount", _movement_blend)
-	# Weapon-based walk animation (0 = rifle, 1 = pistol)
-	_anim_tree.set("parameters/WalkWeaponBlend/blend_amount", _weapon_blend)
-	# Weapon-based shoot animation (0 = rifle, 1 = pistol)
-	_anim_tree.set("parameters/ShootWeaponBlend/blend_amount", _weapon_blend)
+	# TimeScale: 速度同期
+	_update_time_scale()
+
+
+## TimeScale速度同期
+func _update_time_scale() -> void:
+	if not _anim_tree:
+		return
+
+	var actual_speed: float
+	if _is_sprinting:
+		actual_speed = SPRINT_SPEED
+	elif _movement_blend > 0.1:
+		actual_speed = WALK_SPEED
+	else:
+		_anim_tree.set("parameters/TimeScale/scale", 1.0)
+		return
+
+	var time_scale := 1.0
+	if _speed_blend < 0.5:
+		# Walk mode: 方向別速度で同期
+		var walk_pos: Vector2 = _anim_tree.get("parameters/WalkBlend/blend_position")
+		var blended_natural := _get_blended_anim_speed(walk_pos)
+		if blended_natural > 0.01:
+			time_scale = actual_speed / blended_natural
+	else:
+		# Sprint mode: スプリント速度で同期
+		var sprint_speed: float = _get_anim_speeds()["sprint"]
+		if sprint_speed > 0.01:
+			time_scale = actual_speed / sprint_speed
+
+	_anim_tree.set("parameters/TimeScale/scale", time_scale)
 
 #endregion

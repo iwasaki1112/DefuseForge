@@ -143,7 +143,7 @@ gcloud run services describe rescueforge-relay --region asia-northeast1
 4. **登録済みマップ**: マップ追加・構成の流れを確認
 
 ## 現在の状態
-開発途中。Mixamo専用のキャラクターシステム。マップはBlenderで作成しGLTFインポート。
+開発途中。ARPリグ + in-placeアニメーションのキャラクターシステム。マップはBlenderで作成しGLTFインポート。
 
 ## ドキュメント
 
@@ -204,7 +204,7 @@ const PointType = ActionPointData.Type  # ActionPointDataはclass_name定義済�
 
 | 項目 | 方向 |
 |------|------|
-| Mixamoモデルの前方向 | **+Z** |
+| モデルの前方向（ARP/Mixamo共通） | **+Z** |
 | Godotの`look_at()`がターゲットに向ける軸 | **-Z** |
 
 この180度の差により、キャラクターの向きを変更する際は以下のAPIを使用する：

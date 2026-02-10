@@ -13,7 +13,7 @@
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `spine_bone_name` | `String` | `"mixamorig_Spine2"` | リーン適用対象のボーン名 |
+| `spine_bone_name` | `String` | `"UpperChest"` | リーン適用対象のボーン名 |
 | `recovery_speed` | `float` | `10.0` | リーンの補間速度 |
 
 ## Public API

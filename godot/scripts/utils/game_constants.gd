@@ -28,24 +28,27 @@ const GROUP_CHARACTERS := "characters"
 const GROUP_DOORS := "doors"
 
 # ========================================================
-# Bone Names (Mixamo Standard)
+# Bone Names (ARP / Unity Humanoid)
 # ========================================================
-const BONE_RIGHT_HAND := "mixamorig_RightHand"
-const BONE_SPINE_1 := "mixamorig_Spine1"
-const BONE_SPINE_2 := "mixamorig_Spine2"
+const BONE_RIGHT_HAND := "RightHand"
+const BONE_SPINE := "Spine"
+const BONE_UPPER_CHEST := "UpperChest"
+# 後方互換エイリアス
+const BONE_SPINE_1 := BONE_SPINE
+const BONE_SPINE_2 := BONE_UPPER_CHEST
 
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "death_backward"  # デフォルト死亡アニメーション（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_FORWARD := "death_backward"  # 仮: death_backward（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_BACKWARD := "death_backward"  # 後ろから撃たれて前に倒れる
-const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
-# Note: death_left は存在しない → フォールバック処理で対応
-const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
-const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
-const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
-const ANIM_RIFLE_OPEN_DOOR := "rifle_open_door"
+const ANIM_DEATH := "Rifle_Death_3"
+const ANIM_DEATH_FORWARD := "Rifle_Death_3"
+const ANIM_DEATH_BACKWARD := "Rifle_Death_3"
+const ANIM_DEATH_LEFT := "Rifle_Death_L"
+const ANIM_DEATH_RIGHT := "Rifle_Death_R"
+const ANIM_RIFLE_DOOR_KICK := "Rifle_Melee_Kick"
+const ANIM_PISTOL_DOOR_KICK := "Pistol_Melee_Kick"
+const ANIM_PISTOL_LOW_THROWING := "Pistol_Grenade_Throw_Single"
+const ANIM_RIFLE_OPEN_DOOR := "Rifle_OpenDoor"
 
 # ========================================================
 # Grenade Settings

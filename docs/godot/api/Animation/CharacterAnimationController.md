@@ -2,11 +2,11 @@
 
 キャラクターアニメーションを管理するコントローラークラス。移動、戦闘、デスアニメーションを統合的に制御する。
 
-> **重要: Mixamoモデルの向きについて**
+> **重要: ARPモデルの向きについて**
 >
 > | 項目 | 方向 |
 > |------|------|
-> | Mixamoモデルの前方向 | **+Z** |
+> | ARPモデルの前方向 | **+Z** |
 > | Godotの`look_at()`/`Basis.looking_at()`がターゲットに向ける軸 | **-Z** |
 >
 > この180度の差により、キャラクターの向きを変更する際は以下のAPIを使用してください：
@@ -94,8 +94,8 @@
 ### Bone Names
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `upper_body_root` | `String` | `"mixamorig_Spine1"` | 上半身ルートボーン名 |
-| `spine_bone` | `String` | `"mixamorig_Spine2"` | リコイル適用ボーン名 |
+| `upper_body_root` | `String` | `"Spine"` | 上半身ルートボーン名 |
+| `spine_bone` | `String` | `"UpperChest"` | リコイル適用ボーン名 |
 
 ## Public API
 
@@ -155,19 +155,19 @@
 **方向別アニメーション:**
 | 被弾方向 | 倒れる方向 | アニメーション |
 |---------|----------|--------------|
-| `FRONT` | 後ろ | `death_forward` |
-| `BACK` | 前 | `death_backward` |
-| `RIGHT` | 左 | `death_right` |
-| `LEFT` | 右 | `death_forward`（フォールバック）|
+| `FRONT` | 後ろ | `Death_Forward` |
+| `BACK` | 前 | `Death_Backward` |
+| `RIGHT` | 左 | `Death_Right` |
+| `LEFT` | 右 | `Death_Forward`（フォールバック）|
 
-> **Note:** `death_left`アニメーションは存在しないため、`LEFT`被弾時は`death_forward`にフォールバックする。
+> **Note:** `Death_Left`アニメーションは存在しないため、`LEFT`被弾時は`Death_Forward`にフォールバックする。
 > `GameCharacter._select_safe_death_direction()`で壁を避けた安全な方向が選択される。
 
 ### play_door_kick() -> void
 ドアキックアニメーションを再生する。武器タイプに応じて適切なアニメーションが選択される。
 
-- `Weapon.RIFLE` → `rifle_door_kick`
-- `Weapon.PISTOL` → `pistol_door_kick`
+- `Weapon.RIFLE` → `Rifle_DoorKick`
+- `Weapon.PISTOL` → `Pistol_DoorKick`
 
 アニメーション再生中は`update_animation()`の更新がスキップされ、`get_current_speed()`は0を返す。
 アニメーション完了時に`door_kick_finished`シグナルが発火し、0.3秒のクロスフェードでアイドルアニメーションに遷移する。
@@ -206,9 +206,11 @@ func _on_door_kick_done():
 
 ## 内部動作
 
-- 8方向ストレイフアニメーションを`BlendSpace2D`で管理
+- AnimationTree構成: output → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend
+- アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
+- TimeScaleによる移動速度同期でアニメーション速度を調整
 - `RecoilModifier`でプロシージャルリコイルを適用
-- Mixamoリグ専用設計
+- ARPリグ専用設計
 
 ## 重要: モデル向き制御の注意点
 
@@ -218,7 +220,7 @@ func _on_door_kick_done():
 > この **マイナス符号は必須** であり、削除してはならない。
 >
 > **理由:**
-> - Mixamoモデルの前方向: **+Z**
+> - ARPモデルの前方向: **+Z**
 > - `Basis.looking_at()` がターゲットに向ける軸: **-Z**
 >
 > この仕様の違いを吸収するために `-direction` を渡している。
