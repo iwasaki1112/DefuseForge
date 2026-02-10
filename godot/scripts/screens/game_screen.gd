@@ -338,37 +338,22 @@ func _create_crosshair() -> void:
 
 
 func _create_action_buttons() -> void:
-	var vbox := VBoxContainer.new()
-	vbox.name = "ActionButtons"
-	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	vbox.position = Vector2(-100, -120)
-	vbox.add_theme_constant_override("separation", 16)
+	# シーンからアクションボタンを読み込み（Godotエディタで位置調整可能）
+	var action_scene := load("res://scenes/ui/action_buttons.tscn")
+	var vbox: VBoxContainer = action_scene.instantiate()
 	ui_layer.add_child(vbox)
 
-	# Open Door ボタン
-	var btn_door_open := _create_icon_button(
-		"res://assets/ui/game/controller-door-button.png",
-		_on_door_open_pressed
-	)
-	vbox.add_child(btn_door_open)
+	# ボタン参照を取得してシグナル接続
+	var btn_door_open: TextureButton = vbox.get_node("DoorOpenBtn")
+	btn_door_open.pressed.connect(_on_door_open_pressed)
+	ButtonAnimator.setup(btn_door_open)
 
-	# スモークグレネードボタン + 残数ラベル
-	var grenade_container := VBoxContainer.new()
-	grenade_container.add_theme_constant_override("separation", 2)
-	vbox.add_child(grenade_container)
+	_grenade_btn = vbox.get_node("GrenadeContainer/GrenadeBtn")
+	_grenade_btn.pressed.connect(_on_grenade_btn_pressed)
+	ButtonAnimator.setup(_grenade_btn)
 
-	_grenade_btn = _create_icon_button(
-		"res://assets/ui/game/controller-hand-granade-button.png",
-		_on_grenade_btn_pressed
-	)
-	grenade_container.add_child(_grenade_btn)
-
-	_grenade_count_label = Label.new()
+	_grenade_count_label = vbox.get_node("GrenadeContainer/GrenadeCountLabel")
 	_grenade_count_label.text = str(_smoke_grenade_count)
-	_grenade_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_grenade_count_label.add_theme_font_size_override("font_size", 14)
-	grenade_container.add_child(_grenade_count_label)
 
 	if Debug.enabled:
 		_debug_vision_btn = Button.new()
