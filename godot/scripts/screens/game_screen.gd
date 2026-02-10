@@ -39,6 +39,22 @@ var _crosshair_color: Color = Color.WHITE
 ## UI要素
 var _round_hud: RoundHUD = null
 
+## グレネードエイミングモード
+var _is_grenade_aiming: bool = false
+var _grenade_target_pos: Vector3 = Vector3.ZERO
+var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
+
+## グレネードUI
+var _grenade_btn: TextureButton = null
+var _grenade_count_label: Label = null
+
+## レンジインジケーター（SubViewport + Light2D方式 = FoWと同品質）
+var _grenade_viewport: SubViewport = null
+var _grenade_light: PointLight2D = null
+var _grenade_occluder_mgr: OccluderManager = null
+var _grenade_mesh: MeshInstance3D = null
+var _grenade_mat: ShaderMaterial = null
+
 ## 設定
 var _map_id: String = ""
 
@@ -81,6 +97,7 @@ func _initialize_game() -> void:
 	# プレイヤーチームを決定（マルチプレイ: ロビーの割り当て、トレーニング: CT固定）
 	_mode_provider.determine_player_team()
 	_load_map()
+	_setup_grenade_indicator()
 	_spawn_characters()
 	_setup_tps_hud()
 	_setup_round_hud()
@@ -120,9 +137,10 @@ func _setup_game_manager() -> void:
 
 		game_manager.setup(camera, self, ui_layer, Vector2(50, 50), map_container)
 
-		# シグナル接続（TPS用: タイマーとラウンド終了のみ）
+		# シグナル接続（TPS用: タイマー、ラウンド開始/終了）
 		SignalBus.round_timer_updated.connect(_on_round_timer_updated)
 		SignalBus.round_ended.connect(_on_round_ended)
+		SignalBus.round_started.connect(_on_round_started)
 
 
 func _load_map() -> void:
@@ -208,6 +226,11 @@ func _setup_tps_controller() -> void:
 	_tps_controller.name = "TPSPlayerController"
 	add_child(_tps_controller)
 	_tps_controller.setup(_player_character, camera, ui_layer)
+
+	# グレネード投擲シグナル接続
+	if _player_character.anim_ctrl:
+		_player_character.anim_ctrl.throw_release.connect(_on_throw_release)
+		_player_character.anim_ctrl.throw_finished.connect(_on_throw_finished)
 
 
 func _setup_tps_hud() -> void:
@@ -320,7 +343,6 @@ func _create_action_buttons() -> void:
 	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	vbox.position = Vector2(-100, -120)
 	vbox.add_theme_constant_override("separation", 16)
-	vbox.visible = false  # 一旦非表示（ドア・グレネードボタン）
 	ui_layer.add_child(vbox)
 
 	# Open Door ボタン
@@ -330,19 +352,22 @@ func _create_action_buttons() -> void:
 	)
 	vbox.add_child(btn_door_open)
 
-	# Grenade Far ボタン
-	var btn_grenade_far := _create_icon_button(
-		"res://assets/ui/game/controller-hand-granade-button.png",
-		_on_grenade_far_pressed
-	)
-	vbox.add_child(btn_grenade_far)
+	# スモークグレネードボタン + 残数ラベル
+	var grenade_container := VBoxContainer.new()
+	grenade_container.add_theme_constant_override("separation", 2)
+	vbox.add_child(grenade_container)
 
-	# Grenade Close ボタン
-	var btn_grenade_close := _create_icon_button(
-		"res://assets/ui/game/controller-pie-button.png",
-		_on_grenade_close_pressed
+	_grenade_btn = _create_icon_button(
+		"res://assets/ui/game/controller-hand-granade-button.png",
+		_on_grenade_btn_pressed
 	)
-	vbox.add_child(btn_grenade_close)
+	grenade_container.add_child(_grenade_btn)
+
+	_grenade_count_label = Label.new()
+	_grenade_count_label.text = str(_smoke_grenade_count)
+	_grenade_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_grenade_count_label.add_theme_font_size_override("font_size", 14)
+	grenade_container.add_child(_grenade_count_label)
 
 	if Debug.enabled:
 		_debug_vision_btn = Button.new()
@@ -350,7 +375,6 @@ func _create_action_buttons() -> void:
 		_debug_vision_btn.toggle_mode = true
 		_debug_vision_btn.custom_minimum_size = Vector2(80, 30)
 		_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
-		# ActionButtonsが非表示でもDebugボタンは表示するため、UILayerに直接追加
 		ui_layer.add_child(_debug_vision_btn)
 		_debug_vision_btn.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 		_debug_vision_btn.position = Vector2(-180, -140)
@@ -410,12 +434,30 @@ func _update_money_display() -> void:
 func _physics_process(delta: float) -> void:
 	if game_manager:
 		game_manager.process_frame(delta)
-	if _tps_controller:
+	if _tps_controller and not _is_grenade_aiming:
 		_tps_controller.process(delta)
 	_update_tps_hud()
+	if _is_grenade_aiming:
+		_update_grenade_light_position()
 
 
 func _input(event: InputEvent) -> void:
+	# グレネードエイミング中: 移動入力をブロックし、タッチ/クリックはターゲット選択のみ
+	if _is_grenade_aiming:
+		if event is InputEventScreenTouch:
+			var touch := event as InputEventScreenTouch
+			if touch.pressed:
+				_handle_grenade_target_tap(touch.position)
+				get_viewport().set_input_as_handled()
+				return
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				_handle_grenade_target_tap(mb.position)
+				get_viewport().set_input_as_handled()
+				return
+		get_viewport().set_input_as_handled()
+		return
 	if _tps_controller:
 		_tps_controller.handle_input(event)
 
@@ -465,14 +507,243 @@ func _on_weapon_selected(idx: int) -> void:
 	_player_character.equip_weapon(weapon)
 
 
-func _on_grenade_far_pressed() -> void:
-	if _player_character and _player_character.anim_ctrl:
+func _on_grenade_btn_pressed() -> void:
+	if _is_grenade_aiming:
+		_exit_grenade_aiming()
+		return
+	if _smoke_grenade_count <= 0:
+		return
+	if not _player_character or not _player_character.is_alive:
+		return
+	_enter_grenade_aiming()
+
+
+func _enter_grenade_aiming() -> void:
+	_is_grenade_aiming = true
+	_show_range_indicator()
+	if _grenade_btn:
+		_grenade_btn.modulate = Color(1.0, 0.6, 0.3)
+
+
+func _exit_grenade_aiming() -> void:
+	_is_grenade_aiming = false
+	_hide_range_indicator()
+	if _grenade_btn:
+		_grenade_btn.modulate = Color.WHITE
+
+
+func _setup_grenade_indicator() -> void:
+	var fow: Node3D = game_manager.fog_of_war_system if game_manager else null
+	if not fow:
+		return
+
+	var fow_map_size: Vector2 = fow.map_size
+	var q: Dictionary = fow.get_quality_settings()
+	var resolution: int = q["resolution"]
+	var throw_range := GameConstants.GRENADE_THROW_MAX_DISTANCE
+
+	# --- SubViewport（FoWと同じ構成） ---
+	_grenade_viewport = SubViewport.new()
+	_grenade_viewport.name = "GrenadeRangeViewport"
+	_grenade_viewport.size = Vector2i(resolution, resolution)
+	_grenade_viewport.transparent_bg = false
+	_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_grenade_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
+	_grenade_viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
+	_grenade_viewport.disable_3d = true
+	add_child(_grenade_viewport)
+
+	# CanvasModulate（暗い背景）
+	var canvas_mod := CanvasModulate.new()
+	canvas_mod.color = Color(0, 0, 0, 1)
+	_grenade_viewport.add_child(canvas_mod)
+
+	# 白い背景（Light2Dで照らされる）
+	var bg := ColorRect.new()
+	bg.color = Color(1, 1, 1, 1)
+	bg.size = Vector2(resolution, resolution)
+	bg.z_index = -100
+	bg.light_mask = 1
+	_grenade_viewport.add_child(bg)
+
+	# --- OccluderManager（壁の遮蔽、FoWと同じ方式） ---
+	_grenade_occluder_mgr = OccluderManager.new()
+	_grenade_occluder_mgr.name = "GrenadeOccluderManager"
+	add_child(_grenade_occluder_mgr)
+	_grenade_occluder_mgr.setup(_grenade_viewport, fow_map_size, resolution)
+	_grenade_occluder_mgr.extract_occluders_from_map(map_container)
+
+	# --- PointLight2D（360°円形、シャドウ有効） ---
+	_grenade_light = PointLight2D.new()
+	_grenade_light.name = "GrenadeRangeLight"
+	_grenade_light.enabled = true
+	_grenade_light.color = Color(1, 1, 1, 1)
+	_grenade_light.energy = 1.0
+	_grenade_light.blend_mode = Light2D.BLEND_MODE_ADD
+	_grenade_light.shadow_enabled = true
+	_grenade_light.shadow_filter = q["shadow_filter"]
+	_grenade_light.shadow_filter_smooth = q["shadow_smooth"]
+	_grenade_light.shadow_item_cull_mask = 1
+	_grenade_light.range_item_cull_mask = 1
+	_grenade_light.texture = FovTextureGenerator.generate_circular_texture(resolution, 0.8)
+	_grenade_viewport.add_child(_grenade_light)
+
+	# ライトスケール（VisionLightと同じ計算式）
+	var max_dimension := maxf(fow_map_size.x, fow_map_size.y)
+	var scale_factor := float(resolution) / max_dimension
+	var light_diameter := throw_range * scale_factor * 2.0
+	_grenade_light.texture_scale = light_diameter / float(resolution)
+	# アスペクト比補正
+	var aspect_scale := Vector2(1.0, 1.0)
+	if fow_map_size.x > fow_map_size.y:
+		aspect_scale.y = fow_map_size.x / fow_map_size.y
+	elif fow_map_size.y > fow_map_size.x:
+		aspect_scale.x = fow_map_size.y / fow_map_size.x
+	_grenade_light.scale = aspect_scale
+
+	# --- 3Dメッシュ + シェーダー（地面に投影） ---
+	_grenade_mesh = MeshInstance3D.new()
+	_grenade_mesh.name = "GrenadeRangeMesh"
+	var plane_mesh := PlaneMesh.new()
+	plane_mesh.size = fow_map_size
+	_grenade_mesh.mesh = plane_mesh
+	_grenade_mesh.position.y = fow.fog_height + 0.01
+
+	var shader: Shader = load("res://shaders/grenade_range.gdshader")
+	_grenade_mat = ShaderMaterial.new()
+	_grenade_mat.shader = shader
+	_grenade_mat.set_shader_parameter("visibility_texture", _grenade_viewport.get_texture())
+	_grenade_mat.set_shader_parameter("map_min", Vector2(-fow_map_size.x / 2.0, -fow_map_size.y / 2.0))
+	_grenade_mat.set_shader_parameter("map_max", Vector2(fow_map_size.x / 2.0, fow_map_size.y / 2.0))
+	_grenade_mesh.material_override = _grenade_mat
+	_grenade_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_grenade_mesh.visible = false
+	add_child(_grenade_mesh)
+
+
+func _show_range_indicator() -> void:
+	if _grenade_mesh:
+		_grenade_mesh.visible = true
+		_update_grenade_light_position()
+
+
+func _hide_range_indicator() -> void:
+	if _grenade_mesh:
+		_grenade_mesh.visible = false
+	if _grenade_viewport:
+		_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+
+func _update_grenade_light_position() -> void:
+	if not _grenade_light or not _grenade_viewport or not _player_character:
+		return
+	var fow: Node3D = game_manager.fog_of_war_system if game_manager else null
+	if not fow:
+		return
+
+	# ワールド座標 → SubViewportピクセル座標（FoWと同じ変換式）
+	var fow_map_size: Vector2 = fow.map_size
+	var char_pos := _player_character.global_position
+	var half_map := fow_map_size / 2.0
+	var uv_x := (char_pos.x + half_map.x) / fow_map_size.x
+	var uv_y := (char_pos.z + half_map.y) / fow_map_size.y
+	_grenade_light.position = Vector2(uv_x * _grenade_viewport.size.x, uv_y * _grenade_viewport.size.y)
+
+	# SubViewportを1フレーム更新
+	_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
+	if not camera or not _player_character:
+		return
+
+	# スクリーン座標 → 地面位置（レイキャスト）
+	var ray_origin := camera.project_ray_origin(screen_pos)
+	var ray_normal := camera.project_ray_normal(screen_pos)
+	if absf(ray_normal.y) < 0.001:
+		return
+	var t := (0.0 - ray_origin.y) / ray_normal.y
+	if t <= 0:
+		return
+	var ground_point := ray_origin + ray_normal * t
+
+	# 距離チェック & クランプ
+	var char_pos := _player_character.global_position
+	var to_target := ground_point - char_pos
+	to_target.y = 0.0
+	var distance := to_target.length()
+	if distance < 0.5:
+		return  # 近すぎる
+	var max_dist := GameConstants.GRENADE_THROW_MAX_DISTANCE
+	if distance > max_dist:
+		to_target = to_target.normalized() * max_dist
+		ground_point = char_pos + to_target
+		distance = max_dist
+
+	# 視線チェック（壁の向こうには投げられない）
+	var space_state := _player_character.get_world_3d().direct_space_state
+	if space_state:
+		var eye_pos := char_pos + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
+		var target_eye := ground_point + Vector3(0, 0.5, 0)
+		var query := PhysicsRayQueryParameters3D.create(eye_pos, target_eye, 2)  # mask=2: 壁レイヤー
+		query.exclude = [_player_character.get_rid()]
+		var result := space_state.intersect_ray(query)
+		if not result.is_empty():
+			return  # 壁に遮られている
+
+	# エイミングモード終了
+	_exit_grenade_aiming()
+
+	# キャラクターをターゲット方向に向ける
+	var facing_dir := to_target.normalized()
+	_player_character.set_facing_direction_vec(facing_dir)
+
+	# ターゲット位置を保存
+	_grenade_target_pos = ground_point
+
+	# 距離で近投/遠投を自動選択
+	if distance <= GameConstants.GRENADE_THROW_CLOSE_THRESHOLD:
+		_player_character.anim_ctrl.play_throw_close()
+	else:
 		_player_character.anim_ctrl.play_throw_far()
 
 
-func _on_grenade_close_pressed() -> void:
-	if _player_character and _player_character.anim_ctrl:
-		_player_character.anim_ctrl.play_throw_close()
+func _on_throw_release() -> void:
+	if not _player_character or not _player_character.is_alive:
+		return
+	if not game_manager or _grenade_target_pos == Vector3.ZERO:
+		return
+
+	var start_pos := _player_character.global_position + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
+	var target_pos := _grenade_target_pos
+	target_pos.y = 0.0
+
+	# スモークグレネードをスポーン
+	var result: Array = game_manager._spawn_and_throw_smoke_grenade(
+		start_pos, target_pos, Vector3.ZERO, _player_character
+	)
+
+	# ネットワーク同期
+	if result[0] != null:
+		game_manager._emit_grenade_network_event(
+			start_pos, result[1], true, result[2]
+		)
+
+	# インベントリ消費 + UI更新
+	_smoke_grenade_count -= 1
+	_update_grenade_count_ui()
+	_grenade_target_pos = Vector3.ZERO
+
+
+func _on_throw_finished() -> void:
+	_grenade_target_pos = Vector3.ZERO
+
+
+func _update_grenade_count_ui() -> void:
+	if _grenade_count_label:
+		_grenade_count_label.text = str(_smoke_grenade_count)
+	if _grenade_btn:
+		_grenade_btn.modulate.a = 1.0 if _smoke_grenade_count > 0 else 0.4
 
 
 func _on_door_open_pressed() -> void:
@@ -498,6 +769,12 @@ func _on_round_timer_updated(time: float) -> void:
 		var minutes := int(time) / 60
 		var seconds := int(time) % 60
 		_timer_label.text = "%d:%02d" % [minutes, seconds]
+
+
+func _on_round_started() -> void:
+	_smoke_grenade_count = GameConstants.SMOKE_GRENADE_PER_ROUND
+	_update_grenade_count_ui()
+	_exit_grenade_aiming()
 
 
 func _on_round_ended(winner: int, reason: int) -> void:
@@ -565,11 +842,36 @@ func _cleanup_before_transition() -> void:
 			if is_instance_valid(child):
 				child.queue_free()
 
+	# グレネードエイミングモードを解除
+	_exit_grenade_aiming()
+
 	# SignalBusのシグナル切断
 	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
 		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
 	if SignalBus.round_ended.is_connected(_on_round_ended):
 		SignalBus.round_ended.disconnect(_on_round_ended)
+	if SignalBus.round_started.is_connected(_on_round_started):
+		SignalBus.round_started.disconnect(_on_round_started)
+
+	# グレネード投擲シグナル切断
+	if _player_character and _player_character.anim_ctrl:
+		if _player_character.anim_ctrl.throw_release.is_connected(_on_throw_release):
+			_player_character.anim_ctrl.throw_release.disconnect(_on_throw_release)
+		if _player_character.anim_ctrl.throw_finished.is_connected(_on_throw_finished):
+			_player_character.anim_ctrl.throw_finished.disconnect(_on_throw_finished)
+
+	# グレネードレンジインジケーターのクリーンアップ
+	if _grenade_mesh and is_instance_valid(_grenade_mesh):
+		_grenade_mesh.queue_free()
+		_grenade_mesh = null
+	if _grenade_viewport and is_instance_valid(_grenade_viewport):
+		_grenade_viewport.queue_free()
+		_grenade_viewport = null
+	if _grenade_occluder_mgr and is_instance_valid(_grenade_occluder_mgr):
+		_grenade_occluder_mgr.queue_free()
+		_grenade_occluder_mgr = null
+	_grenade_light = null
+	_grenade_mat = null
 	if _round_hud:
 		if SignalBus.survivor_count_changed.is_connected(_round_hud.update_survivor_counts):
 			SignalBus.survivor_count_changed.disconnect(_round_hud.update_survivor_counts)
