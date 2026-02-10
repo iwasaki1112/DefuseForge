@@ -408,12 +408,12 @@ func _setup_door_service() -> void:
 ## 内部：シグナルハンドラ
 ## ========================================
 
-func _on_selection_changed(selected: Array[Node], primary: Node) -> void:
-	SignalBus.selection_changed.emit(selected, primary)
+func _on_selection_changed(_selected: Array[Node], _primary: Node) -> void:
+	pass
 
 
-func _on_primary_changed(character: Node) -> void:
-	SignalBus.primary_changed.emit(character)
+func _on_primary_changed(_character: Node) -> void:
+	pass
 
 
 func _on_round_started() -> void:

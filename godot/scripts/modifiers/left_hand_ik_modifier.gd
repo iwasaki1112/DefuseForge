@@ -94,6 +94,10 @@ func clear_grip_source() -> void:
 	if _ik_node and _is_setup and _ik_target:
 		_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
 
+## グリップソースが有効に設定されているかどうか
+func has_grip_source() -> bool:
+	return _grip_source != null and is_instance_valid(_grip_source)
+
 ## IKが有効かどうか
 func is_enabled() -> bool:
 	return _target_influence > 0.5

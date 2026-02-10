@@ -12,10 +12,7 @@ extends RefCounted
 enum MessageType {
 	## ゲーム状態の同期
 	GAME_STATE_SYNC = 0,
-	## （未使用: 旧PATH_CONFIRM）
-	_RESERVED_1 = 1,
-	## （未使用: 旧PATH_EXECUTE）
-	_RESERVED_2 = 2,
+	## Historical: Values 1-2 were PATH_CONFIRM/PATH_EXECUTE (removed in TPS migration)
 	## キャラクター状態更新
 	CHARACTER_UPDATE = 3,
 	## ラウンド状態

@@ -174,6 +174,13 @@ func get_anim_controller() -> CharacterAnimationController:
 # Facing Direction API (一元管理)
 # ============================================
 
+## 初期向きを設定（scene tree追加前に使用）
+## set_facing_direction_vec()はanim_ctrl依存のため、add_child前はこちらを使用
+func set_initial_facing(direction: Vector3) -> void:
+	if direction.length_squared() > 0.001:
+		_facing_direction = direction.normalized()
+
+
 ## キャラクターの向きを設定（ベクトル）
 ## Animation、Visionすべてがこの向きを参照する
 func set_facing_direction_vec(direction: Vector3) -> void:

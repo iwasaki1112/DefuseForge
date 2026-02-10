@@ -80,6 +80,7 @@ class CharacterStateMessage extends RefCounted:
 	var is_alive: bool = true
 
 	## 現在のアニメーション状態
+	## @deprecated TPS移行後は move_state ベースの同期に変更。後方互換のため残す。
 	var animation_state: String = ""
 
 	## 移動速度（m/s）

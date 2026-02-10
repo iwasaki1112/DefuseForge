@@ -170,7 +170,7 @@ func _spawn_team_characters_for_player(
 			if i < spawn_rotations.size():
 				var spawn_rot: float = spawn_rotations[i]
 				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
-				character._facing_direction = direction
+				character.set_initial_facing(direction)
 
 			var character_parent = game_manager.get_character_parent()
 			character_parent.add_child(character)

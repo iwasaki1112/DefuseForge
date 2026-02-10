@@ -161,7 +161,7 @@ func _spawn_characters() -> void:
 			character.marker_name = "alpha"
 			if ct_rotations.size() > 0:
 				var dir = Vector3(sin(ct_rotations[0]), 0, cos(ct_rotations[0]))
-				character._facing_direction = dir
+				character.set_initial_facing(dir)
 			game_manager.get_character_parent().add_child(character)
 			_mode_provider.register_character(game_manager, character, _network_id_counter)
 			_network_id_counter += 1
@@ -178,7 +178,7 @@ func _spawn_characters() -> void:
 				enemy.team = GameCharacter.Team.TERRORIST
 				if i < t_rotations.size():
 					var dir = Vector3(sin(t_rotations[i]), 0, cos(t_rotations[i]))
-					enemy._facing_direction = dir
+					enemy.set_initial_facing(dir)
 				game_manager.get_character_parent().add_child(enemy)
 				_mode_provider.register_character(game_manager, enemy, _network_id_counter)
 				_network_id_counter += 1
@@ -315,24 +315,25 @@ func _create_action_buttons() -> void:
 	btn_grenade.pressed.connect(_on_grenade_pressed)
 	vbox.add_child(btn_grenade)
 
-	var btn_door_kick := Button.new()
-	btn_door_kick.text = "Door Kick"
-	btn_door_kick.custom_minimum_size = Vector2(150, 50)
-	btn_door_kick.pressed.connect(_on_door_kick_pressed)
-	vbox.add_child(btn_door_kick)
+	if Debug.enabled:
+		var btn_door_kick := Button.new()
+		btn_door_kick.text = "Door Kick"
+		btn_door_kick.custom_minimum_size = Vector2(150, 50)
+		btn_door_kick.pressed.connect(_on_door_kick_pressed)
+		vbox.add_child(btn_door_kick)
 
-	var btn_door_open := Button.new()
-	btn_door_open.text = "Door Open"
-	btn_door_open.custom_minimum_size = Vector2(150, 50)
-	btn_door_open.pressed.connect(_on_door_open_pressed)
-	vbox.add_child(btn_door_open)
+		var btn_door_open := Button.new()
+		btn_door_open.text = "Door Open"
+		btn_door_open.custom_minimum_size = Vector2(150, 50)
+		btn_door_open.pressed.connect(_on_door_open_pressed)
+		vbox.add_child(btn_door_open)
 
-	_debug_vision_btn = Button.new()
-	_debug_vision_btn.text = "Debug Vision"
-	_debug_vision_btn.toggle_mode = true
-	_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
-	_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
-	vbox.add_child(_debug_vision_btn)
+		_debug_vision_btn = Button.new()
+		_debug_vision_btn.text = "Debug Vision"
+		_debug_vision_btn.toggle_mode = true
+		_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
+		_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
+		vbox.add_child(_debug_vision_btn)
 
 
 func _setup_round_hud() -> void:

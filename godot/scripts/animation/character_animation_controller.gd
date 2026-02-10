@@ -10,8 +10,6 @@ enum HitDirection { FRONT, BACK, LEFT, RIGHT }
 
 # Signals
 signal fired()
-signal door_kick_impact()   # キックがドアに当たるタイミング
-signal door_kick_finished() # アニメーション完了
 signal throw_release()      # グレネードをリリースするタイミング
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
@@ -44,7 +42,7 @@ var _anim_tree: AnimationTree
 var _skeleton: Skeleton3D
 var _recoil_modifier: SkeletonModifier3D
 var _lean_modifier: SkeletonModifier3D
-var _left_hand_ik  # LeftHandIKModifier
+var _left_hand_ik: LeftHandIKModifier = null
 
 # State
 var _weapon := Weapon.RIFLE
@@ -172,7 +170,7 @@ func set_weapon(weapon: Weapon) -> void:
 	_switch_weapon_animations()
 	# PISTOLは片手持ちなのでIK無効
 	if _left_hand_ik:
-		_left_hand_ik.set_enabled(weapon != Weapon.PISTOL and _left_hand_ik._grip_source != null)
+		_left_hand_ik.set_enabled(weapon != Weapon.PISTOL and _left_hand_ik.has_grip_source())
 
 ## Set left hand grip source node for IK
 ## grip_node: 武器モデル内のLeftHandGripノード（nullで無効化）
@@ -383,8 +381,7 @@ func play_door_kick() -> void:
 
 
 func _on_door_kick_impact() -> void:
-	if _is_door_kicking:
-		door_kick_impact.emit()
+	pass  # Impact timing (available for future use)
 
 
 func _on_door_kick_finished(_anim_name: String) -> void:
@@ -399,7 +396,6 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
 
-	door_kick_finished.emit()
 
 
 ## ドアキック後のAnimationTree再開
@@ -407,7 +403,7 @@ func _resume_animation_tree() -> void:
 	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door:
 		_anim_tree.active = true
 		# 左手IKを武器に応じて再有効化
-		if _left_hand_ik and _left_hand_ik._grip_source and _weapon != Weapon.PISTOL:
+		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
 			_left_hand_ik.set_enabled(true)
 
 
