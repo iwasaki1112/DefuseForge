@@ -1,24 +1,19 @@
 extends Node3D
 ## TPS テストシーン コントローラー
 ##
-## WASD移動 + マウスエイム + バーチャルスティックのテストシーン。
-## FoW（視界システム）+ 自動攻撃を統合し、TPS視点で全システムが正常動作することを検証する。
+## TPSPlayerControllerを使用したテスト環境。
+## テスト用のシーン構築（地面、壁、敵、視界）を行い、
+## 操作ロジックはTPSPlayerControllerに委譲する。
 ##
 ## 操作:
 ## - WASD / 左スティック: 移動
-## - マウス: エイム（キャラクターがカーソル方向を向く）（PC）
-## - モバイル: 移動方向 = 向き（敵検知時は自動で敵方向を向く）
+## - マウス / 右スティック: エイム（キャラクターがカーソル方向を向く）
 ## - 射撃は完全自動（視界内の敵に対して自動発砲）
 ## - 画面左上プルダウン: 武器切り替え
 
 # ============================================
 # Constants
 # ============================================
-const CAMERA_HEIGHT := 10.0
-const CAMERA_PITCH_DEG := -50.0
-const CAMERA_FOV := 30.0
-const CAMERA_SMOOTH := 8.0
-const GROUND_Y := 0.0
 const GROUND_SIZE := 50.0
 
 const CHARACTER_PRESET_ID := "alpha"
@@ -31,11 +26,6 @@ const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
 const VISION_FOV := 90.0
 const VISION_RANGE := 15.0
 const MAP_SIZE := Vector2(50.0, 50.0)
-
-# Joystick
-const STICK_RADIUS := 80.0
-const STICK_KNOB_RADIUS := 30.0
-const STICK_DEADZONE := 0.15
 
 # Enemy spawn positions
 const ENEMY_POSITIONS: Array[Vector3] = [
@@ -50,22 +40,14 @@ const ENEMY_POSITIONS: Array[Vector3] = [
 var _character: GameCharacter = null
 var _enemies: Array[GameCharacter] = []
 var _camera: Camera3D = null
+var _tps_controller: TPSPlayerController = null
 var _animation_library: AnimationLibrary = null
 var _vision_service: VisionService = null
+var _ui_layer: CanvasLayer = null
+
+# UI elements
 var _weapon_option: OptionButton = null
 var _weapon_list: Array = []
-var _debug_vision_btn: Button = null
-
-# Joystick state
-var _stick_base: Control = null
-var _stick_knob: Control = null
-var _stick_touch_idx: int = -1
-var _stick_mouse_active: bool = false
-var _stick_input: Vector2 = Vector2.ZERO
-var _stick_center: Vector2 = Vector2.ZERO
-
-# Movement direction cache (for mobile facing)
-var _last_move_dir: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -81,25 +63,38 @@ func _ready() -> void:
 	_spawn_enemies()
 	_register_characters_to_vision()
 	_setup_ui()
+	_setup_tps_controller()
 
 
 func _physics_process(delta: float) -> void:
-	if not _character or not _character.is_alive:
-		return
-
-	_handle_movement(delta)
-	_handle_aim(delta)
-	if _character.combat_awareness:
-		_character.combat_awareness.process(delta)
-	_update_camera(delta)
+	if _tps_controller:
+		_tps_controller.process(delta)
 
 
 func _input(event: InputEvent) -> void:
-	_handle_stick_input(event)
+	if _tps_controller:
+		_tps_controller.handle_input(event)
 
 
 # ============================================
-# Setup
+# TPS Controller Setup
+# ============================================
+
+func _setup_tps_controller() -> void:
+	if not _character:
+		return
+	_tps_controller = TPSPlayerController.new()
+	_tps_controller.name = "TPSPlayerController"
+	add_child(_tps_controller)
+	_tps_controller.setup(_character, _camera, _ui_layer, {
+		"camera_height": 10.0,
+		"camera_pitch_deg": -50.0,
+		"enable_aim_stick": true,
+	})
+
+
+# ============================================
+# Scene Construction
 # ============================================
 
 func _setup_environment() -> void:
@@ -166,6 +161,10 @@ func _create_test_walls() -> void:
 		add_child(wall)
 
 
+# ============================================
+# Vision Systems
+# ============================================
+
 func _setup_vision_systems() -> void:
 	_vision_service = VisionService.new()
 	_vision_service.name = "VisionService"
@@ -175,7 +174,6 @@ func _setup_vision_systems() -> void:
 
 
 func _register_characters_to_vision() -> void:
-	# call_deferredで登録（シーンツリーに追加後に実行するため）
 	call_deferred("_deferred_register_characters")
 
 
@@ -186,6 +184,10 @@ func _deferred_register_characters() -> void:
 		if _vision_service and is_instance_valid(enemy):
 			_vision_service.register_character(enemy)
 
+
+# ============================================
+# Character Spawning
+# ============================================
 
 func _spawn_character() -> void:
 	var presets = CharacterRegistry.get_counter_terrorists()
@@ -234,30 +236,38 @@ func _spawn_enemies() -> void:
 			_enemies.append(enemy)
 
 
+# ============================================
+# Camera
+# ============================================
+
 func _setup_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "TPSCamera"
-	_camera.fov = CAMERA_FOV
+	_camera.fov = 30.0
 	_camera.current = true
 
 	var char_pos := _character.global_position if _character else Vector3.ZERO
-	var pitch_rad := deg_to_rad(CAMERA_PITCH_DEG)
-	var offset_z := CAMERA_HEIGHT / tan(-pitch_rad)
-	_camera.position = char_pos + Vector3(0, CAMERA_HEIGHT, offset_z)
-	_camera.rotation_degrees.x = CAMERA_PITCH_DEG
+	var pitch_rad := deg_to_rad(-50.0)
+	var offset_z := 10.0 / tan(-pitch_rad)
+	_camera.position = char_pos + Vector3(0, 10.0, offset_z)
+	_camera.rotation_degrees.x = -50.0
 
 	add_child(_camera)
 
 
+# ============================================
+# UI
+# ============================================
+
 func _setup_ui() -> void:
-	var canvas := CanvasLayer.new()
-	canvas.name = "UI"
-	add_child(canvas)
+	_ui_layer = CanvasLayer.new()
+	_ui_layer.name = "UI"
+	add_child(_ui_layer)
 
 	# Weapon selector (top-left)
 	var hbox := HBoxContainer.new()
 	hbox.position = Vector2(10, 10)
-	canvas.add_child(hbox)
+	_ui_layer.add_child(hbox)
 
 	var label := Label.new()
 	label.text = "Weapon: "
@@ -277,21 +287,18 @@ func _setup_ui() -> void:
 	_weapon_option.selected = default_idx
 	_weapon_option.item_selected.connect(_on_weapon_selected)
 
-	# Virtual joystick (bottom-left)
-	_create_joystick(canvas)
-
 	# Action buttons (right side)
-	_create_action_buttons(canvas)
+	_create_action_buttons()
 
 
-func _create_action_buttons(canvas: CanvasLayer) -> void:
+func _create_action_buttons() -> void:
 	var vbox := VBoxContainer.new()
 	vbox.name = "ActionButtons"
 	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	vbox.position = Vector2(-170, -80)
 	vbox.add_theme_constant_override("separation", 12)
-	canvas.add_child(vbox)
+	_ui_layer.add_child(vbox)
 
 	var btn_grenade := Button.new()
 	btn_grenade.text = "Grenade"
@@ -311,17 +318,23 @@ func _create_action_buttons(canvas: CanvasLayer) -> void:
 	btn_door_open.pressed.connect(_on_door_open_pressed)
 	vbox.add_child(btn_door_open)
 
-	_debug_vision_btn = Button.new()
-	_debug_vision_btn.text = "Debug Vision"
-	_debug_vision_btn.toggle_mode = true
-	_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
-	_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
-	vbox.add_child(_debug_vision_btn)
+	var btn_vision := Button.new()
+	btn_vision.text = "Debug Vision"
+	btn_vision.toggle_mode = true
+	btn_vision.custom_minimum_size = Vector2(150, 50)
+	btn_vision.toggled.connect(_on_debug_vision_toggled)
+	vbox.add_child(btn_vision)
 
 
-func _on_debug_vision_toggled(enabled: bool) -> void:
-	if _vision_service:
-		_vision_service.set_debug_draw(enabled)
+# ============================================
+# UI Callbacks
+# ============================================
+
+func _on_weapon_selected(idx: int) -> void:
+	if not _character or idx < 0 or idx >= _weapon_list.size():
+		return
+	var weapon: WeaponPreset = _weapon_list[idx]
+	_character.equip_weapon(weapon)
 
 
 func _on_grenade_pressed() -> void:
@@ -339,204 +352,13 @@ func _on_door_open_pressed() -> void:
 		_character.anim_ctrl.play_door_open()
 
 
-func _create_joystick(canvas: CanvasLayer) -> void:
-	var margin := 40.0
-	var base_size := STICK_RADIUS * 2
-
-	# Base circle (outer ring)
-	_stick_base = Control.new()
-	_stick_base.name = "StickBase"
-	_stick_base.custom_minimum_size = Vector2(base_size, base_size)
-	_stick_base.size = Vector2(base_size, base_size)
-	_stick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_stick_base.position = Vector2(margin, -margin - base_size)
-	_stick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	canvas.add_child(_stick_base)
-
-	# Draw base circle
-	var base_draw := ColorRect.new()
-	base_draw.name = "BaseBG"
-	base_draw.size = Vector2(base_size, base_size)
-	base_draw.color = Color(1, 1, 1, 0.0)
-	base_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stick_base.add_child(base_draw)
-
-	# Use a custom draw for circles
-	var base_circle := _create_circle_control(STICK_RADIUS, Color(0.5, 0.5, 0.5, 0.3))
-	base_circle.position = Vector2(STICK_RADIUS, STICK_RADIUS)
-	base_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stick_base.add_child(base_circle)
-
-	# Knob (inner circle)
-	_stick_knob = _create_circle_control(STICK_KNOB_RADIUS, Color(0.8, 0.8, 0.8, 0.6))
-	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
-	_stick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stick_base.add_child(_stick_knob)
-
-	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-
-
-func _create_circle_control(radius: float, color: Color) -> Control:
-	var ctrl := Control.new()
-	ctrl.custom_minimum_size = Vector2(radius * 2, radius * 2)
-	ctrl.size = Vector2(radius * 2, radius * 2)
-	ctrl.pivot_offset = Vector2(radius, radius)
-	ctrl.draw.connect(func():
-		ctrl.draw_circle(Vector2.ZERO, radius, color)
-	)
-	return ctrl
-
-
-func _on_weapon_selected(idx: int) -> void:
-	if not _character or idx < 0 or idx >= _weapon_list.size():
-		return
-	var weapon: WeaponPreset = _weapon_list[idx]
-	_character.equip_weapon(weapon)
+func _on_debug_vision_toggled(enabled: bool) -> void:
+	if _vision_service:
+		_vision_service.set_debug_draw(enabled)
 
 
 # ============================================
-# Joystick Input
-# ============================================
-
-func _is_in_stick_area(pos: Vector2) -> bool:
-	_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-	return pos.distance_to(_stick_center) <= STICK_RADIUS * 1.5
-
-
-func _handle_stick_input(event: InputEvent) -> void:
-	# Touch input (mobile)
-	if event is InputEventScreenTouch:
-		var touch := event as InputEventScreenTouch
-		if touch.pressed:
-			if _stick_touch_idx < 0 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.5:
-				_stick_touch_idx = touch.index
-				_stick_center = _stick_base.global_position + Vector2(STICK_RADIUS, STICK_RADIUS)
-				_update_stick_position(touch.position)
-		else:
-			if touch.index == _stick_touch_idx:
-				_release_stick()
-
-	elif event is InputEventScreenDrag:
-		var drag := event as InputEventScreenDrag
-		if drag.index == _stick_touch_idx:
-			_update_stick_position(drag.position)
-
-	# Mouse input (PC)
-	elif event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed and _is_in_stick_area(mb.position):
-				_stick_mouse_active = true
-				_update_stick_position(mb.position)
-			elif not mb.pressed and _stick_mouse_active:
-				_stick_mouse_active = false
-				_release_stick()
-
-	elif event is InputEventMouseMotion:
-		if _stick_mouse_active:
-			_update_stick_position(event.position)
-
-
-func _release_stick() -> void:
-	_stick_touch_idx = -1
-	_stick_input = Vector2.ZERO
-	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS)
-
-
-func _update_stick_position(touch_pos: Vector2) -> void:
-	var offset := touch_pos - _stick_center
-	var dist := offset.length()
-
-	if dist > STICK_RADIUS:
-		offset = offset.normalized() * STICK_RADIUS
-
-	# Update knob visual position
-	_stick_knob.position = Vector2(STICK_RADIUS, STICK_RADIUS) + offset
-
-	# Calculate normalized input (-1 to 1)
-	var normalized := offset / STICK_RADIUS
-	if normalized.length() < STICK_DEADZONE:
-		_stick_input = Vector2.ZERO
-	else:
-		_stick_input = normalized
-
-
-# ============================================
-# Input Handling
-# ============================================
-
-func _handle_movement(delta: float) -> void:
-	# WASD input
-	var input_dir := Vector2.ZERO
-	input_dir.y -= Input.get_action_strength("move_forward")
-	input_dir.y += Input.get_action_strength("move_backward")
-	input_dir.x -= Input.get_action_strength("move_left")
-	input_dir.x += Input.get_action_strength("move_right")
-
-	# Combine with joystick (stick X = left/right, stick Y = up/down on screen)
-	input_dir.x += _stick_input.x
-	input_dir.y += _stick_input.y
-
-	if input_dir.length() > 1.0:
-		input_dir = input_dir.normalized()
-
-	var move_dir := Vector3.ZERO
-	if input_dir.length() > 0.01:
-		input_dir = input_dir.normalized()
-		move_dir = Vector3(input_dir.x, 0, input_dir.y).normalized()
-
-	# Cache move direction for mobile facing
-	_last_move_dir = move_dir
-
-	var speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
-	_character.velocity = move_dir * speed
-	_character.move_and_slide()
-
-	if _character.anim_ctrl:
-		var aim_dir := _character.get_facing_direction()
-		_character.anim_ctrl.update_animation(move_dir, aim_dir, false, delta)
-
-
-func _handle_aim(_delta: float) -> void:
-	# 1. CombatAwareness override — 敵検知時は自動で敵方向を向く
-	if _character.combat_awareness:
-		var override_dir := _character.combat_awareness.get_override_look_direction()
-		if override_dir != Vector3.ZERO:
-			_character.set_facing_direction_vec(override_dir)
-			return
-
-	# 2. PC: マウスエイム（ジョイスティック非アクティブ時のみ）
-	if _camera and _stick_input.length() <= 0.01:
-		var mouse_pos := get_viewport().get_mouse_position()
-		var ray_origin := _camera.project_ray_origin(mouse_pos)
-		var ray_normal := _camera.project_ray_normal(mouse_pos)
-
-		if absf(ray_normal.y) > 0.001:
-			var t := (GROUND_Y - ray_origin.y) / ray_normal.y
-			if t > 0:
-				var ground_point := ray_origin + ray_normal * t
-				var aim_dir := ground_point - _character.global_position
-				aim_dir.y = 0
-				if aim_dir.length_squared() > 0.01:
-					_character.set_facing_direction_vec(aim_dir.normalized())
-				return
-
-	# 3. モバイル: 移動方向 = 向き
-	if _last_move_dir.length_squared() > 0.01:
-		_character.set_facing_direction_vec(_last_move_dir)
-
-
-func _update_camera(delta: float) -> void:
-	if not _character or not _camera:
-		return
-	var pitch_rad := deg_to_rad(CAMERA_PITCH_DEG)
-	var offset_z := CAMERA_HEIGHT / tan(-pitch_rad)
-	var target := _character.global_position + Vector3(0, CAMERA_HEIGHT, offset_z)
-	_camera.global_position = _camera.global_position.lerp(target, CAMERA_SMOOTH * delta)
-
-
-# ============================================
-# Character Factory (lighting_test.gd pattern)
+# Character Factory
 # ============================================
 
 func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:

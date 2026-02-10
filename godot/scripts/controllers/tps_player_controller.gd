@@ -16,14 +16,18 @@ extends Node
 ## _input内でctrl.handle_input(event)を呼び出す。
 
 # ============================================
+# Configurable Parameters
+# ============================================
+var camera_height := 20.0
+var camera_pitch_deg := -90.0
+var enable_aim_stick := true
+
+# ============================================
 # Constants
 # ============================================
-const CAMERA_HEIGHT := 20.0
-const CAMERA_PITCH_DEG := -90.0
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
 const GROUND_Y := 0.0
-
 
 # Move stick (left)
 const STICK_RADIUS := 80.0
@@ -65,7 +69,12 @@ var _last_move_dir: Vector3 = Vector3.ZERO
 # ============================================
 
 ## コントローラーを初期化する
-func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer) -> void:
+## config: オプション設定 { "camera_height": float, "camera_pitch_deg": float, "enable_aim_stick": bool }
+func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer, config: Dictionary = {}) -> void:
+	camera_height = config.get("camera_height", camera_height)
+	camera_pitch_deg = config.get("camera_pitch_deg", camera_pitch_deg)
+	enable_aim_stick = config.get("enable_aim_stick", enable_aim_stick)
+
 	_character = character
 	_camera = cam
 	_ui_layer = canvas
@@ -73,17 +82,18 @@ func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer) -> void
 	# カメラをTPS用に設定
 	if _camera:
 		_camera.fov = CAMERA_FOV
-		_camera.rotation_degrees.x = CAMERA_PITCH_DEG
+		_camera.rotation_degrees.x = camera_pitch_deg
 		# 初期位置をキャラクター上に設定
 		if _character:
-			var pitch_rad := deg_to_rad(CAMERA_PITCH_DEG)
-			var offset_z := CAMERA_HEIGHT / tan(-pitch_rad)
-			_camera.global_position = _character.global_position + Vector3(0, CAMERA_HEIGHT, offset_z)
+			var pitch_rad := deg_to_rad(camera_pitch_deg)
+			var offset_z := camera_height / tan(-pitch_rad)
+			_camera.global_position = _character.global_position + Vector3(0, camera_height, offset_z)
 
 	# ジョイスティックUI作成（左: 移動、右: 向き）
 	if _ui_layer:
 		_create_move_stick(_ui_layer)
-		_create_aim_stick(_ui_layer)
+		if enable_aim_stick:
+			_create_aim_stick(_ui_layer)
 
 
 ## 毎フレーム処理（_physics_processから呼ぶ）
@@ -194,9 +204,9 @@ func _handle_aim(_delta: float) -> void:
 func _update_camera(delta: float) -> void:
 	if not _character or not _camera:
 		return
-	var pitch_rad := deg_to_rad(CAMERA_PITCH_DEG)
-	var offset_z := CAMERA_HEIGHT / tan(-pitch_rad)
-	var target := _character.global_position + Vector3(0, CAMERA_HEIGHT, offset_z)
+	var pitch_rad := deg_to_rad(camera_pitch_deg)
+	var offset_z := camera_height / tan(-pitch_rad)
+	var target := _character.global_position + Vector3(0, camera_height, offset_z)
 	_camera.global_position = _camera.global_position.lerp(target, CAMERA_SMOOTH * delta)
 
 
