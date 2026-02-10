@@ -94,12 +94,12 @@ const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50
 # Far throw animation (weapon-dependent)
 const RIFLE_THROW_FAR_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_FAR
 const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING  # Pistolはfar専用がないためSingle使用
-const THROW_FAR_RELEASE_TIME := 1.67
+const THROW_FAR_RELEASE_TIME := 0.433  # キー13 / 30fps
 
 # Close throw animation (weapon-dependent)
 const RIFLE_THROW_CLOSE_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_CLOSE
 const PISTOL_THROW_CLOSE_ANIM := GameConstants.ANIM_PISTOL_GRENADE_THROW_CLOSE
-const THROW_CLOSE_RELEASE_TIME := 1.0  # 近投は早めにリリース
+const THROW_CLOSE_RELEASE_TIME := 0.333  # キー10 / 30fps
 
 # Door open animation
 const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
@@ -250,6 +250,17 @@ func get_look_direction() -> Vector3:
 ## Get the model node (for external rotation control)
 func get_model() -> Node3D:
 	return _model
+
+
+## Get bone global position (world space)
+func get_bone_global_position(bone_name: String) -> Vector3:
+	if not _skeleton:
+		return Vector3.ZERO
+	var idx := _skeleton.find_bone(bone_name)
+	if idx < 0:
+		return Vector3.ZERO
+	var bone_pose := _skeleton.get_bone_global_pose(idx)
+	return _skeleton.global_transform * bone_pose.origin
 
 
 ## Set aim direction directly (for rotation mode)

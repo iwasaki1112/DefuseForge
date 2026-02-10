@@ -615,6 +615,7 @@ func _setup_grenade_indicator() -> void:
 	_grenade_mat.set_shader_parameter("visibility_texture", _grenade_viewport.get_texture())
 	_grenade_mat.set_shader_parameter("map_min", Vector2(-fow_map_size.x / 2.0, -fow_map_size.y / 2.0))
 	_grenade_mat.set_shader_parameter("map_max", Vector2(fow_map_size.x / 2.0, fow_map_size.y / 2.0))
+	_grenade_mat.set_shader_parameter("throw_range", throw_range)
 	_grenade_mesh.material_override = _grenade_mat
 	_grenade_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_grenade_mesh.visible = false
@@ -648,6 +649,10 @@ func _update_grenade_light_position() -> void:
 	var uv_x := (char_pos.x + half_map.x) / fow_map_size.x
 	var uv_y := (char_pos.z + half_map.y) / fow_map_size.y
 	_grenade_light.position = Vector2(uv_x * _grenade_viewport.size.x, uv_y * _grenade_viewport.size.y)
+
+	# シェーダーにキャラクター位置を渡す（リングエッジ描画用）
+	if _grenade_mat:
+		_grenade_mat.set_shader_parameter("char_position", Vector2(char_pos.x, char_pos.z))
 
 	# SubViewportを1フレーム更新
 	_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
@@ -714,7 +719,10 @@ func _on_throw_release() -> void:
 	if not game_manager or _grenade_target_pos == Vector3.ZERO:
 		return
 
-	var start_pos := _player_character.global_position + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
+	# 左手ボーン位置からグレネードを生成（フォールバック: 胴体高さ）
+	var start_pos := _player_character.anim_ctrl.get_bone_global_position(GameConstants.BONE_LEFT_HAND)
+	if start_pos == Vector3.ZERO:
+		start_pos = _player_character.global_position + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
 	var target_pos := _grenade_target_pos
 	target_pos.y = 0.0
 
