@@ -734,8 +734,9 @@ func _on_debug_vision_toggled(enabled: bool) -> void:
 
 func _on_round_timer_updated(time: float) -> void:
 	if _timer_label:
-		var minutes := int(time) / 60
-		var seconds := int(time) % 60
+		var total_seconds := int(time)
+		var minutes := total_seconds / 60
+		var seconds := total_seconds % 60
 		_timer_label.text = "%d:%02d" % [minutes, seconds]
 
 
