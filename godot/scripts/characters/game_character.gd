@@ -365,6 +365,24 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 		# Default rotation for ARP right hand (要実機調整)
 		socket.rotation_degrees = Vector3(-79, -66, -28)
 
+	# 左手IKグリップ設定
+	_update_left_hand_ik(weapon)
+
+
+
+## 左手IKグリップを武器モデルから検出してAnimationControllerに通知
+func _update_left_hand_ik(weapon: WeaponPreset) -> void:
+	if not anim_ctrl:
+		return
+	if not weapon or not weapon.left_hand_grip_enabled or not _weapon_model:
+		anim_ctrl.set_left_hand_grip(null)
+		return
+
+	var grip_node := _weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
+	if grip_node:
+		anim_ctrl.set_left_hand_grip(grip_node)
+	else:
+		anim_ctrl.set_left_hand_grip(null)
 
 
 ## Equip a weapon from WeaponPreset

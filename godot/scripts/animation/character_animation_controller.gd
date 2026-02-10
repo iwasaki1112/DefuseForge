@@ -44,6 +44,7 @@ var _anim_tree: AnimationTree
 var _skeleton: Skeleton3D
 var _recoil_modifier: SkeletonModifier3D
 var _lean_modifier: SkeletonModifier3D
+var _left_hand_ik  # LeftHandIKModifier
 
 # State
 var _weapon := Weapon.RIFLE
@@ -116,6 +117,7 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 	if _skeleton:
 		_setup_recoil_modifier()
 		_setup_lean_modifier()
+		_setup_left_hand_ik()
 		# Set AnimationPlayer root_node to model node (parent of Skeleton3D)
 		# Animation tracks use paths like "Skeleton3D:bonename"
 		if _anim_player:
@@ -168,6 +170,21 @@ func set_weapon(weapon: Weapon) -> void:
 		return
 	_weapon = weapon
 	_switch_weapon_animations()
+	# PISTOLは片手持ちなのでIK無効
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(weapon != Weapon.PISTOL and _left_hand_ik._grip_source != null)
+
+## Set left hand grip source node for IK
+## grip_node: 武器モデル内のLeftHandGripノード（nullで無効化）
+func set_left_hand_grip(grip_node: Node3D) -> void:
+	if not _left_hand_ik:
+		return
+	if grip_node:
+		_left_hand_ik.set_grip_source(grip_node)
+		if _weapon != Weapon.PISTOL:
+			_left_hand_ik.set_enabled(true)
+	else:
+		_left_hand_ik.clear_grip_source()
 
 ## Trigger fire action (recoil)
 func fire() -> void:
@@ -287,6 +304,10 @@ func play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: boo
 
 	_is_dead = true
 
+	# 左手IKを即座に無効化
+	if _left_hand_ik:
+		_left_hand_ik.disable_immediate()
+
 	# Stop AnimationTree
 	if _anim_tree:
 		_anim_tree.active = false
@@ -331,6 +352,10 @@ func play_door_kick() -> void:
 		return
 
 	_is_door_kicking = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
 
 	# Stop AnimationTree during door kick
 	if _anim_tree:
@@ -381,6 +406,9 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 func _resume_animation_tree() -> void:
 	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door:
 		_anim_tree.active = true
+		# 左手IKを武器に応じて再有効化
+		if _left_hand_ik and _left_hand_ik._grip_source and _weapon != Weapon.PISTOL:
+			_left_hand_ik.set_enabled(true)
 
 
 ## Check if door kick animation is playing
@@ -394,6 +422,10 @@ func play_throw() -> void:
 		return
 
 	_is_throwing = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
 
 	# Stop AnimationTree during throw
 	if _anim_tree:
@@ -443,6 +475,10 @@ func play_door_open() -> void:
 		return
 
 	_is_opening_door = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
 
 	if _anim_tree:
 		_anim_tree.active = false
@@ -607,6 +643,16 @@ func _setup_lean_modifier() -> void:
 	_lean_modifier.recovery_speed = lean_speed
 	_skeleton.add_child(_lean_modifier)
 
+func _setup_left_hand_ik() -> void:
+	var script = load("res://scripts/modifiers/left_hand_ik_modifier.gd")
+	if not script:
+		push_warning("CharacterAnimationController: left_hand_ik_modifier.gd not found")
+		return
+	_left_hand_ik = script.new()
+	_left_hand_ik.name = "LeftHandIKModifier"
+	_model.add_child(_left_hand_ik)  # Nodeとして追加（_process用）
+	_left_hand_ik.setup(_skeleton)
+
 func _setup_animation_loops() -> void:
 	var loop_anims := [
 		# Idle animations
@@ -671,7 +717,7 @@ func _setup_animation_tree() -> void:
 
 	# --- Shoot OneShot (上半身フィルター) ---
 	var shoot_anim := AnimationNodeAnimation.new()
-	shoot_anim.animation = prefix + "_Shoot" if _anim_player.has_animation(prefix + "_Shoot") else ""
+	shoot_anim.animation = prefix + "_ShootOnce" if _anim_player.has_animation(prefix + "_ShootOnce") else ""
 	var shoot_oneshot := AnimationNodeOneShot.new()
 	shoot_oneshot.fadein_time = 0.05
 	shoot_oneshot.fadeout_time = 0.15
@@ -768,7 +814,7 @@ func _switch_weapon_animations() -> void:
 	# Shoot
 	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation
 	if shoot_node:
-		var shoot_name := prefix + "_Shoot"
+		var shoot_name := prefix + "_ShootOnce"
 		shoot_node.animation = shoot_name if _anim_player.has_animation(shoot_name) else ""
 
 	# WalkBlend (BlendSpace2D) - 8方向のアニメーション名を更新

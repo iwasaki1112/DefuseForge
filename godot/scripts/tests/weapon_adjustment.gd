@@ -47,6 +47,14 @@ extends Node3D
 @onready var quad1_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/Quad1Z/SpinBox
 @onready var quad1_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/Quad1Z/HSlider
 @onready var muzzle_preview_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/MuzzlePreviewToggle
+@onready var grip_toggle: CheckBox = $UI/PanelLeft/VBoxLeft/GripToggle
+@onready var grip_x_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripX/SpinBox
+@onready var grip_x_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripX/HSlider
+@onready var grip_y_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripY/SpinBox
+@onready var grip_y_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripY/HSlider
+@onready var grip_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripZ/SpinBox
+@onready var grip_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripZ/HSlider
+@onready var grip_preset_label: Label = $UI/PanelLeft/VBoxLeft/GripPresetLabel
 @onready var camera: Camera3D = $Camera3D
 
 # Preset value display (bone-local values for copying to .tres)
@@ -60,6 +68,7 @@ var current_character_idx: int = -1
 var current_weapon_idx: int = -1
 var _environment_setup: Node = null
 var _animation_library: AnimationLibrary = null
+var _grip_node: Node3D = null  # 武器モデル内のLeftHandGripノード
 
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
@@ -247,6 +256,15 @@ func _setup_ui() -> void:
 	quad1_z_spin.value_changed.connect(func(v): quad1_z_slider.value = v; _update_quad1_z())
 	muzzle_preview_toggle.toggled.connect(_on_muzzle_preview_toggled)
 
+	# Connect signals for Left Hand Grip
+	grip_x_slider.value_changed.connect(func(v): grip_x_spin.value = v; _update_grip_position())
+	grip_x_spin.value_changed.connect(func(v): grip_x_slider.value = v; _update_grip_position())
+	grip_y_slider.value_changed.connect(func(v): grip_y_spin.value = v; _update_grip_position())
+	grip_y_spin.value_changed.connect(func(v): grip_y_slider.value = v; _update_grip_position())
+	grip_z_slider.value_changed.connect(func(v): grip_z_spin.value = v; _update_grip_position())
+	grip_z_spin.value_changed.connect(func(v): grip_z_slider.value = v; _update_grip_position())
+	grip_toggle.toggled.connect(_on_grip_toggle)
+
 func _select_character(idx: int) -> void:
 	if idx < 0 or idx >= characters.size():
 		return
@@ -279,6 +297,7 @@ func _select_weapon(idx: int) -> void:
 
 	_set_ui_values(weapon.attach_offset, weapon.attach_rotation)
 	_set_muzzle_ui_values(weapon.muzzle_flash_offset, weapon.muzzle_flash_scale, weapon.muzzle_flash_rotation)
+	_setup_grip_ui(weapon)
 	if character:
 		character.update_muzzle_flash_preview()
 
@@ -508,3 +527,68 @@ func _update_preset_display() -> void:
 		snapped(pos.x, 0.001), snapped(pos.y, 0.001), snapped(pos.z, 0.001),
 		snapped(rot.x, 0.01), snapped(rot.y, 0.01), snapped(rot.z, 0.01),
 	]
+
+
+# ============================================
+# Left Hand Grip
+# ============================================
+
+## 武器切替時にグリップUI初期化
+func _setup_grip_ui(weapon: WeaponPreset) -> void:
+	_grip_node = null
+	if character and character._weapon_model:
+		_grip_node = character._weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
+
+	if _grip_node and weapon.left_hand_grip_enabled:
+		grip_toggle.set_pressed_no_signal(true)
+		var pos := _grip_node.position
+		grip_x_spin.set_value_no_signal(pos.x)
+		grip_x_slider.set_value_no_signal(pos.x)
+		grip_y_spin.set_value_no_signal(pos.y)
+		grip_y_slider.set_value_no_signal(pos.y)
+		grip_z_spin.set_value_no_signal(pos.z)
+		grip_z_slider.set_value_no_signal(pos.z)
+	else:
+		grip_toggle.set_pressed_no_signal(false)
+		grip_x_spin.set_value_no_signal(0)
+		grip_x_slider.set_value_no_signal(0)
+		grip_y_spin.set_value_no_signal(0)
+		grip_y_slider.set_value_no_signal(0)
+		grip_z_spin.set_value_no_signal(0)
+		grip_z_slider.set_value_no_signal(0)
+
+	_update_grip_preset_display()
+
+
+## グリップ位置スライダー変更時
+func _update_grip_position() -> void:
+	if not _grip_node:
+		return
+	_grip_node.position = Vector3(grip_x_spin.value, grip_y_spin.value, grip_z_spin.value)
+	_update_grip_preset_display()
+
+
+## グリップIK有効/無効トグル
+func _on_grip_toggle(enabled: bool) -> void:
+	if not character:
+		return
+	var anim_ctrl := character.get_anim_controller()
+	if not anim_ctrl:
+		return
+	if enabled and _grip_node:
+		anim_ctrl.set_left_hand_grip(_grip_node)
+	else:
+		anim_ctrl.set_left_hand_grip(null)
+
+
+## グリップ位置のプリセット表示更新
+func _update_grip_preset_display() -> void:
+	if not grip_preset_label:
+		return
+	if _grip_node:
+		var pos := _grip_node.position
+		grip_preset_label.text = "Grip: (%s, %s, %s)" % [
+			snapped(pos.x, 0.001), snapped(pos.y, 0.001), snapped(pos.z, 0.001),
+		]
+	else:
+		grip_preset_label.text = "Grip: (no LeftHandGrip node)"

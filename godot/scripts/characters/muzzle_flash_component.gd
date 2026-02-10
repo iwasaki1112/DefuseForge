@@ -11,7 +11,7 @@ extends RefCounted
 
 var MUZZLE_FLASH_TEXTURE: Texture2D = null
 const MUZZLE_FLASH_BASE_SIZE: float = 0.25
-const MUZZLE_FLASH_SCALE_MULTIPLIER: float = 200.0
+const MUZZLE_FLASH_SCALE_MULTIPLIER: float = 2.0  ## ARP 1.0スケール用（旧Mixamo 0.01時代は200.0）
 const MUZZLE_FLASH_DURATION: float = 0.09  # 3フレーム × 0.03秒/フレーム
 const MUZZLE_FLASH_FRAME_TIME: float = 0.03  # 各フレームの表示時間
 

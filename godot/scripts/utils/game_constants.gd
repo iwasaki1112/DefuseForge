@@ -33,9 +33,18 @@ const GROUP_DOORS := "doors"
 const BONE_RIGHT_HAND := "RightHand"
 const BONE_SPINE := "Spine"
 const BONE_UPPER_CHEST := "UpperChest"
+const BONE_LEFT_ARM := "LeftUpperArm"
+const BONE_LEFT_FOREARM := "LeftLowerArm"
+const BONE_LEFT_HAND := "LeftHand"
 # 後方互換エイリアス
 const BONE_SPINE_1 := BONE_SPINE
 const BONE_SPINE_2 := BONE_UPPER_CHEST
+
+# ========================================================
+# Node Names (Left Hand IK)
+# ========================================================
+const NODE_LEFT_HAND_GRIP := "LeftHandGrip"
+const NODE_LEFT_HAND_IK_TARGET := "LeftHandIKTarget"
 
 # ========================================================
 # Animation Names

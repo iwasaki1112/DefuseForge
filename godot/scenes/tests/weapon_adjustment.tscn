@@ -263,6 +263,85 @@ max_value = 0.1
 step = 0.001
 value = 0.026
 
+[node name="HSeparatorLeft3" type="HSeparator" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="LabelGrip" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Left Hand Grip"
+
+[node name="GripToggle" type="CheckBox" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "IK Enabled"
+button_pressed = false
+
+[node name="GripX" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/GripX"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/GripX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/GripX"]
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="GripY" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/GripY"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/GripY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/GripY"]
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="GripZ" type="HBoxContainer" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/PanelLeft/VBoxLeft/GripZ"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HSlider" type="HSlider" parent="UI/PanelLeft/VBoxLeft/GripZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="SpinBox" type="SpinBox" parent="UI/PanelLeft/VBoxLeft/GripZ"]
+layout_mode = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.001
+
+[node name="GripPresetLabel" type="Label" parent="UI/PanelLeft/VBoxLeft"]
+layout_mode = 2
+text = "Grip: -"
+
 [node name="Panel" type="PanelContainer" parent="UI"]
 anchors_preset = 11
 anchor_left = 1.0
