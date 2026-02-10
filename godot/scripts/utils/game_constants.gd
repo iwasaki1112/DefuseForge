@@ -83,6 +83,14 @@ const SMOKE_FADE_TIME := 2.5  # 消滅時間（秒）
 const SMOKE_FUSE_TIME := 3.0  # 導火線時間（秒）
 
 # ========================================================
+# Grenade Throw Settings
+# ========================================================
+const GRENADE_THROW_MAX_DISTANCE := 6.5    # 最大投擲距離（メートル）
+const GRENADE_THROW_CLOSE_THRESHOLD := 4.0 # 近投/遠投の閾値（メートル）
+const GRENADE_START_HEIGHT := 1.5          # 発射高さ（手の位置近似）
+const SMOKE_GRENADE_PER_ROUND := 99        # ラウンドあたりのスモーク数（デバッグ用、本番は1）
+
+# ========================================================
 # Scene Paths (Use with load/preload if class_name not available)
 # ========================================================
 const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
