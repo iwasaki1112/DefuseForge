@@ -62,6 +62,9 @@ var _aim_stick_center: Vector2 = Vector2.ZERO
 # Movement direction cache
 var _last_move_dir: Vector3 = Vector3.ZERO
 
+# 右スティック操作中フラグ（自動エイム・自動射撃を一時停止するため）
+var _is_aim_stick_active: bool = false
+
 
 
 # ============================================
@@ -107,8 +110,8 @@ func process(delta: float) -> void:
 		_character.combat_awareness.process(delta)
 	# フェーズ2: エイム更新（検知結果で向きを即座に設定）
 	_handle_aim(delta)
-	# フェーズ3: 射撃判定（向き完了後に発砲）
-	if _character.combat_awareness:
+	# フェーズ3: 射撃判定（右スティック操作中は自動射撃を一時停止）
+	if _character.combat_awareness and not _is_aim_stick_active:
 		_character.combat_awareness.process_firing(delta)
 	_handle_movement(delta)
 	_update_camera(delta)
@@ -164,19 +167,19 @@ func _handle_movement(delta: float) -> void:
 # ============================================
 
 func _handle_aim(_delta: float) -> void:
-	# 1. CombatAwareness override — 敵検知時は自動で敵方向を向く
+	# 1. 右スティック — 操作中は自動エイム・自動射撃を一時停止
+	_is_aim_stick_active = _aim_stick_input.length() > STICK_DEADZONE
+	if _is_aim_stick_active:
+		var aim_dir := Vector3(_aim_stick_input.x, 0, _aim_stick_input.y).normalized()
+		_character.set_facing_direction_vec(aim_dir)
+		return
+
+	# 2. CombatAwareness override — 敵検知時は自動で敵方向を向く
 	if _character.combat_awareness:
 		var override_dir := _character.combat_awareness.get_override_look_direction()
 		if override_dir != Vector3.ZERO:
 			_character.set_facing_direction_vec(override_dir)
 			return
-
-	# 2. 右スティック — エイム方向を直接指定
-	if _aim_stick_input.length() > STICK_DEADZONE:
-		# スティックの2D入力をワールド3D方向に変換（X→X, Y→Z）
-		var aim_dir := Vector3(_aim_stick_input.x, 0, _aim_stick_input.y).normalized()
-		_character.set_facing_direction_vec(aim_dir)
-		return
 
 	# 3. 移動方向 — 移動中は進行方向を向く
 	if _last_move_dir.length_squared() > 0.01:

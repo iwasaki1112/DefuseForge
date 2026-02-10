@@ -350,7 +350,10 @@ func _create_action_buttons() -> void:
 		_debug_vision_btn.toggle_mode = true
 		_debug_vision_btn.custom_minimum_size = Vector2(80, 30)
 		_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
-		vbox.add_child(_debug_vision_btn)
+		# ActionButtonsが非表示でもDebugボタンは表示するため、UILayerに直接追加
+		ui_layer.add_child(_debug_vision_btn)
+		_debug_vision_btn.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+		_debug_vision_btn.position = Vector2(-180, -140)
 
 
 ## アイコン付きTextureButtonを生成
@@ -550,6 +553,18 @@ func _cleanup_before_transition() -> void:
 		game_manager.unload_map(true)
 		if Debug.enabled: print("[GameScreen] Map and characters cleaned up")
 
+	# 安全策: "characters" グループに残っているノードを全て削除
+	# game_manager.characters 配列に入っていない孤立ノードも確実に削除する
+	for node in get_tree().get_nodes_in_group(GameConstants.GROUP_CHARACTERS):
+		if is_instance_valid(node):
+			node.queue_free()
+
+	# MapContainer の全子ノードを削除（死体、エフェクト等の残留防止）
+	if map_container:
+		for child in map_container.get_children():
+			if is_instance_valid(child):
+				child.queue_free()
+
 	# SignalBusのシグナル切断
 	if SignalBus.round_timer_updated.is_connected(_on_round_timer_updated):
 		SignalBus.round_timer_updated.disconnect(_on_round_timer_updated)
@@ -569,6 +584,10 @@ func _cleanup_before_transition() -> void:
 	if _round_hud and is_instance_valid(_round_hud):
 		_round_hud.queue_free()
 		_round_hud = null
+
+	# TPS制御のクリーンアップ
+	_tps_controller = null
+	_player_character = null
 
 	# Providerのクリーンアップ（WebSocket切断含む）
 	if _mode_provider:

@@ -380,7 +380,8 @@ func _is_facing_target() -> bool:
 			facing_dir = model.global_transform.basis.orthonormalized().z
 			facing_dir.y = 0
 	if facing_dir.length_squared() < 0.001:
-		facing_dir = _character.get_facing_direction()
+		# モデルの向きが取得できない場合は安全策として射撃を許可しない
+		return false
 	facing_dir = facing_dir.normalized()
 	return facing_dir.dot(to_target) >= FACING_ANGLE_THRESHOLD
 
