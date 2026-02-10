@@ -57,6 +57,9 @@ const ANIM_DEATH_RIGHT := "Rifle_Death_R"
 const ANIM_RIFLE_DOOR_KICK := "Rifle_Melee_Kick"
 const ANIM_PISTOL_DOOR_KICK := "Pistol_Melee_Kick"
 const ANIM_PISTOL_LOW_THROWING := "Pistol_Grenade_Throw_Single"
+const ANIM_PISTOL_GRENADE_THROW_CLOSE := "Pistol_Grenade_Throw_Close"
+const ANIM_RIFLE_GRENADE_THROW_FAR := "Rifle_Grenade_Throw_Far"
+const ANIM_RIFLE_GRENADE_THROW_CLOSE := "Rifle_Grenade_Throw_Close"
 const ANIM_RIFLE_OPEN_DOOR := "Rifle_OpenDoor"
 
 # ========================================================

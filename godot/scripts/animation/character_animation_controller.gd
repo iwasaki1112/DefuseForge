@@ -91,6 +91,16 @@ const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレー
 const PISTOL_LOW_THROWING_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING
 const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50 / 30fps）
 
+# Far throw animation (weapon-dependent)
+const RIFLE_THROW_FAR_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_FAR
+const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING  # Pistolはfar専用がないためSingle使用
+const THROW_FAR_RELEASE_TIME := 1.67
+
+# Close throw animation (weapon-dependent)
+const RIFLE_THROW_CLOSE_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_CLOSE
+const PISTOL_THROW_CLOSE_ANIM := GameConstants.ANIM_PISTOL_GRENADE_THROW_CLOSE
+const THROW_CLOSE_RELEASE_TIME := 1.0  # 近投は早めにリリース
+
 # Door open animation
 const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
 
@@ -412,32 +422,11 @@ func is_door_kicking() -> bool:
 	return _is_door_kicking
 
 
-## Play throw animation (underhand grenade throw with pistol)
+## Play throw animation (legacy: underhand grenade throw with pistol)
 func play_throw() -> void:
 	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
 		return
-
-	_is_throwing = true
-
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
-
-	# Stop AnimationTree during throw
-	if _anim_tree:
-		_anim_tree.active = false
-
-	# Play throw animation (crossfade from current pose)
-	if _anim_player.has_animation(PISTOL_LOW_THROWING_ANIM):
-		_anim_player.play(PISTOL_LOW_THROWING_ANIM, 0.15)
-		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
-		# リリースタイミングでシグナルを発火するタイマー
-		get_tree().create_timer(THROW_RELEASE_TIME).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
-	else:
-		push_warning("CharacterAnimationController: Throw animation not found: %s" % PISTOL_LOW_THROWING_ANIM)
-		_is_throwing = false
-		if _anim_tree:
-			_anim_tree.active = true
+	_start_throw(PISTOL_LOW_THROWING_ANIM, THROW_RELEASE_TIME)
 
 
 func _on_throw_release() -> void:
@@ -458,6 +447,61 @@ func _on_throw_finished(_anim_name: String) -> void:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
 
 	throw_finished.emit()
+
+
+## Play far throw animation (weapon-appropriate overhand throw)
+func play_throw_far() -> void:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+		return
+
+	var anim_name: String
+	match _weapon:
+		Weapon.PISTOL:
+			anim_name = PISTOL_THROW_FAR_ANIM
+		_:
+			anim_name = RIFLE_THROW_FAR_ANIM
+
+	_start_throw(anim_name, THROW_FAR_RELEASE_TIME)
+
+
+## Play close throw animation (weapon-appropriate underhand throw)
+func play_throw_close() -> void:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+		return
+
+	var anim_name: String
+	match _weapon:
+		Weapon.PISTOL:
+			anim_name = PISTOL_THROW_CLOSE_ANIM
+		_:
+			anim_name = RIFLE_THROW_CLOSE_ANIM
+
+	_start_throw(anim_name, THROW_CLOSE_RELEASE_TIME)
+
+
+## 投擲アニメーション共通処理
+func _start_throw(anim_name: String, release_time: float) -> void:
+	_is_throwing = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
+
+	# Stop AnimationTree during throw
+	if _anim_tree:
+		_anim_tree.active = false
+
+	# Play throw animation (crossfade from current pose)
+	if _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name, 0.15)
+		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
+		# リリースタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(release_time).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Throw animation not found: %s" % anim_name)
+		_is_throwing = false
+		if _anim_tree:
+			_anim_tree.active = true
 
 
 ## Check if throw animation is playing

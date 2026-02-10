@@ -305,35 +305,52 @@ func _create_action_buttons() -> void:
 	vbox.name = "ActionButtons"
 	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 	vbox.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	vbox.position = Vector2(-170, -80)
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.position = Vector2(-100, -120)
+	vbox.add_theme_constant_override("separation", 16)
 	ui_layer.add_child(vbox)
 
-	var btn_grenade := Button.new()
-	btn_grenade.text = "Grenade"
-	btn_grenade.custom_minimum_size = Vector2(150, 50)
-	btn_grenade.pressed.connect(_on_grenade_pressed)
-	vbox.add_child(btn_grenade)
+	# Open Door ボタン
+	var btn_door_open := _create_icon_button(
+		"res://assets/ui/game/controller-door-button.png",
+		_on_door_open_pressed
+	)
+	vbox.add_child(btn_door_open)
+
+	# Grenade Far ボタン
+	var btn_grenade_far := _create_icon_button(
+		"res://assets/ui/game/controller-hand-granade-button.png",
+		_on_grenade_far_pressed
+	)
+	vbox.add_child(btn_grenade_far)
+
+	# Grenade Close ボタン
+	var btn_grenade_close := _create_icon_button(
+		"res://assets/ui/game/controller-pie-button.png",
+		_on_grenade_close_pressed
+	)
+	vbox.add_child(btn_grenade_close)
 
 	if Debug.enabled:
-		var btn_door_kick := Button.new()
-		btn_door_kick.text = "Door Kick"
-		btn_door_kick.custom_minimum_size = Vector2(150, 50)
-		btn_door_kick.pressed.connect(_on_door_kick_pressed)
-		vbox.add_child(btn_door_kick)
-
-		var btn_door_open := Button.new()
-		btn_door_open.text = "Door Open"
-		btn_door_open.custom_minimum_size = Vector2(150, 50)
-		btn_door_open.pressed.connect(_on_door_open_pressed)
-		vbox.add_child(btn_door_open)
-
 		_debug_vision_btn = Button.new()
 		_debug_vision_btn.text = "Debug Vision"
 		_debug_vision_btn.toggle_mode = true
-		_debug_vision_btn.custom_minimum_size = Vector2(150, 50)
+		_debug_vision_btn.custom_minimum_size = Vector2(80, 30)
 		_debug_vision_btn.toggled.connect(_on_debug_vision_toggled)
 		vbox.add_child(_debug_vision_btn)
+
+
+## アイコン付きTextureButtonを生成
+func _create_icon_button(icon_path: String, callback: Callable) -> TextureButton:
+	var btn := TextureButton.new()
+	var tex := load(icon_path) as Texture2D
+	if tex:
+		btn.texture_normal = tex
+	btn.ignore_texture_size = true
+	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	btn.custom_minimum_size = Vector2(80, 80)
+	btn.pressed.connect(callback)
+	ButtonAnimator.setup(btn)
+	return btn
 
 
 func _setup_round_hud() -> void:
@@ -431,14 +448,14 @@ func _on_weapon_selected(idx: int) -> void:
 	_player_character.equip_weapon(weapon)
 
 
-func _on_grenade_pressed() -> void:
+func _on_grenade_far_pressed() -> void:
 	if _player_character and _player_character.anim_ctrl:
-		_player_character.anim_ctrl.play_throw()
+		_player_character.anim_ctrl.play_throw_far()
 
 
-func _on_door_kick_pressed() -> void:
+func _on_grenade_close_pressed() -> void:
 	if _player_character and _player_character.anim_ctrl:
-		_player_character.anim_ctrl.play_door_kick()
+		_player_character.anim_ctrl.play_throw_close()
 
 
 func _on_door_open_pressed() -> void:
