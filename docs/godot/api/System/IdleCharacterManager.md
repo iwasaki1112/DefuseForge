@@ -133,8 +133,7 @@ func _physics_process(delta: float) -> void:
 ## 関連クラス
 
 - [CharacterSelectionManager](CharacterSelectionManager.md) - 選択状態管理
-- [PathExecutionManager](PathExecutionManager.md) - パス実行管理
-- [CombatAwarenessComponent](CombatAwarenessComponent.md) - 敵検出・自動照準
+- [CombatAwarenessComponent](../Character/CombatAwarenessComponent.md) - 敵検出・自動照準
 
 ## APIリファレンス
 

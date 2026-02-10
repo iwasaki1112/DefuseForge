@@ -4,32 +4,13 @@
 
 ## 概要
 
-パス確定、ラウンド状態、キャラクター状態、ゲームイベントなど、ネットワーク越しにやり取りするデータ構造を定義する。
+ラウンド状態、キャラクター状態、ゲームイベントなど、ネットワーク越しにやり取りするデータ構造を定義する。
 
 ## ファイル
 
 `godot/scripts/network/network_messages.gd`
 
 ## メッセージクラス
-
-### PathConfirmMessage
-
-パス確定時に送信するメッセージ。キャラクターの移動パスとマーカー情報を含む。
-
-```gdscript
-class PathConfirmMessage extends RefCounted:
-    var player_id: int              # 送信元プレイヤーID
-    var character_id: int           # 対象キャラクターID
-    var path: Array[Vector3]        # パス座標配列
-    var vision_points: Array[Dictionary]   # 視線マーカー { path_ratio, anchor, target_point }
-    var wait_points: Array[Dictionary]     # Waitポイント { path_ratio, anchor, wait_duration }
-    var timestamp: int              # タイムスタンプ（msec）
-
-    func to_dict() -> Dictionary
-    func from_dict(data: Dictionary) -> void
-```
-
-> **Note**: `run_segments`, `clear_points`, `grenade_points`, `door_points`, `smoke_grenade_points` はPathFollowingControllerが対応可能だが、現在PathServiceでUIからの追加がサポートされていないため、同期対象外。将来UIが実装されればPathConfirmMessageに追加予定。
 
 ### RoundStateMessage
 
@@ -60,7 +41,7 @@ class CharacterStateMessage extends RefCounted:
     var rotation: float              # Y軸回転（ラジアン）
     var current_health: int          # 現在のHP
     var is_alive: bool               # 生存フラグ
-    var animation_state: String      # アニメーション状態
+    var animation_state: String      # @deprecated TPS移行後は move_state ベースの同期に変更
     var velocity: Vector3            # 移動速度（m/s）
     var character_preset_id: String  # キャラクタープリセットID（初期同期用）
     var weapon_id: String            # 武器ID（初期同期用）
@@ -119,14 +100,6 @@ static func get_timestamp() -> int
 
 現在時刻のタイムスタンプを取得。
 
-### create_path_confirm
-
-```gdscript
-static func create_path_confirm(player_id: int, character_id: int, path: Array[Vector3]) -> PathConfirmMessage
-```
-
-PathConfirmMessageを作成。
-
 ### create_round_state
 
 ```gdscript
@@ -154,20 +127,14 @@ GameEventMessageを作成。
 ## 使用例
 
 ```gdscript
-# パス確定メッセージの作成
-var path: Array[Vector3] = [Vector3(0, 0, 0), Vector3(5, 0, 3)]
-var msg = NetworkMessages.create_path_confirm(1, 100, path)
-msg.vision_points.append({
-    "path_ratio": 0.5,
-    "target_point": [10.0, 1.0, 5.0],
-    "has_target": true
-})
+# キャラクター状態メッセージの作成
+var msg = NetworkMessages.create_character_state(100, Vector3(5, 0, 3), 1.57, 80, true)
 
 # シリアライズ
 var dict = msg.to_dict()
 
 # デシリアライズ
-var restored = NetworkMessages.PathConfirmMessage.new()
+var restored = NetworkMessages.CharacterStateMessage.new()
 restored.from_dict(dict)
 
 # ゲームイベントの作成
@@ -184,4 +151,3 @@ var damage_event = NetworkMessages.create_game_event(
 - [NetworkConstants](NetworkConstants.md) - ネットワーク定数
 - [SyncState](SyncState.md) - 同期状態クラス
 - [NetworkSerializer](NetworkSerializer.md) - シリアライズユーティリティ
-- [ActionPointData](ActionPointData.md) - マーカーデータ構造

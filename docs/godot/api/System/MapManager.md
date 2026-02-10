@@ -18,7 +18,7 @@ MapManagerは以下の責務を持つ：
 |------|------|
 | ライフサイクル管理 | マップのロード・アンロード・切り替え |
 | 状態追跡 | 現在のマップ・プリセット・IDの管理 |
-| クリーンアップ | キャラクター・パスの自動削除 |
+| クリーンアップ | キャラクターの自動削除 |
 | シグナル通知 | ロード前後・アンロード前後のイベント発火 |
 
 ## シグナル
@@ -68,7 +68,7 @@ if map:
 #### `unload_map(cleanup_characters: bool = true) -> void`
 現在のマップをアンロードする。
 
-- `cleanup_characters`: trueの場合、キャラクターとパスもクリーンアップ
+- `cleanup_characters`: trueの場合、キャラクターもクリーンアップ
 
 ```gdscript
 map_manager.unload_map(true)  # キャラクターも削除
@@ -96,19 +96,6 @@ map_manager.cleanup_characters()
 1. GameManagerに登録された全キャラクターを取得
 2. `unregister_character()`で登録解除
 3. `queue_free()`でノード削除
-
-#### `cleanup_paths() -> void`
-パス関連の状態をすべてクリアする。
-
-```gdscript
-map_manager.cleanup_paths()
-```
-
-処理内容：
-1. `cancel_all_path_following()` - パス追従停止
-2. `clear_all_pending_paths()` - 保留パスクリア
-3. パスモード中なら`cancel_path()` - パスモードキャンセル
-4. `selection_manager.deselect_all()` - 選択解除
 
 ### クエリAPI
 
@@ -205,7 +192,6 @@ func _on_map_unloaded(map_id: String) -> void:
 
 ```gdscript
 # 手動でクリーンアップ制御
-game_manager.map_manager.cleanup_paths()  # パスのみクリア
 game_manager.map_manager.cleanup_characters()  # キャラクターを削除
 game_manager.map_manager.unload_map(false)  # マップのみアンロード（クリーンアップ済み）
 ```
@@ -215,7 +201,6 @@ game_manager.map_manager.unload_map(false)  # マップのみアンロード（�
 - [MapRegistry](MapRegistry.md) - マッププリセット管理・インスタンス化
 - [MapPreset](MapPreset.md) - マップ定義リソース
 - [GameManager](GameManager.md) - MapManagerを内包、システム全体の統括
-- [PathExecutionManager](PathExecutionManager.md) - パス実行管理
 - [CharacterSelectionManager](CharacterSelectionManager.md) - キャラクター選択管理
 
 ## APIリファレンス
@@ -234,7 +219,6 @@ game_manager.map_manager.unload_map(false)  # マップのみアンロード（�
 - `unload_map(cleanup_characters_on_unload: bool = true) -> void`
 - `switch_map(new_map_id: String) -> Node3D`
 - `cleanup_characters() -> void`
-- `cleanup_paths() -> void`
 - `has_map() -> bool`
 - `get_map_size() -> Vector2`
 - `get_spawn_points(is_ct: bool) -> Array[Vector3]`

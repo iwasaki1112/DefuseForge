@@ -193,7 +193,7 @@ func _init() -> void:
     SomeScript = load("res://scripts/some_script.gd")
 
 # OK: class_nameを持つクラスは直接参照可能
-const PointType = ActionPointData.Type  # ActionPointDataはclass_name定義済み
+var msg = NetworkMessages.CharacterStateMessage.new()  # NetworkMessagesはclass_name定義済み
 ```
 
 **テスト必須:** PCで動作してもiOSで失敗することがあるため、機能追加後は必ずiOS実機でテストすること。

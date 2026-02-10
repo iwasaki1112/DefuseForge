@@ -157,8 +157,6 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** 正規化された向きベクトル
 
-**重要**: PathFollowingControllerは移動中に`_facing_direction`を直接更新する。これにより、移動中も視界の向きが正しく追従する。
-
 ### Weapon API
 
 #### equip_weapon(weapon: Resource) -> void

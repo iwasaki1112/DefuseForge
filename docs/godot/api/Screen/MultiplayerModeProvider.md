@@ -98,14 +98,6 @@ func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: 
 
 ## 同期処理
 
-### on_path_confirmed
-
-パス確定時に`sync_controller.send_state_sync()`を呼び出します。
-
-### on_execute_paths
-
-パス実行時に`sync_controller.send_path_execute(false)`を呼び出します。
-
 ### on_round_ended
 
 ラウンド終了時、ホストのみ`sync_controller.send_round_state()`を呼び出します。
