@@ -108,7 +108,7 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 **シーン**: `scenes/screens/game.tscn`
 **スクリプト**: `scripts/screens/game_screen.gd`
 
-ゲームプレイ画面。選択したマップでキャラクターを操作する。
+ゲームプレイ画面。選択したマップでキャラクターをTPS操作する。
 
 **初期化処理**:
 1. プレイヤーチームをランダムに決定（CT/T）
@@ -116,16 +116,16 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 3. 選択マップをロード
 4. FogOfWarSystemのマップサイズを更新（`set_map_size()`を使用）
 5. キャラクターをスポーン位置に配置
-6. チーム表示UIを更新
-7. 視界システムを有効化
+6. TPSPlayerControllerをセットアップ（プレイヤーキャラクター操作用）
+7. チーム表示UIを更新
+8. 視界システムを有効化
 
 **注意**: マップロード後、`FogOfWarSystem.set_map_size()`でマップサイズを更新すること。プロパティ直接変更では反映されない。
 
 **主要システム**:
 - `GameManager` - コアシステム初期化・更新
+- `TPSPlayerController` - TPS操作（移動/エイム/カメラ/ジョイスティック）
 - `MapManager` - マップ読み込み・クリーンアップ
-- `CharacterSelectionManager` - キャラクター選択
-- `PathExecutionManager` - パス描画・実行
 - `FogOfWarSystem` - 視界システム
 - `EnemyVisibilitySystem` - 敵可視性制御
 
@@ -134,10 +134,13 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 GameScreen (Node3D)
 ├─ WorldEnvironment
 ├─ DirectionalLight3D
-├─ Camera3D (俯瞰視点)
+├─ Camera3D (TPS固定カメラ)
 ├─ MapContainer (Node3D) ← マップがロードされる
+├─ TPSPlayerController (Node) ← プレイヤー操作
 └─ UILayer (CanvasLayer)
-    └─ TeamDisplayLabel ← "You are CT/T" 表示
+    ├─ TeamDisplayLabel ← "You are CT/T" 表示
+    ├─ MoveStickBase ← 左ジョイスティック（モバイル）
+    └─ AimStickBase ← 右ジョイスティック（モバイル）
 ```
 
 ## データフロー

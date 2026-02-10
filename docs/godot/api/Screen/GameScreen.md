@@ -1,6 +1,6 @@
 # GameScreen
 
-統合されたゲーム画面。TrainingモードとMultiplayerモードの両方に対応。
+統合されたゲーム画面（TPS版）。TrainingモードとMultiplayerモードの両方に対応。
 
 ## 基本情報
 
@@ -15,10 +15,10 @@
 GameScreenはゲームのメイン画面を担当し、以下の機能を提供します：
 
 - マップのロードとキャラクタースポーン
-- HUD（GameHUD, RoundHUD）の管理
-- カメラとインプットの制御
+- TPS操作（TPSPlayerControllerによる移動/エイム/カメラ）
+- HUD（HP、クロスヘア、RoundHUD）の管理
 - GameManagerとの連携
-- **UIコンポーネントの生成とGameManagerへの注入**（`CharacterLabelManager`、`PathContextMenu`）
+- **UIコンポーネントの生成とGameManagerへの注入**（`CharacterLabelManager`）
 
 モード固有の処理は`GameModeProvider`に委譲されます。
 
@@ -30,6 +30,8 @@ GameScreenはゲームのメイン画面を担当し、以下の機能を提供�
 | camera | Camera3D | メインカメラ |
 | map_container | Node3D | マップの親ノード |
 | ui_layer | CanvasLayer | UI用レイヤー |
+| _tps_controller | TPSPlayerController | TPS操作コントローラー |
+| _player_character | GameCharacter | プレイヤーキャラクター |
 
 ## メソッド
 
@@ -74,22 +76,19 @@ func cleanup() -> void
 ```
 _ready()  ※setup_multiplayer()はadd_child前に呼ばれ、Providerを設定するのみ
     │
-    ├── _setup_environment()      # 環境設定
-    ├── _setup_game_manager()     # GameManager初期化
-    │     ├── _setup_label_manager()       # CharacterLabelManager生成→注入
-    │     ├── _setup_path_context_menu()   # PathContextMenu生成→注入
-    │     └── game_manager.setup()          # サブシステム初期化（Factory使用）
-    ├── _mode_provider.initialize() # Provider初期化
-    ├── _mode_provider.determine_player_team() # チーム決定
-    ├── _load_map()               # マップロード
-    ├── _spawn_characters()       # キャラクタースポーン
-    ├── _setup_hud()              # HUD設定
-    ├── _setup_round_hud()        # ラウンドHUD設定
-    ├── _register_character_markers() # マーカー登録
-    ├── _setup_money()            # 所持金設定
-    ├── _setup_camera_pan()       # カメラパン設定
-    ├── _setup_input_controller() # 入力設定
-    └── _setup_camera_for_player() # カメラ位置設定
+    ├── _setup_environment()         # 環境設定
+    ├── _setup_game_manager()        # GameManager初期化
+    │     ├── _setup_label_manager() # CharacterLabelManager生成→注入
+    │     └── game_manager.setup()   # サブシステム初期化（Factory使用）
+    ├── _mode_provider.initialize()  # Provider初期化
+    ├── PlayerState.set_player_team() # チーム決定（CT固定）
+    ├── _load_map()                  # マップロード
+    ├── _spawn_characters()          # キャラクタースポーン
+    ├── _setup_tps_hud()             # TPS HUD設定（HP、クロスヘア）
+    ├── _setup_round_hud()           # ラウンドHUD設定
+    ├── _setup_money()               # 所持金設定
+    ├── _setup_tps_controller()      # TPSPlayerController初期化
+    └── game_manager.set_vision_enabled(true) # 視界有効化
 ```
 
 ### UIコンポーネント注入
@@ -104,17 +103,21 @@ func _setup_label_manager() -> void:
     lm.name = GameConstants.NODE_LABEL_MANAGER
     game_manager.add_child(lm)
     game_manager.set_label_manager(lm)
-
-# GameScreen._setup_path_context_menu()
-func _setup_path_context_menu() -> void:
-    var menu := PathContextMenu.new()
-    menu.name = "PathContextMenu"
-    if ui_layer:
-        ui_layer.add_child(menu)
-    else:
-        game_manager.add_child(menu)
-    game_manager.set_path_context_menu(menu)
 ```
+
+## TPS操作
+
+`_setup_tps_controller()`でTPSPlayerControllerを初期化し、プレイヤーキャラクターの操作を委譲。
+
+```gdscript
+func _setup_tps_controller() -> void:
+    _tps_controller = TPSPlayerController.new()
+    _tps_controller.name = "TPSPlayerController"
+    add_child(_tps_controller)
+    _tps_controller.setup(_player_character, camera, ui_layer)
+```
+
+`_physics_process`でTPSPlayerController.process()を呼び出し、`_input`でhandle_input()を呼び出す。
 
 ## モード判定
 
@@ -131,23 +134,17 @@ if _mode_provider is MultiplayerModeProvider:
 
 ## デバッグ機能
 
-- **F3キー**: 視界デバッグ表示（Vision Debug Draw）の切り替え。敵の視界範囲やレイキャストが表示されます。
+- **F3キー**: 視界デバッグ表示（Vision Debug Draw）の切り替え
+- **Debug.enabled時**: Door Kick, Door Open, Debug Visionボタンが表示
 
 ## シグナル接続
 
-GameScreenは以下のGameManagerシグナルを購読します：
+GameScreenは以下のシグナルを購読します：
 
-| シグナル | ハンドラ |
-|---------|---------|
-| selection_changed | _on_selection_changed |
-| path_confirmed | _on_path_confirmed |
-| paths_execution_started | _on_paths_execution_started |
-| all_paths_completed | _on_all_paths_completed |
-| paths_cleared | _on_paths_cleared |
-| path_ready | _on_path_ready |
-| path_mode_ended | _on_path_mode_ended |
-| round_timer_updated | _on_round_timer_updated |
-| round_ended | _on_round_ended |
+| シグナル | ソース | ハンドラ |
+|---------|--------|---------|
+| round_timer_updated | GameManager | _on_round_timer_updated |
+| round_ended | GameManager | _on_round_ended |
 
 ## 関連クラス
 
@@ -155,7 +152,5 @@ GameScreenは以下のGameManagerシグナルを購読します：
 - [TrainingModeProvider](./TrainingModeProvider.md)
 - [MultiplayerModeProvider](./MultiplayerModeProvider.md)
 - [GameManager](../System/GameManager.md)
-- [GameSystemFactory](../System/GameSystemFactory.md) - GameManager内部で使用されるファクトリ
-- [GameHUD](../UI/GameHUD.md)
+- [TPSPlayerController](../Controllers/TPSPlayerController.md) - TPS操作制御
 - [CharacterLabelManager](../UI/CharacterLabelManager.md) - GameScreenが生成しGameManagerに注入
-- [PathContextMenu](../UI/PathContextMenu.md) - GameScreenが生成しGameManagerに注入

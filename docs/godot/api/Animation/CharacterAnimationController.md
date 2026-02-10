@@ -56,8 +56,6 @@
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `fired` | なし | 発射アクションが実行されたタイミング |
-| `door_kick_impact` | なし | ドアキックのインパクトタイミング（フレーム36/66、1.2秒） |
-| `door_kick_finished` | なし | ドアキックアニメーション完了時 |
 
 ## Export Properties
 
@@ -127,30 +125,17 @@
 ### get_current_speed() -> float
 現在の状態に基づく移動速度を返す。
 
-**戻り値:** 現在の移動速度
-
 ### is_dead() -> bool
 キャラクターが死亡状態か確認する。
-
-**戻り値:** 死亡状態なら`true`
 
 ### get_look_direction() -> Vector3
 現在の視線方向を取得する（視界計算用）。
 
-**戻り値:** 視線方向ベクトル（正規化済み）
-
 ### set_look_direction(direction: Vector3) -> void
 視線方向を直接設定する（回転モード用）。モデルの向きも即座に更新。
 
-**引数:**
-- `direction` - 視線方向ベクトル
-
 ### play_death(hit_direction: HitDirection = HitDirection.FRONT, headshot: bool = false) -> void
 デスアニメーションを再生する。被弾方向に応じて適切なアニメーションを選択。
-
-**引数:**
-- `hit_direction` - 被弾方向（倒れる方向を決定）
-- `headshot` - ヘッドショットか（将来拡張用）
 
 **方向別アニメーション:**
 | 被弾方向 | 倒れる方向 | アニメーション |
@@ -161,7 +146,6 @@
 | `LEFT` | 右 | `Death_Forward`（フォールバック）|
 
 > **Note:** `Death_Left`アニメーションは存在しないため、`LEFT`被弾時は`Death_Forward`にフォールバックする。
-> `GameCharacter._select_safe_death_direction()`で壁を避けた安全な方向が選択される。
 
 ### play_door_kick() -> void
 ドアキックアニメーションを再生する。武器タイプに応じて適切なアニメーションが選択される。
@@ -170,12 +154,9 @@
 - `Weapon.PISTOL` → `Pistol_DoorKick`
 
 アニメーション再生中は`update_animation()`の更新がスキップされ、`get_current_speed()`は0を返す。
-アニメーション完了時に`door_kick_finished`シグナルが発火し、0.3秒のクロスフェードでアイドルアニメーションに遷移する。
 
 ### is_door_kicking() -> bool
 ドアキックアニメーション再生中か確認する。
-
-**戻り値:** ドアキック中なら`true`
 
 ## 使用例
 
@@ -195,13 +176,6 @@ func _physics_process(delta):
 anim_ctrl.set_stance(CharacterAnimationController.Stance.CROUCH)
 anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
 anim_ctrl.fire()
-
-# ドアキック
-anim_ctrl.door_kick_finished.connect(_on_door_kick_done)
-anim_ctrl.play_door_kick()
-
-func _on_door_kick_done():
-    print("Door kick completed!")
 ```
 
 ## 内部動作
@@ -210,6 +184,7 @@ func _on_door_kick_done():
 - アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
 - TimeScaleによる移動速度同期でアニメーション速度を調整
 - `RecoilModifier`でプロシージャルリコイルを適用
+- `LeftHandIKModifier`で左手IKを制御
 - ARPリグ専用設計
 
 ## 重要: モデル向き制御の注意点
@@ -237,12 +212,10 @@ func _on_door_kick_done():
 | シグナル | 引数 |
 |---------|------|
 | `fired` | なし |
-| `door_kick_impact` | なし |
-| `door_kick_finished` | なし |
 
 ### メソッド
 - `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
-- `update_animation(`
+- `update_animation(movement_direction: Vector3, look_direction: Vector3, is_running: bool, delta: float) -> void`
 - `set_stance(stance: Stance) -> void`
 - `get_stance() -> Stance`
 - `set_weapon(weapon: Weapon) -> void`
