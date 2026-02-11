@@ -41,6 +41,8 @@ var _round_hud: RoundHUD = null
 ## グレネードエイミングモード
 var _is_grenade_aiming: bool = false
 var _grenade_target_pos: Vector3 = Vector3.ZERO
+var _grenade_start_override: Vector3 = Vector3.ZERO
+var _is_near_opening: bool = false
 var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
 
 ## グレネードUI
@@ -584,6 +586,7 @@ func _setup_grenade_indicator() -> void:
 func _show_range_indicator() -> void:
 	if _grenade_mesh:
 		_grenade_mesh.visible = true
+		_check_near_opening()
 		_update_grenade_light_position()
 
 
@@ -592,6 +595,9 @@ func _hide_range_indicator() -> void:
 		_grenade_mesh.visible = false
 	if _grenade_viewport:
 		_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_is_near_opening = false
+	if _grenade_mat:
+		_grenade_mat.set_shader_parameter("shadow_min", 0.0)
 
 
 func _update_grenade_light_position() -> void:
@@ -655,17 +661,40 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 				var px := int(uv_x * float(img.get_width() - 1))
 				var py := int(uv_y * float(img.get_height() - 1))
 				var vis := img.get_pixel(px, py).r
+				print("[GRENADE] vis=%.2f near_opening=%s" % [vis, _is_near_opening])
 				if vis < 0.5:
-					return  # グリーン領域外（不可視）
+					# 影の領域 → 開口部付近でのみコーナースロー可能
+					if not _is_near_opening:
+						print("[GRENADE] BLOCKED: not near opening")
+						return
+					if not _has_ground_at(ground_point):
+						print("[GRENADE] BLOCKED: no ground at target")
+						return
+					var corner_info := _find_corner_throw(char_pos, ground_point)
+					if corner_info.is_empty():
+						print("[GRENADE] BLOCKED: no corner throw route")
+						return
+					_grenade_start_override = corner_info.start
+					# キャラは開口部方向に向けてアニメーション（タップ方向ではない）
+					to_target = corner_info.opening_dir
+					print("[GRENADE] CORNER THROW: facing=%s target=%s start=%s opening=%s" % [to_target, ground_point, corner_info.start, corner_info.opening_dir])
+					# 距離はスタート→ターゲットの実飛行距離
+					var start_xz := Vector3(corner_info.start.x, 0.0, corner_info.start.z)
+					var target_xz := Vector3(ground_point.x, 0.0, ground_point.z)
+					distance = start_xz.distance_to(target_xz)
 			else:
 				return  # マップ範囲外
 
 	# エイミングモード終了
 	_exit_grenade_aiming()
 
-	# キャラクターをターゲット方向に向ける
+	# キャラクターをターゲット方向に向ける（TPSコントローラの向き更新をロック）
 	var facing_dir := to_target.normalized()
-	_player_character.set_facing_direction_vec(facing_dir)
+	print("[GRENADE] lock_facing dir=%s has_controller=%s" % [facing_dir, _tps_controller != null])
+	if _tps_controller:
+		_tps_controller.lock_facing(facing_dir)
+	else:
+		_player_character.set_facing_direction_vec(facing_dir)
 
 	# ターゲット位置を保存
 	_grenade_target_pos = ground_point
@@ -675,6 +704,133 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 		_player_character.anim_ctrl.play_throw_close()
 	else:
 		_player_character.anim_ctrl.play_throw_far()
+
+
+func _has_ground_at(pos: Vector3) -> bool:
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return false
+	var query := PhysicsRayQueryParameters3D.create(
+		pos + Vector3.UP * 2.0,
+		pos - Vector3.UP * 2.0
+	)
+	query.collision_mask = 1  # Ground layer only
+	return not space_state.intersect_ray(query).is_empty()
+
+
+## 開口部付近の壁際にいるかチェックし、シェーダーの影表示を切り替え
+func _check_near_opening() -> void:
+	_is_near_opening = false
+	if not _player_character:
+		return
+
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	var char_pos := _player_character.global_position
+	var char_h := Vector3(char_pos.x, 1.0, char_pos.z)
+
+	# 1.0m以内に壁があるか確認
+	var has_wall := false
+	for i in range(12):
+		var angle := deg_to_rad(float(i) * 30.0)
+		var dir := Vector3(sin(angle), 0.0, cos(angle))
+		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.0)
+		q.collision_mask = 2  # Wall layer
+		if not space_state.intersect_ray(q).is_empty():
+			has_wall = true
+			break
+
+	if has_wall:
+		# 開口部（壁がない方向かつフロアあり）が存在するか
+		for i in range(24):
+			var angle := deg_to_rad(float(i) * 15.0)
+			var dir := Vector3(sin(angle), 0.0, cos(angle))
+			var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 2.5)
+			q.collision_mask = 2
+			if space_state.intersect_ray(q).is_empty():
+				if _has_ground_at(Vector3(char_h.x + dir.x * 2.0, 0.0, char_h.z + dir.z * 2.0)):
+					_is_near_opening = true
+					break
+
+	print("[GRENADE] _check_near_opening: has_wall=%s result=%s" % [has_wall, _is_near_opening])
+
+	if _grenade_mat:
+		_grenade_mat.set_shader_parameter("shadow_min", 0.35 if _is_near_opening else 0.0)
+
+
+## 壁の角から内側に投げ込むためのスタート位置と開口部方向を探す
+## Returns: {start: Vector3, opening_dir: Vector3} or empty dict
+func _find_corner_throw(char_pos: Vector3, target_pos: Vector3) -> Dictionary:
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return {}
+
+	var char_h := Vector3(char_pos.x, 1.0, char_pos.z)
+	var target_h := Vector3(target_pos.x, 1.0, target_pos.z)
+	var target_dir := (Vector3(target_pos.x, 0.0, target_pos.z) - Vector3(char_pos.x, 0.0, char_pos.z)).normalized()
+
+	# キャラ→ターゲット間に壁があるか確認
+	var wall_q := PhysicsRayQueryParameters3D.create(char_h, target_h)
+	wall_q.collision_mask = 2  # Wall layer
+	var wall_r := space_state.intersect_ray(wall_q)
+	if wall_r.is_empty():
+		return {}  # 壁なし
+
+	# 壁が近い（1.5m以内）か確認 — 角にいる条件
+	if char_h.distance_to(wall_r.position) > 1.5:
+		return {}  # 壁が遠い
+
+	# === Step 1: 36方向スキャンで壁の有無マップを作成 ===
+	var scan_count := 36  # 10度刻み
+	var wall_hits: Array[bool] = []
+	var scan_dirs: Array[Vector3] = []
+	for i in range(scan_count):
+		var angle := deg_to_rad(float(i) * 10.0)
+		var dir := Vector3(sin(angle), 0.0, cos(angle))
+		scan_dirs.append(dir)
+		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.5)
+		q.collision_mask = 2
+		wall_hits.append(not space_state.intersect_ray(q).is_empty())
+
+	# === Step 2: 投擲スタート位置を探索（壁なし＋ターゲットまで見通しあり）===
+	var best_point := Vector3.ZERO
+	var best_score := -1.0
+	for i in range(scan_count):
+		if wall_hits[i]:
+			continue  # 壁がある方向はスキップ
+		var candidate := char_h + scan_dirs[i] * 1.0
+
+		# candidateからターゲットへの直線に壁がないか
+		var scan_q := PhysicsRayQueryParameters3D.create(candidate, target_h)
+		scan_q.collision_mask = 2
+		if not space_state.intersect_ray(scan_q).is_empty():
+			continue
+
+		# candidateにフロアがあるか
+		if not _has_ground_at(Vector3(candidate.x, 0.0, candidate.z)):
+			continue
+
+		# ターゲット方向との一致度でスコアリング
+		var score := scan_dirs[i].dot(target_dir)
+		if score > best_score:
+			best_score = score
+			best_point = candidate
+
+	if best_point == Vector3.ZERO:
+		return {}
+
+	# === Step 3: 開口部方向を算出（壁面に沿ってスタート側を向く）===
+	# 壁の法線から壁面方向（2つ）を求め、throw_start側を選ぶ
+	var wall_normal: Vector3 = wall_r.normal
+	var face_a := Vector3(-wall_normal.z, 0.0, wall_normal.x)   # 法線を90°回転
+	var face_b := Vector3(wall_normal.z, 0.0, -wall_normal.x)   # 法線を-90°回転
+	var start_dir: Vector3 = (best_point - char_h).normalized()
+	var opening_dir: Vector3 = face_a if face_a.dot(start_dir) > face_b.dot(start_dir) else face_b
+
+	print("[GRENADE] char=%s wall_hit=%s start=%s opening_dir=%s" % [char_h, wall_r.position, best_point, opening_dir])
+	return {start = best_point, opening_dir = opening_dir}
 
 
 func _on_throw_release() -> void:
@@ -687,6 +843,10 @@ func _on_throw_release() -> void:
 	var start_pos := _player_character.anim_ctrl.get_bone_global_position(GameConstants.BONE_LEFT_HAND)
 	if start_pos == Vector3.ZERO:
 		start_pos = _player_character.global_position + Vector3(0, GameConstants.GRENADE_START_HEIGHT, 0)
+	# コーナースロー時はスタート位置を角の向こう側にオーバーライド
+	if _grenade_start_override != Vector3.ZERO:
+		start_pos = _grenade_start_override
+		_grenade_start_override = Vector3.ZERO
 	var target_pos := _grenade_target_pos
 	target_pos.y = 0.0
 
@@ -709,6 +869,9 @@ func _on_throw_release() -> void:
 
 func _on_throw_finished() -> void:
 	_grenade_target_pos = Vector3.ZERO
+	_grenade_start_override = Vector3.ZERO
+	if _tps_controller:
+		_tps_controller.unlock_facing()
 
 
 func _update_grenade_count_ui() -> void:

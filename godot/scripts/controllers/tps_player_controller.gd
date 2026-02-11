@@ -65,6 +65,10 @@ var _last_move_dir: Vector3 = Vector3.ZERO
 # 右スティック操作中フラグ（自動エイム・自動射撃を一時停止するため）
 var _is_aim_stick_active: bool = false
 
+# 向き固定（投擲アニメーション中など）
+var _facing_locked: bool = false
+var _locked_facing: Vector3 = Vector3.FORWARD
+
 
 
 # ============================================
@@ -117,6 +121,21 @@ func process(delta: float) -> void:
 	_update_camera(delta)
 
 
+## 向きを固定する（投擲アニメーション中など）
+func lock_facing(dir: Vector3) -> void:
+	_facing_locked = true
+	_locked_facing = dir
+	print("[TPS] lock_facing dir=%s" % dir)
+	if _character:
+		_character.set_facing_direction_vec(dir)
+
+
+## 向き固定を解除する
+func unlock_facing() -> void:
+	_facing_locked = false
+	print("[TPS] unlock_facing")
+
+
 ## 入力処理（_inputから呼ぶ）
 func handle_input(event: InputEvent) -> void:
 	_handle_touch_input(event)
@@ -167,6 +186,11 @@ func _handle_movement(delta: float) -> void:
 # ============================================
 
 func _handle_aim(_delta: float) -> void:
+	# 0. 向き固定中はスキップ（投擲アニメーション等）
+	if _facing_locked:
+		_character.set_facing_direction_vec(_locked_facing)
+		return
+
 	# 1. 右スティック — 操作中は自動エイム・自動射撃を一時停止
 	_is_aim_stick_active = _aim_stick_input.length() > STICK_DEADZONE
 	if _is_aim_stick_active:

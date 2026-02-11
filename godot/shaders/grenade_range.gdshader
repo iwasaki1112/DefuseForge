@@ -16,6 +16,7 @@ uniform float ring_width = 0.12;
 // Visibility binarization
 uniform float visibility_threshold : hint_range(0.0, 1.0) = 0.5;
 uniform float visibility_aa : hint_range(0.0, 0.1) = 0.02;
+uniform float shadow_min : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 world_position;
 
@@ -36,18 +37,21 @@ void fragment() {
 	float aa = max(visibility_aa, fwidth(raw_visibility));
 	float visibility = smoothstep(visibility_threshold - aa, visibility_threshold + aa, raw_visibility);
 
+	// 開口部付近時: 影エリアも薄く表示（コーナースロー可能範囲を示す）
+	float effective_vis = mix(shadow_min, 1.0, visibility);
+
 	// Ring at throw range boundary
 	float dist = length(world_xz - char_position);
 	float ring_inner = throw_range - ring_width;
 	float ring = smoothstep(ring_inner - ring_width * 0.5, ring_inner, dist)
 	           * (1.0 - smoothstep(throw_range - ring_width * 0.2, throw_range, dist));
 
-	// Combine fill + ring (ring only where visible)
-	float fill_alpha = area_color.a * visibility;
-	float ring_alpha = ring_color.a * ring * visibility;
+	// Combine fill + ring（影エリアも含む完全な円）
+	float fill_alpha = area_color.a * effective_vis;
+	float ring_alpha = ring_color.a * ring * effective_vis;
 	float combined_alpha = max(fill_alpha, ring_alpha);
 
-	vec3 color = mix(area_color.rgb, ring_color.rgb, ring * visibility);
+	vec3 color = mix(area_color.rgb, ring_color.rgb, ring * effective_vis);
 
 	ALBEDO = color;
 	ALPHA = combined_alpha;
