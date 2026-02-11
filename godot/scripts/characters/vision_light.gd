@@ -22,7 +22,7 @@ var fov_degrees: float = 90.0
 var view_distance: float = 15.0
 
 ## 周辺視界設定（至近距離の360度視界）
-var peripheral_distance: float = 0.75
+var peripheral_distance: float = 0.5
 
 ## 回転補間用
 var _current_rotation: float = 0.0  ## 現在の補間された回転角度
