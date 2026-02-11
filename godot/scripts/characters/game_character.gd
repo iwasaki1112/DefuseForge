@@ -359,8 +359,8 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	_weapon_model.name = GameConstants.NODE_WEAPON_MODEL
 	socket.add_child(_weapon_model)
 
-	# ARP skeleton is 1.0 scale, weapon at 1:1
-	_weapon_model.scale = Vector3.ONE
+	# ARP skeleton is 1.0 scale, weapon enlarged for top-down visibility
+	_weapon_model.scale = Vector3.ONE * 1.4
 	_weapon_model.position = Vector3.ZERO
 	_weapon_model.rotation_degrees = Vector3.ZERO
 
@@ -392,6 +392,8 @@ func _update_left_hand_ik(weapon: WeaponPreset) -> void:
 
 	var grip_node := _weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
 	if grip_node:
+		if weapon.left_hand_grip_offset != Vector3.ZERO:
+			grip_node.position = weapon.left_hand_grip_offset
 		anim_ctrl.set_left_hand_grip(grip_node)
 	else:
 		anim_ctrl.set_left_hand_grip(null)

@@ -568,6 +568,7 @@ func _setup_grip_ui(weapon: WeaponPreset) -> void:
 
 	if _grip_node and weapon.left_hand_grip_enabled:
 		grip_toggle.set_pressed_no_signal(true)
+		# Read from grip node (already applied by game_character.equip_weapon)
 		var pos := _grip_node.position
 		grip_x_spin.set_value_no_signal(pos.x)
 		grip_x_slider.set_value_no_signal(pos.x)
