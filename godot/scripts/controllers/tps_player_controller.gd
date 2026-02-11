@@ -69,6 +69,9 @@ var _is_aim_stick_active: bool = false
 var _facing_locked: bool = false
 var _locked_facing: Vector3 = Vector3.FORWARD
 
+# マウス操作検知（PCのみ有効、モバイルではfalseのまま）
+var _mouse_active: bool = false
+
 
 
 # ============================================
@@ -138,6 +141,10 @@ func unlock_facing() -> void:
 
 ## 入力処理（_inputから呼ぶ）
 func handle_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_mouse_active = false
+	elif event is InputEventMouseMotion:
+		_mouse_active = true
 	_handle_touch_input(event)
 
 
@@ -205,8 +212,8 @@ func _handle_aim(_delta: float) -> void:
 			_character.set_facing_direction_vec(override_dir)
 			return
 
-	# 3. PC: マウスエイム（地面レイキャスト）
-	if _camera:
+	# 3. PC: マウスエイム（地面レイキャスト）— PC実マウス操作時のみ
+	if _mouse_active and _camera and not OS.has_feature("mobile"):
 		var viewport := _character.get_viewport()
 		if viewport:
 			var mouse_pos := viewport.get_mouse_position()
