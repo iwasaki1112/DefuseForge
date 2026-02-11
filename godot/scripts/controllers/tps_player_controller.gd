@@ -178,6 +178,8 @@ func _handle_movement(delta: float) -> void:
 		input_dir = input_dir.normalized()
 		move_dir = Vector3(input_dir.x, 0, input_dir.y).normalized()
 		_last_move_dir = move_dir
+	else:
+		_last_move_dir = Vector3.ZERO
 
 	var base_speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
 	_character.velocity = move_dir * base_speed
