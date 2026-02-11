@@ -49,11 +49,11 @@ const NODE_LEFT_HAND_IK_TARGET := "LeftHandIKTarget"
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "Rifle_Death_3"
-const ANIM_DEATH_FORWARD := "Rifle_Death_3"
-const ANIM_DEATH_BACKWARD := "Rifle_Death_3"
-const ANIM_DEATH_LEFT := "Rifle_Death_L"
-const ANIM_DEATH_RIGHT := "Rifle_Death_R"
+const ANIM_DEATH := "Rifle_Death_Forward"
+const ANIM_DEATH_FORWARD := "Rifle_Death_Forward"
+const ANIM_DEATH_BACKWARD := "Rifle_Death_Backward"
+const ANIM_DEATH_LEFT := "Rifle_Death_Left"
+const ANIM_DEATH_RIGHT := "Rifle_Death_Right"
 const ANIM_RIFLE_DOOR_KICK := "Rifle_Melee_Kick"
 const ANIM_PISTOL_DOOR_KICK := "Pistol_Melee_Kick"
 const ANIM_PISTOL_LOW_THROWING := "Pistol_Grenade_Throw_Single"
