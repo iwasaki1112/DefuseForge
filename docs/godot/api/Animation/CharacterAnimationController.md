@@ -83,11 +83,20 @@
 ### Lean
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `max_lean_degrees` | `float` | `25.0` | リーンの最大角度（度） |
+| `max_lean_degrees` | `float` | `25.0` | 移動リーンの最大角度（度） |
 | `lean_speed` | `float` | `10.0` | リーンの補間速度 |
 | `lean_deadzone` | `float` | `0.15` | 小さな横移動を無視する閾値 |
 
-> **Note:** リーンは上半身（`spine_bone`）にロールとして適用される。しゃがみ/走行中は無効。
+> **Note:** リーンは上半身（`spine_bone`）にロールとして適用される。
+
+### Turn Lean
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `turn_lean_degrees` | `float` | `15.0` | 方向転換時の最大リーン角度（度） |
+| `turn_lean_smoothing` | `float` | `12.0` | 角速度スムージング速度 |
+| `turn_lean_angular_ref` | `float` | `3.0` | 最大リーンとなる角速度（rad/s） |
+
+> **Note:** 方向転換（右スティック操作）時に上半身が回転方向へ自然にリーンする視覚エフェクト。移動リーンと加算で合成される。
 
 ### Bone Names
 | プロパティ | 型 | デフォルト | 説明 |
@@ -184,6 +193,7 @@ anim_ctrl.fire()
 - アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
 - TimeScaleによる移動速度同期でアニメーション速度を調整
 - `RecoilModifier`でプロシージャルリコイルを適用
+- `LeanModifier`で移動リーン＋ターンリーンを合成適用
 - `LeftHandIKModifier`で左手IKを制御
 - ARPリグ専用設計
 

@@ -31,6 +31,11 @@ signal door_open_finished() # ドアそっと開けアニメーション完了
 @export var lean_speed := 10.0
 @export var lean_deadzone := 0.15
 
+@export_group("Turn Lean")
+@export var turn_lean_degrees := 35.0    ## 方向転換時の最大リーン角度（度）
+@export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
+@export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
+
 @export_group("Bone Names")
 @export var upper_body_root := GameConstants.BONE_SPINE_1
 @export var spine_bone := GameConstants.BONE_SPINE_2
@@ -52,6 +57,8 @@ var _is_throwing := false
 var _is_opening_door := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
+var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
+var _smoothed_angular_vel := 0.0  # スムージング済み角速度(rad/s)
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 var _is_sprinting := false
 
@@ -957,6 +964,8 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 
 func _update_lean(movement_direction: Vector3, aim_direction: Vector3, delta: float) -> void:
 	var target_lean := 0.0
+
+	# --- 移動方向ベースのリーン（既存） ---
 	var move_dir := movement_direction
 	move_dir.y = 0
 	if move_dir.length() > 0.1:
@@ -969,6 +978,25 @@ func _update_lean(movement_direction: Vector3, aim_direction: Vector3, delta: fl
 			if absf(side_amount) > lean_deadzone:
 				var max_lean := deg_to_rad(max_lean_degrees)
 				target_lean = clampf(side_amount, -1.0, 1.0) * max_lean
+
+	# --- 方向転換ベースのリーン（ターンリーン） ---
+	var aim_dir := aim_direction
+	aim_dir.y = 0
+	if aim_dir.length_squared() > 0.001 and _prev_aim_for_turn.length_squared() > 0.001:
+		var cur := aim_dir.normalized()
+		var prev := _prev_aim_for_turn.normalized()
+		var angle_diff := prev.signed_angle_to(cur, Vector3.UP)
+		var angular_vel := angle_diff / maxf(delta, 0.001)
+		# 角速度のみスムージング（ノイズ除去）
+		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, angular_vel, 1.0 - exp(-turn_lean_smoothing * delta))
+	else:
+		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, 0.0, 1.0 - exp(-turn_lean_smoothing * delta))
+	# 回転方向にリーン、直接target_leanに加算
+	var max_turn := deg_to_rad(turn_lean_degrees)
+	target_lean += clampf(_smoothed_angular_vel / turn_lean_angular_ref, -1.0, 1.0) * max_turn
+
+	if aim_direction.length_squared() > 0.001:
+		_prev_aim_for_turn = aim_direction
 
 	_lean_amount = lerpf(_lean_amount, target_lean, 1.0 - exp(-lean_speed * delta))
 	if _lean_modifier and _lean_modifier.has_method("set_target_lean"):
