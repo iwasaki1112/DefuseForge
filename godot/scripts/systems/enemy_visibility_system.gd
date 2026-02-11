@@ -222,7 +222,14 @@ func _get_friendly_characters() -> Array[Node]:
 
 
 func _get_enemy_characters() -> Array[Node]:
-	return PlayerState.filter_enemies(_characters)
+	var result: Array[Node] = []
+	for character in _characters:
+		if PlayerState.is_enemy(character):
+			result.append(character)
+		# Team.NONE（hostage等）もFoWで可視性を制御する
+		elif character is GameCharacter and character.team == GameCharacter.Team.NONE:
+			result.append(character)
+	return result
 
 
 # ============================================

@@ -274,10 +274,13 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 		anim_player.add_animation_library("", hostage_lib)
 		anim_player.play("Hostage")
 
-	# hostagegグループに追加（識別用）
+	# hostageグループに追加（識別用）
 	character.add_to_group("hostages")
 
-	# game_manager.register_character()は呼ばない → 視界・戦闘・武器セットアップをスキップ
+	# EnemyVisibilitySystemに登録してFoWで可視性を制御（初期状態は非表示）
+	character.visible = false
+	if game_manager and game_manager.enemy_visibility_system:
+		game_manager.enemy_visibility_system.register_character(character)
 
 
 ## マルチプレイ時にローカルプレイヤーのキャラクターを特定

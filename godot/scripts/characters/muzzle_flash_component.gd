@@ -210,9 +210,10 @@ func _create() -> void:
 	_muzzle_flash = Node3D.new()
 	_muzzle_flash.name = "MuzzleFlash"
 
-	# 共通マテリアル作成
+	# 共通マテリアル作成（alpha=0で初期化し、GPUシェーダーを事前コンパイルさせる）
 	_muzzle_flash_mat = StandardMaterial3D.new()
 	_muzzle_flash_mat.albedo_texture = MUZZLE_FLASH_TEXTURE
+	_muzzle_flash_mat.albedo_color = Color(1, 1, 1, 0)
 	_muzzle_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_muzzle_flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	_muzzle_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -243,15 +244,15 @@ func _create() -> void:
 	quad2.material_override = _muzzle_flash_mat
 	_muzzle_flash.add_child(quad2)
 
-	# 光源
+	# 光源（energy=0で初期化、play()で3.0に設定）
 	_muzzle_flash_light = OmniLight3D.new()
 	_muzzle_flash_light.light_color = Color(1.0, 0.6, 0.2)
-	_muzzle_flash_light.light_energy = 3.0
+	_muzzle_flash_light.light_energy = 0.0
 	_muzzle_flash_light.omni_range = 2.0
 	_muzzle_flash_light.omni_attenuation = 2.0
 	_muzzle_flash.add_child(_muzzle_flash_light)
 
-	_muzzle_flash.visible = false
+	# visible=trueのままalpha=0/energy=0で追加し、GPUシェーダーを事前コンパイルさせる
 	_weapon_socket.add_child(_muzzle_flash)
 
 

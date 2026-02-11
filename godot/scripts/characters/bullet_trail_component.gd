@@ -175,7 +175,7 @@ func _ensure_trail_nodes() -> void:
 	_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
 	_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)
 	_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.8)
-	_bullet_trail_mat.set_shader_parameter("overall_alpha", 1.0)
+	_bullet_trail_mat.set_shader_parameter("overall_alpha", 0.0)
 
 	# Quad 1（水平面）
 	_bullet_trail_quad1 = MeshInstance3D.new()
@@ -197,8 +197,8 @@ func _ensure_trail_nodes() -> void:
 	_bullet_trail.add_child(_bullet_trail_quad2)
 
 	# ワールド空間に追加（_ready中のblocked回避）
+	# visible=trueのままalpha=0で追加し、GPUシェーダーを事前コンパイルさせる
 	_character.get_tree().root.add_child.call_deferred(_bullet_trail)
-	_bullet_trail.visible = false
 
 
 func _create_trail(start: Vector3, end: Vector3) -> void:
