@@ -204,9 +204,80 @@ func _spawn_characters() -> void:
 				_mode_provider.register_character(game_manager, enemy, _network_id_counter)
 				_network_id_counter += 1
 
+	# Hostage: 配置のみ（視界・戦闘・武器なし）
+	var hostage_spawns = preset.spawn_points_hostage
+	var hostage_rotations = preset.spawn_rotations_hostage
+	for i in range(hostage_spawns.size()):
+		var rot = hostage_rotations[i] if i < hostage_rotations.size() else 0.0
+		_spawn_hostage_character("hostage_lucas", hostage_spawns[i], rot)
+
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
 		game_manager.idle_manager.set_characters(game_manager.characters)
+
+
+## ホステージキャラクターをスポーン（視界・戦闘・武器なし、アニメーションのみ）
+func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation: float) -> void:
+	var preset = CharacterRegistry.get_preset(preset_id)
+	if not preset or not preset.model_scene:
+		push_warning("[GameScreen] Hostage preset not found: %s" % preset_id)
+		return
+
+	# GameCharacter + model + collision を直接構築（AnimationTree/Controller不要）
+	var character := GameCharacter.new()
+	character.name = preset_id
+	character.character_preset_id = preset_id
+	character.max_health = preset.max_health
+	character.team = GameCharacter.Team.NONE
+	character.is_invulnerable = true
+	character.position = spawn_pos
+
+	# 向き設定
+	var dir := Vector3(sin(y_rotation), 0, cos(y_rotation))
+	character.set_initial_facing(dir)
+
+	# モデル追加
+	var model: Node3D = preset.model_scene.instantiate() as Node3D
+	model.name = "CharacterModel"
+	character.add_child(model)
+
+	# コリジョン（壁・床との衝突用）
+	var collision := CollisionShape3D.new()
+	collision.name = "CollisionShape3D"
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	collision.shape = capsule
+	collision.position.y = 0.9
+	character.add_child(collision)
+	character.collision_mask = 3
+
+	# シーンに追加
+	game_manager.get_character_parent().add_child(character)
+
+	# AnimationPlayerに共有ライブラリを設定し、Hostageアニメーションをループ再生
+	var anim_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if not anim_player:
+		anim_player = AnimationPlayer.new()
+		anim_player.name = "AnimationPlayer"
+		model.add_child(anim_player)
+
+	# 共有ライブラリからHostageアニメーションだけをduplicate（共有インスタンス汚染を防ぐ）
+	var shared_lib := CharacterRegistry.get_animation_library()
+	if shared_lib and shared_lib.has_animation("Hostage"):
+		var hostage_anim := shared_lib.get_animation("Hostage").duplicate()
+		hostage_anim.loop_mode = Animation.LOOP_LINEAR
+		var hostage_lib := AnimationLibrary.new()
+		hostage_lib.add_animation("Hostage", hostage_anim)
+		if anim_player.has_animation_library(""):
+			anim_player.remove_animation_library("")
+		anim_player.add_animation_library("", hostage_lib)
+		anim_player.play("Hostage")
+
+	# hostagegグループに追加（識別用）
+	character.add_to_group("hostages")
+
+	# game_manager.register_character()は呼ばない → 視界・戦闘・武器セットアップをスキップ
 
 
 ## マルチプレイ時にローカルプレイヤーのキャラクターを特定

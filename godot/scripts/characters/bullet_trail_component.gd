@@ -196,8 +196,8 @@ func _ensure_trail_nodes() -> void:
 	_bullet_trail_quad2.material_override = _bullet_trail_mat
 	_bullet_trail.add_child(_bullet_trail_quad2)
 
-	# ワールド空間に追加
-	_character.get_tree().root.add_child(_bullet_trail)
+	# ワールド空間に追加（_ready中のblocked回避）
+	_character.get_tree().root.add_child.call_deferred(_bullet_trail)
 	_bullet_trail.visible = false
 
 

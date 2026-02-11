@@ -30,6 +30,7 @@ const PRESET_FILES := [
 	"res://data/characters/ares.tres",
 	"res://data/characters/dummy_ct.tres",
 	"res://data/characters/dummy_t.tres",
+	"res://data/characters/hostage_lucas.tres",
 ]
 
 # ============================================
@@ -142,6 +143,10 @@ func get_terrorists() -> Array:
 ## Get all Counter-Terrorist presets
 func get_counter_terrorists() -> Array:
 	return get_by_team(GameCharacter.Team.COUNTER_TERRORIST)
+
+## Get shared animation library
+func get_animation_library() -> AnimationLibrary:
+	return _animation_library
 
 # ============================================
 # Factory API

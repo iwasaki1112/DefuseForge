@@ -36,6 +36,9 @@ signal door_open_finished() # ドアそっと開けアニメーション完了
 @export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
 @export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
 
+@export_group("Model Offset")
+@export var model_y_offset := 0.40  ## Hips高さ補正（新アニメーション vs 旧アニメーションの差 + 微調整）
+
 @export_group("Bone Names")
 @export var upper_body_root := GameConstants.BONE_SPINE_1
 @export var spine_bone := GameConstants.BONE_SPINE_2
@@ -130,11 +133,14 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 	_skeleton = _find_skeleton(model)
 
 	if _skeleton:
+		# Hips高さ補正: 新アニメーションのHips位置が旧より低いためモデルを持ち上げる
+		if model_y_offset != 0.0:
+			_skeleton.position.y += model_y_offset
+
 		_setup_recoil_modifier()
 		_setup_lean_modifier()
 		_setup_left_hand_ik()
-		# Set AnimationPlayer root_node to model node (parent of Skeleton3D)
-		# Animation tracks use paths like "Skeleton3D:bonename"
+		# AnimationPlayer root_node: トラックパス root/Skeleton3D:Bone の解決基点
 		if _anim_player:
 			_anim_player.root_node = NodePath("..")
 
@@ -762,7 +768,12 @@ func _setup_animation_tree() -> void:
 
 	# --- Sprint animation ---
 	var sprint_anim := AnimationNodeAnimation.new()
-	sprint_anim.animation = prefix + "_SprintLoop"
+	var sprint_name := prefix + "_SprintLoop"
+	if _anim_player.has_animation(sprint_name):
+		sprint_anim.animation = sprint_name
+	else:
+		# SprintLoopがない場合はWalkFwdLoopで代替（TimeScaleで速度調整）
+		sprint_anim.animation = prefix + "_WalkFwdLoop"
 
 	# --- IdleBlend: 0=Idle, 1=Walk ---
 	var idle_blend := AnimationNodeBlend2.new()
@@ -811,6 +822,7 @@ func _setup_animation_tree() -> void:
 
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
+	_anim_tree.clear_caches()
 	_anim_tree.active = true
 
 

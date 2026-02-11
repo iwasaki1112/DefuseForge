@@ -48,6 +48,7 @@ var character_preset_id: String = ""
 # ============================================
 var current_health: float = 100.0
 var is_alive: bool = true
+var is_invulnerable: bool = false
 
 # ============================================
 # Remote Interpolation (リモートキャラクター用補間)
@@ -117,6 +118,8 @@ func _setup_effect_components() -> void:
 ## Take damage
 func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void:
 	if not is_alive:
+		return
+	if is_invulnerable:
 		return
 
 	current_health = max(0.0, current_health - amount)

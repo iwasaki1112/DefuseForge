@@ -136,14 +136,41 @@ func _setup_scene(preset: CharacterPreset) -> void:
 
 	# Apply shared animation library
 	if _animation_library:
+		print("[DEBUG] Animation library has %d animations: %s" % [_animation_library.get_animation_list().size(), str(_animation_library.get_animation_list())])
 		if anim_player.has_animation_library(""):
 			anim_player.remove_animation_library("")
 		anim_player.add_animation_library("", _animation_library)
+	else:
+		print("[DEBUG] WARNING: _animation_library is null!")
+
+	print("[DEBUG] AnimationPlayer has_animation('Rifle_Idle'): %s" % anim_player.has_animation("Rifle_Idle"))
+	print("[DEBUG] AnimationPlayer animation list: %s" % str(anim_player.get_animation_list()))
 
 	var anim_ctrl = CharacterAnimationController.new()
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 	anim_ctrl.setup(model, anim_player)
+
+	# Debug: check AnimationTree state after setup
+	var anim_tree = character.get_node_or_null("AnimationTree") as AnimationTree
+	if anim_tree:
+		print("[DEBUG] AnimationTree active: %s, anim_player path: %s" % [anim_tree.active, anim_tree.anim_player])
+		# Check blend parameters
+		for param in ["parameters/IdleBlend/blend_amount", "parameters/SpeedBlend/blend_amount", "parameters/TimeScale/scale"]:
+			print("[DEBUG] %s = %s" % [param, anim_tree.get(param)])
+		# Check if Idle animation node is valid
+		var tree_root = anim_tree.tree_root as AnimationNodeBlendTree
+		if tree_root:
+			var idle_node = tree_root.get_node("Idle") as AnimationNodeAnimation
+			if idle_node:
+				print("[DEBUG] Idle node animation: '%s'" % idle_node.animation)
+			var walk_node = tree_root.get_node("WalkBlend")
+			print("[DEBUG] WalkBlend node: %s" % (walk_node != null))
+		# Try direct AnimationPlayer play
+		print("[DEBUG] Trying direct anim_player.play('Rifle_Idle')...")
+		anim_player.play("Rifle_Idle")
+	else:
+		print("[DEBUG] WARNING: AnimationTree not found!")
 	character.set_muzzle_flash_preview(muzzle_preview_toggle.button_pressed)
 
 	character.position = Vector3(0, 0, 0)
@@ -321,15 +348,15 @@ func _set_ui_values(pos: Vector3, rot_bone_local: Vector3) -> void:
 	_update_preset_display()
 
 
-func _set_muzzle_ui_values(pos: Vector3, scale: float, rot: Vector3) -> void:
+func _set_muzzle_ui_values(pos: Vector3, muzzle_scale: float, rot: Vector3) -> void:
 	muzzle_pos_x_spin.set_value_no_signal(pos.x)
 	muzzle_pos_x_slider.set_value_no_signal(pos.x)
 	muzzle_pos_y_spin.set_value_no_signal(pos.y)
 	muzzle_pos_y_slider.set_value_no_signal(pos.y)
 	muzzle_pos_z_spin.set_value_no_signal(pos.z)
 	muzzle_pos_z_slider.set_value_no_signal(pos.z)
-	muzzle_scale_spin.set_value_no_signal(scale)
-	muzzle_scale_slider.set_value_no_signal(scale)
+	muzzle_scale_spin.set_value_no_signal(muzzle_scale)
+	muzzle_scale_slider.set_value_no_signal(muzzle_scale)
 	muzzle_rot_x_spin.set_value_no_signal(rot.x)
 	muzzle_rot_x_slider.set_value_no_signal(rot.x)
 	muzzle_rot_y_spin.set_value_no_signal(rot.y)
