@@ -63,8 +63,8 @@ WebSocketリレーサーバー方式を採用：
 ```
 
 - **リレーサーバー**: `server/relay/` (Go, Cloud Run)
-- **NetworkManager**: WebSocketPeerベースのルーム管理
-- **LobbyScreen**: ルームリスト表示・参加UI
+- **NetworkManager**: WebSocketPeerベースのマッチメイキング・ルーム管理
+- **LobbyScreen**: オートマッチングUI（画面表示で即マッチング開始）
 
 ### ローカル開発
 

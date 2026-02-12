@@ -2,12 +2,14 @@ package main
 
 // クライアント→サーバーのメッセージタイプ
 const (
-	MsgTypeCreateRoom = "CREATE_ROOM"
-	MsgTypeListRooms  = "LIST_ROOMS"
-	MsgTypeJoinRoom   = "JOIN_ROOM"
-	MsgTypeLeaveRoom  = "LEAVE_ROOM"
-	MsgTypeRelay      = "RELAY"
-	MsgTypeHeartbeat  = "HEARTBEAT"
+	MsgTypeCreateRoom  = "CREATE_ROOM"
+	MsgTypeListRooms   = "LIST_ROOMS"
+	MsgTypeJoinRoom    = "JOIN_ROOM"
+	MsgTypeLeaveRoom   = "LEAVE_ROOM"
+	MsgTypeRelay       = "RELAY"
+	MsgTypeHeartbeat   = "HEARTBEAT"
+	MsgTypeFindMatch   = "FIND_MATCH"
+	MsgTypeCancelMatch = "CANCEL_MATCH"
 )
 
 // サーバー→クライアントのメッセージタイプ
@@ -20,6 +22,7 @@ const (
 	MsgTypeMessage          = "MESSAGE"
 	MsgTypeError            = "ERROR"
 	MsgTypeHeartbeatAck     = "HEARTBEAT_ACK"
+	MsgTypeMatchFound       = "MATCH_FOUND"
 )
 
 // ClientMessage クライアントからのメッセージ
@@ -87,6 +90,14 @@ type RelayPayload struct {
 // ErrorPayload エラー
 type ErrorPayload struct {
 	Message string `json:"message"`
+}
+
+// MatchFoundPayload マッチ成立通知
+type MatchFoundPayload struct {
+	RoomID  string       `json:"room_id"`
+	PeerID  int          `json:"peer_id"`
+	MapID   string       `json:"map_id"`
+	Players []PlayerInfo `json:"players"`
 }
 
 // NewServerMessage サーバーメッセージを作成

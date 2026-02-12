@@ -14,8 +14,9 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 └─────────┘     └─────────────────┘     └─────────┘
 ```
 
-- **ホスト**: ルームを作成し、`peer_id=1`を持つ
-- **クライアント**: ルームリストから選択して参加
+- **ホスト**: マッチ成立時に先にキューに入ったプレイヤー（`peer_id=1`）
+- **クライアント**: マッチ成立時に後からキューに入ったプレイヤー（`peer_id=2`）
+- **マッチング**: `find_match()`でオートマッチングキューに参加、2人揃ったらサーバーがルーム自動作成
 
 ## 状態列挙体 (ConnectionState)
 
@@ -40,8 +41,16 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 | `room_list_received` | `rooms: Array` | ルーム一覧を受信した時 |
 | `room_created` | `room_id: String` | ルーム作成が完了した時 |
 | `room_joined` | `room_id: String` | ルーム参加が完了した時 |
+| `match_found` | `room_id: String, map_id: String` | オートマッチが成立した時 |
 
 ## メソッド
+
+### マッチメイキング
+
+| 名前 | 戻り値 | 説明 |
+| :--- | :--- | :--- |
+| `find_match(player_name)` | `bool` | オートマッチングキューに参加します。2人揃うとサーバーがルーム自動作成し`match_found`シグナルが発火します。 |
+| `cancel_match()` | `void` | マッチングをキャンセルして切断します。 |
 
 ### ルーム管理
 
@@ -82,24 +91,18 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 ## 使用例
 
 ```gdscript
-# ルーム作成（ホスト）
-func _on_host_pressed():
-    if network_manager.create_room("My Room", "HostPlayer"):
-        print("ルーム作成中...")
+# オートマッチング（推奨）
+func _ready():
+    network_manager.match_found.connect(_on_match_found)
+    network_manager.find_match("PlayerName")
 
-# ルーム一覧取得
-func _on_join_pressed():
-    network_manager.room_list_received.connect(_on_room_list)
-    network_manager.request_room_list()
+func _on_match_found(room_id: String, map_id: String):
+    print("マッチ成立！ルーム: %s, マップ: %s" % [room_id, map_id])
+    _start_game(map_id)
 
-func _on_room_list(rooms: Array):
-    for room in rooms:
-        print("Room: %s (%d/%d)" % [room.name, room.player_count, room.max_players])
-
-# ルーム参加
-func _join_room(room_id: String):
-    if network_manager.join_room(room_id, "ClientPlayer"):
-        print("参加中...")
+# マッチングキャンセル
+func _on_cancel_pressed():
+    network_manager.cancel_match()
 ```
 
 ## 非推奨API

@@ -213,6 +213,10 @@ func (c *Client) handleMessage(msg ClientMessage) {
 		c.handleLeaveRoom()
 	case MsgTypeRelay:
 		c.handleRelay(msg)
+	case MsgTypeFindMatch:
+		c.handleFindMatch(msg)
+	case MsgTypeCancelMatch:
+		c.handleCancelMatch()
 	case MsgTypeHeartbeat:
 		c.SendMessage(NewServerMessage(MsgTypeHeartbeatAck, nil))
 	default:
@@ -325,6 +329,27 @@ func (c *Client) handleLeaveRoom() {
 	}
 
 	log.Printf("Player %s left room %s", c.GetName(), roomName)
+}
+
+// handleFindMatch マッチ待機キューに追加
+func (c *Client) handleFindMatch(msg ClientMessage) {
+	if c.GetRoom() != nil {
+		c.SendMessage(NewErrorMessage("Already in a room"))
+		return
+	}
+
+	playerName := msg.PlayerName
+	if playerName == "" {
+		playerName = "Player"
+	}
+	c.SetName(playerName)
+
+	c.hub.AddToMatchQueue(c)
+}
+
+// handleCancelMatch マッチ待機キャンセル
+func (c *Client) handleCancelMatch() {
+	c.hub.RemoveFromMatchQueue(c)
 }
 
 // handleRelay メッセージリレー

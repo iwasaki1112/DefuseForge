@@ -25,6 +25,9 @@ signal room_list_received(rooms: Array)
 signal room_created(room_id: String)
 signal room_joined(room_id: String)
 
+## マッチメイキングシグナル
+signal match_found(room_id: String, map_id: String)
+
 ## 設定
 const MAX_PLAYERS: int = 4
 
@@ -200,6 +203,35 @@ func join_room(room_id: String, player_name: String = "Client") -> bool:
 
 	if Debug.enabled: print("NetworkManager: Joining room: %s" % room_id)
 	return true
+
+
+## マッチメイキング開始
+func find_match(player_name: String = "Player") -> bool:
+	if _state != ConnectionState.DISCONNECTED:
+		push_warning("NetworkManager: Already connected")
+		return false
+
+	if not _connect_to_relay():
+		connection_failed.emit("リレーサーバーへの接続失敗")
+		return false
+
+	_state = ConnectionState.CONNECTING
+	connection_state_changed.emit(_state)
+
+	_pending_action = {
+		"type": "FIND_MATCH",
+		"player_name": player_name
+	}
+
+	if Debug.enabled: print("NetworkManager: Finding match as %s" % player_name)
+	return true
+
+
+## マッチメイキングキャンセル
+func cancel_match() -> void:
+	if _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		_send_to_server({"type": "CANCEL_MATCH"})
+	disconnect_from_game()
 
 
 ## 切断
@@ -396,6 +428,8 @@ func _process_single_message(json_string: String) -> void:
 			_on_peer_disconnected_relay(payload)
 		"MESSAGE":
 			_on_relay_message(payload)
+		"MATCH_FOUND":
+			_on_match_found(payload)
 		"ERROR":
 			_on_error(payload)
 		"HEARTBEAT_ACK":
@@ -508,6 +542,36 @@ func _on_room_joined(payload: Dictionary) -> void:
 	room_joined.emit(_room_id)
 	players_updated.emit()
 	if Debug.enabled: print("NetworkManager: Joined room - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+
+
+func _on_match_found(payload: Dictionary) -> void:
+	_clear_pending_action_sent()
+	_room_id = payload.get("room_id", "")
+	_local_peer_id = payload.get("peer_id", 0)
+	var map_id: String = payload.get("map_id", "home")
+
+	# peer_id=1ならホスト
+	if _local_peer_id == 1:
+		_state = ConnectionState.HOST
+	else:
+		_state = ConnectionState.CONNECTED
+
+	# プレイヤー情報を構築
+	_players.clear()
+	var players_data: Array = payload.get("players", [])
+	for player in players_data:
+		var pid: int = player.get("peer_id", 0)
+		if pid > 0:
+			_players[pid] = {
+				"name": player.get("name", "Player"),
+				"ready": true,
+				"team": GameCharacter.Team.COUNTER_TERRORIST if pid == 1 else GameCharacter.Team.TERRORIST
+			}
+
+	connection_state_changed.emit(_state)
+	players_updated.emit()
+	match_found.emit(_room_id, map_id)
+	if Debug.enabled: print("NetworkManager: Match found! Room: %s, Map: %s, PeerID: %d" % [_room_id, map_id, _local_peer_id])
 
 
 func _on_peer_connected_relay(payload: Dictionary) -> void:
