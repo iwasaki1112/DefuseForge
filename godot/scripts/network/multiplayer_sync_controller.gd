@@ -3,12 +3,6 @@ class_name MultiplayerSyncController
 ## マルチプレイヤー同期コントローラー
 ## GameManagerとLocalNetworkBus間の同期処理を管理
 
-## 同期イベントシグナル
-signal sync_state_received(snapshot: SyncState.GameStateSnapshot)
-signal character_updated_remote(char_state: NetworkMessages.CharacterStateMessage)
-signal round_state_updated(round_state: NetworkMessages.RoundStateMessage)
-signal game_event_received(event: NetworkMessages.GameEventMessage)
-
 ## 参照（LocalNetworkBusまたはNetworkBusAdapterを受け入れ）
 var network_bus: Node
 var game_manager: GameManager
@@ -317,7 +311,6 @@ func _handle_state_sync(data: Dictionary) -> void:
 
 	var snapshot := _dict_to_snapshot(data)
 	game_manager.apply_game_state_snapshot(snapshot)
-	sync_state_received.emit(snapshot)
 
 
 func _handle_character_update(data: Dictionary) -> void:
@@ -373,7 +366,6 @@ func _apply_character_state(char_state: NetworkMessages.CharacterStateMessage) -
 	if character:
 		if not character.is_local():
 			character.apply_remote_state(char_state)
-	character_updated_remote.emit(char_state)
 
 
 func _handle_round_state(data: Dictionary) -> void:
@@ -383,12 +375,10 @@ func _handle_round_state(data: Dictionary) -> void:
 	var round_state := _dict_to_round_state(data)
 	if game_manager.round_manager:
 		game_manager.round_manager.apply_round_state(round_state)
-	round_state_updated.emit(round_state)
 
 
 func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 	var event := _dict_to_game_event(data)
-	game_event_received.emit(event)
 
 	# ホストの場合、クライアントからのイベントを他のクライアントに転送
 	if is_host and from_peer != peer_id:

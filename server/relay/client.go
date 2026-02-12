@@ -203,12 +203,6 @@ func (c *Client) writePump() {
 // handleMessage メッセージを処理
 func (c *Client) handleMessage(msg ClientMessage) {
 	switch msg.Type {
-	case MsgTypeCreateRoom:
-		c.handleCreateRoom(msg)
-	case MsgTypeListRooms:
-		c.handleListRooms()
-	case MsgTypeJoinRoom:
-		c.handleJoinRoom(msg)
 	case MsgTypeLeaveRoom:
 		c.handleLeaveRoom()
 	case MsgTypeRelay:
@@ -222,87 +216,6 @@ func (c *Client) handleMessage(msg ClientMessage) {
 	default:
 		c.SendMessage(NewErrorMessage("Unknown message type: " + msg.Type))
 	}
-}
-
-// handleCreateRoom ルーム作成
-func (c *Client) handleCreateRoom(msg ClientMessage) {
-	if c.GetRoom() != nil {
-		c.SendMessage(NewErrorMessage("Already in a room"))
-		return
-	}
-
-	roomName := msg.RoomName
-	if roomName == "" {
-		roomName = "Room"
-	}
-
-	playerName := msg.PlayerName
-	if playerName == "" {
-		playerName = "Host"
-	}
-	c.SetName(playerName)
-
-	room := c.hub.CreateRoom(roomName)
-	room.AddClient(c)
-
-	c.SendMessage(NewServerMessage(MsgTypeRoomCreated, RoomCreatedPayload{
-		RoomID: room.ID,
-		PeerID: c.GetPeerID(),
-	}))
-
-	log.Printf("Room created: %s (%s) by %s", room.Name, room.ID, playerName)
-}
-
-// handleListRooms ルーム一覧取得
-func (c *Client) handleListRooms() {
-	rooms := c.hub.GetRoomList()
-	c.SendMessage(NewServerMessage(MsgTypeRoomList, RoomListPayload{
-		Rooms: rooms,
-	}))
-}
-
-// handleJoinRoom ルーム参加
-func (c *Client) handleJoinRoom(msg ClientMessage) {
-	if c.GetRoom() != nil {
-		c.SendMessage(NewErrorMessage("Already in a room"))
-		return
-	}
-
-	room := c.hub.GetRoom(msg.RoomID)
-	if room == nil {
-		c.SendMessage(NewErrorMessage("Room not found"))
-		return
-	}
-
-	if room.IsFull() {
-		c.SendMessage(NewErrorMessage("Room is full"))
-		return
-	}
-
-	playerName := msg.PlayerName
-	if playerName == "" {
-		playerName = "Player"
-	}
-	c.SetName(playerName)
-
-	room.AddClient(c)
-
-	// 既存プレイヤー一覧を取得
-	players := room.GetPlayerList()
-
-	c.SendMessage(NewServerMessage(MsgTypeRoomJoined, RoomJoinedPayload{
-		RoomID:  room.ID,
-		PeerID:  c.GetPeerID(),
-		Players: players,
-	}))
-
-	// 他のプレイヤーに新規参加を通知
-	room.BroadcastExcept(c, NewServerMessage(MsgTypePeerConnected, PeerEventPayload{
-		PeerID: c.GetPeerID(),
-		Name:   c.GetName(),
-	}))
-
-	log.Printf("Player %s joined room %s (%s)", playerName, room.Name, room.ID)
 }
 
 // handleLeaveRoom ルーム退出

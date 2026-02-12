@@ -13,7 +13,6 @@ signal fired()
 signal throw_release()      # グレネードをリリースするタイミング
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
-signal talking_finished()   # Talkingアニメーション完了/中断
 
 # Export settings
 @export_group("Movement Speed")
@@ -624,8 +623,6 @@ func stop_talking() -> void:
 			_anim_player.play(idle_anim_name, crossfade_time)
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
-
-	talking_finished.emit()
 
 
 ## Check if talking animation is playing

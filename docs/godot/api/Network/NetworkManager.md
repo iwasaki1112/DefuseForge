@@ -3,7 +3,7 @@
 **継承:** `Node`
 
 ネットワーク接続管理クラス。
-WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム管理、プレイヤー管理、メッセージリレーを担当します。
+WebSocketリレーサーバー経由でのマルチプレイ接続、マッチメイキング、プレイヤー管理、メッセージリレーを担当します。
 
 ## アーキテクチャ
 
@@ -16,7 +16,7 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 
 - **ホスト**: マッチ成立時に先にキューに入ったプレイヤー（`peer_id=1`）
 - **クライアント**: マッチ成立時に後からキューに入ったプレイヤー（`peer_id=2`）
-- **マッチング**: `find_match()`でオートマッチングキューに参加、2人揃ったらサーバーがルーム自動作成
+- **マッチング**: `find_match()`でオートマッチングキューに参加、2人揃ったらサーバーがルーム自動作成・ゲーム開始
 
 ## 状態列挙体 (ConnectionState)
 
@@ -38,9 +38,6 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 | `message_received` | `from_peer: int, msg_type: int, data: Dictionary` | リレーメッセージを受信した時 |
 | `all_peers_ready` | `void` | 全プレイヤーの準備が完了した時（ホストのみ） |
 | `players_updated` | `void` | プレイヤーリストが更新された時 |
-| `room_list_received` | `rooms: Array` | ルーム一覧を受信した時 |
-| `room_created` | `room_id: String` | ルーム作成が完了した時 |
-| `room_joined` | `room_id: String` | ルーム参加が完了した時 |
 | `match_found` | `room_id: String, map_id: String` | オートマッチが成立した時 |
 
 ## メソッド
@@ -52,13 +49,10 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 | `find_match(player_name)` | `bool` | オートマッチングキューに参加します。2人揃うとサーバーがルーム自動作成し`match_found`シグナルが発火します。 |
 | `cancel_match()` | `void` | マッチングをキャンセルして切断します。 |
 
-### ルーム管理
+### 接続管理
 
 | 名前 | 戻り値 | 説明 |
 | :--- | :--- | :--- |
-| `create_room(room_name, player_name)` | `bool` | ルームを作成してホストになります。 |
-| `join_room(room_id, player_name)` | `bool` | 指定IDのルームに参加します。 |
-| `request_room_list()` | `bool` | 利用可能なルーム一覧を要求します。 |
 | `disconnect_from_game()` | `void` | ルームから退出し、接続を切断します。 |
 
 ### プレイヤー管理
@@ -86,7 +80,6 @@ WebSocketリレーサーバー経由でのマルチプレイ接続、ルーム�
 | `get_local_peer_id()` | `int` | ローカルのピアID |
 | `get_state()` | `ConnectionState` | 現在の接続状態 |
 | `get_room_id()` | `String` | 現在のルームID |
-| `get_room_name()` | `String` | 現在のルーム名 |
 
 ## 使用例
 
@@ -105,13 +98,3 @@ func _on_cancel_pressed():
     network_manager.cancel_match()
 ```
 
-## 非推奨API
-
-以下のAPIは後方互換性のために残されていますが、使用は推奨されません：
-
-| 名前 | 代替 |
-| :--- | :--- |
-| `host_game(port, name)` | `create_room(room_name, player_name)` |
-| `join_game(ip, port, name)` | `join_room(room_id, player_name)` |
-| `get_local_ip()` | 不要（リレー方式では使用しない） |
-| `get_port()` | 不要（リレー方式では使用しない） |

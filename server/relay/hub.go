@@ -81,46 +81,11 @@ func (h *Hub) Run() {
 	}
 }
 
-// CreateRoom 新しいルームを作成
-func (h *Hub) CreateRoom(name string) *Room {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	id := h.generateRoomID()
-	room := NewRoom(id, name, h)
-	h.rooms[id] = room
-	return room
-}
-
-// GetRoom ルームを取得
-func (h *Hub) GetRoom(id string) *Room {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.rooms[id]
-}
-
 // RemoveRoom ルームを削除
 func (h *Hub) RemoveRoom(id string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.rooms, id)
-}
-
-// GetRoomList ルーム一覧を取得
-func (h *Hub) GetRoomList() []RoomInfo {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	list := make([]RoomInfo, 0, len(h.rooms))
-	for _, room := range h.rooms {
-		list = append(list, RoomInfo{
-			ID:          room.ID,
-			Name:        room.Name,
-			PlayerCount: room.GetPlayerCount(),
-			MaxPlayers:  MaxPlayers,
-		})
-	}
-	return list
 }
 
 // generateRoomID ランダムなルームIDを生成（4文字の16進数）

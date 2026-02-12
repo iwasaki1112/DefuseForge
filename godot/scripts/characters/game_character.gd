@@ -592,7 +592,6 @@ func _die(killer: Node3D = null, is_headshot: bool = false) -> void:
 	# Make corpse passable by other characters but keep ground collision
 	_make_corpse_passable()
 
-	# Emit died signal for path cleanup
 	died.emit(self)
 
 ## Calculate HitDirection from attacker position
