@@ -45,6 +45,11 @@ var _grenade_start_override: Vector3 = Vector3.ZERO
 var _is_near_opening: bool = false
 var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
 
+## グレネードエイミング中の左側タッチ保留（タップ/ドラッグ判定用）
+const GRENADE_TAP_DRAG_THRESHOLD := 20.0  # ドラッグ判定の閾値（px）
+var _grenade_pending_touch_idx: int = -1
+var _grenade_pending_touch_pos: Vector2 = Vector2.ZERO
+
 ## グレネードUI
 var _grenade_btn: TextureButton = null
 var _grenade_count_label: Label = null
@@ -509,22 +514,68 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# グレネードエイミング中: 移動入力をブロックし、タッチ/クリックはターゲット選択のみ
+	# グレネードエイミング中: 左側タッチはドラッグ判定で競合回避
 	if _is_grenade_aiming:
+		var screen_half_x := get_viewport().get_visible_rect().size.x * 0.5
 		if event is InputEventScreenTouch:
 			var touch := event as InputEventScreenTouch
 			if touch.pressed:
-				_handle_grenade_target_tap(touch.position)
-				get_viewport().set_input_as_handled()
-				return
+				if touch.position.x < screen_half_x:
+					# 左側: タップかドラッグか判定するため保留
+					_grenade_pending_touch_idx = touch.index
+					_grenade_pending_touch_pos = touch.position
+				else:
+					# 右側: 即座にターゲット選択
+					_handle_grenade_target_tap(touch.position)
+			else:
+				# リリース: 保留中タッチならドラッグなし=タップとしてターゲット選択
+				if touch.index == _grenade_pending_touch_idx:
+					_handle_grenade_target_tap(_grenade_pending_touch_pos)
+					_grenade_pending_touch_idx = -1
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventScreenDrag:
+			var drag := event as InputEventScreenDrag
+			if drag.index == _grenade_pending_touch_idx:
+				var drag_dist := drag.position.distance_to(_grenade_pending_touch_pos)
+				if drag_dist > GRENADE_TAP_DRAG_THRESHOLD:
+					# ドラッグ判定 → ジョイスティック操作意図 → エイミングキャンセル
+					_grenade_pending_touch_idx = -1
+					_exit_grenade_aiming()
+					# キャンセル後、ドラッグイベントをTPSコントローラーに渡さない
+					# （ジョイスティック状態は次のタッチで開始される）
+					get_viewport().set_input_as_handled()
+					return
+			get_viewport().set_input_as_handled()
+			return
 		if event is InputEventMouseButton:
 			var mb := event as InputEventMouseButton
 			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 				_handle_grenade_target_tap(mb.position)
 				get_viewport().set_input_as_handled()
 				return
+		# WASD入力チェック（キーイベント）
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			if key.pressed and _is_wasd_key(key.keycode):
+				_exit_grenade_aiming()
+				get_viewport().set_input_as_handled()
+				return
 		get_viewport().set_input_as_handled()
 		return
+
+	# Talk中: 移動入力でキャンセル（タッチイベントはTPSコントローラに渡す）
+	if _is_talking:
+		if _tps_controller:
+			_tps_controller.handle_input(event)
+		# WASD入力でキャンセル
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			if key.pressed and _is_wasd_key(key.keycode):
+				_cancel_talking()
+		get_viewport().set_input_as_handled()
+		return
+
 	if _tps_controller:
 		_tps_controller.handle_input(event)
 
@@ -594,6 +645,7 @@ func _enter_grenade_aiming() -> void:
 
 func _exit_grenade_aiming() -> void:
 	_is_grenade_aiming = false
+	_grenade_pending_touch_idx = -1
 	_hide_range_indicator()
 	if _grenade_btn:
 		_grenade_btn.modulate = Color.WHITE
@@ -1205,6 +1257,11 @@ func _update_talking(delta: float) -> void:
 		_cancel_talking()
 		return
 
+	# 移動入力でキャンセル（左スティック or WASD）
+	if _tps_controller and _tps_controller.has_move_input():
+		_cancel_talking()
+		return
+
 	# タイマー進行
 	_talking_elapsed += delta
 
@@ -1475,3 +1532,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_vision_debug_enabled = not _vision_debug_enabled
 			game_manager.set_vision_debug_draw(_vision_debug_enabled)
 			if Debug.enabled: print("[DEBUG] Vision debug draw: %s" % ("ON" if _vision_debug_enabled else "OFF"))
+
+
+## WASDキーかどうか判定
+func _is_wasd_key(keycode: Key) -> bool:
+	return keycode == KEY_W or keycode == KEY_A or keycode == KEY_S or keycode == KEY_D

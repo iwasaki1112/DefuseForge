@@ -148,6 +148,21 @@ func handle_input(event: InputEvent) -> void:
 	_handle_touch_input(event)
 
 
+## 移動入力があるかどうかを返す（スティック or WASD）
+func has_move_input() -> bool:
+	if _stick_input.length() > STICK_DEADZONE:
+		return true
+	if Input.get_action_strength("move_forward") > 0.0:
+		return true
+	if Input.get_action_strength("move_backward") > 0.0:
+		return true
+	if Input.get_action_strength("move_left") > 0.0:
+		return true
+	if Input.get_action_strength("move_right") > 0.0:
+		return true
+	return false
+
+
 ## 操作対象のキャラクターを返す
 func get_character() -> GameCharacter:
 	return _character

@@ -64,6 +64,9 @@ GameScreenで使用するTPS操作の中核コンポーネント。左スティ�
 ### handle_input(event: InputEvent) -> void
 入力処理。`_input`から呼び出す。タッチ入力（モバイルジョイスティック）を処理する。
 
+### has_move_input() -> bool
+移動入力があるかどうかを返す。左スティック（デッドゾーン超過）またはWASD/アクションマッピングのいずれかが入力中の場合trueを返す。GameScreenがグレネードエイミング中やTalk中に移動意図を検知してキャンセルするために使用。
+
 ### get_character() -> GameCharacter
 操作対象のキャラクターを返す。
 
