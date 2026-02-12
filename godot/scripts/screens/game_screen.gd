@@ -257,9 +257,11 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 	var dir := Vector3(sin(y_rotation), 0, cos(y_rotation))
 	character.set_initial_facing(dir)
 
-	# モデル追加
+	# モデル追加（共通スケール適用 + 地面めり込み補正）
 	var model: Node3D = preset.model_scene.instantiate() as Node3D
 	model.name = "CharacterModel"
+	model.scale = Vector3.ONE * GameConstants.CHARACTER_MODEL_SCALE
+	model.position.y = 0.15  # モデル原点が足元より上にあるため補正
 	character.add_child(model)
 
 	# コリジョン（壁・床との衝突用）

@@ -179,8 +179,9 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 	character.team = preset.team
 	character.position = spawn_position
 
-	# Add model as child
+	# Add model as child (共通スケール適用)
 	model.name = "CharacterModel"
+	model.scale = Vector3.ONE * GameConstants.CHARACTER_MODEL_SCALE
 	character.add_child(model)
 
 	# Setup collision shape (物理衝突用 - 小さめ)

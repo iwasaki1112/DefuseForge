@@ -964,7 +964,8 @@
 				953,
 				954,
 				955,
-				956
+				956,
+				957
 			]
 		}
 	],
@@ -9966,6 +9967,14 @@
 				-0.05000000074505806,
 				0
 			]
+		},
+		{
+			"name":"spawn_hostage",
+			"translation":[
+				1.5252392292022705,
+				0,
+				4.5713958740234375
+			]
 		}
 	],
 	"materials":[
@@ -9973,9 +9982,6 @@
 			"doubleSided":true,
 			"name":"color",
 			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":0
-				},
 				"metallicFactor":0
 			}
 		},
@@ -23388,19 +23394,6 @@
 					"indices":3
 				}
 			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"color",
-			"uri":"color.png"
 		}
 	],
 	"accessors":[
@@ -67841,12 +67834,6 @@
 			"byteLength":32,
 			"byteOffset":164936,
 			"target":34962
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
 		}
 	],
 	"buffers":[
