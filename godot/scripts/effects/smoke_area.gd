@@ -33,10 +33,17 @@ var _smoke_manager: SmokeAreaManager = null
 var _radius_map_texture: ImageTexture = null
 ## パーティクルクリップ用シェーダーマテリアル
 var _particle_clip_mat: ShaderMaterial = null
+## FogOfWarSystem参照（FoW可視性チェック用）
+var _fow_system = null
 
 
 func _ready() -> void:
 	_particles = $GPUParticles3D if has_node("GPUParticles3D") else null
+
+
+## FogOfWarSystemを設定（FoW可視性チェック用）
+func set_fow_system(fow) -> void:
+	_fow_system = fow
 
 
 ## スモークを開始
@@ -52,6 +59,9 @@ func start(manager: SmokeAreaManager = null) -> void:
 
 	# 壁クリップシェーダーを構築・適用（位置確定後に実行）
 	_setup_particle_wall_clip()
+
+	# FoW可視性をシェーダーに適用（パーティクル単位でFoWクリッピング）
+	_apply_fow_to_shader()
 
 	# パーティクル開始
 	if _particles:
@@ -106,6 +116,23 @@ func _update_visuals() -> void:
 		_particle_clip_mat.set_shader_parameter("current_radius", _current_radius)
 		var scale_factor := _current_radius / max_radius if max_radius > 0 else 0.0
 		_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", scale_factor)
+
+
+## FoW可視性テクスチャをパーティクルシェーダーに適用（1回のみ呼出し）
+## ViewportTextureはライブ参照のため毎フレーム更新不要
+func _apply_fow_to_shader() -> void:
+	if not _fow_system or not _particle_clip_mat:
+		return
+
+	var vis_tex = _fow_system.get_visibility_texture()
+	if not vis_tex:
+		return
+
+	var half_map: Vector2 = _fow_system.map_size / 2.0
+	_particle_clip_mat.set_shader_parameter("fow_visibility_texture", vis_tex)
+	_particle_clip_mat.set_shader_parameter("fow_map_min", Vector2(-half_map.x, -half_map.y))
+	_particle_clip_mat.set_shader_parameter("fow_map_max", Vector2(half_map.x, half_map.y))
+	_particle_clip_mat.set_shader_parameter("fow_enabled", 1.0)
 
 
 ## スモークを停止

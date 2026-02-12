@@ -78,6 +78,10 @@ func _deploy_smoke() -> void:
 	smoke_area.expand_time = smoke_expand_time
 	smoke_area.fade_time = smoke_fade_time
 
+	# FoWシステムを渡す（視界外の煙を非表示にするため）
+	if _fow_system:
+		smoke_area.set_fow_system(_fow_system)
+
 	# スモークを開始
 	smoke_area.start(_smoke_manager)
 

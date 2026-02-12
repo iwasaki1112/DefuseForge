@@ -17,6 +17,12 @@ uniform float current_radius = 0.0;
 // クリップ境界でのフェード幅（メートル）
 uniform float clip_fade_width = 0.5;
 
+// FoW可視性テクスチャ（パーティクル単位のFoWクリッピング用）
+uniform sampler2D fow_visibility_texture : filter_linear, hint_default_white;
+uniform vec2 fow_map_min = vec2(-20.0, -20.0);
+uniform vec2 fow_map_max = vec2(20.0, 20.0);
+uniform float fow_enabled = 0.0;
+
 varying vec3 v_world_pos;
 
 void vertex() {
@@ -68,8 +74,21 @@ void fragment() {
 	float height_above_ground = v_world_pos.y - smoke_center.y;
 	float height_alpha = smoothstep(0.0, 0.5, height_above_ground);
 
-	// 最終アルファ = 煙色α × パーティクル寿命α × ライフサイクル × 壁クリップ × 高さフェード
-	float alpha = smoke_color.a * COLOR.a * smoke_alpha_multiplier * clip_alpha * height_alpha;
+	// FoW可視性チェック（パーティクル単位: 視界外の煙フラグメントを消す）
+	float fow_alpha = 1.0;
+	if (fow_enabled > 0.5) {
+		vec2 fow_uv = (v_world_pos.xz - fow_map_min) / (fow_map_max - fow_map_min);
+		if (fow_uv.x >= 0.0 && fow_uv.x <= 1.0 && fow_uv.y >= 0.0 && fow_uv.y <= 1.0) {
+			// smoothstep閾値をfow.gdshaderと統一（境界が一致する）
+			float fow_visibility = texture(fow_visibility_texture, fow_uv).r;
+			fow_alpha = smoothstep(0.1, 0.3, fow_visibility);
+		} else {
+			fow_alpha = 0.0;
+		}
+	}
+
+	// 最終アルファ = 煙色α × パーティクル寿命α × ライフサイクル × 壁クリップ × 高さフェード × FoW
+	float alpha = smoke_color.a * COLOR.a * smoke_alpha_multiplier * clip_alpha * height_alpha * fow_alpha;
 
 	if (alpha < 0.02) {
 		discard;

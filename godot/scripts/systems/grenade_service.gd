@@ -93,6 +93,9 @@ func spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thro
 
 	if _smoke_area_manager:
 		smoke_grenade.set_smoke_manager(_smoke_area_manager)
+	# FoWシステムを設定（視界外の煙を非表示にするため）
+	if _fow_system:
+		smoke_grenade.set_fow_system(_fow_system)
 	_mesh_parent.add_child(smoke_grenade)
 
 	# グレネードIDを割り当てて追跡
