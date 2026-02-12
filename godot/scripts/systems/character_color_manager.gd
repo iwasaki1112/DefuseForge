@@ -34,7 +34,7 @@ const DEFAULT_COLOR: Color = Color(0.5, 0.5, 0.5)
 # State
 # ============================================
 ## キャラクターID → 色インデックスのマッピング
-var _color_assignments: Dictionary = {}  # { character_id: int }
+var _color_assignments: Dictionary[int, int] = {}  # { character_id: int }
 
 ## 使用中の色インデックス
 var _used_indices: Array[int] = []

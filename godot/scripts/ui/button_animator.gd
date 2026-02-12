@@ -15,7 +15,7 @@ const DEFAULT_RELEASE_DURATION: float = 0.1
 const DEFAULT_PRESS_ALPHA: float = 0.7
 
 ## 設定済みボタンのTweenを保持
-static var _active_tweens: Dictionary = {}
+static var _active_tweens: Dictionary[int, Tween] = {}
 
 
 ## ボタンに自動アニメーションを設定

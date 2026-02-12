@@ -21,7 +21,7 @@ var _characters: Array[Node] = []
 # ============================================
 # State
 # ============================================
-var _visibility_cache: Dictionary = {}  # { instance_id: bool }
+var _visibility_cache: Dictionary[int, bool] = {}  # { instance_id: bool }
 var _is_enabled: bool = true
 
 # SmokeAreaManager reference

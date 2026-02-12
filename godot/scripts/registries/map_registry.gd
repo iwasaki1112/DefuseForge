@@ -11,7 +11,7 @@ const WALL_COLLISION_LAYER := 2
 # ============================================
 
 ## All registered presets indexed by ID
-var _presets: Dictionary = {}  # { id: MapPreset }
+var _presets: Dictionary[String, MapPreset] = {}  # { id: MapPreset }
 
 # ============================================
 # Preset Directory

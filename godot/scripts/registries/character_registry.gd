@@ -11,10 +11,10 @@ var _animation_library: AnimationLibrary = null
 # ============================================
 
 ## All registered presets indexed by ID
-var _presets: Dictionary = {}  # { id: CharacterPreset }
+var _presets: Dictionary[String, CharacterPreset] = {}  # { id: CharacterPreset }
 
 ## Presets organized by team
-var _by_team: Dictionary = {}  # { Team: Array[CharacterPreset] }
+var _by_team: Dictionary[GameCharacter.Team, Array] = {}  # { Team: Array[CharacterPreset] }
 
 # ============================================
 # Preset Directory

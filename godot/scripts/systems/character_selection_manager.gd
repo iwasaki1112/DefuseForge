@@ -14,11 +14,11 @@ var selected_characters: Array[Node] = []
 var primary_character: Node = null
 
 ## アウトライン適用中のメッシュ { character_id: Array[MeshInstance3D] }
-var _outlined_meshes_by_character: Dictionary = {}
+var _outlined_meshes_by_character: Dictionary[int, Array] = {}
 ## 元のマテリアルオーバーライドを保存 { character_id: { mesh_instance_id: { surface_index: Material } } }
 var _original_materials_by_character: Dictionary = {}
 ## 選択マーカー { character_id: CharacterSelectedMarker }
-var _selection_markers: Dictionary = {}
+var _selection_markers: Dictionary[int, CharacterSelectedMarker] = {}
 
 ## アウトライン設定
 var outline_color: Color = Color(0.0, 0.8, 1.0, 1.0)

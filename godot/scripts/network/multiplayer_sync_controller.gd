@@ -15,7 +15,7 @@ var _auto_sync_enabled: bool = true
 
 ## Tick管理（Phase 3: Tick分離）
 var _tick_counter: int = 0
-var _last_sent_states: Dictionary = {}  # character_id -> last_state for delta detection
+var _last_sent_states: Dictionary[int, NetworkMessages.CharacterStateMessage] = {}  # character_id -> last_state for delta detection
 var _idle_skip_counter: int = 0  # 静止時の送信スキップカウンター
 
 

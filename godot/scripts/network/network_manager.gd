@@ -36,14 +36,14 @@ var _ws: WebSocketPeer = null
 var _heartbeat_timer: float = 0.0
 
 ## リトライ用
-var _pending_action_sent: Dictionary = {}  # 送信済みアクション（リトライ用）
+var _pending_action_sent: Dictionary[String, Variant] = {}  # 送信済みアクション（リトライ用）
 var _pending_action_timer: float = 0.0
 var _pending_action_retries: int = 0
 const PENDING_ACTION_TIMEOUT: float = 3.0  # 3秒でリトライ
 const PENDING_ACTION_MAX_RETRIES: int = 3
 
 ## プレイヤー情報
-var _players: Dictionary = {}  # { peer_id: { "name": String, "ready": bool, "team": int } }
+var _players: Dictionary[int, Dictionary] = {}  # { peer_id: { "name": String, "ready": bool, "team": int } }
 
 
 func _ready() -> void:
@@ -323,12 +323,10 @@ func _split_json_messages(data: String) -> Array[String]:
 
 ## 単一のJSONメッセージを処理
 func _process_single_message(json_string: String) -> void:
-	var json := JSON.new()
-	if json.parse(json_string) != OK:
+	var msg = JSON.parse_string(json_string)
+	if msg == null:
 		push_error("NetworkManager: Invalid JSON: %s" % json_string)
 		return
-
-	var msg: Dictionary = json.data
 	var msg_type: String = msg.get("type", "")
 	var payload = msg.get("payload", {})
 
