@@ -3,7 +3,7 @@ extends RefCounted
 ## カメラを平行移動、ズームする簡易コントローラー
 ## PC: 1本指ドラッグでパン、マウスホイールでズーム
 ## モバイル: 1本指でパン、2本指でズーム
-## パスモード時は1本指でパス描画
+## マップ閲覧時の操作用
 ## 参考: https://github.com/DionHo/GodotTouchCamera
 
 var camera: Camera3D = null

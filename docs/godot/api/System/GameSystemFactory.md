@@ -23,7 +23,7 @@ GameManagerのシステム生成ロジックを分離するファクトリクラ
 | メソッド | 戻り値 | 説明 |
 |---------|--------|------|
 | `create_selection_manager()` | CharacterSelectionManager | 選択マネージャーを生成 |
-| `create_idle_manager(characters_ref, is_following_callback, get_primary_callback)` | IdleCharacterManager | アイドルマネージャーを生成・初期化 |
+| `create_idle_manager(characters_ref, get_primary_callback)` | IdleCharacterManager | アイドルマネージャーを生成・初期化 |
 | `create_smoke_area_manager()` | SmokeAreaManager | スモークエリアマネージャーを生成 |
 | `create_vision_service(fow_map_size, is_vision_enabled, smoke_area_manager)` | VisionService | ビジョンサービスを生成・初期化 |
 | `create_map_manager(map_container, game_manager)` | MapManager | マップマネージャーを生成・初期化 |

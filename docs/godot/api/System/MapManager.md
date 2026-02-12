@@ -79,7 +79,7 @@ map_manager.unload_map(false) # マップのみ削除
 マップを切り替える（アンロード→ロードを一括実行）。
 
 ```gdscript
-# マップ切り替え（キャラクター・パスは自動クリーンアップ）
+# マップ切り替え（キャラクターは自動クリーンアップ）
 var new_map = map_manager.switch_map("warehouse")
 ```
 

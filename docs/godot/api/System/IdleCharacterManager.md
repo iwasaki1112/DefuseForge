@@ -4,7 +4,7 @@
 
 ## 概要
 
-パス追従していないキャラクターのアイドル状態を毎フレーム更新する。
+TPS操作対象以外のキャラクターのアイドル状態を毎フレーム更新する。
 CombatAwareness処理と向き更新を担当し、テストシーンからゲームロジックを分離する。
 
 ## パス
@@ -23,7 +23,6 @@ class_name IdleCharacterManager
 | 名前 | 型 | 説明 |
 |------|-----|------|
 | characters | Array[Node] | 管理対象キャラクターリスト |
-| is_following_path_callback | Callable | パス追従中チェック用コールバック |
 | get_primary_callback | Callable | プライマリキャラクター取得用コールバック |
 
 ## メソッド
@@ -35,14 +34,12 @@ class_name IdleCharacterManager
 ```gdscript
 func setup(
     char_list: Array[Node],
-    following_check: Callable,
     primary_getter: Callable
 ) -> void
 ```
 
 **引数:**
 - `char_list`: 管理対象キャラクターリスト
-- `following_check`: パス追従中かどうかをチェックするコールバック `func(character) -> bool`
 - `primary_getter`: プライマリキャラクターを取得するコールバック `func() -> Node`
 
 ### add_character()
@@ -78,8 +75,8 @@ func process_idle_characters(delta: float) -> void
 ```
 
 以下の条件のキャラクターはスキップ:
-- パス追従中
-- プライマリキャラクター（別処理）
+- リモートキャラクター（ネットワークから状態受信）
+- プライマリキャラクター（TPSPlayerControllerが制御）
 - 死亡中
 
 ### process_primary_idle()
@@ -101,7 +98,6 @@ idle_manager.name = "IdleCharacterManager"
 add_child(idle_manager)
 idle_manager.setup(
     characters,
-    func(c): return path_execution_manager.is_character_following_path(c),
     func(): return selection_manager.primary_character
 )
 
@@ -141,7 +137,7 @@ func _physics_process(delta: float) -> void:
 なし
 
 ### メソッド
-- `setup(`
+- `setup(char_list: Array[Node], primary_getter: Callable) -> void`
 - `add_character(character: Node) -> void`
 - `remove_character(character: Node) -> void`
 - `set_characters(char_list: Array[Node]) -> void`

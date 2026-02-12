@@ -5,6 +5,7 @@
 
 - [Animation](Animation/README.md)
 - [Character](Character/README.md)
+- [Controllers](Controllers/README.md)
 - [Effect](Effect/README.md)
 - [Map](Map/README.md)
 - [Network](Network/README.md)

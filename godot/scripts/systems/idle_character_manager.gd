@@ -13,7 +13,6 @@ var get_primary_callback: Callable
 ## セットアップ
 func setup(
 	char_list: Array[Node],
-	_following_check: Callable,
 	primary_getter: Callable
 ) -> void:
 	characters = char_list

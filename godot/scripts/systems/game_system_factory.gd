@@ -16,12 +16,11 @@ func create_selection_manager() -> CharacterSelectionManager:
 ## IdleCharacterManagerを生成・初期化
 func create_idle_manager(
 	characters_ref: Array[Node],
-	is_following_callback: Callable,
 	get_primary_callback: Callable
 ) -> IdleCharacterManager:
 	var manager := IdleCharacterManager.new()
 	manager.name = GameConstants.NODE_IDLE_MANAGER
-	manager.setup(characters_ref, is_following_callback, get_primary_callback)
+	manager.setup(characters_ref, get_primary_callback)
 	return manager
 
 

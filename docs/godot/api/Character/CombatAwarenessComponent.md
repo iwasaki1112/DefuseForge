@@ -18,6 +18,7 @@
 | `target_changed` | `new_target: Node, old_target: Node` | ターゲットが変更されたとき |
 | `shot_missed` | `target: Node, miss_offset: Vector3` | 射撃が外れたとき |
 | `critical_hit` | `target: Node, damage: float` | クリティカルヒット発生時 |
+| `damage_dealt` | `attacker: Node, target: Node, damage: float, is_headshot: bool` | ダメージを与えたとき |
 
 ## Constants
 
@@ -175,7 +176,7 @@ func _physics_process(delta: float) -> void:
 
 ### 自動発砲ロジック
 - `enable_firing()`で有効化
-- 毎`process()`呼び出し時に発砲判定
+- 毎`process_firing()`呼び出し時に発砲判定
 - 条件: 発砲有効 AND ターゲット存在 AND ターゲット有効
 - 発砲時の動作:
   1. `CharacterAnimationController.fire()`でリコイルアニメーション再生
@@ -310,6 +311,7 @@ long_critical_rate = 0.5  # 高クリ率
 | `target_changed` | `new_target: Node, old_target: Node` |
 | `shot_missed` | `target: Node, miss_offset: Vector3` |
 | `critical_hit` | `target: Node, damage: float` |
+| `damage_dealt` | `attacker: Node, target: Node, damage: float, is_headshot: bool` |
 
 ### メソッド
 - `setup(character: Node) -> void`
@@ -323,3 +325,4 @@ long_critical_rate = 0.5  # 高クリ率
 - `is_firing_enabled() -> bool`
 - `get_last_shot_result() -> Dictionary`
 - `process(delta: float) -> void`
+- `process_firing(delta: float) -> void`

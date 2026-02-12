@@ -1,7 +1,7 @@
 extends Node
 class_name CharacterSelectionManager
 ## キャラクター選択管理
-## 選択状態・アウトライン表示・パス適用対象の管理を担当
+## 選択状態・アウトライン表示の管理を担当
 
 ## 選択変更時のシグナル
 signal selection_changed(selected: Array[Node], primary: Node)

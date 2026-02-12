@@ -15,7 +15,7 @@ MultiplayerModeProviderはネットワーク同期に必要なすべての処理
 
 - NetworkManagerとSyncControllerの保持
 - ネットワークイベントのハンドリング
-- パス実行とグレネードの同期
+- グレネードの同期
 - ピア切断の処理
 
 ## プロパティ

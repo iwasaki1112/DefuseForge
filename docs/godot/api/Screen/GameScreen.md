@@ -92,6 +92,8 @@ _ready()  ※setup_multiplayer()はadd_child前に呼ばれ、Providerを設定�
 
 ### UIコンポーネント注入
 
+**※ 現在無効化中**（`_setup_label_manager()` がコメントアウト済み）
+
 GameScreenはUIコンポーネントを生成し、GameManagerに注入する責務を持つ。
 これはUI関連の責務をGameManagerから分離するためのパターン。
 

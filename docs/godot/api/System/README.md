@@ -19,3 +19,6 @@
 | [RoundManager](RoundManager.md) | ラウンド状態管理・タイマー・生存者数追跡・勝敗判定 |
 | [SmokeAreaManager](SmokeAreaManager.md) | スモークエリアのグローバル管理・視線判定API |
 | [SignalBus](SignalBus.md) | グローバルシグナルバス・イベント通知一元管理（Autoload） |
+| [DoorService](DoorService.md) | ドア管理・キック処理・ネットワーク同期 |
+| [GrenadeService](GrenadeService.md) | グレネード生成・投擲・ネットワーク同期 |
+| [CharacterManagerService](CharacterManagerService.md) | キャラクター登録・検索・フィルタリング |

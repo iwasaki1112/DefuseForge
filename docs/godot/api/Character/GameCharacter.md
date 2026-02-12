@@ -103,7 +103,7 @@ VisionComponentを設定する。
 #### get_vision_component() -> VisionComponent
 VisionComponentを取得する。
 
-#### setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent
+#### setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent
 VisionComponentをセットアップする（存在しなければ自動作成）。
 
 **引数:**
@@ -300,11 +300,9 @@ CharacterSnapshotから状態を復元する（リモートキャラクター用
 - `set_facing_direction(y_rotation: float) -> void`
 - `face_towards(target_pos: Vector3) -> void`
 - `get_facing_direction() -> Vector3`
-- `is_crouching() -> bool`
-- `toggle_crouch() -> void`
 - `set_vision_component(component: VisionComponent) -> void`
 - `get_vision_component() -> VisionComponent`
-- `setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent`
+- `setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent`
 - `setup_combat_awareness() -> CombatAwarenessComponent`
 - `get_combat_awareness() -> CombatAwarenessComponent`
 - `equip_weapon(weapon: WeaponPreset) -> void`

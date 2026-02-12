@@ -318,7 +318,6 @@ func _setup_idle_manager() -> void:
 	if idle_manager == null:
 		idle_manager = _factory.create_idle_manager(
 			characters,
-			Callable(),  # パス追従なし — 常にfalse
 			func(): return selection_manager.primary_character if selection_manager else null
 		)
 		add_child(idle_manager)
