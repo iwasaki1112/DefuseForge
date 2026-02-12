@@ -131,6 +131,18 @@ if _mode_provider is MultiplayerModeProvider:
     var is_host = mp.is_host()
 ```
 
+## 人質（Hostage）機能
+
+人質はTraining/Multiplayer両モードで共通にスポーンされます。
+
+- `_spawn_hostages()`: マッププリセットの`spawn_points_hostage`から人質をスポーン
+- `_spawn_hostage_character()`: 個別の人質を構築（Team.NONE、無敵、Hostageアニメーションループ）
+- `_update_hostage_proximity()`: 毎フレーム近接チェック（CT側のみ交渉可能）
+- `_on_talking_btn_pressed()`: 交渉開始（10秒プログレスバー）
+- `_complete_talking()`: 交渉完了 → CT勝利（HOSTAGE_RESCUED）
+
+**チーム制限**: T側プレイヤーは人質交渉ボタンが表示されません。
+
 ## デバッグ機能
 
 - **F3キー**: 視界デバッグ表示（Vision Debug Draw）の切り替え

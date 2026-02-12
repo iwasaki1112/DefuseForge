@@ -130,6 +130,12 @@ func update_visibility() -> void:
 	for friendly in _get_friendly_characters():
 		friendly.visible = true
 
+	# T側は人質を常に表示（T側が人質を警備しているため）
+	if PlayerState.get_player_team() == GameCharacter.Team.TERRORIST:
+		for character in _characters:
+			if character is GameCharacter and character.team == GameCharacter.Team.NONE:
+				character.visible = true
+
 	# 敵リストを取得
 	var enemies := _get_enemy_characters()
 	if enemies.is_empty():
@@ -226,9 +232,10 @@ func _get_enemy_characters() -> Array[Node]:
 	for character in _characters:
 		if PlayerState.is_enemy(character):
 			result.append(character)
-		# Team.NONE（hostage等）もFoWで可視性を制御する
+		# Team.NONE（hostage等）: CT側はFoWで可視性を制御、T側は常に表示（update_visibilityで処理済み）
 		elif character is GameCharacter and character.team == GameCharacter.Team.NONE:
-			result.append(character)
+			if PlayerState.get_player_team() != GameCharacter.Team.TERRORIST:
+				result.append(character)
 	return result
 
 

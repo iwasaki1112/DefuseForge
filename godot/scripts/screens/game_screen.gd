@@ -168,6 +168,8 @@ func _spawn_characters() -> void:
 	if _mode_provider.spawn_characters(self, game_manager):
 		# マルチプレイ: ローカルプレイヤーのキャラクターを特定
 		_find_local_player_character()
+		# 人質スポーン（マルチプレイでも共通）
+		_spawn_hostages()
 		return
 
 	# デフォルトのスポーン処理
@@ -213,16 +215,26 @@ func _spawn_characters() -> void:
 				_mode_provider.register_character(game_manager, enemy, _network_id_counter)
 				_network_id_counter += 1
 
-	# Hostage: 配置のみ（視界・戦闘・武器なし）
+	# 人質スポーン
+	_spawn_hostages()
+
+	# IdleManagerにキャラクターリストを更新
+	if game_manager.idle_manager:
+		game_manager.idle_manager.set_characters(game_manager.characters)
+
+
+## マッププリセットから人質をスポーン
+func _spawn_hostages() -> void:
+	if not game_manager.has_map():
+		return
+	var preset = game_manager.get_current_map_preset()
+	if not preset:
+		return
 	var hostage_spawns = preset.spawn_points_hostage
 	var hostage_rotations = preset.spawn_rotations_hostage
 	for i in range(hostage_spawns.size()):
 		var rot = hostage_rotations[i] if i < hostage_rotations.size() else 0.0
 		_spawn_hostage_character("hostage_lucas", hostage_spawns[i], rot)
-
-	# IdleManagerにキャラクターリストを更新
-	if game_manager.idle_manager:
-		game_manager.idle_manager.set_characters(game_manager.characters)
 
 
 ## ホステージキャラクターをスポーン（視界・戦闘・武器なし、アニメーションのみ）
@@ -1110,6 +1122,12 @@ func _on_debug_vision_toggled(enabled: bool) -> void:
 ## ホステージとの近接チェック（毎フレーム）
 func _update_hostage_proximity() -> void:
 	if not _player_character or not _player_character.is_alive:
+		if _talking_btn and _talking_btn.visible:
+			_talking_btn.visible = false
+		return
+
+	# CT側のみ人質交渉可能
+	if _player_character.team != GameCharacter.Team.COUNTER_TERRORIST:
 		if _talking_btn and _talking_btn.visible:
 			_talking_btn.visible = false
 		return

@@ -96,6 +96,14 @@ func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: 
 
 グレネード爆発をネットワークに送信します。
 
+## 人質スポーン
+
+人質のスポーンはMultiplayerModeProviderではなく、GameScreen側で共通処理として行われます。
+`spawn_characters()`がCT/Tプレイヤーのスポーン後に`true`を返した後、
+GameScreenの`_spawn_hostages()`がマッププリセットに基づいて人質を配置します。
+
+人質はネットワーク同期の対象外で、各クライアントがローカルに同一の位置にスポーンします。
+
 ## 同期処理
 
 ### on_round_ended
