@@ -36,7 +36,7 @@ var _ws: WebSocketPeer = null
 var _heartbeat_timer: float = 0.0
 
 ## リトライ用
-var _pending_action_sent: Dictionary[String, Variant] = {}  # 送信済みアクション（リトライ用）
+var _pending_action_sent: Dictionary = {}  # 送信済みアクション（リトライ用）
 var _pending_action_timer: float = 0.0
 var _pending_action_retries: int = 0
 const PENDING_ACTION_TIMEOUT: float = 3.0  # 3秒でリトライ
