@@ -45,10 +45,12 @@ var _grenade_start_override: Vector3 = Vector3.ZERO
 var _is_near_opening: bool = false
 var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
 
-## グレネードエイミング中の左側タッチ保留（タップ/ドラッグ判定用）
-const GRENADE_TAP_DRAG_THRESHOLD := 20.0  # ドラッグ判定の閾値（px）
+## グレネードエイミング中の左側タッチ判定
+const GRENADE_TAP_DRAG_THRESHOLD := 5.0  # ドラッグ判定の閾値（px）
+const GRENADE_TAP_TIME_THRESHOLD := 200  # 長押し判定の閾値（msec）
 var _grenade_pending_touch_idx: int = -1
 var _grenade_pending_touch_pos: Vector2 = Vector2.ZERO
+var _grenade_pending_touch_time: int = 0  # タッチ開始時刻（msec）
 
 ## グレネードUI
 var _grenade_btn: TextureButton = null
@@ -514,23 +516,30 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# グレネードエイミング中: 左側タッチはドラッグ判定で競合回避
+	# グレネードエイミング中: 左側は素早いタップのみターゲット選択、それ以外はキャンセル
 	if _is_grenade_aiming:
 		var screen_half_x := get_viewport().get_visible_rect().size.x * 0.5
 		if event is InputEventScreenTouch:
 			var touch := event as InputEventScreenTouch
 			if touch.pressed:
 				if touch.position.x < screen_half_x:
-					# 左側: タップかドラッグか判定するため保留
+					# 左側: タップか移動か判定するため保留（時刻記録）
 					_grenade_pending_touch_idx = touch.index
 					_grenade_pending_touch_pos = touch.position
+					_grenade_pending_touch_time = Time.get_ticks_msec()
 				else:
 					# 右側: 即座にターゲット選択
 					_handle_grenade_target_tap(touch.position)
 			else:
-				# リリース: 保留中タッチならドラッグなし=タップとしてターゲット選択
+				# リリース: 保留中タッチの判定
 				if touch.index == _grenade_pending_touch_idx:
-					_handle_grenade_target_tap(_grenade_pending_touch_pos)
+					var elapsed := Time.get_ticks_msec() - _grenade_pending_touch_time
+					if elapsed < GRENADE_TAP_TIME_THRESHOLD:
+						# 素早いタップ → ターゲット選択
+						_handle_grenade_target_tap(_grenade_pending_touch_pos)
+					else:
+						# 長押し → 移動意図 → キャンセル
+						_exit_grenade_aiming()
 					_grenade_pending_touch_idx = -1
 			get_viewport().set_input_as_handled()
 			return
@@ -539,13 +548,9 @@ func _input(event: InputEvent) -> void:
 			if drag.index == _grenade_pending_touch_idx:
 				var drag_dist := drag.position.distance_to(_grenade_pending_touch_pos)
 				if drag_dist > GRENADE_TAP_DRAG_THRESHOLD:
-					# ドラッグ判定 → ジョイスティック操作意図 → エイミングキャンセル
+					# ドラッグ → 移動意図 → キャンセル
 					_grenade_pending_touch_idx = -1
 					_exit_grenade_aiming()
-					# キャンセル後、ドラッグイベントをTPSコントローラーに渡さない
-					# （ジョイスティック状態は次のタッチで開始される）
-					get_viewport().set_input_as_handled()
-					return
 			get_viewport().set_input_as_handled()
 			return
 		if event is InputEventMouseButton:

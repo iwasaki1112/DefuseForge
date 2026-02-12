@@ -9,7 +9,7 @@ import (
 )
 
 // 利用可能マップIDリスト
-var availableMapIDs = []string{"home", "office"}
+var availableMapIDs = []string{"home"}
 
 // Hub クライアントとルームを管理する中央ハブ
 type Hub struct {
