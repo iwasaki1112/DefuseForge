@@ -1138,6 +1138,9 @@ func _update_hostage_proximity() -> void:
 	for hostage in _hostage_characters:
 		if not is_instance_valid(hostage):
 			continue
+		# 視界が通っていない（FoWで非表示の）ホステージは対象外
+		if not hostage.visible:
+			continue
 		var dist := player_pos.distance_to(hostage.global_position)
 		if dist <= GameConstants.HOSTAGE_TALK_DISTANCE:
 			_nearby_hostage = hostage
@@ -1192,6 +1195,11 @@ func _update_talking(delta: float) -> void:
 
 	# プレイヤー死亡チェック
 	if not _player_character or not _player_character.is_alive:
+		_cancel_talking()
+		return
+
+	# ホステージが視界外になったらキャンセル
+	if _nearby_hostage and not _nearby_hostage.visible:
 		_cancel_talking()
 		return
 
