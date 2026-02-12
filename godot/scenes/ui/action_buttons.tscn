@@ -39,3 +39,9 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "99"
 horizontal_alignment = 1
+
+[node name="TalkingBtn" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(80, 40)
+layout_mode = 2
+text = "Talk"

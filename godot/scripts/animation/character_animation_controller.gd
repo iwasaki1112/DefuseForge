@@ -13,6 +13,7 @@ signal fired()
 signal throw_release()      # グレネードをリリースするタイミング
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
+signal talking_finished()   # Talkingアニメーション完了/中断
 
 # Export settings
 @export_group("Movement Speed")
@@ -58,6 +59,7 @@ var _is_dead := false
 var _is_door_kicking := false
 var _is_throwing := false
 var _is_opening_door := false
+var _is_talking := false
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
@@ -161,7 +163,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	# is_running パラメータをスプリントとして使用
@@ -237,7 +239,7 @@ func fire() -> void:
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
 		return 0.0
 	if _is_sprinting:
 		return SPRINT_SPEED
@@ -434,7 +436,7 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 
 ## ドアキック後のAnimationTree再開
 func _resume_animation_tree() -> void:
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door and not _is_talking:
 		_anim_tree.active = true
 		# 左手IKを武器に応じて再有効化
 		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
@@ -576,6 +578,61 @@ func is_opening_door() -> bool:
 	return _is_opening_door
 
 
+## Play talking animation (looping, used during hostage negotiation)
+func play_talking() -> void:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+		return
+
+	_is_talking = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
+
+	# AnimationTreeを無効化
+	if _anim_tree:
+		_anim_tree.active = false
+
+	# Talkingアニメーションをループ再生
+	var anim_name := GameConstants.ANIM_TALKING
+	if _anim_player.has_animation(anim_name):
+		var anim_lib := _anim_player.get_animation_library("")
+		if anim_lib:
+			var anim := anim_lib.get_animation(anim_name)
+			if anim:
+				anim.loop_mode = Animation.LOOP_LINEAR
+		_anim_player.play(anim_name, 0.15)
+	else:
+		push_warning("CharacterAnimationController: Talking animation not found: %s" % anim_name)
+		_is_talking = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+## Stop talking animation and return to idle
+func stop_talking() -> void:
+	if not _is_talking:
+		return
+
+	_is_talking = false
+
+	# スムーズにアイドルへ遷移してからAnimationTreeを再開
+	if _anim_player and not _is_dead:
+		var idle_anim_name := _get_idle_anim_name()
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
+	talking_finished.emit()
+
+
+## Check if talking animation is playing
+func is_talking() -> bool:
+	return _is_talking
+
+
 ## Get current animation state for network synchronization
 ## Returns encoded state: "move_state,is_firing,blend_x,blend_y"
 ## move_state: 0=idle, 1=walking, 2=sprinting
@@ -594,7 +651,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	var parts := state.split(",")

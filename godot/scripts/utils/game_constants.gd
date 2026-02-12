@@ -61,6 +61,13 @@ const ANIM_PISTOL_GRENADE_THROW_CLOSE := "Pistol_Grenade_Throw_Close"
 const ANIM_RIFLE_GRENADE_THROW_FAR := "Rifle_Grenade_Throw_Far"
 const ANIM_RIFLE_GRENADE_THROW_CLOSE := "Rifle_Grenade_Throw_Close"
 const ANIM_RIFLE_OPEN_DOOR := "Rifle_OpenDoor"
+const ANIM_TALKING := "Talking"
+
+# ========================================================
+# Hostage Talking Settings
+# ========================================================
+const HOSTAGE_TALK_DISTANCE := 2.0    # 近接判定距離（メートル）
+const HOSTAGE_TALK_DURATION := 10.0   # 会話に必要な時間（秒）
 
 # ========================================================
 # Grenade Settings

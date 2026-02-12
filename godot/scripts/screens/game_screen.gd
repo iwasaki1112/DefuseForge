@@ -49,6 +49,14 @@ var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
 var _grenade_btn: TextureButton = null
 var _grenade_count_label: Label = null
 
+## Talking（人質交渉）
+var _talking_btn: Button = null
+var _is_talking: bool = false
+var _talking_elapsed: float = 0.0
+var _talking_progress_bar: ProgressBar = null
+var _hostage_characters: Array[GameCharacter] = []
+var _nearby_hostage: GameCharacter = null
+
 ## レンジインジケーター（レイキャスト方式）
 var _grenade_viewport: SubViewport = null  # 後方互換（タップ検証用に維持）
 var _grenade_light: PointLight2D = null
@@ -277,6 +285,7 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 
 	# hostageグループに追加（識別用）
 	character.add_to_group("hostages")
+	_hostage_characters.append(character)
 
 	# EnemyVisibilitySystemに登録してFoWで可視性を制御（初期状態は非表示）
 	character.visible = false
@@ -420,6 +429,11 @@ func _create_action_buttons() -> void:
 	_grenade_count_label = vbox.get_node("GrenadeContainer/GrenadeCountLabel")
 	_grenade_count_label.text = str(_smoke_grenade_count)
 
+	# Talkingボタン
+	_talking_btn = vbox.get_node("TalkingBtn")
+	_talking_btn.pressed.connect(_on_talking_btn_pressed)
+	ButtonAnimator.setup(_talking_btn)
+
 	if Debug.enabled:
 		_debug_vision_btn = Button.new()
 		_debug_vision_btn.text = "Debug Vision"
@@ -469,11 +483,15 @@ func _setup_label_manager() -> void:
 func _physics_process(delta: float) -> void:
 	if game_manager:
 		game_manager.process_frame(delta)
-	if _tps_controller and not _is_grenade_aiming:
+	if _tps_controller and not _is_grenade_aiming and not _is_talking:
 		_tps_controller.process(delta)
 	_update_tps_hud()
 	if _is_grenade_aiming:
 		_update_grenade_light_position()
+	if _is_talking:
+		_update_talking(delta)
+	else:
+		_update_hostage_proximity()
 
 
 func _input(event: InputEvent) -> void:
@@ -1086,6 +1104,192 @@ func _on_debug_vision_toggled(enabled: bool) -> void:
 
 
 ## ========================================
+## Talking（人質交渉）
+## ========================================
+
+## ホステージとの近接チェック（毎フレーム）
+func _update_hostage_proximity() -> void:
+	if not _player_character or not _player_character.is_alive:
+		if _talking_btn and _talking_btn.visible:
+			_talking_btn.visible = false
+		return
+
+	var player_pos := _player_character.global_position
+	_nearby_hostage = null
+
+	for hostage in _hostage_characters:
+		if not is_instance_valid(hostage):
+			continue
+		var dist := player_pos.distance_to(hostage.global_position)
+		if dist <= GameConstants.HOSTAGE_TALK_DISTANCE:
+			_nearby_hostage = hostage
+			break
+
+	if _talking_btn:
+		_talking_btn.visible = _nearby_hostage != null
+
+
+## Talkingボタン押下
+func _on_talking_btn_pressed() -> void:
+	if not _player_character or not _player_character.is_alive:
+		return
+	if not _nearby_hostage:
+		return
+	if _is_talking:
+		return
+
+	_is_talking = true
+	_talking_elapsed = 0.0
+
+	# ホステージの方を向く
+	var dir_to_hostage := (_nearby_hostage.global_position - _player_character.global_position).normalized()
+	dir_to_hostage.y = 0.0
+	_player_character.set_facing_direction_vec(dir_to_hostage)
+
+	# Talkingアニメーション開始
+	if _player_character.anim_ctrl:
+		_player_character.anim_ctrl.play_talking()
+
+	# 武器を非表示
+	var weapon_socket := _player_character.get_weapon_socket()
+	if weapon_socket:
+		weapon_socket.visible = false
+
+	# 自動射撃を無効化
+	if _player_character.combat_awareness:
+		_player_character.combat_awareness.disable_firing()
+
+	# プログレスバー作成
+	_create_talking_progress_bar()
+
+	# Talkingボタンを非表示
+	if _talking_btn:
+		_talking_btn.visible = false
+
+
+## Talking中の毎フレーム更新
+func _update_talking(delta: float) -> void:
+	if not _is_talking:
+		return
+
+	# プレイヤー死亡チェック
+	if not _player_character or not _player_character.is_alive:
+		_cancel_talking()
+		return
+
+	# タイマー進行
+	_talking_elapsed += delta
+
+	# プログレスバー更新
+	if _talking_progress_bar:
+		_talking_progress_bar.value = _talking_elapsed / GameConstants.HOSTAGE_TALK_DURATION
+
+		# キャラ頭上の3D位置を2D座標に変換
+		if camera and _player_character:
+			var head_pos := _player_character.global_position + Vector3(0, 2.2, 0)
+			var screen_pos := camera.unproject_position(head_pos)
+			_talking_progress_bar.position = screen_pos - Vector2(_talking_progress_bar.size.x / 2.0, 20)
+
+	# 完了判定
+	if _talking_elapsed >= GameConstants.HOSTAGE_TALK_DURATION:
+		_complete_talking()
+
+
+## Talking完了（CT勝利）
+func _complete_talking() -> void:
+	_is_talking = false
+
+	# アニメーション停止
+	if _player_character and _player_character.anim_ctrl:
+		_player_character.anim_ctrl.stop_talking()
+
+	# 武器を再表示
+	_restore_weapon_visibility()
+
+	# 自動射撃を再有効化
+	if _player_character and _player_character.combat_awareness:
+		_player_character.combat_awareness.enable_firing()
+
+	# プログレスバー削除
+	_remove_talking_progress_bar()
+
+	# CT勝利
+	if game_manager and game_manager.round_manager:
+		game_manager.round_manager.end_round(
+			GameCharacter.Team.COUNTER_TERRORIST,
+			RoundManager.EndReason.HOSTAGE_RESCUED
+		)
+
+
+## Talkingキャンセル（死亡時）
+func _cancel_talking() -> void:
+	_is_talking = false
+
+	# アニメーション停止
+	if _player_character and _player_character.anim_ctrl:
+		_player_character.anim_ctrl.stop_talking()
+
+	# 武器を再表示
+	_restore_weapon_visibility()
+
+	# 自動射撃を再有効化
+	if _player_character and _player_character.combat_awareness:
+		_player_character.combat_awareness.enable_firing()
+
+	# プログレスバー削除
+	_remove_talking_progress_bar()
+
+
+## プログレスバー作成
+func _create_talking_progress_bar() -> void:
+	_remove_talking_progress_bar()
+
+	_talking_progress_bar = ProgressBar.new()
+	_talking_progress_bar.name = "TalkingProgressBar"
+	_talking_progress_bar.custom_minimum_size = Vector2(100, 10)
+	_talking_progress_bar.size = Vector2(100, 10)
+	_talking_progress_bar.min_value = 0.0
+	_talking_progress_bar.max_value = 1.0
+	_talking_progress_bar.value = 0.0
+	_talking_progress_bar.show_percentage = false
+
+	# 緑色のfillスタイル
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = Color(0.2, 0.8, 0.2)
+	fill_style.corner_radius_top_left = 3
+	fill_style.corner_radius_top_right = 3
+	fill_style.corner_radius_bottom_left = 3
+	fill_style.corner_radius_bottom_right = 3
+	_talking_progress_bar.add_theme_stylebox_override("fill", fill_style)
+
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.2, 0.2, 0.2, 0.6)
+	bg_style.corner_radius_top_left = 3
+	bg_style.corner_radius_top_right = 3
+	bg_style.corner_radius_bottom_left = 3
+	bg_style.corner_radius_bottom_right = 3
+	_talking_progress_bar.add_theme_stylebox_override("background", bg_style)
+
+	_talking_progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_layer.add_child(_talking_progress_bar)
+
+
+## 武器を再表示
+func _restore_weapon_visibility() -> void:
+	if _player_character:
+		var weapon_socket := _player_character.get_weapon_socket()
+		if weapon_socket:
+			weapon_socket.visible = true
+
+
+## プログレスバー削除
+func _remove_talking_progress_bar() -> void:
+	if _talking_progress_bar and is_instance_valid(_talking_progress_bar):
+		_talking_progress_bar.queue_free()
+		_talking_progress_bar = null
+
+
+## ========================================
 ## シグナルハンドラ
 ## ========================================
 
@@ -1101,9 +1305,15 @@ func _on_round_started() -> void:
 	_smoke_grenade_count = GameConstants.SMOKE_GRENADE_PER_ROUND
 	_update_grenade_count_ui()
 	_exit_grenade_aiming()
+	# Talking状態リセット
+	if _is_talking:
+		_cancel_talking()
 
 
 func _on_round_ended(winner: int, reason: int) -> void:
+	# Talking中ならキャンセル
+	if _is_talking:
+		_cancel_talking()
 	_mode_provider.on_round_ended(winner, reason)
 
 	# 3秒後に遷移
@@ -1167,6 +1377,10 @@ func _cleanup_before_transition() -> void:
 		for child in map_container.get_children():
 			if is_instance_valid(child):
 				child.queue_free()
+
+	# Talking中ならキャンセル
+	if _is_talking:
+		_cancel_talking()
 
 	# グレネードエイミングモードを解除
 	_exit_grenade_aiming()
