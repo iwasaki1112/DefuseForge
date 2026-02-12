@@ -49,13 +49,14 @@ var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
 var _grenade_btn: TextureButton = null
 var _grenade_count_label: Label = null
 
-## レンジインジケーター（SubViewport + Light2D方式 = FoWと同品質）
-var _grenade_viewport: SubViewport = null
+## レンジインジケーター（レイキャスト方式）
+var _grenade_viewport: SubViewport = null  # 後方互換（タップ検証用に維持）
 var _grenade_light: PointLight2D = null
 var _grenade_occluder_mgr: OccluderManager = null
 var _grenade_mesh: MeshInstance3D = null
 var _grenade_mat: ShaderMaterial = null
 var _grenade_map_size: Vector2 = Vector2.ZERO
+var _grenade_throwability_tex: ImageTexture = null
 
 ## 設定
 var _map_id: String = ""
@@ -616,18 +617,18 @@ func _setup_grenade_indicator() -> void:
 	_grenade_light.energy = 1.0
 	_grenade_light.blend_mode = Light2D.BLEND_MODE_ADD
 	_grenade_light.shadow_enabled = true
-	_grenade_light.shadow_filter = q["shadow_filter"]
-	_grenade_light.shadow_filter_smooth = q["shadow_smooth"]
+	_grenade_light.shadow_filter = Light2D.SHADOW_FILTER_NONE
+	_grenade_light.shadow_filter_smooth = 0.0
 	_grenade_light.shadow_item_cull_mask = 1
 	_grenade_light.range_item_cull_mask = 1
-	_grenade_light.texture = FovTextureGenerator.generate_circular_texture(resolution, 0.8)
+	_grenade_light.texture = FovTextureGenerator.generate_peripheral_texture(resolution)
 	_grenade_viewport.add_child(_grenade_light)
 
 	# ライトスケール（VisionLightと同じ計算式）
 	var max_dimension := maxf(fow_map_size.x, fow_map_size.y)
 	var scale_factor := float(resolution) / max_dimension
 	var light_diameter := throw_range * scale_factor * 2.0
-	_grenade_light.texture_scale = light_diameter / float(resolution)
+	_grenade_light.texture_scale = light_diameter / float(resolution) * (1.0 / 0.9)
 	# アスペクト比補正
 	var aspect_scale := Vector2(1.0, 1.0)
 	if fow_map_size.x > fow_map_size.y:
@@ -647,7 +648,8 @@ func _setup_grenade_indicator() -> void:
 	var shader: Shader = load("res://shaders/grenade_range.gdshader")
 	_grenade_mat = ShaderMaterial.new()
 	_grenade_mat.shader = shader
-	_grenade_mat.set_shader_parameter("visibility_texture", _grenade_viewport.get_texture())
+	# visibility_textureはレイキャスト結果のImageTextureを後で設定
+	# SubViewportテクスチャはタップ検証用に維持
 	_grenade_mat.set_shader_parameter("map_min", Vector2(-fow_map_size.x / 2.0, -fow_map_size.y / 2.0))
 	_grenade_mat.set_shader_parameter("map_max", Vector2(fow_map_size.x / 2.0, fow_map_size.y / 2.0))
 	_grenade_mat.set_shader_parameter("throw_range", throw_range)
@@ -662,6 +664,7 @@ func _show_range_indicator() -> void:
 		_grenade_mesh.visible = true
 		_check_near_opening()
 		_update_grenade_light_position()
+		_generate_throwability_mask()
 
 
 func _hide_range_indicator() -> void:
@@ -670,8 +673,6 @@ func _hide_range_indicator() -> void:
 	if _grenade_viewport:
 		_grenade_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_is_near_opening = false
-	if _grenade_mat:
-		_grenade_mat.set_shader_parameter("shadow_min", 0.0)
 
 
 func _update_grenade_light_position() -> void:
@@ -792,7 +793,7 @@ func _has_ground_at(pos: Vector3) -> bool:
 	return not space_state.intersect_ray(query).is_empty()
 
 
-## 開口部付近の壁際にいるかチェックし、シェーダーの影表示を切り替え
+## 開口部付近の壁際にいるかチェック（コーナースロー判定用）
 func _check_near_opening() -> void:
 	_is_near_opening = false
 	if not _player_character:
@@ -811,13 +812,12 @@ func _check_near_opening() -> void:
 		var angle := deg_to_rad(float(i) * 30.0)
 		var dir := Vector3(sin(angle), 0.0, cos(angle))
 		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.0)
-		q.collision_mask = 2  # Wall layer
+		q.collision_mask = 2
 		if not space_state.intersect_ray(q).is_empty():
 			has_wall = true
 			break
 
 	if has_wall:
-		# 開口部（壁がない方向かつフロアあり）が存在するか
 		for i in range(24):
 			var angle := deg_to_rad(float(i) * 15.0)
 			var dir := Vector3(sin(angle), 0.0, cos(angle))
@@ -828,10 +828,130 @@ func _check_near_opening() -> void:
 					_is_near_opening = true
 					break
 
-	print("[GRENADE] _check_near_opening: has_wall=%s result=%s" % [has_wall, _is_near_opening])
 
-	if _grenade_mat:
-		_grenade_mat.set_shader_parameter("shadow_min", 0.35 if _is_near_opening else 0.0)
+## 開口部（壁の隙間）にのみコーナー投擲起点を配置
+## 壁に隣接する開放方向のみ = ドア/窓の位置
+func _get_corner_origins(char_pos: Vector3) -> Array[Vector3]:
+	var origins: Array[Vector3] = []
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return origins
+
+	var char_h := Vector3(char_pos.x, 1.0, char_pos.z)
+
+	# 36方向スキャンで壁マップを作成
+	var scan_count := 36
+	var wall_hits: Array[bool] = []
+	var scan_dirs: Array[Vector3] = []
+	for i in range(scan_count):
+		var angle := deg_to_rad(float(i) * 10.0)
+		var dir := Vector3(sin(angle), 0.0, cos(angle))
+		scan_dirs.append(dir)
+		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.5)
+		q.collision_mask = 2
+		wall_hits.append(not space_state.intersect_ray(q).is_empty())
+
+	# 開口部のみ: 壁に隣接する開放方向（±20°以内に壁あり）
+	for i in range(scan_count):
+		if wall_hits[i]:
+			continue
+
+		var has_adjacent_wall := false
+		for offset in range(1, 3):
+			var prev_idx := (i - offset + scan_count) % scan_count
+			var next_idx := (i + offset) % scan_count
+			if wall_hits[prev_idx] or wall_hits[next_idx]:
+				has_adjacent_wall = true
+				break
+
+		if not has_adjacent_wall:
+			continue  # 周囲に壁なし = 開けた空間、開口部ではない
+
+		var candidate := char_h + scan_dirs[i] * 1.0
+		if _has_ground_at(Vector3(candidate.x, 0.0, candidate.z)):
+			origins.append(candidate)
+
+	print("[GRENADE] corner_origins: %d candidates (openings only)" % origins.size())
+	return origins
+
+
+## レイキャストで投擲可否マスクを生成（Light2Dに依存しない正確な表示）
+func _generate_throwability_mask() -> void:
+	if not _player_character or not _grenade_mat:
+		return
+	var fow: Node3D = game_manager.fog_of_war_system if game_manager else null
+	if not fow:
+		return
+
+	var char_pos := _player_character.global_position
+	var char_h := Vector3(char_pos.x, 1.0, char_pos.z)
+	var throw_range := GameConstants.GRENADE_THROW_MAX_DISTANCE
+
+	# 投擲起点: キャラ位置 + 開口部のみのコーナー起点
+	var origins: Array[Vector3] = [char_h]
+	if _is_near_opening:
+		origins.append_array(_get_corner_origins(char_pos))
+
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	# グリッドを投擲範囲に集中（64x64 → レイキャスト軽量、後でアップスケールで滑らか化）
+	var grid_size := 64
+	var margin := throw_range * 1.1
+	var area_min := Vector2(char_pos.x - margin, char_pos.z - margin)
+	var area_max := Vector2(char_pos.x + margin, char_pos.z + margin)
+	var area_size := area_max - area_min
+
+	var img := Image.create(grid_size, grid_size, false, Image.FORMAT_L8)
+	var throwable_count := 0
+
+	for py in range(grid_size):
+		for px in range(grid_size):
+			var uv_x := (float(px) + 0.5) / float(grid_size)
+			var uv_y := (float(py) + 0.5) / float(grid_size)
+			var world_x := area_min.x + uv_x * area_size.x
+			var world_z := area_min.y + uv_y * area_size.y
+
+			var dx := world_x - char_pos.x
+			var dz := world_z - char_pos.z
+			var dist_sq := dx * dx + dz * dz
+			if dist_sq > throw_range * throw_range or dist_sq < 0.25:
+				img.set_pixel(px, py, Color(0, 0, 0))
+				continue
+
+			var target := Vector3(world_x, 1.0, world_z)
+
+			var throwable := false
+			for origin in origins:
+				var q := PhysicsRayQueryParameters3D.create(origin, target)
+				q.collision_mask = 2
+				if space_state.intersect_ray(q).is_empty():
+					throwable = true
+					break
+
+			if throwable:
+				img.set_pixel(px, py, Color(1, 1, 1))
+				throwable_count += 1
+			else:
+				img.set_pixel(px, py, Color(0, 0, 0))
+
+	# エッジ滑らか化（壁裏への漏れ防止付き）
+	var mask := img.duplicate()  # 元のバイナリマスクを保存
+	img.resize(16, 16, Image.INTERPOLATE_BILINEAR)   # ダウンスケールでブラー
+	img.resize(64, 64, Image.INTERPOLATE_BILINEAR)    # 元解像度に戻す
+	# 元が非投擲のセルはブラー後も0に戻す（壁裏への漏れ防止）
+	for y in range(64):
+		for x in range(64):
+			if mask.get_pixel(x, y).r < 0.5:
+				img.set_pixel(x, y, Color(0, 0, 0))
+	img.resize(256, 256, Image.INTERPOLATE_BILINEAR)  # アップスケールで滑らか化
+
+	_grenade_throwability_tex = ImageTexture.create_from_image(img)
+	_grenade_mat.set_shader_parameter("visibility_texture", _grenade_throwability_tex)
+	_grenade_mat.set_shader_parameter("map_min", area_min)
+	_grenade_mat.set_shader_parameter("map_max", area_max)
+	print("[GRENADE] throwability mask: %d/%d throwable, origins=%d, cell=%.2fm" % [throwable_count, grid_size * grid_size, origins.size(), area_size.x / grid_size])
 
 
 ## 壁の角から内側に投げ込むためのスタート位置と開口部方向を探す
