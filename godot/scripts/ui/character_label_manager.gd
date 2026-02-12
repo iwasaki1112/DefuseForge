@@ -25,7 +25,7 @@ extends Node
 # ============================================
 # State
 # ============================================
-var _labels: Dictionary = {}  ## character_id -> Node3D (label container)
+var _labels: Dictionary[int, Node3D] = {}  ## character_id -> Node3D (label container)
 var _label_index: int = 0  ## 次のラベル用インデックス（A=0, B=1...）
 
 # ============================================

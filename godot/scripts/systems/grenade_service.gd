@@ -19,7 +19,7 @@ var GrenadeScene: PackedScene = null
 var SmokeGrenadeScene: PackedScene = null
 
 ## グレネード追跡（爆発位置同期用）
-var _active_grenades: Dictionary = {}  ## grenade_id -> Grenade/SmokeGrenade
+var _active_grenades: Dictionary[int, Node3D] = {}  ## grenade_id -> Grenade/SmokeGrenade
 var _exploded_grenades: Array[Node3D] = []  ## 爆発済みグレネード（ラウンド終了時に削除）
 var _next_grenade_id: int = 1
 

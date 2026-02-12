@@ -8,10 +8,10 @@ extends Node
 # ============================================
 
 ## All registered presets indexed by ID
-var _presets: Dictionary = {}  # { id: WeaponPreset }
+var _presets: Dictionary[String, WeaponPreset] = {}  # { id: WeaponPreset }
 
 ## Presets organized by category
-var _by_category: Dictionary = {}  # { WeaponCategory: Array[WeaponPreset] }
+var _by_category: Dictionary[WeaponPreset.WeaponCategory, Array] = {}  # { WeaponCategory: Array[WeaponPreset] }
 
 # ============================================
 # Preset Directory

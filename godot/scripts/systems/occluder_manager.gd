@@ -12,8 +12,8 @@ var _viewport: SubViewport = null
 
 ## オクルーダー管理
 var _wall_occluders: Array[LightOccluder2D] = []
-var _door_occluders: Dictionary = {}  # door_node -> LightOccluder2D
-var _smoke_occluders: Dictionary = {}  # smoke_area -> LightOccluder2D
+var _door_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # door_node -> LightOccluder2D
+var _smoke_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # smoke_area -> LightOccluder2D
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
@@ -196,7 +196,7 @@ func _extract_occluders_recursive(node: Node) -> void:
 					if occluder:
 						_occluder_parent.add_child(occluder)
 						if is_door:
-							var door_node: Node = node if node_name_lower.begins_with("door_") else parent
+							var door_node: Node3D = (node if node_name_lower.begins_with("door_") else parent) as Node3D
 							_door_occluders[door_node] = occluder
 						else:
 							_wall_occluders.append(occluder)
@@ -212,7 +212,7 @@ func _extract_occluders_recursive(node: Node) -> void:
 				if occluder:
 					_occluder_parent.add_child(occluder)
 					if is_door:
-						var door_node: Node = node if node_name_lower.begins_with("door_") else parent
+						var door_node: Node3D = (node if node_name_lower.begins_with("door_") else parent) as Node3D
 						_door_occluders[door_node] = occluder
 					else:
 						_wall_occluders.append(occluder)

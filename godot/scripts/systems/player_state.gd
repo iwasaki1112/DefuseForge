@@ -23,7 +23,7 @@ var _local_peer_id: int = 0
 
 ## 全プレイヤーの状態（peer_id -> SyncState.PlayerStateData）
 ## マルチプレイヤー時に使用
-var _players: Dictionary = {}
+var _players: Dictionary[int, SyncState.PlayerStateData] = {}
 
 # ============================================
 # Team API

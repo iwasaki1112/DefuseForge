@@ -70,9 +70,9 @@ static func deserialize_game_state(data: PackedByteArray) -> SyncState.GameState
 	var snapshot := SyncState.GameStateSnapshot.new()
 
 	var json_str := data.get_string_from_utf8()
-	var json := JSON.new()
-	if json.parse(json_str) == OK and json.data is Dictionary:
-		snapshot.from_dict(json.data)
+	var parsed = JSON.parse_string(json_str)
+	if parsed is Dictionary:
+		snapshot.from_dict(parsed)
 
 	return snapshot
 
@@ -223,9 +223,9 @@ static func serialize_dict(dict: Dictionary) -> PackedByteArray:
 ## PackedByteArrayからDictionaryを復元
 static func deserialize_dict(data: PackedByteArray) -> Dictionary:
 	var json_str := data.get_string_from_utf8()
-	var json := JSON.new()
-	if json.parse(json_str) == OK and json.data is Dictionary:
-		return json.data
+	var parsed = JSON.parse_string(json_str)
+	if parsed is Dictionary:
+		return parsed
 	return {}
 
 

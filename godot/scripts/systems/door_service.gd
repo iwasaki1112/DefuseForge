@@ -12,8 +12,8 @@ signal door_opened(door: Node3D, character: Node)
 
 ## ドアID管理（マルチプレイヤー同期用）
 var _next_door_id: int = 1
-var _door_id_map: Dictionary = {}  ## door_node -> door_id
-var _id_to_door: Dictionary = {}   ## door_id -> door_node
+var _door_id_map: Dictionary[Node3D, int] = {}  ## door_node -> door_id
+var _id_to_door: Dictionary[int, Node3D] = {}   ## door_id -> door_node
 
 ## 外部参照
 var _character_manager: CharacterManagerService = null

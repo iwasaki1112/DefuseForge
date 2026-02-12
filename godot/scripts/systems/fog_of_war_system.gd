@@ -54,8 +54,8 @@ var _visibility_viewport: SubViewport
 var _occluder_manager: OccluderManager = null
 
 ## VisionLight管理
-var _vision_lights: Dictionary = {}  # character -> VisionLight
-var _registered_characters: Array = []
+var _vision_lights: Dictionary[Node3D, VisionLight] = {}  # character -> VisionLight
+var _registered_characters: Array[Node3D] = []
 
 ## 更新フラグ
 var _needs_update: bool = false
