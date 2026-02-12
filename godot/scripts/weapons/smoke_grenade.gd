@@ -35,6 +35,13 @@ func set_smoke_manager(manager: SmokeAreaManager) -> void:
 	_smoke_manager = manager
 
 
+## 着地した瞬間に即発火
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta)
+	if _is_grounded and not _has_exploded:
+		_explode()
+
+
 ## 爆発処理をオーバーライド（スモークエリアを生成）
 func _explode() -> void:
 	if _has_exploded:

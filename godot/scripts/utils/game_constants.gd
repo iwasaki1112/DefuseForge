@@ -97,7 +97,7 @@ const GRENADE_MASS := 0.4  # 質量
 # ========================================================
 const SMOKE_DURATION := 10.0  # スモーク持続時間（秒）
 const SMOKE_RADIUS := 3.5  # スモーク半径（メートル）
-const SMOKE_EXPAND_TIME := 1.5  # 展開時間（秒）
+const SMOKE_EXPAND_TIME := 0.5  # 展開時間（秒）
 const SMOKE_FADE_TIME := 2.5  # 消滅時間（秒）
 const SMOKE_FUSE_TIME := 3.0  # 導火線時間（秒）
 
