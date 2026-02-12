@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dsmoke_grenade"]
 
 [ext_resource type="Script" path="res://scripts/weapons/smoke_grenade.gd" id="1_smoke_grenade"]
-[ext_resource type="PackedScene" uid="uid://gjhu0hjnilsv" path="res://assets/weapons/hand_granade/hand_granade.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/weapons/smoke_granade/smoke_granade.glb" id="2_model"]
 
 [node name="SmokeGrenade" type="Node3D"]
 script = ExtResource("1_smoke_grenade")

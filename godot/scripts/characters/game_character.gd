@@ -360,7 +360,7 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	socket.add_child(_weapon_model)
 
 	# ARP skeleton is 1.0 scale, weapon enlarged for top-down visibility
-	_weapon_model.scale = Vector3.ONE * 1.4
+	_weapon_model.scale = Vector3.ONE * GameConstants.WEAPON_VISIBILITY_SCALE
 	_weapon_model.position = Vector3.ZERO
 	_weapon_model.rotation_degrees = Vector3.ZERO
 

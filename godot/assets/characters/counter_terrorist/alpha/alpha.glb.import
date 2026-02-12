@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c4gp0yf1rydh6"
-path="res://.godot/imported/ares.glb-4286e66d62e0701606fc0bbb41bfee74.scn"
+uid="uid://ciqeo10uf2fj2"
+path="res://.godot/imported/alpha.glb-f4c85b2db80caf3a3cdca2fa08a8f616.scn"
 
 [deps]
 
-source_file="res://assets/characters/terrorist/ares/ares.glb"
-dest_files=["res://.godot/imported/ares.glb-4286e66d62e0701606fc0bbb41bfee74.scn"]
+source_file="res://assets/characters/counter_terrorist/alpha/alpha.glb"
+dest_files=["res://.godot/imported/alpha.glb-f4c85b2db80caf3a3cdca2fa08a8f616.scn"]
 
 [params]
 
@@ -17,7 +17,7 @@ nodes/root_type=""
 nodes/root_name=""
 nodes/root_script=null
 nodes/apply_root_scale=true
-nodes/root_scale=2.0
+nodes/root_scale=1.84
 nodes/import_as_skeleton_bones=false
 nodes/use_name_suffixes=true
 nodes/use_node_type_suffixes=true

@@ -16,9 +16,9 @@ signal exploded(position: Vector3)
 
 ## 物理設定
 @export var throw_gravity: float = 9.8  ## 重力
-@export var bounce_factor: float = 0.15  ## 跳ね返り係数
-@export var friction: float = 0.5  ## 摩擦係数
-@export var min_bounce_velocity: float = 1.2  ## バウンス判定の最小速度
+@export var bounce_factor: float = 0.4  ## 跳ね返り係数（複数回の小バウンド用）
+@export var friction: float = 0.8  ## 摩擦係数（着地後の減速用）
+@export var min_bounce_velocity: float = 0.3  ## バウンス判定の最小速度（小さいほど細かいバウンドが出る）
 @export var collision_radius: float = 0.08  ## 衝突判定の半径
 
 ## 内部状態
@@ -35,12 +35,22 @@ var _is_active: bool = false  ## 飛行中かどうか
 var _is_grounded: bool = false  ## 地面に着地しているか
 var _ground_normal: Vector3 = Vector3.UP  ## 地面の法線
 
+## 回転演出
+var _spin_axis: Vector3 = Vector3.ZERO  ## 回転軸（投擲方向に直交）
+var _spin_speed: float = 0.0  ## 現在の回転速度（rad/s）
+const SPIN_SPEED_BASE: float = 12.0  ## 基本回転速度（rad/s）
+var _model_node: Node3D = null  ## Modelノード参照キャッシュ
+
 ## タイマー
 var _fuse_timer: Timer = null
 
 
 func _ready() -> void:
 	_setup_fuse_timer()
+	# 武器モデルの視認性向上スケールを適用
+	_model_node = get_node_or_null("Model") as Node3D
+	if _model_node:
+		_model_node.scale = Vector3.ONE * GameConstants.WEAPON_VISIBILITY_SCALE
 
 
 ## FogOfWarSystemを設定（リモートグレネードのFoW可視性チェック用）
@@ -53,7 +63,32 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_update_kinematic(delta)
+	_update_spin(delta)
 	_update_fow_visibility()
+
+
+## モデルの回転演出を更新
+func _update_spin(delta: float) -> void:
+	if not _model_node or _spin_speed < 0.1:
+		return
+	_model_node.rotate(_spin_axis, _spin_speed * delta)
+	# 着地後は摩擦で回転を減衰
+	if _is_grounded:
+		_spin_speed = move_toward(_spin_speed, 0.0, SPIN_SPEED_BASE * 2.0 * delta)
+
+
+## ランダムな回転軸と速度を初期化
+func _init_spin() -> void:
+	# ランダムな方向の回転軸を生成（単位球面上の一様分布）
+	_spin_axis = Vector3(
+		randf_range(-1.0, 1.0),
+		randf_range(-1.0, 1.0),
+		randf_range(-1.0, 1.0)
+	).normalized()
+	# 軸がゼロベクトルになった場合のフォールバック
+	if _spin_axis.length_squared() < 0.01:
+		_spin_axis = Vector3.RIGHT
+	_spin_speed = SPIN_SPEED_BASE * randf_range(0.8, 1.2)
 
 
 ## 導火線タイマーをセットアップ
@@ -177,14 +212,19 @@ func _handle_collision(collision: Dictionary) -> void:
 		var vertical_speed: float = absf(_velocity.y)
 
 		if vertical_speed < min_bounce_velocity:
-			# バウンスせず着地
+			# 十分遅いのでバウンスせず着地
 			_is_grounded = true
 			_ground_normal = normal
 			_velocity.y = 0
-			# 水平速度を維持
+			# 水平速度も減衰（着地の衝撃）
+			_velocity.x *= 0.5
+			_velocity.z *= 0.5
 		else:
-			# バウンス
+			# バウンス（垂直方向を反射＋減衰）
 			_velocity = _velocity.bounce(normal) * bounce_factor
+			# 水平速度も毎バウンスで減衰
+			_velocity.x *= 0.7
+			_velocity.z *= 0.7
 	else:
 		# 壁にバウンス
 		_velocity = _velocity.bounce(normal) * bounce_factor
@@ -208,6 +248,7 @@ func throw(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null, arc_
 	_velocity = velocity
 	_is_active = true
 	_is_grounded = false
+	_init_spin()
 
 	# 導火線タイマー開始
 	_fuse_timer.start()
@@ -223,6 +264,7 @@ func throw_with_velocity(start_pos: Vector3, velocity: Vector3) -> void:
 	_velocity = velocity
 	_is_active = true
 	_is_grounded = false
+	_init_spin()
 	_fuse_timer.start()
 
 
@@ -357,9 +399,6 @@ func _explode() -> void:
 
 	# シグナル発火
 	exploded.emit(global_position)
-
-	# オブジェクト削除
-	queue_free()
 
 
 ## コライダーからGameCharacterを探す

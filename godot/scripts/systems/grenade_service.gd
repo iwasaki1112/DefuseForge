@@ -20,6 +20,7 @@ var SmokeGrenadeScene: PackedScene = null
 
 ## グレネード追跡（爆発位置同期用）
 var _active_grenades: Dictionary = {}  ## grenade_id -> Grenade/SmokeGrenade
+var _exploded_grenades: Array[Node3D] = []  ## 爆発済みグレネード（ラウンド終了時に削除）
 var _next_grenade_id: int = 1
 
 ## 外部参照
@@ -180,13 +181,17 @@ func handle_grenade_explode_from_network(grenade_id: int, position: Vector3, _is
 
 	if is_instance_valid(grenade):
 		grenade.explode_at_position(position)
+		_exploded_grenades.append(grenade)
 
 
 ## グレネード爆発時のコールバック（ネットワーク送信用）
 func _on_grenade_exploded(position: Vector3, grenade_id: int, is_smoke: bool) -> void:
-	# 追跡から削除
+	# アクティブから爆発済みリストに移動
 	if _active_grenades.has(grenade_id):
+		var grenade: Node3D = _active_grenades[grenade_id]
 		_active_grenades.erase(grenade_id)
+		if is_instance_valid(grenade):
+			_exploded_grenades.append(grenade)
 
 	# ネットワークイベントを発火（リモート側で同じ位置で爆発させる）
 	grenade_explode_network_event.emit(grenade_id, position, is_smoke)
@@ -208,4 +213,8 @@ func clear_all() -> void:
 		if is_instance_valid(grenade):
 			grenade.queue_free()
 	_active_grenades.clear()
+	for grenade in _exploded_grenades:
+		if is_instance_valid(grenade):
+			grenade.queue_free()
+	_exploded_grenades.clear()
 	_next_grenade_id = 1

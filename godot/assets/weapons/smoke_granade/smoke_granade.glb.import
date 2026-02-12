@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c4gp0yf1rydh6"
-path="res://.godot/imported/ares.glb-4286e66d62e0701606fc0bbb41bfee74.scn"
+uid="uid://fu6erjvs5cgu"
+path="res://.godot/imported/smoke_granade.glb-c32a38a755c080146a431f441d473480.scn"
 
 [deps]
 
-source_file="res://assets/characters/terrorist/ares/ares.glb"
-dest_files=["res://.godot/imported/ares.glb-4286e66d62e0701606fc0bbb41bfee74.scn"]
+source_file="res://assets/weapons/smoke_granade/smoke_granade.glb"
+dest_files=["res://.godot/imported/smoke_granade.glb-c32a38a755c080146a431f441d473480.scn"]
 
 [params]
 
@@ -17,7 +17,7 @@ nodes/root_type=""
 nodes/root_name=""
 nodes/root_script=null
 nodes/apply_root_scale=true
-nodes/root_scale=2.0
+nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
 nodes/use_name_suffixes=true
 nodes/use_node_type_suffixes=true

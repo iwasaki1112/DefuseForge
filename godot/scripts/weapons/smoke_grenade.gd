@@ -48,9 +48,6 @@ func _explode() -> void:
 	# シグナル発火（親クラスと同じ）
 	exploded.emit(global_position)
 
-	# オブジェクト削除
-	queue_free()
-
 
 ## スモークエリアを展開
 func _deploy_smoke() -> void:
