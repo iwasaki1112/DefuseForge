@@ -156,8 +156,8 @@ func _setup_enemy_visibility_system() -> void:
 # ============================================
 
 func _on_smoke_area_added(_area: Node3D) -> void:
-	# FoWオクルーダーは追加しない（扇形の視界はそのまま維持）
-	# 敵の非表示はEnemyVisibilitySystem側でSmokeAreaManagerを使って処理
+	# FoWオクルーダーは追加しない（扇形の視界表示はそのまま維持）
+	# 敵キャラクターの表示/非表示はEnemyVisibilitySystemで制御
 	pass
 
 

@@ -168,9 +168,14 @@ func _check_enemy_visibility(enemy: Node) -> void:
 	var enemy_pos: Vector3 = enemy_node3d.global_position
 	var is_visible := _is_position_visible_to_friendlies(enemy_pos)
 
-	# スモーク内の敵は常に非表示（FoWテクスチャだけではスモーク内部手前側が可視になるため）
-	if is_visible and _smoke_area_manager and _smoke_area_manager.is_position_in_smoke(enemy_pos):
-		is_visible = false
+	# スモーク可視性チェック（双方向で不透明）
+	if is_visible and _smoke_area_manager:
+		if _smoke_area_manager.is_position_in_smoke(enemy_pos):
+			# 敵がスモーク内 → 非表示（外から中が見えない）
+			is_visible = false
+		elif _are_all_friendlies_in_smoke():
+			# 全味方がスモーク内 → 外の敵も非表示（中から外が見えない）
+			is_visible = false
 
 	var instance_id := enemy.get_instance_id()
 
@@ -183,6 +188,19 @@ func _check_enemy_visibility(enemy: Node) -> void:
 		var elapsed := Time.get_ticks_usec() - start_time
 		if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
 			print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
+
+
+## 全ての生存味方がスモーク内にいるか判定
+func _are_all_friendlies_in_smoke() -> bool:
+	if not _smoke_area_manager:
+		return false
+	for friendly in _get_friendly_characters():
+		var game_char := friendly as GameCharacter
+		if not game_char or not game_char.is_alive:
+			continue
+		if not _smoke_area_manager.is_position_in_smoke(friendly.global_position):
+			return false  # スモーク外の味方がいる → false
+	return true  # 全味方がスモーク内
 
 
 ## Check if a world position is visible to any friendly character
