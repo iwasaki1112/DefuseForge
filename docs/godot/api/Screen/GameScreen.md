@@ -106,6 +106,18 @@ func _setup_label_manager() -> void:
     game_manager.set_label_manager(lm)
 ```
 
+## HP表示
+
+画面左下にプレイヤーキャラクターのHPをバー＋数値で表示します。
+
+- **位置**: 左下（ジョイスティックの上）
+- **構成**: `HBoxContainer` > `ProgressBar`(160x20) + `Label`(数値)
+- **色変化**: HP割合に応じて自動変更
+  - 50%超: 緑 `(0.2, 0.8, 0.2)`
+  - 25〜50%: 黄 `(0.9, 0.7, 0.1)`
+  - 25%以下: 赤 `(0.9, 0.2, 0.2)`
+- **更新**: `_update_tps_hud()` で毎フレーム `get_health_ratio()` と `current_health` を参照
+
 ## TPS操作
 
 `_setup_tps_controller()`でTPSPlayerControllerを初期化し、プレイヤーキャラクターの操作を委譲。
