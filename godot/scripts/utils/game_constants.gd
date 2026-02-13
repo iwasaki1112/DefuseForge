@@ -8,14 +8,11 @@ class_name GameConstants
 # ========================================================
 # Character Model
 # ========================================================
-## キャラクターモデルの共通スケール（.glb.import の nodes/root_scale に設定する値）
-## 新規キャラクター追加時はこの値に合わせること
-const CHARACTER_MODEL_SCALE: float = 2.0
 
 # ========================================================
 # Weapon Visibility
 # ========================================================
-const WEAPON_VISIBILITY_SCALE: float = 1.4  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
+const WEAPON_VISIBILITY_SCALE: float = 1.3  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
 
 # ========================================================
 # Node Names
@@ -61,19 +58,19 @@ const NODE_LEFT_HAND_IK_TARGET := "LeftHandIKTarget"
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "Rifle_Death_Forward"
-const ANIM_DEATH_FORWARD := "Rifle_Death_Forward"
-const ANIM_DEATH_BACKWARD := "Rifle_Death_Backward"
-const ANIM_DEATH_LEFT := "Rifle_Death_Left"
-const ANIM_DEATH_RIGHT := "Rifle_Death_Right"
-const ANIM_RIFLE_DOOR_KICK := "Rifle_Melee_Kick"
-const ANIM_PISTOL_DOOR_KICK := "Pistol_Melee_Kick"
-const ANIM_PISTOL_LOW_THROWING := "Pistol_Grenade_Throw_Single"
-const ANIM_PISTOL_GRENADE_THROW_CLOSE := "Pistol_Grenade_Throw_Close"
-const ANIM_RIFLE_GRENADE_THROW_FAR := "Rifle_Grenade_Throw_Far"
-const ANIM_RIFLE_GRENADE_THROW_CLOSE := "Rifle_Grenade_Throw_Close"
-const ANIM_RIFLE_OPEN_DOOR := "Rifle_OpenDoor"
-const ANIM_TALKING := "Talking"
+const ANIM_DEATH := "game_rifle_death_forward"
+const ANIM_DEATH_FORWARD := "game_rifle_death_forward"
+const ANIM_DEATH_BACKWARD := "game_rifle_death_backward"
+const ANIM_DEATH_LEFT := "game_rifle_death_left"
+const ANIM_DEATH_RIGHT := "game_rifle_death_right"
+const ANIM_RIFLE_DOOR_KICK := "game_rifle_melee_kick"
+const ANIM_PISTOL_DOOR_KICK := "game_pistol_melee_kick"
+const ANIM_PISTOL_LOW_THROWING := "game_pistol_grenade_throw_single"
+const ANIM_PISTOL_GRENADE_THROW_CLOSE := "game_pistol_grenade_throw_close"
+const ANIM_RIFLE_GRENADE_THROW_FAR := "game_rifle_grenade_throw_far"
+const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
+const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
+const ANIM_TALKING := "game_rifle_talking"
 
 # ========================================================
 # Hostage Talking Settings

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://ciqeo10uf2fj2"
-path="res://.godot/imported/alpha.glb-f4c85b2db80caf3a3cdca2fa08a8f616.scn"
+uid="uid://c7apc8eqmtw36"
+path="res://.godot/imported/character_anims_kubold.glb-4610a69c62903b9756ed9ed48b0f21a6.scn"
 
 [deps]
 
-source_file="res://assets/characters/counter_terrorist/alpha/alpha.glb"
-dest_files=["res://.godot/imported/alpha.glb-f4c85b2db80caf3a3cdca2fa08a8f616.scn"]
+source_file="res://assets/animations/character_anims_kubold.glb"
+dest_files=["res://.godot/imported/character_anims_kubold.glb-4610a69c62903b9756ed9ed48b0f21a6.scn"]
 
 [params]
 
@@ -39,4 +39,4 @@ materials/extract_format=0
 materials/extract_path=""
 _subresources={}
 gltf/naming_version=2
-gltf/embedded_image_handling=1
+gltf/embedded_image_handling=0

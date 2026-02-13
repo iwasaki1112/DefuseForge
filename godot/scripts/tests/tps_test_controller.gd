@@ -20,7 +20,7 @@ const CHARACTER_PRESET_ID := "alpha"
 const ENEMY_PRESET_ID := "ares"
 const DEFAULT_WEAPON_ID := "glock"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
-const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
+const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
 
 # Vision
 const VISION_FOV := 75.0

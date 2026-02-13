@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cd6w12lvoqppl"
-path.s3tc="res://.godot/imported/character_anims_inplace_militarysoldier3dmodel_basecolor.jpg-53a2f0f7d214a2bccf55f6adc5580ff3.s3tc.ctex"
-path.etc2="res://.godot/imported/character_anims_inplace_militarysoldier3dmodel_basecolor.jpg-53a2f0f7d214a2bccf55f6adc5580ff3.etc2.ctex"
+uid="uid://cyaj2d86nppau"
+path.s3tc="res://.godot/imported/ares_2b038b8c_c84c93c0-463e-4bb0-8378-40de77a5beaf_basecolor.jpg-a1578238da504a9f5e538861525aa082.s3tc.ctex"
+path.etc2="res://.godot/imported/ares_2b038b8c_c84c93c0-463e-4bb0-8378-40de77a5beaf_basecolor.jpg-a1578238da504a9f5e538861525aa082.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "78d2ff1b44d5808ec70864a8faa400e4"
+"md5": "72a8bcfb242533a2bbfeaeafbe6993d6"
 }
 
 [deps]
 
-source_file="res://assets/animations/character_anims_inplace_militarysoldier3dmodel_basecolor.jpg"
-dest_files=["res://.godot/imported/character_anims_inplace_militarysoldier3dmodel_basecolor.jpg-53a2f0f7d214a2bccf55f6adc5580ff3.s3tc.ctex", "res://.godot/imported/character_anims_inplace_militarysoldier3dmodel_basecolor.jpg-53a2f0f7d214a2bccf55f6adc5580ff3.etc2.ctex"]
+source_file="res://assets/characters/terrorist/ares/ares_2b038b8c_c84c93c0-463e-4bb0-8378-40de77a5beaf_basecolor.jpg"
+dest_files=["res://.godot/imported/ares_2b038b8c_c84c93c0-463e-4bb0-8378-40de77a5beaf_basecolor.jpg-a1578238da504a9f5e538861525aa082.s3tc.ctex", "res://.godot/imported/ares_2b038b8c_c84c93c0-463e-4bb0-8378-40de77a5beaf_basecolor.jpg-a1578238da504a9f5e538861525aa082.etc2.ctex"]
 
 [params]
 

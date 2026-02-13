@@ -697,11 +697,11 @@ func apply_animation_state(state: String, delta: float) -> void:
 
 ## 武器プレフィックスを取得
 func _get_weapon_prefix() -> String:
-	return "Rifle" if _weapon != Weapon.PISTOL else "Pistol"
+	return "game_rifle" if _weapon != Weapon.PISTOL else "game_pistol"
 
 ## 現在の武器のアイドルアニメーション名
 func _get_idle_anim_name() -> String:
-	return _get_weapon_prefix() + "_Idle"
+	return _get_weapon_prefix() + "_idle"
 
 ## 現在の武器のアニメーション速度テーブル
 func _get_anim_speeds() -> Dictionary:
@@ -774,19 +774,19 @@ func _setup_left_hand_ik() -> void:
 func _setup_animation_loops() -> void:
 	var loop_anims := [
 		# Idle animations
-		"Rifle_Idle", "Pistol_Idle",
+		"game_rifle_idle", "game_pistol_idle",
 		# Rifle walk (8 directions)
-		"Rifle_WalkFwdLoop", "Rifle_WalkBwdLoop",
-		"Rifle_StrafeLeftLoop", "Rifle_StrafeRightLoop",
-		"Rifle_StrafeLeft45Loop", "Rifle_StrafeRight45Loop",
-		"Rifle_StrafeLeft135Loop", "Rifle_StrafeRight135Loop",
+		"game_rifle_walk_forward", "game_rifle_walk_backward",
+		"game_rifle_strafe_left", "game_rifle_strafe_right",
+		"game_rifle_strafe_left_45", "game_rifle_strafe_right_45",
+		"game_rifle_strafe_left_135", "game_rifle_strafe_right_135",
 		# Pistol walk (8 directions)
-		"Pistol_WalkFwdLoop", "Pistol_WalkBwdLoop",
-		"Pistol_StrafeLeftLoop", "Pistol_StrafeRightLoop",
-		"Pistol_StrafeLeft45Loop", "Pistol_StrafeRight45Loop",
-		"Pistol_StrafeLeft135Loop", "Pistol_StrafeRight135Loop",
+		"game_pistol_walk_forward", "game_pistol_walk_backward",
+		"game_pistol_strafe_left", "game_pistol_strafe_right",
+		"game_pistol_strafe_left_45", "game_pistol_strafe_right_45",
+		"game_pistol_strafe_left_135", "game_pistol_strafe_right_135",
 		# Sprint
-		"Rifle_SprintLoop", "Pistol_SprintLoop",
+		"game_rifle_sprint", "game_pistol_sprint",
 	]
 
 	var anim_lib = _anim_player.get_animation_library("")
@@ -818,16 +818,16 @@ func _setup_animation_tree() -> void:
 
 	# --- Idle animation ---
 	var idle_anim := AnimationNodeAnimation.new()
-	idle_anim.animation = prefix + "_Idle"
+	idle_anim.animation = prefix + "_idle"
 
 	# --- Sprint animation ---
 	var sprint_anim := AnimationNodeAnimation.new()
-	var sprint_name := prefix + "_SprintLoop"
+	var sprint_name := prefix + "_sprint"
 	if _anim_player.has_animation(sprint_name):
 		sprint_anim.animation = sprint_name
 	else:
 		# SprintLoopがない場合はWalkFwdLoopで代替（TimeScaleで速度調整）
-		sprint_anim.animation = prefix + "_WalkFwdLoop"
+		sprint_anim.animation = prefix + "_walk_forward"
 
 	# --- IdleBlend: 0=Idle, 1=Walk ---
 	var idle_blend := AnimationNodeBlend2.new()
@@ -840,7 +840,7 @@ func _setup_animation_tree() -> void:
 
 	# --- Shoot OneShot (上半身フィルター) ---
 	var shoot_anim := AnimationNodeAnimation.new()
-	shoot_anim.animation = prefix + "_ShootOnce" if _anim_player.has_animation(prefix + "_ShootOnce") else ""
+	shoot_anim.animation = prefix + "_shoot_once" if _anim_player.has_animation(prefix + "_shoot_once") else ""
 	var shoot_oneshot := AnimationNodeOneShot.new()
 	shoot_oneshot.fadein_time = 0.05
 	shoot_oneshot.fadeout_time = 0.15
@@ -894,14 +894,14 @@ func _create_walk_blend_space(prefix: String) -> AnimationNodeBlendSpace2D:
 	# Forward=(0,1), FwdRight=(0.707,0.707), Right=(1,0), BwdRight=(0.707,-0.707)
 	# Backward=(0,-1), BwdLeft=(-0.707,-0.707), Left=(-1,0), FwdLeft=(-0.707,0.707)
 	var walk_points := {
-		Vector2(0, 1): prefix + "_WalkFwdLoop",
-		Vector2(0.707, 0.707): prefix + "_StrafeRight45Loop",
-		Vector2(1, 0): prefix + "_StrafeRightLoop",
-		Vector2(0.707, -0.707): prefix + "_StrafeRight135Loop",
-		Vector2(0, -1): prefix + "_WalkBwdLoop",
-		Vector2(-0.707, -0.707): prefix + "_StrafeLeft135Loop",
-		Vector2(-1, 0): prefix + "_StrafeLeftLoop",
-		Vector2(-0.707, 0.707): prefix + "_StrafeLeft45Loop",
+		Vector2(0, 1): prefix + "_walk_forward",
+		Vector2(0.707, 0.707): prefix + "_strafe_right_45",
+		Vector2(1, 0): prefix + "_strafe_right",
+		Vector2(0.707, -0.707): prefix + "_strafe_right_135",
+		Vector2(0, -1): prefix + "_walk_backward",
+		Vector2(-0.707, -0.707): prefix + "_strafe_left_135",
+		Vector2(-1, 0): prefix + "_strafe_left",
+		Vector2(-0.707, 0.707): prefix + "_strafe_left_45",
 	}
 
 	for pos in walk_points:
@@ -928,31 +928,31 @@ func _switch_weapon_animations() -> void:
 	# Idle
 	var idle_node := bt.get_node("Idle") as AnimationNodeAnimation
 	if idle_node:
-		idle_node.animation = prefix + "_Idle"
+		idle_node.animation = prefix + "_idle"
 
 	# Sprint
 	var sprint_node := bt.get_node("Sprint") as AnimationNodeAnimation
 	if sprint_node:
-		sprint_node.animation = prefix + "_SprintLoop"
+		sprint_node.animation = prefix + "_sprint"
 
 	# Shoot
 	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation
 	if shoot_node:
-		var shoot_name := prefix + "_ShootOnce"
+		var shoot_name := prefix + "_shoot_once"
 		shoot_node.animation = shoot_name if _anim_player.has_animation(shoot_name) else ""
 
 	# WalkBlend (BlendSpace2D) - 8方向のアニメーション名を更新
 	var walk_blend := bt.get_node("WalkBlend") as AnimationNodeBlendSpace2D
 	if walk_blend:
 		var walk_anims := [
-			prefix + "_WalkFwdLoop",
-			prefix + "_StrafeRight45Loop",
-			prefix + "_StrafeRightLoop",
-			prefix + "_StrafeRight135Loop",
-			prefix + "_WalkBwdLoop",
-			prefix + "_StrafeLeft135Loop",
-			prefix + "_StrafeLeftLoop",
-			prefix + "_StrafeLeft45Loop",
+			prefix + "_walk_forward",
+			prefix + "_strafe_right_45",
+			prefix + "_strafe_right",
+			prefix + "_strafe_right_135",
+			prefix + "_walk_backward",
+			prefix + "_strafe_left_135",
+			prefix + "_strafe_left",
+			prefix + "_strafe_left_45",
 		]
 		for i in range(mini(walk_anims.size(), walk_blend.get_blend_point_count())):
 			var anim_node := walk_blend.get_blend_point_node(i) as AnimationNodeAnimation
