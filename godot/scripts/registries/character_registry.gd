@@ -179,9 +179,7 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 	character.team = preset.team
 	character.position = spawn_position
 
-	# Add model as child (共通スケール適用)
 	model.name = "CharacterModel"
-	model.scale = Vector3.ONE * GameConstants.CHARACTER_MODEL_SCALE
 	character.add_child(model)
 
 	# Setup collision shape (物理衝突用 - 小さめ)
@@ -236,6 +234,21 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 		# _facing_directionが設定されていればモデルを回転
 		if character._facing_direction.length_squared() > 0.001:
 			anim_ctrl.set_model_direction(character._facing_direction)
+		# アニメーション適用後にSkeleton3Dオフセットを補正
+		await character.get_tree().process_frame
+		var skel := _find_skeleton(model)
+		if skel:
+			model.position.y = -skel.position.y
 	, CONNECT_ONE_SHOT)
 
 	return character
+
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var result := _find_skeleton(child)
+		if result:
+			return result
+	return null

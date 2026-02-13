@@ -143,7 +143,7 @@ func _setup_scene(preset: CharacterPreset) -> void:
 	else:
 		print("[DEBUG] WARNING: _animation_library is null!")
 
-	print("[DEBUG] AnimationPlayer has_animation('Rifle_Idle'): %s" % anim_player.has_animation("Rifle_Idle"))
+	print("[DEBUG] AnimationPlayer has_animation('Rifle_Idle'): %s" % anim_player.has_animation("game_rifle_idle"))
 	print("[DEBUG] AnimationPlayer animation list: %s" % str(anim_player.get_animation_list()))
 
 	var anim_ctrl = CharacterAnimationController.new()
@@ -168,12 +168,19 @@ func _setup_scene(preset: CharacterPreset) -> void:
 			print("[DEBUG] WalkBlend node: %s" % (walk_node != null))
 		# Try direct AnimationPlayer play
 		print("[DEBUG] Trying direct anim_player.play('Rifle_Idle')...")
-		anim_player.play("Rifle_Idle")
+		anim_player.play("game_rifle_idle")
 	else:
 		print("[DEBUG] WARNING: AnimationTree not found!")
 	character.set_muzzle_flash_preview(muzzle_preview_toggle.button_pressed)
 
 	character.position = Vector3(0, 0, 0)
+
+	# アニメーション適用後にSkeleton3Dオフセットを補正
+	await get_tree().process_frame
+	var skeleton := _find_skeleton(model)
+	if skeleton:
+		model.position.y = -skeleton.position.y
+		print("[DEBUG-FLOAT] Skeleton offset compensated: model.y = %s" % model.position.y)
 
 
 ## Load shared animation library from GLB file
@@ -620,3 +627,33 @@ func _update_grip_preset_display() -> void:
 		]
 	else:
 		grip_preset_label.text = "Grip: (no LeftHandGrip node)"
+
+
+func _debug_print_tree_positions(node: Node, depth: int) -> void:
+	if node is Node3D:
+		var n3d := node as Node3D
+		var info := "  ".repeat(depth) + "%s (%s) pos=%s" % [n3d.name, n3d.get_class(), n3d.position]
+		if n3d is Skeleton3D:
+			var skel := n3d as Skeleton3D
+			var hips_idx := skel.find_bone("Hips")
+			if hips_idx >= 0:
+				var hips_pose := skel.get_bone_global_pose(hips_idx)
+				info += " | Hips_global_y=%.4f" % hips_pose.origin.y
+		if n3d is MeshInstance3D:
+			var mi := n3d as MeshInstance3D
+			var aabb := mi.get_aabb()
+			info += " | AABB_min_y=%.4f max_y=%.4f" % [aabb.position.y, aabb.position.y + aabb.size.y]
+		print("[DEBUG-FLOAT] %s" % info)
+	for child in node.get_children():
+		if depth < 3:
+			_debug_print_tree_positions(child, depth + 1)
+
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var result := _find_skeleton(child)
+		if result:
+			return result
+	return null

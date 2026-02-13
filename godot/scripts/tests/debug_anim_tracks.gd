@@ -13,9 +13,9 @@ func _init():
 		anim_lib = source_player.get_animation_library("")
 		print("=== Source Animation Library ===")
 		print("Animations: %s" % str(anim_lib.get_animation_list()))
-		var sample_anim = anim_lib.get_animation("Rifle_Idle")
+		var sample_anim = anim_lib.get_animation("game_rifle_idle")
 		if sample_anim:
-			print("Rifle_Idle tracks: %d" % sample_anim.get_track_count())
+			print("game_rifle_idle tracks: %d" % sample_anim.get_track_count())
 			for i in range(min(3, sample_anim.get_track_count())):
 				print("  Track[%d]: %s" % [i, sample_anim.track_get_path(i)])
 	anim_instance.queue_free()
@@ -43,8 +43,8 @@ func _init():
 			anim_player.add_animation_library("", anim_lib)
 
 		print("\n=== AnimationPlayer (after library swap) ===")
-		print("Has Rifle_Idle: %s" % anim_player.has_animation("Rifle_Idle"))
-		print("Has Rifle_WalkFwdLoop: %s" % anim_player.has_animation("Rifle_WalkFwdLoop"))
+		print("Has Rifle_Idle: %s" % anim_player.has_animation("game_rifle_idle"))
+		print("Has Rifle_WalkFwdLoop: %s" % anim_player.has_animation("game_rifle_walk_forward"))
 		print("Animation list: %s" % str(anim_player.get_animation_list()))
 
 		# Step 4: Change root_node like the controller does
@@ -66,7 +66,7 @@ func _init():
 
 		# Step 6: Check track path resolution
 		if anim_lib:
-			var test_anim = anim_lib.get_animation("Rifle_Idle")
+			var test_anim = anim_lib.get_animation("game_rifle_idle")
 			if test_anim:
 				print("\n=== Track Path Resolution Test ===")
 				for i in range(min(5, test_anim.get_track_count())):

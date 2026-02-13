@@ -265,11 +265,8 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 	var dir := Vector3(sin(y_rotation), 0, cos(y_rotation))
 	character.set_initial_facing(dir)
 
-	# モデル追加（共通スケール適用 + 地面めり込み補正）
 	var model: Node3D = preset.model_scene.instantiate() as Node3D
 	model.name = "CharacterModel"
-	model.scale = Vector3.ONE * GameConstants.CHARACTER_MODEL_SCALE
-	model.position.y = 0.15  # モデル原点が足元より上にあるため補正
 	character.add_child(model)
 
 	# コリジョン（壁・床との衝突用）
@@ -295,15 +292,21 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 
 	# 共有ライブラリからHostageアニメーションだけをduplicate（共有インスタンス汚染を防ぐ）
 	var shared_lib := CharacterRegistry.get_animation_library()
-	if shared_lib and shared_lib.has_animation("Hostage"):
-		var hostage_anim := shared_lib.get_animation("Hostage").duplicate()
+	if shared_lib and shared_lib.has_animation("game_hostage"):
+		var hostage_anim := shared_lib.get_animation("game_hostage").duplicate()
 		hostage_anim.loop_mode = Animation.LOOP_LINEAR
 		var hostage_lib := AnimationLibrary.new()
-		hostage_lib.add_animation("Hostage", hostage_anim)
+		hostage_lib.add_animation("game_hostage", hostage_anim)
 		if anim_player.has_animation_library(""):
 			anim_player.remove_animation_library("")
 		anim_player.add_animation_library("", hostage_lib)
-		anim_player.play("Hostage")
+		anim_player.play("game_hostage")
+
+	# アニメーション適用後にSkeleton3Dオフセットを補正
+	await get_tree().process_frame
+	var skel := _find_skeleton_in(model)
+	if skel:
+		model.position.y = -skel.position.y
 
 	# hostageグループに追加（識別用）
 	character.add_to_group("hostages")
@@ -1547,6 +1550,16 @@ func _cleanup_before_transition() -> void:
 
 func _exit_tree() -> void:
 	_cleanup_before_transition()
+
+
+func _find_skeleton_in(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var result := _find_skeleton_in(child)
+		if result:
+			return result
+	return null
 
 
 ## ========================================
