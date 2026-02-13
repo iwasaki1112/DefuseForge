@@ -25,6 +25,7 @@ const PRESET_DIR := "res://data/weapons/"
 const PRESET_FILES := [
 	"res://data/weapons/ak47.tres",
 	"res://data/weapons/glock.tres",
+	"res://data/weapons/mark18.tres",
 ]
 
 # ============================================

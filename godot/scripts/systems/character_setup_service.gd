@@ -6,7 +6,8 @@ extends RefCounted
 var enemy_visibility_system: Node = null
 var fog_of_war_system: Node3D = null
 var label_manager: CharacterLabelManager = null
-var default_weapon_id: String = "ak47"
+var default_weapon_id_ct: String = "mark18"
+var default_weapon_id_t: String = "ak47"
 var is_vision_enabled: bool = false
 var default_vision_fov: float = 75.0
 var default_vision_range: float = 7.0
@@ -16,7 +17,8 @@ func setup(
 	visibility_system: Node,
 	fow_system: Node3D,
 	label_mgr: CharacterLabelManager,
-	weapon_id: String,
+	weapon_id_ct: String,
+	weapon_id_t: String,
 	vision_enabled: bool,
 	vision_fov: float,
 	vision_range: float
@@ -24,7 +26,8 @@ func setup(
 	enemy_visibility_system = visibility_system
 	fog_of_war_system = fow_system
 	label_manager = label_mgr
-	default_weapon_id = weapon_id
+	default_weapon_id_ct = weapon_id_ct
+	default_weapon_id_t = weapon_id_t
 	is_vision_enabled = vision_enabled
 	default_vision_fov = vision_fov
 	default_vision_range = vision_range
@@ -73,12 +76,16 @@ func _complete_character_setup(character: Node) -> void:
 		if fog_of_war_system:
 			fog_of_war_system.set_fog_visible(false)
 
-	# デフォルト武器を装備
+	# チームに応じたデフォルト武器を装備
+	var weapon_id := default_weapon_id_ct
+	if character is GameCharacter and character.team == GameCharacter.Team.TERRORIST:
+		weapon_id = default_weapon_id_t
+
 	var anim_ctrl = character.get_anim_controller()
 	if anim_ctrl:
 		anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
 
-	var default_weapon = WeaponRegistry.get_preset(default_weapon_id)
+	var default_weapon = WeaponRegistry.get_preset(weapon_id)
 	if default_weapon:
 		_equip_weapon(character, default_weapon)
 

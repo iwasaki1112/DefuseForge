@@ -230,7 +230,8 @@ func _load_data() -> void:
 	# Load weapon presets
 	var weapon_paths = [
 		"res://data/weapons/ak47.tres",
-		"res://data/weapons/glock.tres"
+		"res://data/weapons/glock.tres",
+		"res://data/weapons/mark18.tres",
 	]
 
 	for path in weapon_paths:

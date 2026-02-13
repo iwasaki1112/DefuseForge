@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://drelxc4w0t6en"]
+
+[ext_resource type="PackedScene" uid="uid://bsk7a7n2v6h7b" path="res://assets/weapons/mark18/mark18.glb" id="1"]
+
+[node name="Mark18" type="Node3D" unique_id=239775454]
+
+[node name="Model" parent="." unique_id=1524728877 instance=ExtResource("1")]
+
+[node name="LeftHandGrip" type="Node3D" parent="." unique_id=1607135639]
+transform = Transform3D(0.97372216, 0.22773911, 0, -0.22773911, 0.97372216, 0, 0, 0, 1, -0.0014823154, 0.22841117, 0.21638651)

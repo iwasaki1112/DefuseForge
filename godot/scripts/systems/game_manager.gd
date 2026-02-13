@@ -50,7 +50,8 @@ var _local_peer_id: int = 0
 var fow_map_size: Vector2 = Vector2(50, 50)
 var default_vision_fov: float = 75.0
 var default_vision_range: float = 7.0
-var default_weapon_id: String = "ak47"
+var default_weapon_id_ct: String = "mark18"
+var default_weapon_id_t: String = "ak47"
 var is_vision_enabled: bool = false
 
 
@@ -371,7 +372,8 @@ func _setup_character_setup_service() -> void:
 			vision_service.enemy_visibility_system,
 			vision_service.fog_of_war_system,
 			label_manager,
-			default_weapon_id,
+			default_weapon_id_ct,
+			default_weapon_id_t,
 			is_vision_enabled,
 			default_vision_fov,
 			default_vision_range

@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="WeaponPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/weapon_preset.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/weapons/mark18/mark18.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "mark18"
+display_name = "MK18"
+category = 0
+damage = 16.0
+fire_rate = 0.08
+accuracy_peak = 0.72
+accuracy_close = 0.65
+accuracy_far = 0.06
+accuracy_range_min = 2.0
+accuracy_range_max = 18.0
+accuracy_max_distance = 38.0
+shooter_walk_penalty = 0.78
+shooter_sprint_penalty = 0.4
+target_move_penalty = 0.15
+target_speed_reference = 6.0
+recoil_strength = 0.12
+recoil_recovery = 9.0
+model_scene = ExtResource("2")
+attach_offset = Vector3(0.05, 0.09, -0.02)
+attach_rotation = Vector3(-66.5, 77.0, 24.0)
+muzzle_flash_offset = Vector3(0.0, 0.15, 0.7)
+muzzle_flash_scale = 0.59
+muzzle_flash_rotation = Vector3(88.0, -162.0, 22.5)
+left_hand_grip_enabled = true
+left_hand_grip_offset = Vector3(0.024, 0.04, 0.19)
+auto_firing_mode_enabled = true
+cqb_max_distance = 3.0
+cqb_firing_mode = 2
+cqb_shots_per_burst = 0
+cqb_burst_interval = 0.07
+cqb_pause_after_burst = 0.0
+cqb_accuracy_modifier = 0.85
+cqb_critical_rate = 0.05
+medium_max_distance = 14.0
+medium_firing_mode = 1
+medium_shots_per_burst = 3
+medium_burst_interval = 0.08
+medium_pause_after_burst = 0.35
+medium_accuracy_modifier = 0.92
+medium_critical_rate = 0.12
+long_firing_mode = 0
+long_shots_per_burst = 1
+long_burst_interval = 0.0
+long_pause_after_burst = 0.55
+long_accuracy_modifier = 1.0
+long_critical_rate = 0.2

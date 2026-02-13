@@ -66,7 +66,8 @@ func create_character_setup_service(
 	enemy_visibility_system: Node,
 	fog_of_war_system: Node3D,
 	label_manager: CharacterLabelManager,
-	default_weapon_id: String,
+	default_weapon_id_ct: String,
+	default_weapon_id_t: String,
 	is_vision_enabled: bool,
 	default_vision_fov: float,
 	default_vision_range: float
@@ -76,7 +77,8 @@ func create_character_setup_service(
 		enemy_visibility_system,
 		fog_of_war_system,
 		label_manager,
-		default_weapon_id,
+		default_weapon_id_ct,
+		default_weapon_id_t,
 		is_vision_enabled,
 		default_vision_fov,
 		default_vision_range
