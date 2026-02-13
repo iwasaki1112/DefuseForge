@@ -4,6 +4,8 @@ render_mode unshaded, cull_disabled, shadows_disabled;
 
 // スモークの色（元のStandardMaterial3Dのalbedo_colorを再現）
 uniform vec4 smoke_color : source_color = vec4(0.85, 0.85, 0.85, 0.4);
+// 煙パフテクスチャ（透過PNGで四角さを消す）
+uniform sampler2D smoke_texture : filter_linear, hint_default_white;
 // ライフサイクル制御（GDScriptから更新）
 uniform float smoke_alpha_multiplier : hint_range(0.0, 1.0) = 1.0;
 // 壁距離マップ（1D: 64ピクセル、R=正規化距離 0〜1）
@@ -87,13 +89,17 @@ void fragment() {
 		}
 	}
 
-	// 最終アルファ = 煙色α × パーティクル寿命α × ライフサイクル × 壁クリップ × 高さフェード × FoW
-	float alpha = smoke_color.a * COLOR.a * smoke_alpha_multiplier * clip_alpha * height_alpha * fow_alpha;
+	// テクスチャサンプリング（UVはQuadMeshの0〜1座標）
+	vec4 tex = texture(smoke_texture, UV);
+	float tex_alpha = tex.a;
+
+	// 最終アルファ = テクスチャα × 煙色α × パーティクル寿命α × ライフサイクル × 壁クリップ × 高さフェード × FoW
+	float alpha = tex_alpha * smoke_color.a * COLOR.a * smoke_alpha_multiplier * clip_alpha * height_alpha * fow_alpha;
 
 	if (alpha < 0.02) {
 		discard;
 	}
 
-	ALBEDO = smoke_color.rgb * COLOR.rgb;
+	ALBEDO = smoke_color.rgb * tex.rgb * COLOR.rgb;
 	ALPHA = alpha;
 }

@@ -208,6 +208,11 @@ func _setup_particle_wall_clip() -> void:
 	_particle_clip_mat.set_shader_parameter("current_radius", 0.0)
 	_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", 0.0)
 
+	# 煙パフテクスチャを適用（四角いパーティクルを自然な煙型にする）
+	var smoke_tex := load("res://assets/textures/smoke_puff.png") as Texture2D
+	if smoke_tex:
+		_particle_clip_mat.set_shader_parameter("smoke_texture", smoke_tex)
+
 	# パーティクルのQuadMeshにクリップシェーダーを適用
 	# 元のシーンデータを変更しないようメッシュを複製
 	var quad := _particles.draw_pass_1 as QuadMesh
