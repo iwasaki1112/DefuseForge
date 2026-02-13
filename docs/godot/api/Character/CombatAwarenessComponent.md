@@ -16,8 +16,6 @@
 | `enemy_spotted` | `enemy: Node` | 敵を発見したとき |
 | `enemy_lost` | `enemy: Node` | 敵を見失ったとき |
 | `target_changed` | `new_target: Node, old_target: Node` | ターゲットが変更されたとき |
-| `shot_missed` | `target: Node, miss_offset: Vector3` | 射撃が外れたとき |
-| `critical_hit` | `target: Node, damage: float` | クリティカルヒット発生時 |
 | `damage_dealt` | `attacker: Node, target: Node, damage: float, is_headshot: bool` | ダメージを与えたとき |
 
 ## Constants
@@ -27,8 +25,8 @@
 | `SCAN_INTERVAL` | `0.05` | 敵スキャン間隔（50ms、EnemyVisibilitySystemと同等） |
 | `TRACKING_TIMEOUT` | `0.75` | 視界離脱後の追跡継続時間（秒） |
 | `FIRE_INTERVAL` | `0.5` | 発砲間隔（500ms） |
-| `MOVEMENT_ACCURACY_PENALTY` | `0.3` | 移動中の精度ペナルティ |
 | `MOVEMENT_THRESHOLD` | `0.5` | 移動判定の速度閾値（m/s） |
+| `SPRINT_THRESHOLD` | `4.0` | スプリント判定の速度閾値（m/s） |
 
 ## Public API
 
@@ -192,39 +190,56 @@ func _physics_process(delta: float) -> void:
 
 ## 命中判定システム
 
-### 命中率計算アルゴリズム
+### 精度カーブベースの命中率計算
+
+Door Kickers 2スタイルの精度システム。武器ごとに最適距離帯があり、移動状態が精度に影響する。
 
 ```
-# 基本精度
-base_accuracy = weapon.accuracy
+# 1. 距離カーブから基礎精度
+base_accuracy = get_accuracy_from_curve(weapon, distance)
+  # 0 〜 range_min: lerp(accuracy_close, accuracy_peak)
+  # range_min 〜 range_max: accuracy_peak（スイートスポット）
+  # range_max 〜 max_distance: lerp(accuracy_peak, accuracy_far)
+  # max_distance以降: accuracy_far
 
-# 散布によるペナルティ（ランダム要素）
-spread_penalty = spread × randf() × 0.5
+# 2. Auto Firing Mode修正値（RIFLE/SMG）
+base_accuracy *= accuracy_modifier  # CQB:0.85x, Medium:1.0x, Long:1.15x
 
-# 距離によるペナルティ
-distance_factor = 1.0
-if distance > effective_range:
-    distance_factor = effective_range / distance  # 射程の2倍で50%
+# 3. 射手の移動ペナルティ
+shooter_mult = get_shooter_movement_multiplier(weapon)
+  # 静止(〜0.5m/s): 1.0
+  # 歩行(0.5〜4.0m/s): lerp(1.0, shooter_walk_penalty)
+  # スプリント(4.0m/s〜): shooter_sprint_penalty
 
-# 移動によるペナルティ
-movement_penalty = 0.0
-if character.velocity.length() > MOVEMENT_THRESHOLD:
-    movement_penalty = MOVEMENT_ACCURACY_PENALTY (0.3)
+# 4. ターゲットの移動ペナルティ
+target_mult = get_target_movement_multiplier(weapon)
+  # 1.0 - clamp(target_speed / reference, 0, 1) * target_move_penalty
 
-# 最終命中率
-final_accuracy = (base_accuracy - spread_penalty - movement_penalty) × distance_factor
-final_accuracy = clamp(final_accuracy, 0.05, 1.0)  # 最低5%は当たる
+# 5. ランダムなバラつき（精度が高いほど小さい）
+spread = (1.0 - base_accuracy) * randf() * 0.3
 
-# 判定
-is_hit = randf() < final_accuracy
+# 6. 最終命中率
+final = (base_accuracy - spread) * shooter_mult * target_mult
+final = clamp(final, 0.05, 1.0)  # 最低5%は当たる
+```
+
+### ダメージ距離減衰
+
+`damage_falloff_enabled = true` の場合、距離に応じてダメージが減衰する：
+
+```
+distance <= start: 1.0（フルダメージ）
+start < distance < end: lerp(1.0, damage_falloff_min, 正規化距離)
+distance >= end: damage_falloff_min
 ```
 
 ### 外れ時の弾道オフセット
 
 外れた場合、着弾点にランダムオフセットが適用される：
-- XZ平面でランダム角度（0〜360度）
-- オフセット距離: 0.5〜2.0メートル
-- 垂直方向: -0.5〜+0.5メートル
+- XZ平面でランダム角度（左右）
+- 距離スケーリング: 遠いほどミスの散らばりが大きい（`distance / 20.0`, 0.5〜2.5倍）
+- 水平オフセット: 0.3〜1.2m × 距離スケール
+- 垂直オフセット: -0.4〜+0.4m × 距離スケール
 
 ### GameCharacterとの連携
 
@@ -258,7 +273,6 @@ RIFLE/SMG専用の機能。距離に応じて射撃モード（フルオート/�
 - 武器の`auto_firing_mode_enabled`がtrueの場合のみ発生
 - 距離レンジに応じたクリティカル率（CQB: 10%, Medium: 25%, Long: 50%）
 - クリティカル時は2倍ダメージ
-- `critical_hit`シグナルが発火
 
 ### 動作フロー
 
@@ -269,16 +283,30 @@ RIFLE/SMG専用の機能。距離に応じて射撃モード（フルオート/�
    - FULL_AUTO: 高速連続発射
    - BURST: 指定数発を連射後、一時停止
    - SINGLE: 1発射撃後、一時停止
-4. 精度倍率適用
-5. 命中判定（成功時はクリティカル判定）
-6. ダメージ適用（クリティカル時2倍）
-7. 次の射撃サイクルへ
+4. 精度カーブ + Auto Firing Mode倍率適用
+5. 射手/ターゲット移動ペナルティ適用
+6. 命中判定（成功時はクリティカル判定 + ダメージ減衰）
+7. ダメージ適用（クリティカル時2倍）
+8. 次の射撃サイクルへ
 ```
 
 ### 設定例（AK-47）
 
 ```
 auto_firing_mode_enabled = true
+
+# Accuracy Curve
+accuracy_peak = 0.85
+accuracy_close = 0.70
+accuracy_far = 0.10
+accuracy_range_min = 3.0   # 3m〜20mがスイートスポット
+accuracy_range_max = 20.0
+accuracy_max_distance = 45.0
+
+# Movement Penalties
+shooter_walk_penalty = 0.75
+shooter_sprint_penalty = 0.35
+target_move_penalty = 0.15
 
 # CQB (0-5m): フルオート
 cqb_max_distance = 5.0
@@ -309,8 +337,6 @@ long_critical_rate = 0.5  # 高クリ率
 | `enemy_spotted` | `enemy: Node` |
 | `enemy_lost` | `enemy: Node` |
 | `target_changed` | `new_target: Node, old_target: Node` |
-| `shot_missed` | `target: Node, miss_offset: Vector3` |
-| `critical_hit` | `target: Node, damage: float` |
 | `damage_dealt` | `attacker: Node, target: Node, damage: float, is_headshot: bool` |
 
 ### メソッド

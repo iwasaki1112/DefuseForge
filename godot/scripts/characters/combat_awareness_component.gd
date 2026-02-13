@@ -19,8 +19,8 @@ const SCAN_INTERVAL: float = 0.05  ## Scan every 50ms (matches EnemyVisibilitySy
 const TRACKING_TIMEOUT: float = 0.75  ## Time to track last known position after losing sight
 const CHARACTERS_CACHE_INTERVAL: float = 0.2  ## キャラクターキャッシュ更新間隔（200ms）
 const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
-const MOVEMENT_ACCURACY_PENALTY: float = 0.3  ## Accuracy penalty when moving
 const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
+const SPRINT_THRESHOLD: float = 4.0  ## Velocity threshold to consider "sprinting"
 const FACING_ANGLE_THRESHOLD: float = 0.866  ## cos(30°) — 射撃許可の角度閾値
 
 # ============================================
@@ -435,42 +435,93 @@ func _try_fire() -> bool:
 	return true
 
 
-## Calculate hit chance based on weapon stats, distance, and movement
+## 距離カーブから基礎精度を取得
+func _get_accuracy_from_curve(weapon: WeaponPreset, distance: float) -> float:
+	if distance <= weapon.accuracy_range_min:
+		# 0 〜 range_min: accuracy_close → accuracy_peak
+		if weapon.accuracy_range_min <= 0.0:
+			return weapon.accuracy_peak
+		var t: float = distance / weapon.accuracy_range_min
+		return lerpf(weapon.accuracy_close, weapon.accuracy_peak, t)
+	elif distance <= weapon.accuracy_range_max:
+		# range_min 〜 range_max: accuracy_peak 固定（スイートスポット）
+		return weapon.accuracy_peak
+	elif distance <= weapon.accuracy_max_distance:
+		# range_max 〜 max_distance: accuracy_peak → accuracy_far
+		var range_span: float = weapon.accuracy_max_distance - weapon.accuracy_range_max
+		if range_span <= 0.0:
+			return weapon.accuracy_far
+		var t: float = (distance - weapon.accuracy_range_max) / range_span
+		return lerpf(weapon.accuracy_peak, weapon.accuracy_far, t)
+	else:
+		# max_distance以降: accuracy_far 固定
+		return weapon.accuracy_far
+
+
+## 射手の移動状態による精度乗数を取得
+func _get_shooter_movement_multiplier(weapon: WeaponPreset) -> float:
+	if not (_character is CharacterBody3D):
+		return 1.0
+	var speed: float = _character.velocity.length()
+	if speed <= MOVEMENT_THRESHOLD:
+		return 1.0  # 静止
+	elif speed >= SPRINT_THRESHOLD:
+		return weapon.shooter_sprint_penalty
+	else:
+		# 歩行〜スプリント間を補間
+		var t: float = (speed - MOVEMENT_THRESHOLD) / (SPRINT_THRESHOLD - MOVEMENT_THRESHOLD)
+		return lerpf(1.0, weapon.shooter_walk_penalty, t)
+
+
+## ターゲットの移動状態による精度乗数を取得
+func _get_target_movement_multiplier(weapon: WeaponPreset) -> float:
+	if not _current_target or not is_instance_valid(_current_target):
+		return 1.0
+	if not (_current_target is CharacterBody3D):
+		return 1.0
+	var target_speed: float = _current_target.velocity.length()
+	var speed_ratio: float = clampf(target_speed / weapon.target_speed_reference, 0.0, 1.0)
+	return 1.0 - speed_ratio * weapon.target_move_penalty
+
+
+## ダメージ距離減衰倍率を取得
+func _get_damage_multiplier(weapon: WeaponPreset, distance: float) -> float:
+	if not weapon.damage_falloff_enabled:
+		return 1.0
+	if distance <= weapon.damage_falloff_start:
+		return 1.0
+	if distance >= weapon.damage_falloff_end:
+		return weapon.damage_falloff_min
+	var range_span: float = weapon.damage_falloff_end - weapon.damage_falloff_start
+	if range_span <= 0.0:
+		return weapon.damage_falloff_min
+	var t: float = (distance - weapon.damage_falloff_start) / range_span
+	return lerpf(1.0, weapon.damage_falloff_min, t)
+
+
+## Calculate hit chance based on weapon accuracy curve, distance, and movement
 func _calculate_hit_chance(weapon: WeaponPreset, distance: float) -> float:
 	if not weapon:
 		return 0.5  # Default 50% if no weapon
 
-	# Base accuracy from weapon
-	var base_accuracy: float = weapon.accuracy
+	# 距離カーブから基礎精度
+	var base_accuracy: float = _get_accuracy_from_curve(weapon, distance)
 
 	# Apply auto firing mode accuracy modifier if applicable
 	if _supports_auto_firing_mode():
 		base_accuracy *= _get_current_accuracy_modifier()
 
-	# Spread penalty (random factor)
-	var spread_penalty: float = weapon.spread * randf() * 0.5
+	# 射手の移動ペナルティ
+	var shooter_mult: float = _get_shooter_movement_multiplier(weapon)
 
-	# Distance factor
-	var distance_factor: float = 1.0
-	if distance > weapon.effective_range:
-		distance_factor = weapon.effective_range / distance  # e.g., 2x range = 50%
+	# ターゲットの移動ペナルティ
+	var target_mult: float = _get_target_movement_multiplier(weapon)
 
-	# Close range bonus: within 30% of effective range, accuracy increases up to +20%
-	var close_range_threshold: float = weapon.effective_range * 0.3
-	if distance < close_range_threshold and close_range_threshold > 0.0:
-		var closeness: float = 1.0 - (distance / close_range_threshold)  # 1.0 at 0m, 0.0 at threshold
-		base_accuracy += closeness * 0.2  # Up to +20% accuracy bonus
-		spread_penalty *= (1.0 - closeness * 0.7)  # Reduce spread up to 70% at point blank
+	# 精度が高いほどバラつきが小さい
+	var spread: float = (1.0 - base_accuracy) * randf() * 0.3
 
-	# Movement penalty
-	var movement_penalty: float = 0.0
-	if _character is CharacterBody3D:
-		var velocity: Vector3 = _character.velocity
-		if velocity.length() > MOVEMENT_THRESHOLD:
-			movement_penalty = MOVEMENT_ACCURACY_PENALTY
-
-	# Final accuracy calculation
-	var final_accuracy: float = (base_accuracy - spread_penalty - movement_penalty) * distance_factor
+	# 最終命中率
+	var final_accuracy: float = (base_accuracy - spread) * shooter_mult * target_mult
 	return clampf(final_accuracy, 0.05, 1.0)  # Minimum 5% hit chance
 
 
@@ -481,6 +532,7 @@ func _roll_hit_check(weapon: WeaponPreset, distance: float) -> bool:
 
 
 ## Calculate miss offset vector (perpendicular to target direction)
+## 距離が遠いほどミスの散らばりが大きくなる
 func _calculate_miss_offset() -> Vector3:
 	if not _current_target or not is_instance_valid(_current_target):
 		return Vector3.ZERO
@@ -490,16 +542,21 @@ func _calculate_miss_offset() -> Vector3:
 	to_target.y = 0
 	if to_target.length_squared() < 0.01:
 		return Vector3.ZERO
+
+	# 距離スケーリング: 遠いほどミスの散らばり大
+	var distance: float = to_target.length()
+	var distance_scale: float = clampf(distance / 20.0, 0.5, 2.5)
+
 	to_target = to_target.normalized()
 
 	# Perpendicular vector to target direction (horizontal)
 	var right: Vector3 = to_target.cross(Vector3.UP).normalized()
 
-	# Horizontal offset: left or right with random distance
-	var horizontal_offset: float = (randf() * 2.0 - 1.0) * randf_range(0.3, 1.2)
+	# Horizontal offset: left or right with random distance (距離スケーリング適用)
+	var horizontal_offset: float = (randf() * 2.0 - 1.0) * randf_range(0.3, 1.2) * distance_scale
 
-	# Vertical offset (smaller range)
-	var vertical_offset: float = randf_range(-0.4, 0.4)
+	# Vertical offset (smaller range, 距離スケーリング適用)
+	var vertical_offset: float = randf_range(-0.4, 0.4) * distance_scale
 
 	return right * horizontal_offset + Vector3.UP * vertical_offset
 
@@ -526,9 +583,12 @@ func _apply_damage_to_target() -> void:
 	_last_shot_hit = is_hit
 
 	if is_hit:
-		# Hit - apply damage (with critical hit check)
+		# Hit - apply damage (with critical hit check and distance falloff)
 		_last_shot_miss_offset = Vector3.ZERO
 		var final_damage: float = damage
+		# ダメージ距離減衰
+		if weapon:
+			final_damage *= _get_damage_multiplier(weapon, distance)
 		var critical_rate: float = _get_current_critical_rate()
 		_last_critical_hit = randf() < critical_rate
 		if _last_critical_hit:
@@ -681,13 +741,15 @@ func _process_firing(delta: float) -> void:
 
 ## Legacy firing for pistols and other non-auto mode weapons
 func _process_legacy_firing(delta: float) -> void:
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var interval: float = weapon.fire_rate if weapon and weapon.fire_rate > 0.0 else FIRE_INTERVAL
 	_fire_timer += delta
-	if _fire_timer >= FIRE_INTERVAL:
+	if _fire_timer >= interval:
 		if _try_fire():
 			_fire_timer = 0.0
 		else:
 			# 向き未完了：タイマーを維持し、次フレームで即リトライ
-			_fire_timer = FIRE_INTERVAL
+			_fire_timer = interval
 
 
 ## Start a new burst sequence

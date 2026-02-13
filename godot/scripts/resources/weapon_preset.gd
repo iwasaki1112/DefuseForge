@@ -23,9 +23,35 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export_group("Combat Stats")
 @export var damage: float = 30.0  ## Damage per hit
 @export var fire_rate: float = 0.1  ## Fire interval in seconds
-@export var accuracy: float = 0.9  ## Accuracy (0.0 - 1.0)
-@export var spread: float = 0.1  ## Spread (0.0 - 1.0, lower is tighter grouping)
-@export var effective_range: float = 20.0  ## Effective range in meters
+
+# ============================================
+# Accuracy Curve
+# ============================================
+@export_group("Accuracy Curve")
+@export var accuracy_peak: float = 0.85      ## 最適距離での命中精度
+@export var accuracy_close: float = 0.75     ## 至近距離(0m)での命中精度
+@export var accuracy_far: float = 0.15       ## 最大距離以降の命中精度
+@export var accuracy_range_min: float = 0.0  ## 最適距離帯の開始(m)
+@export var accuracy_range_max: float = 15.0 ## 最適距離帯の終了(m)
+@export var accuracy_max_distance: float = 40.0 ## 精度最低到達距離(m)
+
+# ============================================
+# Movement Penalties
+# ============================================
+@export_group("Movement Penalties")
+@export var shooter_walk_penalty: float = 0.8   ## 歩行時の精度乗数
+@export var shooter_sprint_penalty: float = 0.4 ## スプリント時の精度乗数
+@export var target_move_penalty: float = 0.15   ## ターゲット移動ペナルティ係数
+@export var target_speed_reference: float = 6.0 ## ターゲット速度基準値(m/s)
+
+# ============================================
+# Damage Falloff
+# ============================================
+@export_group("Damage Falloff")
+@export var damage_falloff_enabled: bool = false  ## ダメージ距離減衰の有効化
+@export var damage_falloff_start: float = 20.0    ## 減衰開始距離(m)
+@export var damage_falloff_min: float = 0.5       ## 最低ダメージ倍率
+@export var damage_falloff_end: float = 50.0      ## 最低ダメージ到達距離(m)
 
 # ============================================
 # Recoil
