@@ -292,15 +292,15 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 
 	# 共有ライブラリからHostageアニメーションだけをduplicate（共有インスタンス汚染を防ぐ）
 	var shared_lib := CharacterRegistry.get_animation_library()
-	if shared_lib and shared_lib.has_animation("game_hostage"):
-		var hostage_anim := shared_lib.get_animation("game_hostage").duplicate()
+	if shared_lib and shared_lib.has_animation("game_hostage_idle"):
+		var hostage_anim := shared_lib.get_animation("game_hostage_idle").duplicate()
 		hostage_anim.loop_mode = Animation.LOOP_LINEAR
 		var hostage_lib := AnimationLibrary.new()
-		hostage_lib.add_animation("game_hostage", hostage_anim)
+		hostage_lib.add_animation("game_hostage_idle", hostage_anim)
 		if anim_player.has_animation_library(""):
 			anim_player.remove_animation_library("")
 		anim_player.add_animation_library("", hostage_lib)
-		anim_player.play("game_hostage")
+		anim_player.play("game_hostage_idle")
 
 	# アニメーション適用後にSkeleton3Dオフセットを補正
 	await get_tree().process_frame

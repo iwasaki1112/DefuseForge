@@ -185,7 +185,7 @@ func _setup_scene(preset: CharacterPreset) -> void:
 
 ## Load shared animation library from GLB file
 func _load_animation_library() -> AnimationLibrary:
-	const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
+	const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
 	if not ResourceLoader.exists(ANIMATION_SOURCE):
 		printerr("Animation source not found: %s" % ANIMATION_SOURCE)
 		return null

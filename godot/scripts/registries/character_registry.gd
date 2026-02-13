@@ -2,8 +2,9 @@ extends Node
 ## Character Registry - Manages all character presets
 ## Use as Autoload singleton (CharacterRegistry)
 
-## Shared animation library source (GLB with character and all animations)
-const ANIMATION_SOURCE := "res://assets/animations/character_anims_inplace.glb"
+## Shared animation library sources (GLB files with animations)
+const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
+const ANIMATION_SOURCE_MIXAMO := "res://assets/animations/character_anims_mixamo.glb"
 var _animation_library: AnimationLibrary = null
 
 # ============================================
@@ -46,25 +47,37 @@ func _init_team_arrays() -> void:
 	for team in GameCharacter.Team.values():
 		_by_team[team] = []
 
-## Load shared animation library from blend file
+## Load shared animation library from GLB files
 func _load_animation_library() -> void:
-	if not ResourceLoader.exists(ANIMATION_SOURCE):
-		push_warning("CharacterRegistry: Animation source not found: %s" % ANIMATION_SOURCE)
+	_animation_library = _extract_animation_library(ANIMATION_SOURCE)
+	if not _animation_library:
 		return
 
-	var anim_scene := load(ANIMATION_SOURCE) as PackedScene
+	# Merge additional MIXAMO animations into the same library
+	var mixamo_lib := _extract_animation_library(ANIMATION_SOURCE_MIXAMO)
+	if mixamo_lib:
+		for anim_name in mixamo_lib.get_animation_list():
+			if not _animation_library.has_animation(anim_name):
+				_animation_library.add_animation(anim_name, mixamo_lib.get_animation(anim_name))
+
+## Extract AnimationLibrary from a GLB PackedScene
+func _extract_animation_library(source_path: String) -> AnimationLibrary:
+	if not ResourceLoader.exists(source_path):
+		push_warning("CharacterRegistry: Animation source not found: %s" % source_path)
+		return null
+
+	var anim_scene := load(source_path) as PackedScene
 	if not anim_scene:
-		push_warning("CharacterRegistry: Could not load animation source")
-		return
+		push_warning("CharacterRegistry: Could not load animation source: %s" % source_path)
+		return null
 
-	# Instance temporarily to extract animations
 	var anim_instance := anim_scene.instantiate()
 	var source_anim_player := _find_animation_player(anim_instance)
-
+	var lib: AnimationLibrary = null
 	if source_anim_player:
-		_animation_library = source_anim_player.get_animation_library("")
-
+		lib = source_anim_player.get_animation_library("")
 	anim_instance.queue_free()
+	return lib
 
 ## Find AnimationPlayer in node tree
 func _find_animation_player(node: Node) -> AnimationPlayer:

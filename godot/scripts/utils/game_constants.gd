@@ -12,7 +12,7 @@ class_name GameConstants
 # ========================================================
 # Weapon Visibility
 # ========================================================
-const WEAPON_VISIBILITY_SCALE: float = 1.4  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
+const WEAPON_VISIBILITY_SCALE: float = 1.3  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
 
 # ========================================================
 # Node Names
@@ -70,7 +70,7 @@ const ANIM_PISTOL_GRENADE_THROW_CLOSE := "game_pistol_grenade_throw_close"
 const ANIM_RIFLE_GRENADE_THROW_FAR := "game_rifle_grenade_throw_far"
 const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
 const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
-const ANIM_TALKING := "game_talking"
+const ANIM_TALKING := "game_rifle_talking"
 
 # ========================================================
 # Hostage Talking Settings

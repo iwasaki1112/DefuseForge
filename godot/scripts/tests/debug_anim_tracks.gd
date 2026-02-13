@@ -4,7 +4,7 @@ func _init():
 	# Simulate weapon_adjustment flow exactly
 
 	# Step 1: Load animation library (same as weapon_adjustment._load_animation_library)
-	var anim_scene = load("res://assets/animations/character_anims_inplace.glb") as PackedScene
+	var anim_scene = load("res://assets/animations/character_anims_kubold.glb") as PackedScene
 	var anim_instance = anim_scene.instantiate()
 	root.add_child(anim_instance)
 	var source_player = _find_anim_player(anim_instance)
