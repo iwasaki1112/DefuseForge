@@ -188,3 +188,71 @@ def export_gltf(output_path: str) -> None:
         export_yup=True,
     )
     print(f"Exported: {output_path}")
+
+
+def export_tiles(output_dir: str) -> None:
+    """
+    tile_library.blend の全オブジェクトを個別GLBとしてエクスポート。
+    1オブジェクト = 1 GLB。オブジェクト名からGLBファイル名を生成。
+
+    命名変換: "Ground_Wasteland-col" → "ground_wasteland.glb"
+              "Ground_WastelandGrass-col" → "ground_wasteland_grass.glb"
+
+    Args:
+        output_dir: GLB出力先ディレクトリ
+    """
+    import re
+
+    results = []
+    for col in bpy.data.collections:
+        for obj in col.objects:
+            if obj.type != "MESH":
+                continue
+
+            # Save original state
+            orig_loc = obj.location.copy()
+            orig_hide = obj.hide_get()
+            obj.location = (0, 0, 0)
+            obj.hide_set(False)
+
+            # Deselect all, select only this object
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            # Generate filename from object name
+            # "Ground_Wasteland-col" → "ground_wasteland"
+            name = obj.name
+            name = re.sub(r"-col$", "", name)  # Remove -col suffix
+            # CamelCase → snake_case
+            name = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+            name = name.lower()
+            # Remove prefix like "ground_" for the filename
+            # Actually keep it for clarity: ground_wasteland, wall_north, etc.
+            # But remove the Godot collision prefix pattern
+            # "ground_wasteland" is already good
+            glb_name = f"{name}.glb"
+            filepath = os.path.join(output_dir, glb_name)
+
+            bpy.ops.export_scene.gltf(
+                filepath=filepath,
+                export_format="GLB",
+                use_selection=True,
+                export_apply=True,
+                export_yup=True,
+                export_texcoords=True,
+                export_normals=True,
+                export_materials="EXPORT",
+                export_image_format="AUTO",
+            )
+
+            # Restore
+            obj.location = orig_loc
+            obj.hide_set(orig_hide)
+
+            file_size = os.path.getsize(filepath)
+            results.append(f"OK: {glb_name} ({file_size} bytes)")
+
+    for r in results:
+        print(r)
+    print(f"Exported {len(results)} tiles to {output_dir}")

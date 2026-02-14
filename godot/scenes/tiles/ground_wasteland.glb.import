@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://nrbo1fptn0vi"
-path="res://.godot/imported/wall_exterior.glb-df01128e7bfa75af3f47c710a7e0d7b2.scn"
+uid="uid://c68p6mu48nif"
+path="res://.godot/imported/ground_wasteland.glb-69569858cc38fbc555c2108d8f9419e0.scn"
 
 [deps]
 
-source_file="res://scenes/tiles/wall_exterior.glb"
-dest_files=["res://.godot/imported/wall_exterior.glb-df01128e7bfa75af3f47c710a7e0d7b2.scn"]
+source_file="res://scenes/tiles/ground_wasteland.glb"
+dest_files=["res://.godot/imported/ground_wasteland.glb-69569858cc38fbc555c2108d8f9419e0.scn"]
 
 [params]
 

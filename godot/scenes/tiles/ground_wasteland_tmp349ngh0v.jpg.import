@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cja31hytjid6o"
-path.s3tc="res://.godot/imported/wall_interior_interior_wall.png-d426a248971f83dd93bea5b6f8480d49.s3tc.ctex"
-path.etc2="res://.godot/imported/wall_interior_interior_wall.png-d426a248971f83dd93bea5b6f8480d49.etc2.ctex"
+uid="uid://b5i8pmrdk673g"
+path.s3tc="res://.godot/imported/ground_wasteland_tmp349ngh0v.jpg-3da9c5533e20b25774dfc6c44f1945c7.s3tc.ctex"
+path.etc2="res://.godot/imported/ground_wasteland_tmp349ngh0v.jpg-3da9c5533e20b25774dfc6c44f1945c7.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "0c5cdb39fd8281ffefcbc909fe1c427b"
+"md5": "b73db1445ff0da4a5f4e2b16955cf69c"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/wall_interior_interior_wall.png"
-dest_files=["res://.godot/imported/wall_interior_interior_wall.png-d426a248971f83dd93bea5b6f8480d49.s3tc.ctex", "res://.godot/imported/wall_interior_interior_wall.png-d426a248971f83dd93bea5b6f8480d49.etc2.ctex"]
+source_file="res://scenes/tiles/ground_wasteland_tmp349ngh0v.jpg"
+dest_files=["res://.godot/imported/ground_wasteland_tmp349ngh0v.jpg-3da9c5533e20b25774dfc6c44f1945c7.s3tc.ctex", "res://.godot/imported/ground_wasteland_tmp349ngh0v.jpg-3da9c5533e20b25774dfc6c44f1945c7.etc2.ctex"]
 
 [params]
 
