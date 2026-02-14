@@ -15,11 +15,12 @@ var _character: Node3D = null
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
+var _map_center: Vector2 = Vector2.ZERO
 var _texture_resolution: int = 256
 
 ## 視界設定
-var fov_degrees: float = 90.0
-var view_distance: float = 15.0
+var fov_degrees: float = 75.0
+var view_distance: float = 7.0
 
 ## 周辺視界設定（至近距離の360度視界）
 var peripheral_distance: float = 0.5
@@ -218,9 +219,9 @@ func cleanup() -> void:
 # ============================================
 
 func _world_to_viewport(world_pos: Vector3) -> Vector2:
-	var half_map := _map_size / 2.0
-	var uv_x := (world_pos.x + half_map.x) / _map_size.x
-	var uv_y := (world_pos.z + half_map.y) / _map_size.y
+	var map_min := _map_center - _map_size / 2.0
+	var uv_x := (world_pos.x - map_min.x) / _map_size.x
+	var uv_y := (world_pos.z - map_min.y) / _map_size.y
 	return Vector2(uv_x * _texture_resolution, uv_y * _texture_resolution)
 
 

@@ -34,6 +34,7 @@ static var QUALITY_SETTINGS := {
 ## Export settings
 @export_group("Map Settings")
 @export var map_size: Vector2 = Vector2(40, 40)
+@export var map_center: Vector2 = Vector2.ZERO  ## マップ中心のワールドXZ座標
 @export var fog_height: float = 0.02
 
 @export_group("Visual Settings")
@@ -124,7 +125,7 @@ func _setup_fog_mesh() -> void:
 	var plane_mesh := PlaneMesh.new()
 	plane_mesh.size = map_size
 	_fog_mesh.mesh = plane_mesh
-	_fog_mesh.position.y = fog_height
+	_fog_mesh.position = Vector3(map_center.x, fog_height, map_center.y)
 
 	# Load external shader
 	var shader: Shader = load(FOW_SHADER_PATH)
@@ -132,11 +133,13 @@ func _setup_fog_mesh() -> void:
 		push_error("FogOfWarSystem: Failed to load shader from " + FOW_SHADER_PATH)
 		return
 
+	var map_min := map_center - map_size / 2.0
+	var map_max := map_center + map_size / 2.0
 	_fog_material = ShaderMaterial.new()
 	_fog_material.shader = shader
 	_fog_material.set_shader_parameter("fog_color", fog_color)
-	_fog_material.set_shader_parameter("map_min", Vector2(-map_size.x / 2, -map_size.y / 2))
-	_fog_material.set_shader_parameter("map_max", Vector2(map_size.x / 2, map_size.y / 2))
+	_fog_material.set_shader_parameter("map_min", map_min)
+	_fog_material.set_shader_parameter("map_max", map_max)
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
 	# デバッグ: blur無効、edge_softnessを広げて可視化しやすく
 	_fog_material.set_shader_parameter("blur_radius", 0.0)
@@ -155,6 +158,7 @@ func _setup_occluder_manager() -> void:
 	_occluder_manager = OccluderManager.new()
 	_occluder_manager.name = "OccluderManager"
 	add_child(_occluder_manager)
+	_occluder_manager._map_center = map_center
 	_occluder_manager.setup(_visibility_viewport, map_size, texture_resolution)
 
 
@@ -231,9 +235,9 @@ func register_character(character: Node3D) -> void:
 	vision_light.name = "VisionLight_%s" % character.name
 
 	# キャラクターからFOV設定を取得（VisionComponentが唯一の設定元）
-	var fov := 90.0
-	var view_dist := 15.0
-	var peripheral_dist := 0.8
+	var fov := 75.0
+	var view_dist := 7.0
+	var peripheral_dist := 0.5
 	if character.has_method("get_vision_component"):
 		var vision = character.get_vision_component()
 		if vision:
@@ -249,6 +253,7 @@ func register_character(character: Node3D) -> void:
 	add_child(vision_light)
 
 	# セットアップ
+	vision_light._map_center = map_center
 	vision_light.setup(_visibility_viewport, character, map_size, texture_resolution)
 
 	# 品質設定を適用
@@ -514,9 +519,9 @@ func are_positions_visible_in_fow(positions: Array[Vector3]) -> Array[bool]:
 
 ## ワールド座標をテクスチャUVに変換
 func _world_to_texture_uv(world_pos: Vector3) -> Vector2:
-	var half_map := map_size / 2.0
-	var uv_x := (world_pos.x + half_map.x) / map_size.x
-	var uv_y := (world_pos.z + half_map.y) / map_size.y
+	var map_min := map_center - map_size / 2.0
+	var uv_x := (world_pos.x - map_min.x) / map_size.x
+	var uv_y := (world_pos.z - map_min.y) / map_size.y
 	return Vector2(uv_x, uv_y)
 
 
@@ -573,18 +578,26 @@ func _mark_visibility_cache_dirty() -> void:
 	_visibility_image_dirty = true
 
 
-## Dynamically change map size
+## Dynamically change map size (backward compat: center=ZERO)
 func set_map_size(new_size: Vector2) -> void:
-	if Debug.enabled: print("[FOW] set_map_size called: ", new_size, " (was: ", map_size, ")")
-	map_size = new_size
+	set_map_bounds(new_size, map_center)
 
-	# Update fog mesh size
-	if _fog_mesh and _fog_mesh.mesh is PlaneMesh:
-		(_fog_mesh.mesh as PlaneMesh).size = map_size
+
+## Dynamically change map size and center
+func set_map_bounds(new_size: Vector2, new_center: Vector2) -> void:
+	if Debug.enabled: print("[FOW] set_map_bounds called: size=", new_size, " center=", new_center, " (was: size=", map_size, " center=", map_center, ")")
+	map_size = new_size
+	map_center = new_center
+
+	# Update fog mesh size and position
+	if _fog_mesh:
+		if _fog_mesh.mesh is PlaneMesh:
+			(_fog_mesh.mesh as PlaneMesh).size = map_size
+		_fog_mesh.position = Vector3(map_center.x, fog_height, map_center.y)
 
 	# Update shader parameters
-	var map_min := Vector2(-map_size.x / 2, -map_size.y / 2)
-	var map_max := Vector2(map_size.x / 2, map_size.y / 2)
+	var map_min := map_center - map_size / 2.0
+	var map_max := map_center + map_size / 2.0
 	if _fog_material:
 		_fog_material.set_shader_parameter("map_min", map_min)
 		_fog_material.set_shader_parameter("map_max", map_max)
@@ -592,12 +605,13 @@ func set_map_size(new_size: Vector2) -> void:
 
 	# Update occluder manager
 	if _occluder_manager:
-		_occluder_manager.set_map_size(new_size)
+		_occluder_manager.set_map_bounds(new_size, new_center)
 
-	# Update existing VisionLights with new map_size
+	# Update existing VisionLights with new map bounds
 	for vision_light in _vision_lights.values():
 		if vision_light:
 			vision_light._map_size = new_size
+			vision_light._map_center = new_center
 			vision_light.sync_transform()
 
 	_needs_update = true

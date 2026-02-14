@@ -1,7 +1,28 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://dwu1jpv6m5usq"]
 
-[ext_resource type="PackedScene" path="res://scenes/maps/home.gltf" id="1_gltf"]
-[ext_resource type="Script" path="res://scripts/maps/home.gd" id="2_script"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library.tres" id="1"]
+[ext_resource type="Script" uid="uid://lqncyhb0ni2o" path="res://scripts/maps/map_base.gd" id="2"]
 
-[node name="Home" instance=ExtResource("1_gltf")]
-script = ExtResource("2_script")
+[node name="Home" type="Node3D" unique_id=1289749173]
+script = ExtResource("2")
+map_id = "home"
+display_name = "Home"
+
+[node name="GridMap" type="GridMap" parent="." unique_id=1413045907]
+mesh_library = ExtResource("1")
+cell_center_y = false
+data = {
+"cells": PackedInt32Array(0, 0, 1, 65535, 0, 1, 65535, 65535, 1, 0, 65535, 1, 4, 65535, 1, 3, 0, 1, 3, 65535, 1, 2, 65535, 1, 1, 65535, 1, 1, 0, 1, 2, 0, 1, 4, 0, 1, 1, 1, 1, 2, 1, 1)
+}
+
+[node name="spawn_ct_0" type="Marker3D" parent="." unique_id=2014919147]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 0, -2)
+
+[node name="spawn_ct_1" type="Marker3D" parent="." unique_id=1701572218]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 0, 2)
+
+[node name="spawn_t_0" type="Marker3D" parent="." unique_id=1937403318]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -2)
+
+[node name="spawn_t_1" type="Marker3D" parent="." unique_id=873732991]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 2)

@@ -17,6 +17,7 @@ var _smoke_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # smoke_area -> 
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
+var _map_center: Vector2 = Vector2.ZERO
 var _texture_resolution: int = 256
 var _scale_factor: float = 1.0
 
@@ -128,9 +129,15 @@ func clear_all_occluders() -> void:
 	_clear_smoke_occluders()
 
 
-## マップサイズを更新
+## マップサイズを更新（後方互換）
 func set_map_size(new_size: Vector2) -> void:
+	set_map_bounds(new_size, _map_center)
+
+
+## マップサイズと中心を更新
+func set_map_bounds(new_size: Vector2, new_center: Vector2) -> void:
 	_map_size = new_size
+	_map_center = new_center
 	_scale_factor = float(_texture_resolution) / maxf(new_size.x, new_size.y)
 
 
@@ -174,6 +181,11 @@ func _get_mesh_world_height(mesh_instance: MeshInstance3D) -> float:
 
 
 func _extract_occluders_recursive(node: Node) -> void:
+	# GridMap handling
+	if node is GridMap:
+		_extract_gridmap_occluders(node as GridMap)
+		return
+
 	var node_name_lower := node.name.to_lower()
 	var parent: Node = node.get_parent()
 	var parent_name_lower := parent.name.to_lower() if parent else ""
@@ -220,6 +232,83 @@ func _extract_occluders_recursive(node: Node) -> void:
 	# 子ノードを再帰的に処理
 	for child in node.get_children():
 		_extract_occluders_recursive(child)
+
+
+## GridMapのセルからオクルーダーを抽出（壁/ドアアイテムのみ）
+func _extract_gridmap_occluders(grid_map: GridMap) -> void:
+	var lib := grid_map.mesh_library
+	if not lib:
+		return
+
+	if Debug.enabled: print("[FOW] Extracting GridMap occluders: ", grid_map.name)
+
+	for cell in grid_map.get_used_cells():
+		var item_id := grid_map.get_cell_item(cell)
+		if item_id == GridMap.INVALID_CELL_ITEM:
+			continue
+
+		var item_name := lib.get_item_name(item_id).to_lower()
+		var is_wall := "wall" in item_name
+		var is_door := "door" in item_name
+
+		if not is_wall and not is_door:
+			continue
+
+		var mesh := lib.get_item_mesh(item_id)
+		if not mesh:
+			continue
+
+		# セルのワールド変換を計算
+		var local_pos := grid_map.map_to_local(cell)
+		var orientation := grid_map.get_cell_item_orientation(cell)
+		var basis := grid_map.get_basis_with_orthogonal_index(orientation)
+		var cell_global := grid_map.global_transform * Transform3D(basis, local_pos)
+
+		# 高さフィルター
+		var aabb := mesh.get_aabb()
+		var mesh_top_y := cell_global.origin.y + aabb.position.y + aabb.size.y
+		if mesh_top_y < MIN_OCCLUSION_HEIGHT:
+			if Debug.enabled: print("[FOW] Skip low GridMap obstacle: ", item_name, " at ", cell, " (height=", snapped(mesh_top_y, 0.01), ")")
+			continue
+
+		# AABBからオクルーダー生成
+		var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
+		if occluder:
+			_occluder_parent.add_child(occluder)
+			_wall_occluders.append(occluder)
+
+	if Debug.enabled: print("[FOW] GridMap occluders extracted from: ", grid_map.name)
+
+
+## GridMapセルのAABBからオクルーダーを生成
+func _create_occluder_from_gridmap_cell(aabb: AABB, cell_transform: Transform3D) -> LightOccluder2D:
+	var half := aabb.size / 2.0
+	var center := aabb.position + half
+
+	# AABBの4隅（XZ平面に投影）
+	var corners_3d := [
+		Vector3(center.x - half.x, 0, center.z - half.z),
+		Vector3(center.x + half.x, 0, center.z - half.z),
+		Vector3(center.x + half.x, 0, center.z + half.z),
+		Vector3(center.x - half.x, 0, center.z + half.z),
+	]
+
+	var polygon_2d := PackedVector2Array()
+	for corner in corners_3d:
+		var world: Vector3 = cell_transform * corner
+		polygon_2d.append(_world_to_viewport(world))
+
+	if polygon_2d.size() < 3:
+		return null
+
+	var occluder := LightOccluder2D.new()
+	var occluder_polygon := OccluderPolygon2D.new()
+	occluder_polygon.polygon = polygon_2d
+	occluder_polygon.cull_mode = OccluderPolygon2D.CULL_DISABLED
+	occluder.occluder = occluder_polygon
+	occluder.occluder_light_mask = 1
+
+	return occluder
 
 
 func _create_occluder_from_shape(collision_shape: CollisionShape3D) -> LightOccluder2D:
@@ -342,9 +431,9 @@ func _extract_cylinder_polygon(collision_shape: CollisionShape3D) -> PackedVecto
 
 func _world_to_viewport(world_pos: Vector3) -> Vector2:
 	# ワールドXZ座標をビューポート座標に変換
-	var half_map := _map_size / 2.0
-	var uv_x := (world_pos.x + half_map.x) / _map_size.x
-	var uv_y := (world_pos.z + half_map.y) / _map_size.y
+	var map_min := _map_center - _map_size / 2.0
+	var uv_x := (world_pos.x - map_min.x) / _map_size.x
+	var uv_y := (world_pos.z - map_min.y) / _map_size.y
 	return Vector2(uv_x * _texture_resolution, uv_y * _texture_resolution)
 
 

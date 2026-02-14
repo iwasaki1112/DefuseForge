@@ -2,21 +2,38 @@ class_name MapBase
 extends Node3D
 ## マップ基底クラス
 ## 壁/ドア/床のコリジョン設定とFoWオクルーダー抽出の共通処理
+##
+## GridMapマップは.tscnだけで完結（@exportでメタデータ設定）
+## 既存Blenderマップは従来通りサブクラス + .tres
 
 const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
 
-## マップ名（ログ用、サブクラスでオーバーライド）
+## マップメタデータ（.tscnのインスペクタで設定）
+@export_group("Map Info")
+@export var map_id: String = ""  ## マップID（MapRegistryで使用）
+@export var display_name: String = ""  ## マップ選択画面の表示名
+@export var map_description: String = ""  ## マップの説明
+
+## マップ名（ログ用、レガシーサブクラスでオーバーライド可）
 var _map_name: String = "MAP"
 
 
 func _ready() -> void:
+	# @exportのmap_idが設定されていれば使用（GridMapマップ用）
+	# レガシーサブクラスは_map_nameを直接設定してからsuper._ready()を呼ぶ
+	if _map_name == "MAP" and not map_id.is_empty():
+		_map_name = map_id.to_upper()
 	_setup_collisions(self)
 	_notify_fow_system()
 
 
 ## コリジョンレイヤーを設定
 func _setup_collisions(node: Node) -> void:
+	if node is GridMap:
+		_setup_gridmap_collisions(node as GridMap)
+		return
+
 	if node is StaticBody3D:
 		var node_name_lower := node.name.to_lower()
 
@@ -57,11 +74,11 @@ func _notify_fow_system() -> void:
 		var fow_str := str(vision_service.fog_of_war_system != null) if vision_service else "false"
 		if Debug.enabled: print("[%s] vision_service: %s, fow_system: %s" % [_map_name, vision_service != null, fow_str])
 		if vision_service and vision_service.fog_of_war_system:
-			# ground_ノードからマップサイズを計算してFoWに設定
-			var ground_size := _calculate_ground_bounds()
-			if ground_size != Vector2.ZERO:
-				vision_service.fog_of_war_system.set_map_size(ground_size)
-				if Debug.enabled: print("[%s] Set FoW map_size from ground bounds: %s" % [_map_name, ground_size])
+			# ground_ノードからマップサイズと中心を計算してFoWに設定
+			var ground_info = _calculate_ground_bounds()
+			if ground_info:
+				vision_service.fog_of_war_system.set_map_bounds(ground_info["size"], ground_info["center"])
+				if Debug.enabled: print("[%s] Set FoW map_bounds: size=%s, center=%s" % [_map_name, ground_info["size"], ground_info["center"]])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system" % _map_name)
 		else:
@@ -81,17 +98,18 @@ func _notify_fow_system_deferred() -> void:
 	if game_screen and game_screen.has_method("get_vision_service"):
 		var vision_service = game_screen.get_vision_service()
 		if vision_service and vision_service.fog_of_war_system:
-			# ground_ノードからマップサイズを計算してFoWに設定
-			var ground_size := _calculate_ground_bounds()
-			if ground_size != Vector2.ZERO:
-				vision_service.fog_of_war_system.set_map_size(ground_size)
-				if Debug.enabled: print("[%s] Set FoW map_size from ground bounds (deferred): %s" % [_map_name, ground_size])
+			# ground_ノードからマップサイズと中心を計算してFoWに設定
+			var ground_info = _calculate_ground_bounds()
+			if ground_info:
+				vision_service.fog_of_war_system.set_map_bounds(ground_info["size"], ground_info["center"])
+				if Debug.enabled: print("[%s] Set FoW map_bounds (deferred): size=%s, center=%s" % [_map_name, ground_info["size"], ground_info["center"]])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)
 
 
-## ground_プレフィックスノードからマップの床サイズを計算
-func _calculate_ground_bounds() -> Vector2:
+## ground_ノードからマップの床サイズと中心を計算
+## 戻り値: { "size": Vector2, "center": Vector2 } or null
+func _calculate_ground_bounds() -> Variant:
 	var bounds := {
 		"min": Vector3(INF, INF, INF),
 		"max": Vector3(-INF, -INF, -INF),
@@ -102,17 +120,99 @@ func _calculate_ground_bounds() -> Vector2:
 
 	if not bounds["found"]:
 		if Debug.enabled: print("[%s] No ground_ nodes found for bounds calculation" % _map_name)
-		return Vector2.ZERO
+		return null
 
-	# X-Z平面でのサイズを返す（Yは高さなので無視）
-	var size_x: float = bounds["max"].x - bounds["min"].x
-	var size_z: float = bounds["max"].z - bounds["min"].z
-	if Debug.enabled: print("[%s] Ground bounds: min=%s, max=%s, size=(%s, %s)" % [_map_name, bounds["min"], bounds["max"], size_x, size_z])
-	return Vector2(size_x, size_z)
+	# X-Z平面でのサイズと中心を返す（Fogがグラウンド外にも広がるようパディング追加）
+	const FOG_PADDING := 14.0  # カメラ高さ分のパディング（グラウンド外もFogで覆う）
+	var size_x: float = bounds["max"].x - bounds["min"].x + FOG_PADDING * 2.0
+	var size_z: float = bounds["max"].z - bounds["min"].z + FOG_PADDING * 2.0
+	var center_x: float = (bounds["min"].x + bounds["max"].x) / 2.0
+	var center_z: float = (bounds["min"].z + bounds["max"].z) / 2.0
+	if Debug.enabled: print("[%s] Ground bounds: min=%s, max=%s, size=(%s, %s), center=(%s, %s)" % [_map_name, bounds["min"], bounds["max"], size_x, size_z, center_x, center_z])
+	return { "size": Vector2(size_x, size_z), "center": Vector2(center_x, center_z) }
+
+
+## GridMapのセルからコリジョンボディを生成
+func _setup_gridmap_collisions(grid_map: GridMap) -> void:
+	var lib := grid_map.mesh_library
+	if not lib:
+		return
+
+	# GridMapの内蔵コリジョンを無効化（個別にStaticBody3Dを生成するため）
+	grid_map.collision_layer = 0
+	grid_map.collision_mask = 0
+
+	var cells := grid_map.get_used_cells()
+	if Debug.enabled: print("[%s] Setting up GridMap collisions: %d cells" % [_map_name, cells.size()])
+
+	for cell in cells:
+		var item_id := grid_map.get_cell_item(cell)
+		if item_id == GridMap.INVALID_CELL_ITEM:
+			continue
+
+		var item_name := lib.get_item_name(item_id)
+		var item_type := _classify_gridmap_item(item_name)
+
+		# コリジョンレイヤー決定
+		var col_layer: int
+		match item_type:
+			1, 2:  # wall, door
+				col_layer = WALL_COLLISION_LAYER
+			_:  # floor or unknown
+				col_layer = GROUND_COLLISION_LAYER
+
+		# MeshLibraryからシェイプを取得
+		var shapes := lib.get_item_shapes(item_id)
+		if shapes.size() < 2:
+			continue
+
+		# セルのローカル位置と回転を取得
+		var local_pos := grid_map.map_to_local(cell)
+		var orientation := grid_map.get_cell_item_orientation(cell)
+		var basis := grid_map.get_basis_with_orthogonal_index(orientation)
+
+		# StaticBody3D生成
+		var body := StaticBody3D.new()
+		body.name = "GridCol_%s_%d_%d_%d" % [item_name, cell.x, cell.y, cell.z]
+		body.collision_layer = col_layer
+		body.collision_mask = 0
+		body.transform = Transform3D(basis, local_pos)
+		grid_map.add_child(body)
+
+		# ドアグループに追加
+		if item_type == 2:
+			body.add_to_group(GameConstants.GROUP_DOORS)
+			if Debug.enabled: print("[%s] Added GridMap door: %s" % [_map_name, body.name])
+
+		# コリジョンシェイプを追加
+		var i := 0
+		while i < shapes.size():
+			if shapes[i] is Shape3D:
+				var col := CollisionShape3D.new()
+				col.shape = shapes[i]
+				if i + 1 < shapes.size() and shapes[i + 1] is Transform3D:
+					col.transform = shapes[i + 1]
+				body.add_child(col)
+			i += 2
+
+
+## GridMapアイテム名からカテゴリを判定
+## 0=floor, 1=wall, 2=door
+static func _classify_gridmap_item(item_name: String) -> int:
+	var name_lower := item_name.to_lower()
+	if "door" in name_lower:
+		return 2
+	elif "wall" in name_lower or "glass" in name_lower:
+		return 1
+	return 0
 
 
 ## 再帰的にground_ノードを探索してバウンディングボックスを収集
 func _collect_ground_bounds(node: Node, bounds: Dictionary) -> void:
+	# GridMap handling
+	if node is GridMap:
+		_collect_gridmap_ground_bounds(node as GridMap, bounds)
+
 	var node_name_lower := node.name.to_lower()
 	var is_ground := node_name_lower.begins_with("ground_")
 
@@ -144,3 +244,31 @@ func _collect_ground_bounds(node: Node, bounds: Dictionary) -> void:
 
 	for child in node.get_children():
 		_collect_ground_bounds(child, bounds)
+
+
+## GridMapのフロアセルからバウンディングボックスを収集
+func _collect_gridmap_ground_bounds(grid_map: GridMap, bounds: Dictionary) -> void:
+	var lib := grid_map.mesh_library
+	if not lib:
+		return
+
+	var cell_size := grid_map.cell_size
+
+	for cell in grid_map.get_used_cells():
+		var item_id := grid_map.get_cell_item(cell)
+		if item_id == GridMap.INVALID_CELL_ITEM:
+			continue
+
+		var item_name := lib.get_item_name(item_id)
+		if _classify_gridmap_item(item_name) != 0:
+			continue
+
+		var local_pos := grid_map.map_to_local(cell)
+		var world_pos: Vector3 = grid_map.global_transform * local_pos
+
+		# セル中心から±cell_size/2の範囲
+		bounds["min"].x = minf(bounds["min"].x, world_pos.x - cell_size.x / 2.0)
+		bounds["min"].z = minf(bounds["min"].z, world_pos.z - cell_size.z / 2.0)
+		bounds["max"].x = maxf(bounds["max"].x, world_pos.x + cell_size.x / 2.0)
+		bounds["max"].z = maxf(bounds["max"].z, world_pos.z + cell_size.z / 2.0)
+		bounds["found"] = true

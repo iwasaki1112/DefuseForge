@@ -33,16 +33,14 @@ var _time_since_lost: float = 0.0
 var _is_tracking_last_known: bool = false
 var _scan_timer: float = 0.0
 var _ignored_enemies: Array[Node] = []  ## Enemies dismissed by user action (e.g., rotation)
+var _ignored_enemies_timer: float = 0.0  ## 無視リスト時間制限タイマー
+const IGNORE_TIMEOUT: float = 3.0  ## 無視リスト自動解除時間（秒）
 var _firing_enabled: bool = false  ## Whether automatic firing is enabled
 var _fire_timer: float = 0.0  ## 発砲タイマー
 
 # キャラクターキャッシュ（GC負荷削減）
 var _characters_cache: Array = []
 var _characters_cache_timer: float = CHARACTERS_CACHE_INTERVAL  # 初回即時更新
-
-# FoWシステムキャッシュ（FoW表示との整合性確保）
-var _fow_system_cache: Node3D = null
-var _fow_system_checked: bool = false
 
 # 命中判定結果（最後の射撃）
 var _last_shot_hit: bool = true
@@ -120,10 +118,11 @@ func clear_target() -> void:
 
 
 ## Dismiss current target due to user action (adds to ignore list)
-## The enemy will be ignored until it leaves the field of view
+## The enemy will be ignored for IGNORE_TIMEOUT seconds or until it becomes invisible
 func dismiss_current_target() -> void:
 	if _current_target and is_instance_valid(_current_target):
 		_ignored_enemies.append(_current_target)
+		_ignored_enemies_timer = 0.0  # Reset timeout
 	clear_target()
 
 
@@ -170,6 +169,9 @@ func process(delta: float) -> void:
 			_is_tracking_last_known = false
 			_time_since_lost = 0.0
 
+	# Update ignored enemies timer (real delta for accuracy)
+	_update_ignored_list(delta)
+
 	# Periodic enemy scan
 	_scan_timer += delta
 	if _scan_timer >= SCAN_INTERVAL:
@@ -192,10 +194,16 @@ func process_firing(delta: float) -> void:
 # Internal Methods
 # ============================================
 
-## Update ignored enemies list - remove enemies that are no longer in view
-func _update_ignored_list() -> void:
-	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
-	if not vision:
+## Update ignored enemies list - remove enemies by timeout or invisibility
+func _update_ignored_list(delta: float) -> void:
+	if _ignored_enemies.is_empty():
+		return
+
+	# 時間経過で自動解除（チーム共有視界では不可視にならないケースがあるため）
+	_ignored_enemies_timer += delta
+	if _ignored_enemies_timer >= IGNORE_TIMEOUT:
+		_ignored_enemies.clear()
+		_ignored_enemies_timer = 0.0
 		return
 
 	var to_remove: Array[Node] = []
@@ -203,15 +211,18 @@ func _update_ignored_list() -> void:
 		if not is_instance_valid(enemy):
 			to_remove.append(enemy)
 			continue
-		# Remove from ignore list when enemy leaves field of view
-		if not vision.is_position_in_view(enemy.global_position):
+		# Remove from ignore list when enemy becomes invisible (EnemyVisibilitySystem)
+		if enemy is Node3D and not enemy.visible:
 			to_remove.append(enemy)
 
 	for enemy in to_remove:
 		_ignored_enemies.erase(enemy)
 
 
-## Scan for enemies in vision cone
+## Scan for visible enemies and select closest target
+## プレイヤーチーム: EnemyVisibilitySystem（FoWテクスチャ）の結果（enemy.visible）を使用
+## 敵AI: VisionComponent（個別レイキャスト）を使用
+## 射撃制限は_is_facing_target()で行う（向いていないと撃たない）
 func _scan_for_enemies() -> void:
 	if not _character:
 		return
@@ -220,13 +231,6 @@ func _scan_for_enemies() -> void:
 	if _current_target and is_instance_valid(_current_target):
 		if "is_alive" in _current_target and not _current_target.is_alive:
 			clear_target()
-
-	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
-	if not vision:
-		return
-
-	# Update ignored list (remove enemies that left field of view)
-	_update_ignored_list()
 
 	# Check if character is alive
 	if _character.has_method("is_alive") or "is_alive" in _character:
@@ -240,55 +244,55 @@ func _scan_for_enemies() -> void:
 		_handle_no_enemy_in_sight()
 		return
 
+	# プレイヤーチームか判定
+	# プレイヤーチーム: enemy.visible（FoWと一致）で可視判定
+	# 敵AI: VisionComponent（個別レイキャスト）で可視判定
+	var is_player_team := _character is GameCharacter and PlayerState.is_friendly(_character)
+	var vision: VisionComponent = null
+	if not is_player_team:
+		vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
+		if not vision:
+			_handle_no_enemy_in_sight()
+			return
+
 	# Find closest visible enemy
 	var closest_enemy: Node = null
 	var closest_distance: float = INF
 
 	var char_pos: Vector3 = _character.global_position
 
-	# 可視性チェックの計測
-	var start_time := Time.get_ticks_usec() if Debug.enabled else 0
-
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
 		if enemy in _ignored_enemies:
-			if Debug.enabled: print("[CAC] Skip ignored enemy: ", enemy.name)
 			continue
 
 		# Skip dead enemies
 		if "is_alive" in enemy and not enemy.is_alive:
-			if Debug.enabled: print("[CAC] Skip dead enemy: ", enemy.name)
 			continue
 
-		# Skip enemies not visible on screen (EnemyVisibilitySystem が非表示にしている敵は無視)
-		if enemy is Node3D and not enemy.visible:
-			if Debug.enabled: print("[CAC] Skip hidden enemy: ", enemy.name)
-			continue
+		# 可視性チェック
+		if is_player_team:
+			# プレイヤーチーム: EnemyVisibilitySystemが設定したenemy.visibleを使用
+			# FoWテクスチャと完全に一致した可視判定
+			if enemy is Node3D and not enemy.visible:
+				continue
+		else:
+			# 敵AI: VisionComponentの個別レイキャストで可視判定
+			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+			if not vision.is_position_in_view(enemy_pos):
+				continue
 
-		# 敵の胴体中心の位置を使用（足元ではなく）
-		# レイキャストが目線から敵の足元に向かうと、近距離で検知できない問題がある
-		var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
-		var dist_to_enemy: float = char_pos.distance_to(enemy.global_position)
-
-		# Check if enemy is visible (uses single raycast per enemy)
-		var is_visible := _is_enemy_visible(enemy_pos, vision)
+		var dist: float = char_pos.distance_to(enemy.global_position)
 		if Debug.enabled:
-			print("[CAC] Check enemy: ", enemy.name, " dist=", "%.2f" % dist_to_enemy, "m visible=", is_visible)
+			print("[CAC] Visible enemy: ", enemy.name, " dist=", "%.2f" % dist, "m")
 
-		if is_visible:
-			var dist: float = char_pos.distance_to(enemy_pos)
-			if dist < closest_distance:
-				closest_distance = dist
-				closest_enemy = enemy
+		if dist < closest_distance:
+			closest_distance = dist
+			closest_enemy = enemy
 
 	if Debug.enabled:
-		var elapsed := Time.get_ticks_usec() - start_time
-		if elapsed > 2000:  # 2ms以上かかった場合のみログ
-			print("[CAC] Enemy scan took ", elapsed / 1000.0, "ms for ", enemies.size(), " enemies")
 		if closest_enemy:
-			print("[CAC] Closest enemy: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
-		else:
-			print("[CAC] No visible enemy found (checked ", enemies.size(), " enemies)")
+			print("[CAC] Target: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)
@@ -326,22 +330,6 @@ func _handle_no_enemy_in_sight() -> void:
 		target_changed.emit(null, old_target)
 
 
-## 敵が視界内にいるかを判定
-## 二重チェック: VisionComponent（個別レイキャスト）AND FoWテクスチャ（画面表示と一致）
-## これにより、画面上で見えない敵を攻撃することを防ぐ
-func _is_enemy_visible(enemy_pos: Vector3, vision: VisionComponent) -> bool:
-	# 1. VisionComponentで個別キャラクターの視線チェック（レイキャスト）
-	if not vision or not vision.is_position_in_view(enemy_pos):
-		return false
-
-	# 2. FoWテクスチャで画面表示との整合性チェック
-	# FoWはXZ平面投影のため、レイキャストでは通過するがFoWでは遮蔽される場合がある
-	var fow := _get_fog_of_war_system()
-	if fow and fow.has_method("is_position_visible_in_fow"):
-		return fow.is_position_visible_in_fow(enemy_pos)
-
-	# FoWシステムが利用できない場合はVisionComponentの結果のみで判定
-	return true
 
 
 ## Get all enemy characters
@@ -374,18 +362,6 @@ func _get_enemy_characters() -> Array[Node]:
 	return enemies
 
 
-## FogOfWarSystemを取得（キャッシュ版）
-## VisionComponentのSmokeAreaManager取得と同じパターン
-func _get_fog_of_war_system() -> Node3D:
-	if _fow_system_checked:
-		return _fow_system_cache
-	_fow_system_checked = true
-	var game_screen := get_tree().get_first_node_in_group("game_screen")
-	if game_screen and game_screen.has_method("get_vision_service"):
-		var vision_service = game_screen.get_vision_service()
-		if vision_service:
-			_fow_system_cache = vision_service.fog_of_war_system
-	return _fow_system_cache
 
 
 ## キャラクターが現在のターゲット方向を向いているかチェック

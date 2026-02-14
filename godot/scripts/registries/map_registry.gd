@@ -1,6 +1,10 @@
 extends Node
 ## Map Registry - Manages all map presets
 ## Use as Autoload singleton (MapRegistry)
+##
+## マップの検出方式:
+## 1. scenes/maps/ の .tscn をスキャン（map_id @exportが設定されたMapBase直接方式）
+## 2. エクスポート時: PRESET_FILES静的リストにフォールバック
 
 
 ## Wall collision layer bit (for VisionComponent)
@@ -14,17 +18,16 @@ const WALL_COLLISION_LAYER := 2
 var _presets: Dictionary[String, MapPreset] = {}  # { id: MapPreset }
 
 # ============================================
-# Preset Directory
+# Directories
 # ============================================
 
-## Directory containing .tres preset files
-const PRESET_DIR := "res://data/maps/"
+## マップシーンディレクトリ（.tscn直接方式）
+const SCENE_DIR := "res://scenes/maps/"
 
-## Static list of map preset files (required for exported builds)
-## DirAccess does not work with res:// in exported .pck files
+## 静的リスト（exported builds用フォールバック）
+## scripts/editor/sync_map_presets.gd で自動更新可能
 const PRESET_FILES := [
-	"res://data/maps/home.tres",
-	"res://data/maps/office.tres",
+	"res://scenes/maps/home.tscn",
 ]
 
 # ============================================
@@ -32,21 +35,87 @@ const PRESET_FILES := [
 # ============================================
 
 func _ready() -> void:
-	_load_presets_from_list()
+	# エディタ: ディレクトリスキャンで自動検出
+	var found := _load_presets_from_scenes()
+	# エクスポート: DirAccessが使えない場合は静的リストにフォールバック
+	if not found:
+		_load_presets_from_list()
 
 # ============================================
-# Loading
+# Loading - Scene Direct (.tscn)
 # ============================================
 
-## Load all preset files from static list
+## scenes/maps/の.tscnをスキャンしてmap_id付きマップを検出
+func _load_presets_from_scenes() -> bool:
+	var dir := DirAccess.open(SCENE_DIR)
+	if not dir:
+		return false
+
+	var found := false
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tscn"):
+			var path := SCENE_DIR + file_name
+			var scene := load(path) as PackedScene
+			if scene:
+				var preset := _create_preset_from_scene(scene)
+				if preset:
+					register(preset)
+					found = true
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	return found
+
+
+## PackedSceneのSceneStateからMapPresetを生成（インスタンス化不要）
+func _create_preset_from_scene(scene: PackedScene) -> MapPreset:
+	var state := scene.get_state()
+	if state.get_node_count() == 0:
+		return null
+
+	var mid := ""
+	var dname := ""
+	var desc := ""
+
+	for i in state.get_node_property_count(0):
+		var prop_name := state.get_node_property_name(0, i)
+		var prop_value = state.get_node_property_value(0, i)
+		match prop_name:
+			&"map_id":
+				mid = str(prop_value)
+			&"display_name":
+				dname = str(prop_value)
+			&"map_description":
+				desc = str(prop_value)
+
+	# map_idが未設定 → このシーンは自己記述型マップではない
+	if mid.is_empty():
+		return null
+
+	var preset := MapPreset.new()
+	preset.id = mid
+	preset.display_name = dname if not dname.is_empty() else mid.to_pascal_case()
+	preset.description = desc
+	preset.map_scene = scene
+	return preset
+
+# ============================================
+# Loading - Static Fallback
+# ============================================
+
+## 静的リストからロード（exported builds用）
 func _load_presets_from_list() -> void:
 	for path in PRESET_FILES:
-		if ResourceLoader.exists(path):
-			var preset := load(path) as MapPreset
+		if not ResourceLoader.exists(path):
+			push_warning("MapRegistry: File not found: %s" % path)
+			continue
+
+		var scene := load(path) as PackedScene
+		if scene:
+			var preset := _create_preset_from_scene(scene)
 			if preset:
 				register(preset)
-		else:
-			push_warning("MapRegistry: Preset file not found: %s" % path)
 
 # ============================================
 # Registration API
@@ -59,7 +128,7 @@ func register(preset: MapPreset) -> void:
 		return
 
 	if _presets.has(preset.id):
-		push_warning("MapRegistry: Preset already registered: %s" % preset.id)
+		# 重複は静かにスキップ（.tscnと.tresの両方存在時）
 		return
 
 	_presets[preset.id] = preset
