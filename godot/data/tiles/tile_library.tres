@@ -1,15 +1,14 @@
-[gd_resource type="MeshLibrary" format=4]
+[gd_resource type="MeshLibrary" format=4 uid="uid://dr60jeroal3gt"]
 
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_ground_wasteland_diffuse.png" id="1_5d3r0"]
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_tmp349ngh0v.jpg" id="2_3rsh1"]
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_tmpulrkp8i1.jpg" id="3_rh5gb"]
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_grass_ground_wasteland_grass_diffuse.png" id="4_wsqq4"]
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_grass_wg_bake_rough.png" id="5_s3mab"]
-[ext_resource type="Texture2D" path="res://scenes/tiles/ground_wasteland_grass_wg_bake_norm.png" id="6_034c7"]
+[ext_resource type="Texture2D" uid="uid://cxqp0yxdbj7v" path="res://scenes/tiles/ground_wasteland_ground_wasteland_diffuse.png" id="1_5d3r0"]
+[ext_resource type="Texture2D" uid="uid://b5i8pmrdk673g" path="res://scenes/tiles/ground_wasteland_tmp349ngh0v.jpg" id="2_3rsh1"]
+[ext_resource type="Texture2D" uid="uid://uny6jfny3pho" path="res://scenes/tiles/ground_wasteland_tmpulrkp8i1.jpg" id="3_rh5gb"]
+[ext_resource type="Texture2D" uid="uid://iuku4duaqfuf" path="res://scenes/tiles/ground_wasteland_grass_ground_wasteland_grass_diffuse.png" id="4_wsqq4"]
+[ext_resource type="Texture2D" uid="uid://cltf1irrutdv5" path="res://scenes/tiles/ground_wasteland_grass_wg_bake_rough.png" id="5_s3mab"]
+[ext_resource type="Texture2D" uid="uid://c62w6yy287pk0" path="res://scenes/tiles/ground_wasteland_grass_wg_bake_norm.png" id="6_034c7"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_45mnx"]
 resource_name = "brown_mud_dry_material_Ground_Wasteland-col"
-cull_mode = 0
 albedo_texture = ExtResource("1_5d3r0")
 metallic = 1.0
 metallic_texture = ExtResource("2_3rsh1")
@@ -38,7 +37,6 @@ size = Vector3(2, 0.1, 2)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_t8vgw"]
 resource_name = "wasteland_grass_baked"
-cull_mode = 0
 albedo_texture = ExtResource("4_wsqq4")
 metallic_texture = ExtResource("5_s3mab")
 metallic_texture_channel = 2

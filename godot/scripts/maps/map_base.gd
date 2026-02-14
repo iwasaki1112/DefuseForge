@@ -24,8 +24,16 @@ func _ready() -> void:
 	# レガシーサブクラスは_map_nameを直接設定してからsuper._ready()を呼ぶ
 	if _map_name == "MAP" and not map_id.is_empty():
 		_map_name = map_id.to_upper()
+	_remove_editor_lighting()
 	_setup_collisions(self)
 	_notify_fow_system()
+
+
+## エディタ用ライティングをゲーム実行時に削除（GameScreenのEnvironmentSetupが管理するため）
+func _remove_editor_lighting() -> void:
+	for child in get_children():
+		if child is WorldEnvironment or child is DirectionalLight3D:
+			child.queue_free()
 
 
 ## コリジョンレイヤーを設定
