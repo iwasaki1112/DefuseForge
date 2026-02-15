@@ -128,10 +128,11 @@ func _apply_fow_to_shader() -> void:
 	if not vis_tex:
 		return
 
+	var map_center: Vector2 = _fow_system.map_center
 	var half_map: Vector2 = _fow_system.map_size / 2.0
 	_particle_clip_mat.set_shader_parameter("fow_visibility_texture", vis_tex)
-	_particle_clip_mat.set_shader_parameter("fow_map_min", Vector2(-half_map.x, -half_map.y))
-	_particle_clip_mat.set_shader_parameter("fow_map_max", Vector2(half_map.x, half_map.y))
+	_particle_clip_mat.set_shader_parameter("fow_map_min", map_center - half_map)
+	_particle_clip_mat.set_shader_parameter("fow_map_max", map_center + half_map)
 	_particle_clip_mat.set_shader_parameter("fow_enabled", 1.0)
 
 

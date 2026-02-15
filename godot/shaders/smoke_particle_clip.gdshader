@@ -3,7 +3,7 @@ render_mode unshaded, cull_disabled, shadows_disabled;
 // billboard_particles を使わず手動ビルボードでワールド座標を正確に計算
 
 // スモークの色（元のStandardMaterial3Dのalbedo_colorを再現）
-uniform vec4 smoke_color : source_color = vec4(0.85, 0.85, 0.85, 0.4);
+uniform vec4 smoke_color : source_color = vec4(0.85, 0.85, 0.85, 0.8);
 // 煙パフテクスチャ（透過PNGで四角さを消す）
 uniform sampler2D smoke_texture : filter_linear, hint_default_white;
 // ライフサイクル制御（GDScriptから更新）
