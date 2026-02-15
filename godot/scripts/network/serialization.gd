@@ -82,9 +82,9 @@ static func deserialize_game_state(data: PackedByteArray) -> SyncState.GameState
 # ============================================
 
 ## CharacterStateMessageをバイナリ形式でシリアライズ
-## フォーマット: 36 bytes
+## フォーマット: 40 bytes
 ## [char_id:u32][pos_x:i16][pos_y:i16][pos_z:i16][rot:i16]
-## [vel_x:i16][vel_y:i16][vel_z:i16][hp:u8][flags:u8][anim_state:16 bytes]
+## [vel_x:i16][vel_y:i16][vel_z:i16][hp:u8][flags:u8][anim_state:16 bytes][timestamp:u32]
 static func serialize_character_state_binary(state: NetworkMessages.CharacterStateMessage) -> PackedByteArray:
 	var buf := StreamPeerBuffer.new()
 	buf.big_endian = false
@@ -119,6 +119,9 @@ static func serialize_character_state_binary(state: NetworkMessages.CharacterSta
 	anim_bytes.resize(16)  # 16バイトにパディング/切り詰め
 	buf.put_data(anim_bytes)
 
+	# タイムスタンプ (4 bytes) - 送信時刻（補間ジッター防止用）
+	buf.put_u32(state.timestamp)
+
 	return buf.data_array
 
 
@@ -126,7 +129,7 @@ static func serialize_character_state_binary(state: NetworkMessages.CharacterSta
 static func deserialize_character_state_binary(data: PackedByteArray) -> NetworkMessages.CharacterStateMessage:
 	var state := NetworkMessages.CharacterStateMessage.new()
 
-	if data.size() < 36:  # 20 + 16 bytes for animation_state
+	if data.size() < 40:  # 20 + 16 bytes for animation_state + 4 bytes for timestamp
 		return state
 
 	var buf := StreamPeerBuffer.new()
@@ -167,6 +170,9 @@ static func deserialize_character_state_binary(data: PackedByteArray) -> Network
 	var anim_data := buf.get_data(16)[1] as PackedByteArray
 	state.animation_state = anim_data.get_string_from_utf8().strip_edges()
 
+	# タイムスタンプ (4 bytes)
+	state.timestamp = buf.get_u32()
+
 	return state
 
 
@@ -199,7 +205,7 @@ static func deserialize_character_states_binary(data: PackedByteArray) -> Array[
 	buf.data_array = data
 
 	var count := buf.get_u8()
-	const CHAR_STATE_SIZE := 36  # 20 + 16 bytes for animation_state
+	const CHAR_STATE_SIZE := 40  # 20 + 16 bytes for animation_state + 4 bytes for timestamp
 
 	for i in count:
 		if buf.get_position() + CHAR_STATE_SIZE > data.size():

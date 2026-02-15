@@ -40,6 +40,11 @@ func can_start_round() -> bool:
 	return true
 
 
+## アニメーションイベント送信（Multiplayer/Coopでオーバーライド）
+func send_animation_event(_character_id: int, _anim_event: int, _extra_data: Dictionary = {}) -> void:
+	pass
+
+
 ## クリーンアップ
 func cleanup() -> void:
 	pass

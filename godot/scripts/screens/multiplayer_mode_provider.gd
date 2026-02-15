@@ -182,6 +182,11 @@ func _spawn_team_characters_for_player(
 	return network_id_counter
 
 
+func send_animation_event(character_id: int, anim_event: int, extra_data: Dictionary = {}) -> void:
+	if sync_controller:
+		sync_controller.send_animation_event(character_id, anim_event, extra_data)
+
+
 func on_round_ended(_winner: int, _reason: int) -> void:
 	if _is_host and sync_controller:
 		sync_controller.send_round_state()

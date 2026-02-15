@@ -41,11 +41,11 @@ enum MessageType {
 const SIMULATION_TICK_HZ: int = 60
 
 ## ネットワーク送信Tick（Hz）- ネットワーク更新頻度
-const NETWORK_SEND_HZ: int = 15
+const NETWORK_SEND_HZ: int = 20
 
 ## 送信間隔（シミュレーションTickごと）
 @warning_ignore("integer_division")
-const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 4
+const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 3
 
 ## 同期レート（Hz）- 後方互換用（NETWORK_SEND_HZを使用推奨）
 const SYNC_RATE_HZ: int = NETWORK_SEND_HZ
@@ -54,8 +54,8 @@ const SYNC_RATE_HZ: int = NETWORK_SEND_HZ
 const SYNC_INTERVAL: float = 1.0 / NETWORK_SEND_HZ
 
 ## 補間バッファ遅延（秒）- リモートキャラクターの描画遅延
-## 高いほど滑らかだがラグが増える（推奨: 60-120ms）
-const INTERPOLATION_DELAY: float = 0.08
+## 高いほど滑らかだがラグが増える（推奨: 80-150ms）
+const INTERPOLATION_DELAY: float = 0.12
 
 ## スナップショットバッファサイズ（約1秒分のデータを保持）
 const SNAPSHOT_BUFFER_SIZE: int = 30

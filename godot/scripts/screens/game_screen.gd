@@ -900,10 +900,18 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 	_grenade_target_pos = ground_point
 
 	# 距離で近投/遠投を自動選択
-	if distance <= GameConstants.GRENADE_THROW_CLOSE_THRESHOLD:
+	var is_close := distance <= GameConstants.GRENADE_THROW_CLOSE_THRESHOLD
+	if is_close:
 		_player_character.anim_ctrl.play_throw_close()
 	else:
 		_player_character.anim_ctrl.play_throw_far()
+
+	# ネットワーク同期: 投擲アニメーションイベント送信
+	_mode_provider.send_animation_event(
+		_player_character.network_id,
+		NetworkConstants.AnimationEventType.GRENADE_THROW,
+		{"is_close": is_close}
+	)
 
 
 func _has_ground_at(pos: Vector3) -> bool:

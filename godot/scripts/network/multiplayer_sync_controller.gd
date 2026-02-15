@@ -37,7 +37,7 @@ func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
 		game_manager.round_manager.set_authority(is_host)
 
 
-func _process(_delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	if not _auto_sync_enabled:
 		return
 
@@ -549,9 +549,14 @@ func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
 				anim_ctrl.play_death(direction, false)
 
 		NetworkConstants.AnimationEventType.GRENADE_THROW:
-			if anim_ctrl.has_method("play_grenade_throw"):
-				anim_ctrl.play_grenade_throw()
-				_seek_animation_forward(anim_ctrl, latency_sec)
+			var is_close: bool = event.data.get("is_close", false)
+			if is_close:
+				if anim_ctrl.has_method("play_throw_close"):
+					anim_ctrl.play_throw_close()
+			else:
+				if anim_ctrl.has_method("play_throw_far"):
+					anim_ctrl.play_throw_far()
+			_seek_animation_forward(anim_ctrl, latency_sec)
 
 
 func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -663,7 +668,8 @@ func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictio
 		"velocity": {"x": state.velocity.x, "y": state.velocity.y, "z": state.velocity.z},
 		"current_health": state.current_health,
 		"is_alive": state.is_alive,
-		"animation_state": state.animation_state
+		"animation_state": state.animation_state,
+		"timestamp": state.timestamp
 	}
 
 
@@ -681,6 +687,7 @@ func _dict_to_char_state(data: Dictionary) -> NetworkMessages.CharacterStateMess
 	state.current_health = data.get("current_health", 100)
 	state.is_alive = data.get("is_alive", true)
 	state.animation_state = data.get("animation_state", "")
+	state.timestamp = data.get("timestamp", 0)
 
 	return state
 
