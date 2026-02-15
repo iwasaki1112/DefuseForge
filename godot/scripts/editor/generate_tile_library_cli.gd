@@ -1,13 +1,15 @@
 extends SceneTree
 ## MeshLibraryをCLIから生成するスクリプト
-## scenes/tiles/*.glb を自動スキャンしてtile_library.tresを生成
+## scenes/tiles/*.glb を自動スキャンして floor/wall 別のMeshLibraryを生成
 ##
 ## 使い方:
 ##   godot --headless --script res://scripts/editor/generate_tile_library_cli.gd
 
 
 const TILES_DIR := "res://scenes/tiles/"
-const SAVE_PATH := "res://data/tiles/tile_library.tres"
+const SAVE_DIR := "res://data/tiles/"
+const FLOOR_SAVE_PATH := "res://data/tiles/tile_library_floor.tres"
+const WALL_SAVE_PATH := "res://data/tiles/tile_library_wall.tres"
 
 
 func _init() -> void:
@@ -32,13 +34,33 @@ func _init() -> void:
 	glb_files.sort()
 	print("Found %d GLB files" % glb_files.size())
 
+	# floor/wall に分類
+	var floor_files: Array[String] = []
+	var wall_files: Array[String] = []
+	for f in glb_files:
+		var name_lower := f.get_basename().to_lower()
+		if name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("door"):
+			wall_files.append(f)
+		else:
+			floor_files.append(f)
+
+	print("  Floor tiles: %d, Wall tiles: %d" % [floor_files.size(), wall_files.size()])
+
+	# 各ライブラリを生成
+	_build_library(floor_files, FLOOR_SAVE_PATH, "Floor")
+	_build_library(wall_files, WALL_SAVE_PATH, "Wall")
+
+	quit()
+
+
+func _build_library(files: Array[String], save_path: String, label: String) -> void:
 	var lib := MeshLibrary.new()
 
-	for i in glb_files.size():
-		var file_name2 := glb_files[i]
-		var tile_name := file_name2.get_basename()  # "floor_concrete.glb" → "floor_concrete"
+	for i in files.size():
+		var file_name2 := files[i]
+		var tile_name := file_name2.get_basename()
 		var path := TILES_DIR + file_name2
-		print("Loading: ", path)
+		print("Loading [%s]: %s" % [label, path])
 
 		var scene := load(path) as PackedScene
 		if not scene:
@@ -103,16 +125,13 @@ func _init() -> void:
 		print("  Done: ", tile_name)
 
 	# 保存
-	var save_dir := ProjectSettings.globalize_path("res://data/tiles")
-	DirAccess.make_dir_recursive_absolute(save_dir)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_DIR))
 
-	var err := ResourceSaver.save(lib, SAVE_PATH)
+	var err := ResourceSaver.save(lib, save_path)
 	if err == OK:
-		print("=== MeshLibrary saved: %s (%d items) ===" % [SAVE_PATH, glb_files.size()])
+		print("=== [%s] MeshLibrary saved: %s (%d items) ===" % [label, save_path, files.size()])
 	else:
-		print("=== ERROR saving: ", err, " ===")
-
-	quit()
+		print("=== [%s] ERROR saving: %s ===" % [label, err])
 
 
 func _find_all_mesh_instances(node: Node, result: Array[MeshInstance3D]) -> void:

@@ -1,8 +1,10 @@
 [gd_scene format=3 uid="uid://dwu1jpv6m5usq"]
 
-[ext_resource type="MeshLibrary" uid="uid://cjt5mhrqnjs3x" path="res://data/tiles/tile_library.tres" id="1"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_floor.tres" id="1"]
 [ext_resource type="Script" uid="uid://lqncyhb0ni2o" path="res://scripts/maps/map_base.gd" id="2"]
 [ext_resource type="PackedScene" uid="uid://d2ej3e5py3ad0" path="res://scenes/props/car.glb" id="3_vutao"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_wall.tres" id="4"]
+[ext_resource type="PackedScene" uid="uid://b68p5oipfuqo7" path="res://scenes/props/desk.glb" id="5_1cssr"]
 
 [sub_resource type="Environment" id="Environment_editor"]
 background_mode = 1
@@ -32,7 +34,14 @@ directional_shadow_max_distance = 40.0
 mesh_library = ExtResource("1")
 cell_center_y = false
 data = {
-"cells": PackedInt32Array(0, 0, 0, 65535, 0, 3, 65535, 65535, 3, 0, 65535, 0, 4, 65535, 3, 3, 0, 1, 3, 65535, 3, 2, 65535, 0, 1, 65535, 0, 1, 0, 0, 2, 0, 1, 4, 0, 0, 1, 1, 0, 2, 1, 1, 4, 65534, 2, 3, 65534, 0, 2, 65534, 0, 1, 65534, 0, 0, 65534, 0, 65535, 65534, 3, 65535, 1, 3, 0, 1, 0, 3, 1, 1, 4, 1, 2, 65534, 65534, 0, 65534, 65535, 0, 65534, 0, 0, 65534, 1, 0, 65534, 2, 0, 65535, 2, 0, 0, 2, 0, 1, 2, 0, 2, 2, 0, 3, 2, 2, 4, 2, 0, 5, 2, 0, 5, 1, 0, 5, 0, 0, 6, 0, 0, 6, 65535, 0, 6, 65534, 0, 5, 65534, 0, 5, 65533, 0, 5, 65535, 3, 6, 65533, 0, 4, 65533, 0, 3, 65533, 0, 2, 65533, 0, 1, 65533, 0, 0, 65533, 0, 65535, 65533, 0, 65534, 65533, 0, 6, 1, 0, 6, 2, 0)
+"cells": PackedInt32Array(0, 0, 1048577, 65535, 0, 3, 65535, 65535, 3, 0, 65535, 1048577, 4, 65535, 3, 3, 0, 1, 3, 65535, 3, 2, 65535, 0, 1, 65535, 0, 1, 0, 0, 2, 0, 1, 4, 0, 0, 1, 1, 0, 2, 1, 1, 4, 65534, 2, 3, 65534, 0, 2, 65534, 0, 1, 65534, 0, 0, 65534, 1048577, 65535, 65534, 3, 65535, 1, 3, 0, 1, 1048577, 3, 1, 1, 4, 1, 2, 65534, 65534, 0, 65534, 65535, 0, 65534, 0, 0, 65534, 1, 0, 65534, 2, 0, 65535, 2, 0, 0, 2, 0, 1, 2, 0, 2, 2, 0, 3, 2, 2, 4, 2, 0, 5, 2, 0, 5, 1, 0, 5, 0, 0, 6, 0, 0, 6, 65535, 0, 6, 65534, 0, 5, 65534, 0, 5, 65533, 0, 5, 65535, 3, 6, 65533, 0, 4, 65533, 0, 3, 65533, 0, 2, 65533, 0, 1, 65533, 0, 0, 65533, 1048577, 65535, 65533, 0, 65534, 65533, 0, 6, 1, 0, 6, 2, 0)
+}
+
+[node name="GridMapWall" type="GridMap" parent="." unique_id=2117126198]
+mesh_library = ExtResource("4")
+cell_center_y = false
+data = {
+"cells": PackedInt32Array(0, 65534, 1048578, 0, 65535, 1048578, 0, 0, 1048578, 0, 1, 0, 0, 2, 1441794)
 }
 
 [node name="spawn_ct_0" type="Marker3D" parent="." unique_id=2014919147]
@@ -47,5 +56,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -2)
 [node name="spawn_t_1" type="Marker3D" parent="." unique_id=873732991]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 2)
 
-[node name="car" type="Node3D" parent="." unique_id=289592129 instance=ExtResource("3_vutao")]
+[node name="car" parent="." unique_id=289592129 instance=ExtResource("3_vutao")]
 transform = Transform3D(0.5150381, 0, 0.8571673, 0, 1, 0, -0.8571673, 0, 0.5150381, 7.600644, 1.899898e-07, -0.33807993)
+
+[node name="desk" type="Node3D" parent="." unique_id=60526940 instance=ExtResource("5_1cssr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.23440647, 0, -2.68432)

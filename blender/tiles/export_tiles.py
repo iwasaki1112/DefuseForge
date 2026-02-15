@@ -9,6 +9,7 @@ tile_library.blend の各コレクションを個別GLBとしてエクスポー�
     blender tile_library.blend --background --python export_tiles.py
 
 コレクション名 = タイル名 = GLBファイル名（例: floor_concrete → floor_concrete.glb）
+複数オブジェクトのコレクション: オブジェクト名(-col除去) = GLBファイル名
 出力先: godot/scenes/tiles/
 """
 
@@ -30,6 +31,36 @@ else:
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "godot", "scenes", "tiles")
 
 
+def _export_glb(filepath):
+    """共通GLBエクスポート処理"""
+    bpy.ops.export_scene.gltf(
+        filepath=filepath,
+        export_format='GLB',
+        use_selection=True,
+        export_apply=True,
+        export_texcoords=True,
+        export_normals=True,
+        export_materials='EXPORT',
+        export_image_format='AUTO',
+        export_yup=True,
+    )
+
+
+def _export_single_object(obj, tile_name):
+    """単一オブジェクトをGLBエクスポート（位置を一時リセット）"""
+    orig_loc = obj.location.copy()
+    obj.location = (0, 0, 0)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+
+    output_path = os.path.join(OUTPUT_DIR, f"{tile_name}.glb")
+    _export_glb(output_path)
+
+    obj.location = orig_loc
+    return output_path
+
+
 def export_tiles():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -40,33 +71,23 @@ def export_tiles():
 
     exported = 0
     for col in scene_collections:
-        if not col.objects:
+        objects = list(col.objects)
+        if not objects:
             print(f"  SKIP: '{col.name}' (empty)")
             continue
 
-        tile_name = col.name
-        output_path = os.path.join(OUTPUT_DIR, f"{tile_name}.glb")
-
-        # 全選択解除 → コレクション内のオブジェクトだけ選択
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in col.objects:
-            obj.select_set(True)
-
-        # 選択オブジェクトをGLBエクスポート
-        bpy.ops.export_scene.gltf(
-            filepath=output_path,
-            export_format='GLB',
-            use_selection=True,
-            export_apply=True,
-            export_texcoords=True,
-            export_normals=True,
-            export_materials='EXPORT',
-            export_image_format='AUTO',
-            export_yup=True,
-        )
-
-        print(f"  Exported: {tile_name}.glb ({len(col.objects)} objects)")
-        exported += 1
+        if len(objects) == 1:
+            # 単一オブジェクト → コレクション名でエクスポート
+            _export_single_object(objects[0], col.name)
+            print(f"  Exported: {col.name}.glb (1 object)")
+            exported += 1
+        else:
+            # 複数オブジェクト → 各オブジェクトを個別エクスポート
+            for obj in objects:
+                tile_name = obj.name.replace("-col", "")
+                _export_single_object(obj, tile_name)
+                print(f"  Exported: {tile_name}.glb (from '{col.name}')")
+                exported += 1
 
     print(f"\n=== {exported} tiles exported to {OUTPUT_DIR} ===")
 
