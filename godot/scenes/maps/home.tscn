@@ -65,7 +65,7 @@ display_name = "Home"
 environment = SubResource("Environment_editor")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=925898219]
-transform = Transform3D(1, 0, 0, 0, 0.156434, 0.987688, 0, -0.987688, 0.156434, 0, 10, 0)
+transform = Transform3D(0.866025, 0, -0.5, 0.383022, 0.642788, 0.663414, 0.321394, -0.766044, 0.55667, 0, 10, 0)
 light_color = Color(1, 0.98, 0.95, 1)
 light_energy = 0.49
 shadow_enabled = true
@@ -92,14 +92,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 2)
 
 [node name="car" type="Node3D" parent="." unique_id=289592129 instance=ExtResource("3_vutao")]
-transform = Transform3D(0.58778524, 0, 0.809017, 0, 1, 0, -0.809017, 0, 0.58778524, 6.739752, 1.899898e-07, 0.0069753528)
+transform = Transform3D(-0.60619664, 0, -0.7953148, 0, 1, 0, 0.7953148, 0, -0.60619664, 6.2888384, 0, 0.8491399)
 
 [node name="car-object" type="MeshInstance3D" parent="car" unique_id=944683483]
+transform = Transform3D(0.5591929, 0, 0.82903755, 0, 1, 0, -0.82903755, 0, 0.5591929, 0, 0, 0)
 mesh = SubResource("ArrayMesh_cfuc4")
 skeleton = NodePath("")
 
-[node name="car_collision" type="StaticBody3D" parent="car/car-object" unique_id=429766690]
+[node name="car_collision" type="StaticBody3D" parent="car/car-object" unique_id=1685350344]
 collision_layer = 2
 
-[node name="ConvexCollision" type="CollisionShape3D" parent="car/car-object/car_collision" unique_id=628196762]
+[node name="ConvexCollision" type="CollisionShape3D" parent="car/car-object/car_collision" unique_id=982453998]
 shape = SubResource("ConvexPolygonShape3D_vutao")
