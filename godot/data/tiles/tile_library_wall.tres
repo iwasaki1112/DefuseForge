@@ -1,13 +1,13 @@
-[gd_resource type="MeshLibrary" format=4 uid="uid://c57v5a177in6x"]
+[gd_resource type="MeshLibrary" format=4]
 
-[ext_resource type="Texture2D" uid="uid://1p30faw4cykv" path="res://scenes/tiles/wall_corner_tmpz8hmbwb_.jpg" id="1_e0mrc"]
-[ext_resource type="Texture2D" uid="uid://ccfranrbpug2a" path="res://scenes/tiles/wall_corner_tmpda7iwe7x.png" id="2_6t1de"]
-[ext_resource type="Texture2D" uid="uid://d23ychiiyppro" path="res://scenes/tiles/wall_end_tmpz8hmbwb_.jpg" id="3_eer6j"]
-[ext_resource type="Texture2D" uid="uid://dfxqwyhf8rul8" path="res://scenes/tiles/wall_end_tmpda7iwe7x.png" id="4_yw1fo"]
-[ext_resource type="Texture2D" uid="uid://b0ra7364gw2q0" path="res://scenes/tiles/wall_straight_tmpz8hmbwb_.jpg" id="5_wx62k"]
-[ext_resource type="Texture2D" uid="uid://3h4g2jney0ed" path="res://scenes/tiles/wall_straight_tmpda7iwe7x.png" id="6_dm4rg"]
-[ext_resource type="Texture2D" uid="uid://dfq3jo164q1m7" path="res://scenes/tiles/wall_t_tmpz8hmbwb_.jpg" id="7_v13hc"]
-[ext_resource type="Texture2D" uid="uid://dpy75lblxr483" path="res://scenes/tiles/wall_t_tmpda7iwe7x.png" id="8_qe5tk"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_corner_tmpz8hmbwb_.jpg" id="1_e0mrc"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_corner_tmpda7iwe7x.png" id="2_6t1de"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_end_tmpz8hmbwb_.jpg" id="3_eer6j"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_end_tmpda7iwe7x.png" id="4_yw1fo"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_straight_tmpz8hmbwb_.jpg" id="5_wx62k"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_straight_tmpda7iwe7x.png" id="6_dm4rg"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_t_tmpz8hmbwb_.jpg" id="7_v13hc"]
+[ext_resource type="Texture2D" path="res://scenes/tiles/wall_t_tmpda7iwe7x.png" id="8_qe5tk"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1ruen"]
 resource_name = "concrete"

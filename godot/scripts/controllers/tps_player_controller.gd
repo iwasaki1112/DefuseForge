@@ -18,8 +18,8 @@ extends Node
 # ============================================
 # Configurable Parameters
 # ============================================
-var camera_height := 20.0
-var camera_pitch_deg := -90.0
+var camera_height := 24.0
+var camera_pitch_deg := -75.0
 var enable_aim_stick := true
 
 # ============================================
