@@ -75,9 +75,12 @@ func _setup_ui() -> void:
 	main_container.add_theme_constant_override("separation", 30)
 	center_container.add_child(main_container)
 
-	# タイトル
+	# タイトル（モードに合わせて表示）
 	var title := Label.new()
-	title.text = "Multiplayer"
+	if SettingsManager.get_game_mode() == "coop":
+		title.text = "COOP"
+	else:
+		title.text = "Multiplayer"
 	title.add_theme_font_size_override("font_size", 32)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_container.add_child(title)
@@ -195,8 +198,11 @@ func _start_game(map_id: String) -> void:
 	# ゲームシーンをロード（統合されたGameScreenを使用）
 	var game_scene := load(GAME_SCENE).instantiate() as GameScreen
 
-	# Multiplayerモードをadd_child前にセットアップ（_ready()で正しいProviderで初期化するため）
-	game_scene.setup_multiplayer(_network_manager, map_id)
+	# モードに応じてセットアップ（add_child前に呼ぶ）
+	if SettingsManager.get_game_mode() == "coop":
+		game_scene.setup_coop(_network_manager, map_id)
+	else:
+		game_scene.setup_multiplayer(_network_manager, map_id)
 
 	get_tree().root.add_child(game_scene)
 	game_scene.add_child(_network_manager)

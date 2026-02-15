@@ -16,6 +16,7 @@ var _config: ConfigFile
 
 ## セッション中のみ保持（永続化しない）
 var _selected_map_id: String = ""
+var _game_mode: String = ""
 
 
 func _ready() -> void:
@@ -69,3 +70,22 @@ func set_selected_map(map_id: String) -> void:
 ## 選択中のマップIDをクリア
 func clear_selected_map() -> void:
 	_selected_map_id = ""
+
+
+# ============================================
+# Game Mode (Session Only)
+# ============================================
+
+## ゲームモードを取得（"" / "coop" / "multiplayer"）
+func get_game_mode() -> String:
+	return _game_mode
+
+
+## ゲームモードを設定（セッション中のみ保持）
+func set_game_mode(mode: String) -> void:
+	_game_mode = mode
+
+
+## ゲームモードをクリア
+func clear_game_mode() -> void:
+	_game_mode = ""

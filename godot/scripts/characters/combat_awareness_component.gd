@@ -245,15 +245,15 @@ func _scan_for_enemies() -> void:
 		return
 
 	# プレイヤーチームか判定
-	# プレイヤーチーム: enemy.visible（FoWと一致）で可視判定
+	# プレイヤーチーム: enemy.visible（FoW）+ 自分のVisionComponentで可視判定
 	# 敵AI: VisionComponent（個別レイキャスト）で可視判定
 	var is_player_team := _character is GameCharacter and PlayerState.is_friendly(_character)
 	var vision: VisionComponent = null
-	if not is_player_team:
-		vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
-		if not vision:
-			_handle_no_enemy_in_sight()
-			return
+	if _character.has_method("get_vision_component"):
+		vision = _character.get_vision_component()
+	if not is_player_team and not vision:
+		_handle_no_enemy_in_sight()
+		return
 
 	# Find closest visible enemy
 	var closest_enemy: Node = null
@@ -272,10 +272,14 @@ func _scan_for_enemies() -> void:
 
 		# 可視性チェック
 		if is_player_team:
-			# プレイヤーチーム: EnemyVisibilitySystemが設定したenemy.visibleを使用
-			# FoWテクスチャと完全に一致した可視判定
+			# プレイヤーチーム: FoW可視 + 自分のVisionComponentで検知範囲内か確認
+			# FoW可視性だけだと仲間の視界で見えている遠方の敵にも反応してしまう
 			if enemy is Node3D and not enemy.visible:
 				continue
+			if vision:
+				var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+				if not vision.is_position_in_view(enemy_pos):
+					continue
 		else:
 			# 敵AI: VisionComponentの個別レイキャストで可視判定
 			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)

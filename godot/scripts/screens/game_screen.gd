@@ -105,6 +105,17 @@ func setup_multiplayer(net_manager: NetworkManager, map_id: String) -> void:
 	_mode_provider = mp_provider
 
 
+## COOPモードでセットアップ（LobbyScreenから呼ばれる）
+## 注意: add_child()前に呼ぶこと（_ready()で_initialize_game()を一度だけ実行するため）
+func setup_coop(net_manager: NetworkManager, map_id: String) -> void:
+	_map_id = map_id
+
+	# CoopModeProviderをセットアップ
+	var coop_provider := CoopModeProvider.new()
+	coop_provider.setup_network(net_manager)
+	_mode_provider = coop_provider
+
+
 ## ゲームの初期化（共通処理）
 func _initialize_game() -> void:
 	_setup_environment()
@@ -1440,7 +1451,8 @@ func _on_round_ended(winner: int, reason: int) -> void:
 
 	# モードによって遷移先を変える
 	var next_scene: String
-	if _mode_provider.get_mode_name() == "multiplayer":
+	var mode_name := _mode_provider.get_mode_name()
+	if mode_name == "multiplayer" or mode_name == "coop":
 		next_scene = "res://scenes/screens/main_menu.tscn"
 	else:
 		next_scene = "res://scenes/screens/map_selection.tscn"

@@ -358,7 +358,12 @@ func _check_pending_action() -> void:
 	if Debug.enabled: print("NetworkManager: Sending pending action: %s" % _pending_action.get("type", "unknown"))
 	_send_to_server(_pending_action)
 
-	# リトライ用に保存
+	# FIND_MATCHはマッチ待機なのでリトライ不要（相手が来るまで無制限に待つ）
+	if _pending_action.get("type", "") == "FIND_MATCH":
+		_pending_action = {}
+		return
+
+	# それ以外のアクションはリトライ用に保存
 	_pending_action_sent = _pending_action.duplicate()
 	_pending_action_timer = 0.0
 	_pending_action_retries = 0

@@ -48,4 +48,4 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 2)
 
 [node name="car" type="Node3D" parent="." unique_id=289592129 instance=ExtResource("3_vutao")]
-transform = Transform3D(0.42261824, 0, 0.9063078, 0, 1, 0, -0.9063078, 0, 0.42261824, 7.600644, 1.899898e-07, -0.33807993)
+transform = Transform3D(0.5150381, 0, 0.8571673, 0, 1, 0, -0.8571673, 0, 0.5150381, 7.600644, 1.899898e-07, -0.33807993)
