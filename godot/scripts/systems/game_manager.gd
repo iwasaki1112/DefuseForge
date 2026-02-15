@@ -474,15 +474,15 @@ func _emit_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke
 
 
 ## ネットワークからグレネードをスポーン（リモート用）- 速度を直接使用
-func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
+func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
 	if grenade_service:
-		grenade_service.spawn_grenade_from_network(start_pos, velocity, grenade_id)
+		grenade_service.spawn_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 ## ネットワークからスモークグレネードをスポーン（リモート用）- 速度を直接使用
-func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
+func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
 	if grenade_service:
-		grenade_service.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id)
+		grenade_service.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 ## ネットワークからの爆発イベントを処理（リモートグレネード用）

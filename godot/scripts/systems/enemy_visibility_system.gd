@@ -169,25 +169,32 @@ func _check_enemy_visibility(enemy: Node) -> void:
 	var is_visible := _is_position_visible_to_friendlies(enemy_pos)
 
 	# スモーク可視性チェック（双方向で不透明）
+	var _hide_reason := ""
 	if is_visible and _smoke_area_manager:
 		if _smoke_area_manager.is_position_in_smoke(enemy_pos):
 			# 敵がスモーク内 → 非表示（外から中が見えない）
 			is_visible = false
+			_hide_reason = "in_smoke"
 		elif _are_all_friendlies_in_smoke():
 			# 全味方がスモーク内 → 外の敵も非表示（中から外が見えない）
 			is_visible = false
+			_hide_reason = "all_friendlies_in_smoke"
+	elif not is_visible:
+		_hide_reason = "fow"
 
 	var instance_id := enemy.get_instance_id()
 
 	# Update only if changed
 	if _visibility_cache.get(instance_id) != is_visible:
-		var start_time := Time.get_ticks_usec()
 		_visibility_cache[instance_id] = is_visible
 		enemy.visible = is_visible
 		visibility_changed.emit(enemy, is_visible)
-		var elapsed := Time.get_ticks_usec() - start_time
-		if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
-			print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
+		if Debug.enabled:
+			var state_str := "VISIBLE" if is_visible else "HIDDEN"
+			var smoke_info := _get_nearest_smoke_debug_info(enemy_pos)
+			print("[EVS] ", enemy.name, " -> ", state_str,
+				" reason=", _hide_reason if not is_visible else "ok",
+				" enemy_pos=", enemy_pos, smoke_info)
 
 
 ## 全ての生存味方がスモーク内にいるか判定
@@ -264,3 +271,26 @@ func _get_enemy_characters() -> Array[Node]:
 func _on_player_team_changed(_new_team: GameCharacter.Team) -> void:
 	_visibility_cache.clear()
 	update_visibility()
+
+
+## デバッグ用: 最寄りスモークエリアの情報を文字列で返す
+func _get_nearest_smoke_debug_info(pos: Vector3) -> String:
+	if not _smoke_area_manager:
+		return ""
+	var areas: Array[Node3D] = _smoke_area_manager._active_areas
+	if areas.is_empty():
+		return " smoke_areas=0"
+	var nearest_dist := INF
+	var nearest_radius := 0.0
+	var nearest_pos := Vector3.ZERO
+	for area in areas:
+		if not is_instance_valid(area):
+			continue
+		var dist := pos.distance_to(area.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_pos = area.global_position
+			if area.has_method("get_current_radius"):
+				nearest_radius = area.get_current_radius()
+	return " smoke_areas=%d nearest_smoke_dist=%.1f smoke_radius=%.1f smoke_pos=%s" % [
+		areas.size(), nearest_dist, nearest_radius, str(nearest_pos)]

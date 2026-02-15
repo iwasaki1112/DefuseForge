@@ -35,6 +35,12 @@ var _radius_map_texture: ImageTexture = null
 var _particle_clip_mat: ShaderMaterial = null
 ## FogOfWarSystem参照（FoW可視性チェック用）
 var _fow_system = null
+## チーム別可視性
+var thrower_team: GameCharacter.Team = GameCharacter.Team.NONE  ## 投擲者のチーム
+var _once_seen: bool = false  ## 敵スモークが一度でもFoWで視認されたか
+
+## デバッグ可視化
+var _debug_ring: MeshInstance3D = null
 
 
 func _ready() -> void:
@@ -68,6 +74,10 @@ func start(manager: SmokeAreaManager = null) -> void:
 		_particles.visible = true
 		_particles.emitting = true
 
+	# デバッグリング表示
+	if Debug.enabled:
+		_create_debug_ring()
+
 	smoke_started.emit()
 
 
@@ -81,6 +91,14 @@ func _physics_process(delta: float) -> void:
 	if not is_equal_approx(prev_radius, _current_radius):
 		radius_changed.emit()
 	_update_visuals()
+
+	# 敵スモーク「一度視認」チェック: FoWで視認されたらクリッピングを永久無効化
+	if _fow_system and _particle_clip_mat and not _once_seen \
+			and thrower_team != GameCharacter.Team.NONE \
+			and thrower_team != PlayerState.get_player_team():
+		if _fow_system.is_position_visible_in_fow(global_position):
+			_once_seen = true
+			_particle_clip_mat.set_shader_parameter("fow_enabled", 0.0)
 
 	# 持続時間終了
 	if _elapsed_time >= duration:
@@ -117,11 +135,20 @@ func _update_visuals() -> void:
 		var scale_factor := _current_radius / max_radius if max_radius > 0 else 0.0
 		_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", scale_factor)
 
+	# デバッグリング更新
+	if _debug_ring:
+		_update_debug_ring()
+
 
 ## FoW可視性テクスチャをパーティクルシェーダーに適用（1回のみ呼出し）
 ## ViewportTextureはライブ参照のため毎フレーム更新不要
 func _apply_fow_to_shader() -> void:
 	if not _fow_system or not _particle_clip_mat:
+		return
+
+	# 味方スモーク → FoWクリッピング無効（常に表示）
+	if thrower_team != GameCharacter.Team.NONE and thrower_team == PlayerState.get_player_team():
+		_particle_clip_mat.set_shader_parameter("fow_enabled", 0.0)
 		return
 
 	var vis_tex = _fow_system.get_visibility_texture()
@@ -338,3 +365,31 @@ func get_elapsed_time() -> float:
 ## 残り時間を取得
 func get_remaining_time() -> float:
 	return max(0.0, duration - _elapsed_time)
+
+
+## デバッグ用リングメッシュを作成（スモーク半径を可視化）
+func _create_debug_ring() -> void:
+	_debug_ring = MeshInstance3D.new()
+	# 単位円を作成（スケールで半径を制御）
+	var im := ImmediateMesh.new()
+	var segments := 64
+	im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	for i in range(segments + 1):
+		var angle := float(i) * TAU / float(segments)
+		im.surface_add_vertex(Vector3(cos(angle), 0.0, sin(angle)))
+	im.surface_end()
+	_debug_ring.mesh = im
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.3, 0.0, 0.9)  # オレンジ
+	mat.no_depth_test = true
+	_debug_ring.material_override = mat
+
+	add_child(_debug_ring)
+	_debug_ring.position.y = 0.15
+
+
+## デバッグリングのスケールを更新
+func _update_debug_ring() -> void:
+	_debug_ring.scale = Vector3(_current_radius, 1.0, _current_radius)

@@ -454,8 +454,9 @@ func _apply_grenade_throw_event(event: NetworkMessages.GameEventMessage) -> void
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
+	var thrower_team: int = event.data.get("thrower_team", 0)
 	if Debug.enabled: print("[GRENADE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	game_manager.spawn_grenade_from_network(start_pos, velocity, grenade_id)
+	game_manager.spawn_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 func _apply_smoke_grenade_throw_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -471,8 +472,9 @@ func _apply_smoke_grenade_throw_event(event: NetworkMessages.GameEventMessage) -
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
+	var thrower_team: int = event.data.get("thrower_team", 0)
 	if Debug.enabled: print("[SMOKE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	game_manager.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id)
+	game_manager.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 func _apply_grenade_explode_event(event: NetworkMessages.GameEventMessage) -> void:

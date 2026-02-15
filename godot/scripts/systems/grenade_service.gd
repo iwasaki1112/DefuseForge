@@ -116,7 +116,7 @@ func spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thro
 
 
 ## ネットワークからグレネードをスポーン（リモート用）
-func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
+func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
 	if not _mesh_parent:
 		push_error("[GrenadeService] mesh_parent not set")
 		return
@@ -131,6 +131,7 @@ func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_i
 	# リモートグレネードとしてマーク
 	grenade.is_remote = true
 	grenade.network_grenade_id = grenade_id
+	grenade.thrower_team = thrower_team as GameCharacter.Team
 	if _fow_system:
 		grenade.set_fow_system(_fow_system)
 
@@ -144,7 +145,7 @@ func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_i
 
 
 ## ネットワークからスモークグレネードをスポーン（リモート用）
-func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0) -> void:
+func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
 	if not _mesh_parent:
 		push_error("[GrenadeService] mesh_parent not set")
 		return
@@ -161,6 +162,7 @@ func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, gre
 	# リモートグレネードとしてマーク
 	smoke_grenade.is_remote = true
 	smoke_grenade.network_grenade_id = grenade_id
+	smoke_grenade.thrower_team = thrower_team as GameCharacter.Team
 	if _fow_system:
 		smoke_grenade.set_fow_system(_fow_system)
 

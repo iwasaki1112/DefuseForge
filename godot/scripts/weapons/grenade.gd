@@ -27,7 +27,9 @@ var _thrower: Node3D = null  ## 投げたキャラクター（自傷判定用）
 var initial_velocity: Vector3 = Vector3.ZERO  ## 初速度（ネットワーク同期用）
 var network_grenade_id: int = 0  ## ネットワーク同期用ID
 var is_remote: bool = false  ## リモートから生成されたグレネードか
-var _fow_system = null  ## FogOfWarSystem参照（リモートグレネードのFoW可視性用）
+var _fow_system = null  ## FogOfWarSystem参照（FoW可視性用）
+var thrower_team: GameCharacter.Team = GameCharacter.Team.NONE  ## 投擲者のチーム
+var _once_seen: bool = false  ## 敵グレネードが一度でもFoWで視認されたか
 
 ## キネマティック状態
 var _velocity: Vector3 = Vector3.ZERO
@@ -237,6 +239,12 @@ func _handle_collision(collision: Dictionary) -> void:
 ## arc_height: 放物線の高さ（オプション）
 func throw(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null, arc_height: float = -1.0) -> void:
 	_thrower = thrower
+	# 投擲者のチームを自動設定
+	if _thrower is GameCharacter:
+		thrower_team = (_thrower as GameCharacter).team
+	if Debug.enabled:
+		var thrower_name: String = _thrower.name if _thrower else "unknown"
+		print("[GRENADE] throw from=", start_pos, " target=", target_pos, " thrower=", thrower_name, " team=", thrower_team)
 	global_position = start_pos
 
 	# 放物線高さを決定
@@ -258,6 +266,8 @@ func throw(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null, arc_
 ## start_pos: 投擲開始位置
 ## velocity: 初速度ベクトル
 func throw_with_velocity(start_pos: Vector3, velocity: Vector3) -> void:
+	if Debug.enabled:
+		print("[GRENADE] throw_with_velocity from=", start_pos, " vel=", velocity, " team=", thrower_team, " remote=", is_remote)
 	global_position = start_pos
 	global_rotation = Vector3.ZERO  # 回転をリセット
 	initial_velocity = velocity
@@ -351,11 +361,27 @@ func _calculate_throw_velocity(start: Vector3, target: Vector3, arc_height: floa
 	return velocity
 
 
-## リモートグレネードのFoW可視性を更新
+## チーム別FoW可視性を更新
 func _update_fow_visibility() -> void:
-	if not is_remote or not _fow_system:
+	if not _fow_system:
 		return
-	visible = _fow_system.is_position_visible_in_fow(global_position)
+	# 味方グレネード → 常に表示
+	if thrower_team != GameCharacter.Team.NONE and thrower_team == PlayerState.get_player_team():
+		visible = true
+		return
+	# チーム不明（NONE）→ 現行動作（FoWベース、消失あり）
+	if thrower_team == GameCharacter.Team.NONE:
+		visible = _fow_system.is_position_visible_in_fow(global_position)
+		return
+	# 敵グレネード: 一度視認済み → 常に表示
+	if _once_seen:
+		visible = true
+		return
+	# 敵グレネード: FoWチェック
+	var is_visible: bool = _fow_system.is_position_visible_in_fow(global_position)
+	if is_visible:
+		_once_seen = true
+	visible = is_visible
 
 
 ## 導火線タイムアウト時

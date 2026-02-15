@@ -251,6 +251,7 @@ func _on_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: 
 		"vel_y": velocity.y,
 		"vel_z": velocity.z,
 		"grenade_id": grenade_id,
+		"thrower_team": PlayerState.get_player_team(),
 	}
 	sync_controller.send_game_event(event)
 
