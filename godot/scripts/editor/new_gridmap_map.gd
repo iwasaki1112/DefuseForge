@@ -48,7 +48,7 @@ script = ExtResource("2")
 map_id = "%s"
 display_name = "%s"
 
-[node name="GridMap" type="GridMap" parent="."]
+[node name="GridMapGround" type="GridMap" parent="."]
 mesh_library = ExtResource("1")
 cell_size = Vector3(2, 2, 2)
 cell_center_y = false

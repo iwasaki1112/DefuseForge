@@ -82,6 +82,9 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 			print("  Done: ", tile_name)
 			continue
 
+		var name_lower := tile_name.to_lower()
+		var has_opening := name_lower.begins_with("door") or "window" in name_lower
+
 		# メッシュを結合（複数サーフェスのArrayMesh）
 		var combined := ArrayMesh.new()
 		var shapes: Array = []
@@ -109,14 +112,20 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 					combined.surface_set_material(combined.get_surface_count() - 1, mat)
 					print("  Surface: ", mat.resource_name)
 
-			# コリジョン（メッシュごとにBoxShape3D）
-			var aabb := mesh.get_aabb()
-			var box := BoxShape3D.new()
-			box.size = aabb.size
-			var center := mi.transform * aabb.get_center()
-			shapes.append(box)
-			shapes.append(Transform3D(Basis.IDENTITY, center))
-			print("  Mesh: ", mi.name, " AABB: ", aabb.size)
+			if not has_opening:
+				# 非ドア: メッシュごとにAABB BoxShape3D
+				var aabb := mesh.get_aabb()
+				var box := BoxShape3D.new()
+				box.size = aabb.size
+				var center := mi.transform * aabb.get_center()
+				shapes.append(box)
+				shapes.append(Transform3D(Basis.IDENTITY, center))
+			print("  Mesh: ", mi.name, " AABB: ", mi.mesh.get_aabb().size)
+
+		# ドアタイル: 開口部を除いた柱ごとにBoxShape3Dを生成
+		if has_opening:
+			var door_shapes := _create_door_collision_shapes(combined)
+			shapes.append_array(door_shapes)
 
 		lib.set_item_mesh(i, combined)
 		lib.set_item_shapes(i, shapes)
@@ -139,3 +148,109 @@ func _find_all_mesh_instances(node: Node, result: Array[MeshInstance3D]) -> void
 		result.append(node)
 	for child in node.get_children():
 		_find_all_mesh_instances(child, result)
+
+
+## 開口付きタイルのメッシュ頂点を解析し、柱ごとにBoxShape3Dを生成
+## ユニークなX座標から内側の境界（AABB端ではない値）を検出して開口部を特定する
+func _create_door_collision_shapes(mesh: ArrayMesh) -> Array:
+	var shapes: Array = []
+
+	# 全サーフェスの頂点を収集
+	var all_verts: PackedVector3Array = PackedVector3Array()
+	for surf_idx in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(surf_idx)
+		all_verts.append_array(arrays[Mesh.ARRAY_VERTEX])
+
+	if all_verts.is_empty():
+		return shapes
+
+	# ユニークなX座標を取得（AABB端と内側の境界を識別）
+	var unique_x: Array[float] = []
+	for v in all_verts:
+		var found := false
+		for ux in unique_x:
+			if absf(ux - v.x) < 0.001:
+				found = true
+				break
+		if not found:
+			unique_x.append(v.x)
+	unique_x.sort()
+
+	# 4点 [left_outer, left_inner, right_inner, right_outer] を期待
+	# 開口部は inner の2点間
+	if unique_x.size() < 4:
+		# ユニーク値が少ない場合はAABBフォールバック
+		var aabb := mesh.get_aabb()
+		var box := BoxShape3D.new()
+		box.size = aabb.size
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, aabb.get_center()))
+		print("  Opening collision: fallback AABB (unique_x=%d)" % unique_x.size())
+		return shapes
+
+	# 内側の境界 = AABB端(min/max)を除いた値の中で最も離れた2点が開口
+	var inner_left := unique_x[1]   # 左柱の内側エッジ
+	var inner_right := unique_x[unique_x.size() - 2]  # 右柱の内側エッジ
+	var gap_center := (inner_left + inner_right) / 2.0
+
+	print("  Opening detected: x=[%.3f, %.3f] width=%.3f" % [inner_left, inner_right, inner_right - inner_left])
+
+	# ギャップの左右に頂点を分割し、それぞれBoxShape3Dを生成
+	var left_min := Vector3(INF, INF, INF)
+	var left_max := Vector3(-INF, -INF, -INF)
+	var right_min := Vector3(INF, INF, INF)
+	var right_max := Vector3(-INF, -INF, -INF)
+
+	for v in all_verts:
+		if v.x < gap_center:
+			left_min = Vector3(min(left_min.x, v.x), min(left_min.y, v.y), min(left_min.z, v.z))
+			left_max = Vector3(max(left_max.x, v.x), max(left_max.y, v.y), max(left_max.z, v.z))
+		else:
+			right_min = Vector3(min(right_min.x, v.x), min(right_min.y, v.y), min(right_min.z, v.z))
+			right_max = Vector3(max(right_max.x, v.x), max(right_max.y, v.y), max(right_max.z, v.z))
+
+	# 左柱
+	if left_min.x < INF:
+		var box := BoxShape3D.new()
+		box.size = left_max - left_min
+		var center := (left_min + left_max) / 2.0
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, center))
+		print("  Opening collision: left pillar size=", box.size, " center=", center)
+
+	# 右柱
+	if right_min.x < INF:
+		var box := BoxShape3D.new()
+		box.size = right_max - right_min
+		var center := (right_min + right_max) / 2.0
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, center))
+		print("  Opening collision: right pillar size=", box.size, " center=", center)
+
+	# 窓台（中央開口部の底面）: 開口内の頂点がAABB底面より高い場合、窓台ボックスを追加
+	var aabb := mesh.get_aabb()
+	var center_min_y := INF
+	var center_max_z := -INF
+	var center_min_z := INF
+	for v in all_verts:
+		if v.x > inner_left - 0.001 and v.x < inner_right + 0.001:
+			center_min_y = min(center_min_y, v.y)
+			center_min_z = min(center_min_z, v.z)
+			center_max_z = max(center_max_z, v.z)
+
+	# 窓台の高さ = 開口内頂点の最小Y - AABB最小Y
+	if center_min_y < INF:
+		var sill_height := center_min_y - aabb.position.y
+		if sill_height > 0.05:
+			var box := BoxShape3D.new()
+			box.size = Vector3(inner_right - inner_left, sill_height, center_max_z - center_min_z)
+			var center := Vector3(
+				(inner_left + inner_right) / 2.0,
+				aabb.position.y + sill_height / 2.0,
+				(center_min_z + center_max_z) / 2.0
+			)
+			shapes.append(box)
+			shapes.append(Transform3D(Basis.IDENTITY, center))
+			print("  Opening collision: sill size=", box.size, " center=", center)
+
+	return shapes

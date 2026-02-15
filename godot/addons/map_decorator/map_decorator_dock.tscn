@@ -1,0 +1,104 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/map_decorator/map_decorator_dock.gd" id="1"]
+
+[node name="MapDecoratorDock" type="VBoxContainer"]
+custom_minimum_size = Vector2(220, 0)
+script = ExtResource("1")
+
+[node name="TabBar" type="TabBar" parent="."]
+tab_count = 2
+tab_0/title = "  Object  "
+tab_1/title = "  Decal  "
+
+[node name="ModeIndicator" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(0, 28)
+
+[node name="ModeLabel" type="Label" parent="ModeIndicator"]
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 11
+
+[node name="ObjectContainer" type="VBoxContainer" parent="."]
+size_flags_vertical = 3
+
+[node name="Header" type="HBoxContainer" parent="ObjectContainer"]
+
+[node name="Title" type="Label" parent="ObjectContainer/Header"]
+text = "Props"
+theme_override_font_sizes/font_size = 13
+
+[node name="Spacer" type="Control" parent="ObjectContainer/Header"]
+size_flags_horizontal = 3
+
+[node name="RefreshButton" type="Button" parent="ObjectContainer/Header"]
+text = "↻"
+tooltip_text = "Refresh prop list"
+
+[node name="PropList" type="ItemList" parent="ObjectContainer"]
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 200)
+
+[node name="PlaceButton" type="Button" parent="ObjectContainer"]
+text = "配置"
+tooltip_text = "選択中のノードの子として配置"
+
+[node name="PropStatusLabel" type="Label" parent="ObjectContainer"]
+text = "Ready"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
+
+[node name="DecalContainer" type="VBoxContainer" parent="."]
+size_flags_vertical = 3
+visible = false
+
+[node name="DecalHeader" type="HBoxContainer" parent="DecalContainer"]
+
+[node name="Title" type="Label" parent="DecalContainer/DecalHeader"]
+text = "Decals"
+theme_override_font_sizes/font_size = 13
+
+[node name="Spacer" type="Control" parent="DecalContainer/DecalHeader"]
+size_flags_horizontal = 3
+
+[node name="RefreshDecalButton" type="Button" parent="DecalContainer/DecalHeader"]
+text = "↻"
+tooltip_text = "Refresh decal list"
+
+[node name="DecalList" type="ItemList" parent="DecalContainer"]
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 200)
+
+[node name="PaintControls" type="HBoxContainer" parent="DecalContainer"]
+
+[node name="PaintButton" type="Button" parent="DecalContainer/PaintControls"]
+toggle_mode = true
+text = "Paint"
+custom_minimum_size = Vector2(80, 0)
+
+[node name="SizeLabel" type="Label" parent="DecalContainer/PaintControls"]
+text = " Size:"
+
+[node name="SizeSlider" type="HSlider" parent="DecalContainer/PaintControls"]
+custom_minimum_size = Vector2(80, 0)
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 8.0
+step = 0.5
+value = 3.0
+
+[node name="SizeValue" type="Label" parent="DecalContainer/PaintControls"]
+text = "3.0"
+
+[node name="DecalStatusLabel" type="Label" parent="DecalContainer"]
+text = "Ready"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
+
+[connection signal="tab_changed" from="TabBar" to="." method="_on_tab_changed"]
+[connection signal="pressed" from="ObjectContainer/Header/RefreshButton" to="." method="_on_refresh_props"]
+[connection signal="pressed" from="ObjectContainer/PlaceButton" to="." method="_on_place_button_pressed"]
+[connection signal="item_activated" from="ObjectContainer/PropList" to="." method="_on_prop_list_item_activated"]
+[connection signal="pressed" from="DecalContainer/DecalHeader/RefreshDecalButton" to="." method="_on_refresh_decals"]
+[connection signal="toggled" from="DecalContainer/PaintControls/PaintButton" to="." method="_on_paint_toggled"]
+[connection signal="value_changed" from="DecalContainer/PaintControls/SizeSlider" to="." method="_on_size_changed"]

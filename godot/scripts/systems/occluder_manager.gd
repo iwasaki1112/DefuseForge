@@ -279,6 +279,7 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 		var item_name := lib.get_item_name(item_id).to_lower()
 		var is_wall := "wall" in item_name
 		var is_door := "door" in item_name
+		var has_opening := is_door or "window" in item_name
 
 		if not is_wall and not is_door:
 			continue
@@ -300,13 +301,62 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 			if Debug.enabled: print("[FOW] Skip low GridMap obstacle: ", item_name, " at ", cell, " (height=", snapped(mesh_top_y, 0.01), ")")
 			continue
 
-		# AABBからオクルーダー生成
-		var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
-		if occluder:
-			_occluder_parent.add_child(occluder)
-			_wall_occluders.append(occluder)
+		if has_opening:
+			# ドア/窓: MeshLibraryのコリジョンシェイプ（柱ごとのBoxShape3D）からオクルーダー生成
+			var item_shapes := lib.get_item_shapes(item_id)
+			var si := 0
+			while si < item_shapes.size():
+				if item_shapes[si] is BoxShape3D:
+					var box_shape: BoxShape3D = item_shapes[si]
+					var shape_transform: Transform3D = item_shapes[si + 1] if (si + 1 < item_shapes.size() and item_shapes[si + 1] is Transform3D) else Transform3D.IDENTITY
+					# 低い形状（窓台等）はFoW遮蔽しない
+					var shape_top_y := cell_global.origin.y + shape_transform.origin.y + box_shape.size.y / 2.0
+					if shape_top_y < MIN_OCCLUSION_HEIGHT:
+						si += 2
+						continue
+					var shape_global := cell_global * shape_transform
+					var occluder := _create_occluder_from_box(box_shape, shape_global)
+					if occluder:
+						_occluder_parent.add_child(occluder)
+						_wall_occluders.append(occluder)
+				si += 2
+		else:
+			# 壁: AABBからオクルーダー生成
+			var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
+			if occluder:
+				_occluder_parent.add_child(occluder)
+				_wall_occluders.append(occluder)
 
 	if Debug.enabled: print("[FOW] GridMap occluders extracted from: ", grid_map.name)
+
+
+## BoxShape3Dからオクルーダーを生成（ドアの柱ごとに使用）
+func _create_occluder_from_box(box_shape: BoxShape3D, shape_global: Transform3D) -> LightOccluder2D:
+	var half := box_shape.size / 2.0
+
+	var corners_3d := [
+		Vector3(-half.x, 0, -half.z),
+		Vector3(half.x, 0, -half.z),
+		Vector3(half.x, 0, half.z),
+		Vector3(-half.x, 0, half.z),
+	]
+
+	var polygon_2d := PackedVector2Array()
+	for corner in corners_3d:
+		var world: Vector3 = shape_global * corner
+		polygon_2d.append(_world_to_viewport(world))
+
+	if polygon_2d.size() < 3:
+		return null
+
+	var occluder := LightOccluder2D.new()
+	var occluder_polygon := OccluderPolygon2D.new()
+	occluder_polygon.polygon = polygon_2d
+	occluder_polygon.cull_mode = OccluderPolygon2D.CULL_DISABLED
+	occluder.occluder = occluder_polygon
+	occluder.occluder_light_mask = 1
+
+	return occluder
 
 
 ## GridMapセルのAABBからオクルーダーを生成

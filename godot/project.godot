@@ -41,7 +41,7 @@ window/handheld/orientation=4
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/prop_placer/plugin.cfg")
+enabled=PackedStringArray("res://addons/map_decorator/plugin.cfg")
 
 [input]
 
