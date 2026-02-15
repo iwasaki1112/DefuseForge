@@ -406,6 +406,18 @@ func set_door_occluder_enabled(door: Node3D, enabled: bool) -> void:
 		_occluder_manager.set_door_occluder_enabled(door, enabled)
 
 
+## プロップオクルーダーを追加
+func add_prop_occluder(prop_body: StaticBody3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.add_prop_occluder(prop_body)
+
+
+## プロップオクルーダーを削除
+func remove_prop_occluder(prop_body: StaticBody3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.remove_prop_occluder(prop_body)
+
+
 ## スモークオクルーダーを追加
 func add_smoke_occluder(smoke_area: Node3D) -> void:
 	if _occluder_manager:

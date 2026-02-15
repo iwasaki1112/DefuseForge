@@ -1,0 +1,36 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/prop_placer/prop_placer_dock.gd" id="1"]
+
+[node name="PropPlacerDock" type="VBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+script = ExtResource("1")
+
+[node name="Header" type="HBoxContainer" parent="."]
+
+[node name="Title" type="Label" parent="Header"]
+text = "Props"
+theme_override_font_sizes/font_size = 14
+
+[node name="Spacer" type="Control" parent="Header"]
+size_flags_horizontal = 3
+
+[node name="RefreshButton" type="Button" parent="Header" unique_name_in_owner=true]
+text = "↻"
+tooltip_text = "Refresh prop list"
+
+[node name="PropList" type="ItemList" parent="." unique_name_in_owner=true]
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 200)
+
+[node name="PlaceButton" type="Button" parent="." unique_name_in_owner=true]
+text = "配置"
+tooltip_text = "選択中のノードの子として配置"
+
+[node name="StatusLabel" type="Label" parent="." unique_name_in_owner=true]
+text = "Ready"
+theme_override_font_sizes/font_size = 11
+
+[connection signal="pressed" from="Header/RefreshButton" to="." method="_on_refresh_button_pressed"]
+[connection signal="pressed" from="PlaceButton" to="." method="_on_place_button_pressed"]
+[connection signal="item_activated" from="PropList" to="." method="_on_prop_list_item_activated"]

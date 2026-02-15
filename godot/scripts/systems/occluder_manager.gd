@@ -14,6 +14,7 @@ var _viewport: SubViewport = null
 var _wall_occluders: Array[LightOccluder2D] = []
 var _door_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # door_node -> LightOccluder2D
 var _smoke_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # smoke_area -> LightOccluder2D
+var _prop_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # prop_body -> LightOccluder2D
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
@@ -122,11 +123,38 @@ func update_smoke_radius(smoke_area: Node3D) -> void:
 	occluder.occluder.polygon = _generate_circle_polygon(center, radius)
 
 
+## プロップのStaticBody3D + BoxShape3Dからオクルーダーを追加
+## @param prop_body: プロップのStaticBody3D（BoxShape3D子ノードを持つ）
+func add_prop_occluder(prop_body: StaticBody3D) -> void:
+	if prop_body in _prop_occluders:
+		return
+
+	for child in prop_body.get_children():
+		if child is CollisionShape3D and (child.shape is BoxShape3D or child.shape is ConvexPolygonShape3D):
+			var height := _get_obstacle_world_height(child)
+			if height < MIN_OCCLUSION_HEIGHT:
+				return
+			var occluder := _create_occluder_from_shape(child)
+			if occluder:
+				_occluder_parent.add_child(occluder)
+				_prop_occluders[prop_body] = occluder
+			return
+
+
+## プロップオクルーダーを削除
+func remove_prop_occluder(prop_body: StaticBody3D) -> void:
+	if prop_body in _prop_occluders:
+		var occluder: LightOccluder2D = _prop_occluders[prop_body]
+		occluder.queue_free()
+		_prop_occluders.erase(prop_body)
+
+
 ## 全オクルーダーをクリア
 func clear_all_occluders() -> void:
 	_clear_wall_occluders()
 	_clear_door_occluders()
 	_clear_smoke_occluders()
+	_clear_prop_occluders()
 
 
 ## マップサイズを更新（後方互換）
@@ -464,3 +492,10 @@ func _clear_smoke_occluders() -> void:
 		if is_instance_valid(occluder):
 			occluder.queue_free()
 	_smoke_occluders.clear()
+
+
+func _clear_prop_occluders() -> void:
+	for occluder in _prop_occluders.values():
+		if is_instance_valid(occluder):
+			occluder.queue_free()
+	_prop_occluders.clear()

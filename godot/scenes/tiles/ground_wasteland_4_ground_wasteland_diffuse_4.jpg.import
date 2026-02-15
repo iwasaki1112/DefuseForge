@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dikagur5v6xwa"
-path.s3tc="res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.s3tc.ctex"
-path.etc2="res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.etc2.ctex"
+uid="uid://brf0kxqnwn0x2"
+path.s3tc="res://.godot/imported/ground_wasteland_4_ground_wasteland_diffuse_4.jpg-882ffe850ed77bb4a0116223a93285f2.s3tc.ctex"
+path.etc2="res://.godot/imported/ground_wasteland_4_ground_wasteland_diffuse_4.jpg-882ffe850ed77bb4a0116223a93285f2.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "97b0c2c5cae957db10a581c428491f75"
+"md5": "d83f0e2528484f7e7943c61d8cf0d469"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_ground_wasteland_diffuse.jpg"
-dest_files=["res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.s3tc.ctex", "res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.etc2.ctex"]
+source_file="res://scenes/tiles/ground_wasteland_4_ground_wasteland_diffuse_4.jpg"
+dest_files=["res://.godot/imported/ground_wasteland_4_ground_wasteland_diffuse_4.jpg-882ffe850ed77bb4a0116223a93285f2.s3tc.ctex", "res://.godot/imported/ground_wasteland_4_ground_wasteland_diffuse_4.jpg-882ffe850ed77bb4a0116223a93285f2.etc2.ctex"]
 
 [params]
 

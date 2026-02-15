@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cltf1irrutdv5"
-path.s3tc="res://.godot/imported/ground_wasteland_grass_wg_bake_rough.png-2dfc21ac53626f21b47e19235e0834ef.s3tc.ctex"
-path.etc2="res://.godot/imported/ground_wasteland_grass_wg_bake_rough.png-2dfc21ac53626f21b47e19235e0834ef.etc2.ctex"
+uid="uid://blwbl2pu6n3xq"
+path.s3tc="res://.godot/imported/ground_wasteland_3_ground_wasteland_diffuse_3.jpg-73008f58b1ba562a3e183761d9ae34cf.s3tc.ctex"
+path.etc2="res://.godot/imported/ground_wasteland_3_ground_wasteland_diffuse_3.jpg-73008f58b1ba562a3e183761d9ae34cf.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "243321a83e26407774045a0a27db35fb"
+"md5": "ecff00638a67824835349f87459d5825"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_grass_wg_bake_rough.png"
-dest_files=["res://.godot/imported/ground_wasteland_grass_wg_bake_rough.png-2dfc21ac53626f21b47e19235e0834ef.s3tc.ctex", "res://.godot/imported/ground_wasteland_grass_wg_bake_rough.png-2dfc21ac53626f21b47e19235e0834ef.etc2.ctex"]
+source_file="res://scenes/tiles/ground_wasteland_3_ground_wasteland_diffuse_3.jpg"
+dest_files=["res://.godot/imported/ground_wasteland_3_ground_wasteland_diffuse_3.jpg-73008f58b1ba562a3e183761d9ae34cf.s3tc.ctex", "res://.godot/imported/ground_wasteland_3_ground_wasteland_diffuse_3.jpg-73008f58b1ba562a3e183761d9ae34cf.etc2.ctex"]
 
 [params]
 

@@ -88,6 +88,7 @@ func _notify_fow_system() -> void:
 				vision_service.fog_of_war_system.set_map_bounds(ground_info["size"], ground_info["center"])
 				if Debug.enabled: print("[%s] Set FoW map_bounds: size=%s, center=%s" % [_map_name, ground_info["size"], ground_info["center"]])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
+			_register_prop_occluders(vision_service.fog_of_war_system)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system" % _map_name)
 		else:
 			# FoWシステムが準備できていない場合は遅延呼び出し
@@ -112,7 +113,26 @@ func _notify_fow_system_deferred() -> void:
 				vision_service.fog_of_war_system.set_map_bounds(ground_info["size"], ground_info["center"])
 				if Debug.enabled: print("[%s] Set FoW map_bounds (deferred): size=%s, center=%s" % [_map_name, ground_info["size"], ground_info["center"]])
 			vision_service.fog_of_war_system.extract_occluders_from_map(self)
+			_register_prop_occluders(vision_service.fog_of_war_system)
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)
+
+
+## プロップの_collisionノードをFoWオクルーダーとして登録
+func _register_prop_occluders(fow_system) -> void:
+	var prop_bodies: Array = []
+	_find_prop_bodies(self, prop_bodies)
+	for body in prop_bodies:
+		fow_system.add_prop_occluder(body)
+	if Debug.enabled and prop_bodies.size() > 0:
+		print("[%s] Registered %d prop occluders" % [_map_name, prop_bodies.size()])
+
+
+## _collision サフィックス付きのStaticBody3Dを再帰検索
+func _find_prop_bodies(node: Node, result: Array) -> void:
+	if node is StaticBody3D and node.name.ends_with("_collision"):
+		result.append(node)
+	for child in node.get_children():
+		_find_prop_bodies(child, result)
 
 
 ## ground_ノードからマップの床サイズと中心を計算

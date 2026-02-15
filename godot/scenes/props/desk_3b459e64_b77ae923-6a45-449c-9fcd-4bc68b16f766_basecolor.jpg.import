@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://iuku4duaqfuf"
-path.s3tc="res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.png-9f69b9ba93564f45193f97a7e18870cb.s3tc.ctex"
-path.etc2="res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.png-9f69b9ba93564f45193f97a7e18870cb.etc2.ctex"
+uid="uid://bjp8mgggl3yf6"
+path.s3tc="res://.godot/imported/desk_3b459e64_b77ae923-6a45-449c-9fcd-4bc68b16f766_basecolor.jpg-d2ab156791fc55c4ae0ed9b5de3921eb.s3tc.ctex"
+path.etc2="res://.godot/imported/desk_3b459e64_b77ae923-6a45-449c-9fcd-4bc68b16f766_basecolor.jpg-d2ab156791fc55c4ae0ed9b5de3921eb.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "70101377d88efbbf0c5cf766e21db3de"
+"md5": "150d1416c2291c62630798239462e3b5"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_grass_ground_wasteland_grass_diffuse.png"
-dest_files=["res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.png-9f69b9ba93564f45193f97a7e18870cb.s3tc.ctex", "res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.png-9f69b9ba93564f45193f97a7e18870cb.etc2.ctex"]
+source_file="res://scenes/props/desk_3b459e64_b77ae923-6a45-449c-9fcd-4bc68b16f766_basecolor.jpg"
+dest_files=["res://.godot/imported/desk_3b459e64_b77ae923-6a45-449c-9fcd-4bc68b16f766_basecolor.jpg-d2ab156791fc55c4ae0ed9b5de3921eb.s3tc.ctex", "res://.godot/imported/desk_3b459e64_b77ae923-6a45-449c-9fcd-4bc68b16f766_basecolor.jpg-d2ab156791fc55c4ae0ed9b5de3921eb.etc2.ctex"]
 
 [params]
 

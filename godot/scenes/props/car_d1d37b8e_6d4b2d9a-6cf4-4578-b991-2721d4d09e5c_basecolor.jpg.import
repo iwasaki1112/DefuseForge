@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dikagur5v6xwa"
-path.s3tc="res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.s3tc.ctex"
-path.etc2="res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.etc2.ctex"
+uid="uid://0grtcwccwu68"
+path.s3tc="res://.godot/imported/car_d1d37b8e_6d4b2d9a-6cf4-4578-b991-2721d4d09e5c_basecolor.jpg-025cc65d20ddfc63129f138cf7f7094b.s3tc.ctex"
+path.etc2="res://.godot/imported/car_d1d37b8e_6d4b2d9a-6cf4-4578-b991-2721d4d09e5c_basecolor.jpg-025cc65d20ddfc63129f138cf7f7094b.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "97b0c2c5cae957db10a581c428491f75"
+"md5": "2b67a1a863b7b18deba336124f8735d7"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_ground_wasteland_diffuse.jpg"
-dest_files=["res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.s3tc.ctex", "res://.godot/imported/ground_wasteland_ground_wasteland_diffuse.jpg-b221560fe4dfd944f77ba7fef8276800.etc2.ctex"]
+source_file="res://scenes/props/car_d1d37b8e_6d4b2d9a-6cf4-4578-b991-2721d4d09e5c_basecolor.jpg"
+dest_files=["res://.godot/imported/car_d1d37b8e_6d4b2d9a-6cf4-4578-b991-2721d4d09e5c_basecolor.jpg-025cc65d20ddfc63129f138cf7f7094b.s3tc.ctex", "res://.godot/imported/car_d1d37b8e_6d4b2d9a-6cf4-4578-b991-2721d4d09e5c_basecolor.jpg-025cc65d20ddfc63129f138cf7f7094b.etc2.ctex"]
 
 [params]
 

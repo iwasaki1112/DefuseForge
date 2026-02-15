@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://frm6dn1mfqh7"
-path="res://.godot/imported/ground_wasteland_grass.glb-7b102f0d1658b6baf51b159ecb736349.scn"
+uid="uid://b68p5oipfuqo7"
+path="res://.godot/imported/desk.glb-ed52575acbf2d3fc35ad01731ee459f2.scn"
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_grass.glb"
-dest_files=["res://.godot/imported/ground_wasteland_grass.glb-7b102f0d1658b6baf51b159ecb736349.scn"]
+source_file="res://scenes/props/desk.glb"
+dest_files=["res://.godot/imported/desk.glb-ed52575acbf2d3fc35ad01731ee459f2.scn"]
 
 [params]
 

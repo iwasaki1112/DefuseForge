@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cleaq16snh2lg"
-path.s3tc="res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.jpg-0884496b9266c6f05db8a3aafe2a7b4f.s3tc.ctex"
-path.etc2="res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.jpg-0884496b9266c6f05db8a3aafe2a7b4f.etc2.ctex"
+uid="uid://dwab4u22mxh58"
+path.s3tc="res://.godot/imported/ground_wasteland_2_ground_wasteland_diffuse_2.jpg-f4764d02f7fcf65394060e2d21e65e4f.s3tc.ctex"
+path.etc2="res://.godot/imported/ground_wasteland_2_ground_wasteland_diffuse_2.jpg-f4764d02f7fcf65394060e2d21e65e4f.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "5e93652b710b69f0b4764072c6689cfc"
+"md5": "2c0ae6a69b08fd2d6c359df5b0fd25d0"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/ground_wasteland_grass_ground_wasteland_grass_diffuse.jpg"
-dest_files=["res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.jpg-0884496b9266c6f05db8a3aafe2a7b4f.s3tc.ctex", "res://.godot/imported/ground_wasteland_grass_ground_wasteland_grass_diffuse.jpg-0884496b9266c6f05db8a3aafe2a7b4f.etc2.ctex"]
+source_file="res://scenes/tiles/ground_wasteland_2_ground_wasteland_diffuse_2.jpg"
+dest_files=["res://.godot/imported/ground_wasteland_2_ground_wasteland_diffuse_2.jpg-f4764d02f7fcf65394060e2d21e65e4f.s3tc.ctex", "res://.godot/imported/ground_wasteland_2_ground_wasteland_diffuse_2.jpg-f4764d02f7fcf65394060e2d21e65e4f.etc2.ctex"]
 
 [params]
 
