@@ -231,6 +231,8 @@ func send_round_state() -> void:
 ## ゲームイベントを送信
 func send_game_event(event: NetworkMessages.GameEventMessage) -> void:
 	var data := _game_event_to_dict(event)
+	# 送信元peer_idを埋め込み（受信側で自分が送ったイベントをスキップするため）
+	data["sender_peer_id"] = peer_id
 
 	if is_host:
 		network_bus.broadcast_from_host(
@@ -386,6 +388,12 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			NetworkConstants.MessageType.GAME_EVENT,
 			data
 		)
+
+	# 自分が送信したイベントがエコーバックされた場合はスキップ
+	# （ローカルで既に処理済みのため、二重生成を防止）
+	var sender: int = data.get("sender_peer_id", -1)
+	if sender == peer_id:
+		return
 
 	# イベントに応じた処理
 	match event.event_type:

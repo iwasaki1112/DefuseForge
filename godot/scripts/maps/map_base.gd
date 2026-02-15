@@ -149,7 +149,7 @@ func _setup_prop_collisions(node: Node) -> void:
 		body.name = node.name.replace("-object", "") + "_collision"
 		body.collision_layer = WALL_COLLISION_LAYER
 
-		var convex = node.mesh.create_convex_shape(true, false)
+		var convex = node.mesh.create_convex_shape(true, true)
 		var col_shape := CollisionShape3D.new()
 		col_shape.shape = convex
 		col_shape.name = "ConvexCollision"
