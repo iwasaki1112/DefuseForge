@@ -138,6 +138,7 @@ func add_prop_occluder(prop_body: StaticBody3D) -> void:
 			if occluder:
 				_occluder_parent.add_child(occluder)
 				_prop_occluders[prop_body] = occluder
+				occluder_updated.emit()
 			return
 
 

@@ -25,6 +25,7 @@ func _ready() -> void:
 	if _map_name == "MAP" and not map_id.is_empty():
 		_map_name = map_id.to_upper()
 	_remove_editor_lighting()
+	_setup_prop_collisions(self)
 	_setup_collisions(self)
 	_notify_fow_system()
 
@@ -117,11 +118,17 @@ func _notify_fow_system_deferred() -> void:
 			if Debug.enabled: print("[%s] Extracted occluders for FoW system (deferred)" % _map_name)
 
 
-## プロップの_collisionノードをFoWオクルーダーとして登録
+## プロップのStaticBody3DをFoWオクルーダーとして登録
+## _setup_prop_collisions()で追加したノードがSceneTreeに入るまで待ってから登録
 func _register_prop_occluders(fow_system) -> void:
 	var prop_bodies: Array = []
 	_find_prop_bodies(self, prop_bodies)
 	for body in prop_bodies:
+		if not body.is_inside_tree():
+			await body.tree_entered
+		for child in body.get_children():
+			if child is CollisionShape3D and not child.is_inside_tree():
+				await child.tree_entered
 		fow_system.add_prop_occluder(body)
 	if Debug.enabled and prop_bodies.size() > 0:
 		print("[%s] Registered %d prop occluders" % [_map_name, prop_bodies.size()])
@@ -133,6 +140,28 @@ func _find_prop_bodies(node: Node, result: Array) -> void:
 		result.append(node)
 	for child in node.get_children():
 		_find_prop_bodies(child, result)
+
+
+## -object サフィックスのノードにランタイムでConvexHullコリジョンを生成
+func _setup_prop_collisions(node: Node) -> void:
+	if node is MeshInstance3D and node.name.ends_with("-object") and node.mesh:
+		var body := StaticBody3D.new()
+		body.name = node.name.replace("-object", "") + "_collision"
+		body.collision_layer = WALL_COLLISION_LAYER
+
+		var convex = node.mesh.create_convex_shape(true, false)
+		var col_shape := CollisionShape3D.new()
+		col_shape.shape = convex
+		col_shape.name = "ConvexCollision"
+
+		node.add_child(body)
+		body.add_child(col_shape)
+
+		if Debug.enabled:
+			print("[%s] Created prop collision: %s" % [_map_name, body.name])
+
+	for child in node.get_children():
+		_setup_prop_collisions(child)
 
 
 ## ground_ノードからマップの床サイズと中心を計算
@@ -197,14 +226,14 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		# セルのローカル位置と回転を取得
 		var local_pos := grid_map.map_to_local(cell)
 		var orientation := grid_map.get_cell_item_orientation(cell)
-		var basis := grid_map.get_basis_with_orthogonal_index(orientation)
+		var cell_basis := grid_map.get_basis_with_orthogonal_index(orientation)
 
 		# StaticBody3D生成
 		var body := StaticBody3D.new()
 		body.name = "GridCol_%s_%d_%d_%d" % [item_name, cell.x, cell.y, cell.z]
 		body.collision_layer = col_layer
 		body.collision_mask = 0
-		body.transform = Transform3D(basis, local_pos)
+		body.transform = Transform3D(cell_basis, local_pos)
 		grid_map.add_child(body)
 
 		# ドアグループに追加
