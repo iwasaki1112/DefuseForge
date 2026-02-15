@@ -49,6 +49,7 @@
 | `anim_ctrl` | `Node` | `null` | CharacterAnimationControllerへの参照 |
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
+| `shell_ejection` | `ShellEjectionComponent` | `null` | 薬莢排出コンポーネント |
 | `_weapon_socket` | `Node3D` | `null` | 武器調整用のソケットノード |
 
 ## Public API
@@ -186,7 +187,7 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** `WeaponSocket`ノードまたは`null`
 
-### Muzzle Flash & Bullet Trail API
+### Muzzle Flash, Bullet Trail & Shell Ejection API
 
 #### set_muzzle_flash_preview(enabled: bool) -> void
 マズルフラッシュの常時プレビュー表示を切り替える（調整用）。
@@ -199,6 +200,12 @@ character.face_towards(enemy.global_position)
 - Shaderベースのマテリアルを使用
 - ターゲット（敵または最大距離）に向かって描画
 - 時間経過でフェードアウト
+
+#### _eject_shell_casing() -> void
+発砲時に薬莢を排出する。ShellEjectionComponentに委譲。
+- 銃の右側から薬莢が放物線を描いて排出
+- 地面に落下後、3秒間静止してからフェードアウト
+- オブジェクトプール（最大20個）で管理、モバイル最適化
 
 ## ライフサイクル
 

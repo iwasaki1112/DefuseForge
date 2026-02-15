@@ -80,6 +80,7 @@ var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
 var muzzle_flash: MuzzleFlashComponent = null  # マズルフラッシュコンポーネント
 var bullet_trail: BulletTrailComponent = null  # 弾道表示コンポーネント
+var shell_ejection: ShellEjectionComponent = null  # 薬莢排出コンポーネント
 
 # ============================================
 # Lifecycle
@@ -110,6 +111,9 @@ func _setup_effect_components() -> void:
 	if bullet_trail == null:
 		bullet_trail = BulletTrailComponent.new()
 		bullet_trail.setup(self, _weapon_socket, muzzle_flash, combat_awareness)
+	if shell_ejection == null:
+		shell_ejection = ShellEjectionComponent.new()
+		shell_ejection.setup(self, _weapon_socket)
 
 # ============================================
 # HP API
@@ -334,6 +338,8 @@ func _update_effect_component_sockets() -> void:
 	if bullet_trail:
 		bullet_trail.set_weapon_socket(_weapon_socket)
 		bullet_trail.warm_up()
+	if shell_ejection:
+		shell_ejection.set_weapon_socket(_weapon_socket)
 
 
 ## Attach weapon model to right hand
@@ -446,6 +452,7 @@ func get_weapon_socket() -> Node3D:
 func _on_anim_fired() -> void:
 	_play_muzzle_flash()
 	_play_bullet_trail()
+	_eject_shell_casing()
 
 
 func set_muzzle_flash_preview(enabled: bool) -> void:
@@ -466,6 +473,11 @@ func _play_muzzle_flash() -> void:
 func _play_bullet_trail() -> void:
 	if bullet_trail:
 		bullet_trail.play(current_weapon, _weapon_model)
+
+
+func _eject_shell_casing() -> void:
+	if shell_ejection:
+		shell_ejection.play(current_weapon, _weapon_model)
 
 
 ## Set Quad1 X offset for muzzle flash adjustment
