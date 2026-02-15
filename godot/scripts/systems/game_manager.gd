@@ -395,6 +395,8 @@ func _setup_grenade_service(mesh_parent: Node3D) -> void:
 		grenade_service.smoke_grenade_thrown.connect(func(g, c): smoke_grenade_thrown.emit(g, c))
 		grenade_service.grenade_network_event.connect(func(p, v, s, i): grenade_network_event.emit(p, v, s, i))
 		grenade_service.grenade_explode_network_event.connect(func(i, p, s): grenade_explode_network_event.emit(i, p, s))
+		# スモークシェーダーのGPUコンパイルを事前実行（初回投擲ラグ回避）
+		grenade_service.warmup_smoke_shader()
 
 
 func _setup_door_service() -> void:

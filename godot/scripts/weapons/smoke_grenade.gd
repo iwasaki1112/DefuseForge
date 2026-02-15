@@ -17,6 +17,10 @@ var _smoke_area_scene: PackedScene = null
 ## SmokeAreaManagerへの参照（オプション）
 var _smoke_manager: SmokeAreaManager = null
 
+## プリロード済みシェーダー・テクスチャ（GrenadeServiceから注入）
+var smoke_clip_shader: Shader = null
+var smoke_puff_texture: Texture2D = null
+
 
 func _init() -> void:
 	# 爆発ダメージと爆発範囲を無効化（煙のみ）
@@ -26,8 +30,14 @@ func _init() -> void:
 
 func _ready() -> void:
 	super._ready()
-	# スモークエリアシーンをロード
-	_smoke_area_scene = load(GameConstants.SCENE_SMOKE_AREA)
+	# プリロード済みでなければフォールバック
+	if not _smoke_area_scene:
+		_smoke_area_scene = load(GameConstants.SCENE_SMOKE_AREA)
+
+
+## プリロード済みスモークエリアシーンを設定
+func set_smoke_area_scene(scene: PackedScene) -> void:
+	_smoke_area_scene = scene
 
 
 ## SmokeAreaManagerを設定
@@ -91,6 +101,12 @@ func _deploy_smoke() -> void:
 	# FoWシステムを渡す（視界外の煙を非表示にするため）
 	if _fow_system:
 		smoke_area.set_fow_system(_fow_system)
+
+	# プリロード済みリソースを渡す（初回投擲ラグ回避）
+	if smoke_clip_shader:
+		smoke_area.clip_shader = smoke_clip_shader
+	if smoke_puff_texture:
+		smoke_area.puff_texture = smoke_puff_texture
 
 	# スモークを開始
 	smoke_area.start(_smoke_manager)

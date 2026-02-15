@@ -17,6 +17,11 @@ signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smok
 ## シーン参照（iOSビルドでのpreload問題を回避）
 var GrenadeScene: PackedScene = null
 var SmokeGrenadeScene: PackedScene = null
+var SmokeAreaScene: PackedScene = null
+
+## プリロード済みシェーダー・テクスチャ（初回投擲ラグ回避）
+var smoke_clip_shader: Shader = null
+var smoke_puff_texture: Texture2D = null
 
 ## グレネード追跡（爆発位置同期用）
 var _active_grenades: Dictionary[int, Node3D] = {}  ## grenade_id -> Grenade/SmokeGrenade
@@ -32,6 +37,9 @@ var _fow_system = null  ## FogOfWarSystem参照（リモートグレネードの
 func _init() -> void:
 	GrenadeScene = load("res://scenes/weapons/grenade.tscn")
 	SmokeGrenadeScene = load("res://scenes/weapons/smoke_grenade.tscn")
+	SmokeAreaScene = load(GameConstants.SCENE_SMOKE_AREA)
+	smoke_clip_shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
+	smoke_puff_texture = load("res://assets/textures/smoke_puff.png") as Texture2D
 
 
 ## セットアップ
@@ -96,6 +104,8 @@ func spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thro
 	# FoWシステムを設定（視界外の煙を非表示にするため）
 	if _fow_system:
 		smoke_grenade.set_fow_system(_fow_system)
+	# プリロード済みリソースを渡す（初回投擲ラグ回避）
+	_apply_preloaded_resources(smoke_grenade)
 	_mesh_parent.add_child(smoke_grenade)
 
 	# グレネードIDを割り当てて追跡
@@ -157,6 +167,8 @@ func spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, gre
 
 	if _smoke_area_manager:
 		smoke_grenade.set_smoke_manager(_smoke_area_manager)
+	# プリロード済みリソースを渡す（初回投擲ラグ回避）
+	_apply_preloaded_resources(smoke_grenade)
 	_mesh_parent.add_child(smoke_grenade)
 
 	# リモートグレネードとしてマーク
@@ -205,6 +217,34 @@ func _on_grenade_exploded(position: Vector3, grenade_id: int, is_smoke: bool) ->
 ## ネットワークイベントを発火（グレネード投擲）
 func emit_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int = 0) -> void:
 	grenade_network_event.emit(start_pos, velocity, is_smoke, grenade_id)
+
+
+## プリロード済みリソースをスモークグレネードに適用
+func _apply_preloaded_resources(smoke_grenade: SmokeGrenade) -> void:
+	if SmokeAreaScene:
+		smoke_grenade.set_smoke_area_scene(SmokeAreaScene)
+	smoke_grenade.smoke_clip_shader = smoke_clip_shader
+	smoke_grenade.smoke_puff_texture = smoke_puff_texture
+
+
+## シェーダーウォームアップ（ゲーム開始時に呼び出し、初回GPUコンパイルを事前完了）
+func warmup_smoke_shader() -> void:
+	if not smoke_clip_shader:
+		return
+	# 不可視メッシュでシェーダーを1フレーム描画してGPUコンパイルを強制
+	var mat := ShaderMaterial.new()
+	mat.shader = smoke_clip_shader
+	var mesh_inst := MeshInstance3D.new()
+	mesh_inst.mesh = QuadMesh.new()
+	mesh_inst.mesh.material = mat
+	# 画面外に配置
+	mesh_inst.position = Vector3(0, -1000, 0)
+	mesh_inst.scale = Vector3(0.01, 0.01, 0.01)
+	add_child(mesh_inst)
+	# 次フレームで削除（1フレーム描画すればGPUコンパイル完了）
+	mesh_inst.tree_entered.connect(func():
+		get_tree().create_timer(0.1).timeout.connect(mesh_inst.queue_free)
+	)
 
 
 ## アクティブなグレネード数を取得

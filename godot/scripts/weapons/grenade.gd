@@ -243,7 +243,7 @@ func throw(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null, arc_
 	if _thrower is GameCharacter:
 		thrower_team = (_thrower as GameCharacter).team
 	if Debug.enabled:
-		var thrower_name: String = _thrower.name if _thrower else "unknown"
+		var thrower_name: String = _thrower.name if _thrower != null else "unknown"
 		print("[GRENADE] throw from=", start_pos, " target=", target_pos, " thrower=", thrower_name, " team=", thrower_team)
 	global_position = start_pos
 
@@ -378,10 +378,10 @@ func _update_fow_visibility() -> void:
 		visible = true
 		return
 	# 敵グレネード: FoWチェック
-	var is_visible: bool = _fow_system.is_position_visible_in_fow(global_position)
-	if is_visible:
+	var fow_visible: bool = _fow_system.is_position_visible_in_fow(global_position)
+	if fow_visible:
 		_once_seen = true
-	visible = is_visible
+	visible = fow_visible
 
 
 ## 導火線タイムアウト時

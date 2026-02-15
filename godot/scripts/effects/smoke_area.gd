@@ -39,6 +39,10 @@ var _fow_system = null
 var thrower_team: GameCharacter.Team = GameCharacter.Team.NONE  ## 投擲者のチーム
 var _once_seen: bool = false  ## 敵スモークが一度でもFoWで視認されたか
 
+## プリロード済みリソース（GrenadeService→SmokeGrenadeから注入、初回投擲ラグ回避）
+var clip_shader: Shader = null
+var puff_texture: Texture2D = null
+
 ## デバッグ可視化
 var _debug_ring: MeshInstance3D = null
 
@@ -217,7 +221,9 @@ func _setup_particle_wall_clip() -> void:
 	if not _particles:
 		return
 
-	var clip_shader: Shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
+	# プリロード済みでなければフォールバック
+	if not clip_shader:
+		clip_shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
 	if not clip_shader:
 		push_warning("[SmokeArea] smoke_particle_clip.gdshader not found")
 		return
@@ -237,7 +243,9 @@ func _setup_particle_wall_clip() -> void:
 	_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", 0.0)
 
 	# 煙パフテクスチャを適用（四角いパーティクルを自然な煙型にする）
-	var smoke_tex := load("res://assets/textures/smoke_puff.png") as Texture2D
+	var smoke_tex: Texture2D = puff_texture
+	if not smoke_tex:
+		smoke_tex = load("res://assets/textures/smoke_puff.png") as Texture2D
 	if smoke_tex:
 		_particle_clip_mat.set_shader_parameter("smoke_texture", smoke_tex)
 

@@ -1410,9 +1410,10 @@ func _remove_talking_progress_bar() -> void:
 
 func _on_round_timer_updated(time: float) -> void:
 	if _timer_label:
-		var total_seconds := int(time)
-		var minutes := total_seconds / 60
-		var seconds := total_seconds % 60
+		var total_seconds: int = int(time)
+		@warning_ignore("integer_division")
+		var minutes: int = total_seconds / 60
+		var seconds: int = total_seconds % 60
 		_timer_label.text = "%d:%02d" % [minutes, seconds]
 
 
