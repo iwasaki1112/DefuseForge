@@ -243,7 +243,7 @@ func throw(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null, arc_
 	if _thrower is GameCharacter:
 		thrower_team = (_thrower as GameCharacter).team
 	if Debug.enabled:
-		var thrower_name: String = _thrower.name if _thrower != null else "unknown"
+		var thrower_name: String = str(_thrower.name) if _thrower != null else "unknown"
 		print("[GRENADE] throw from=", start_pos, " target=", target_pos, " thrower=", thrower_name, " team=", thrower_team)
 	global_position = start_pos
 

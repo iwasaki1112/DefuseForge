@@ -17,7 +17,7 @@ func determine_player_team() -> void:
 
 ## COOPモード用キャラクタースポーン
 ## 全プレイヤー = CT（alphaプリセット）、AI敵 = T（aresプリセット）
-func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
+func spawn_characters(_screen: Node, game_manager: GameManager) -> bool:
 	if not game_manager.has_map():
 		push_warning("[CoopModeProvider] Cannot spawn characters - no map loaded yet")
 		return true

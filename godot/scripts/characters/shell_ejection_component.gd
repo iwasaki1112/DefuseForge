@@ -181,12 +181,12 @@ func _acquire_casing() -> MeshInstance3D:
 		return null
 
 	# 上限到達 → 最古を強制再利用（Tweenキル）
-	var idx := _pool_cursor
+	var reuse_idx := _pool_cursor
 	_pool_cursor = (_pool_cursor + 1) % MAX_CASINGS
-	var tween: Tween = _pool_tweens[idx]
+	var tween: Tween = _pool_tweens[reuse_idx]
 	if tween and tween.is_running():
 		tween.kill()
-	return _pool[idx]
+	return _pool[reuse_idx]
 
 
 func _create_casing_node() -> MeshInstance3D:
@@ -218,13 +218,6 @@ func _animate_flight(casing: MeshInstance3D, start_pos: Vector3, velocity: Vecto
 	var h := start_pos.y
 	var disc := vy * vy + 2.0 * GRAVITY * h
 	var flight_time := clampf((vy + sqrt(maxf(disc, 0.0))) / GRAVITY, 0.2, 1.5)
-
-	# 着地位置を事前計算（Phase2で使用）
-	var land_pos := Vector3(
-		start_pos.x + velocity.x * flight_time,
-		0.01,
-		start_pos.z + velocity.z * flight_time
-	)
 
 	var casing_scale := _casing_base_scale * CASING_SCALE
 	var tween := casing.create_tween()
