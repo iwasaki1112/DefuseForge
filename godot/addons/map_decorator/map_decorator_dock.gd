@@ -270,6 +270,17 @@ func _on_size_changed(value: float) -> void:
 	$DecalContainer/PaintControls/SizeValue.text = str(value)
 
 
+# ── Random rotation ─────────────────────────────────
+
+func _on_random_rotation_toggled(pressed: bool) -> void:
+	if editor_plugin:
+		editor_plugin.set_random_rotation_enabled(pressed)
+
+
+func is_random_rotation_enabled() -> bool:
+	return $RandomRotationCheck.button_pressed
+
+
 # ── Utilities ────────────────────────────────────────
 
 func _unique_name(scene_root: Node, base_name: String) -> String:

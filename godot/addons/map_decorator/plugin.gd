@@ -18,6 +18,13 @@ var _material_cache: Dictionary = {}  # texture_path -> ShaderMaterial
 const MIN_SPACING_RATIO := 0.3
 const DECAL_PARENT_NAME := "DecalPatches"
 
+# ── Random rotation state ────────────────────────────
+var _random_rotation_enabled := false
+var _tracked_gridmap: GridMap = null
+var _known_cells: Dictionary = {}
+var _y_rotation_indices: Array[int] = []
+var _desired_rotations: Dictionary = {}  # Vector3i -> int (desired orientation)
+
 
 func _enter_tree() -> void:
 	dock = load("res://addons/map_decorator/map_decorator_dock.tscn").instantiate()
@@ -32,6 +39,9 @@ func _exit_tree() -> void:
 		dock.queue_free()
 		dock = null
 	_material_cache.clear()
+	_tracked_gridmap = null
+	_known_cells.clear()
+	_desired_rotations.clear()
 
 
 func _setup_decal_resources() -> void:
@@ -331,3 +341,86 @@ func _commit_erase_stroke() -> void:
 	ur.commit_action(false)
 
 	stroke_erased.clear()
+
+
+# ── Random rotation for floor tiles ─────────────────
+
+func set_random_rotation_enabled(enabled: bool) -> void:
+	_random_rotation_enabled = enabled
+	if not enabled:
+		_tracked_gridmap = null
+		_known_cells.clear()
+		_desired_rotations.clear()
+
+
+func _process(_delta: float) -> void:
+	if not _random_rotation_enabled:
+		return
+
+	var gridmap := _get_selected_gridmap()
+	if not gridmap:
+		return
+
+	# Lazily compute Y-rotation orthogonal indices
+	if _y_rotation_indices.is_empty():
+		for deg in [0, 90, 180, 270]:
+			var basis := Basis(Vector3.UP, deg_to_rad(deg))
+			_y_rotation_indices.append(gridmap.get_orthogonal_index_from_basis(basis))
+
+	# GridMap changed → rebuild tracking and skip this frame
+	if gridmap != _tracked_gridmap:
+		_tracked_gridmap = gridmap
+		_known_cells.clear()
+		_desired_rotations.clear()
+		for cell in gridmap.get_used_cells():
+			_known_cells[cell] = true
+		return
+
+	var lib := gridmap.mesh_library
+	if not lib:
+		return
+
+	# Re-apply desired rotations that were overwritten (e.g. by undo commit)
+	# Only remove tracking when cell is deleted, NOT when orientation matches.
+	# This ensures we catch undo commits that happen later.
+	var removed: Array[Vector3i] = []
+	for cell in _desired_rotations:
+		if gridmap.get_cell_item(cell) == GridMap.INVALID_CELL_ITEM:
+			removed.append(cell)
+			continue
+		var desired: int = _desired_rotations[cell]
+		if gridmap.get_cell_item_orientation(cell) != desired:
+			gridmap.set_cell_item(cell, gridmap.get_cell_item(cell), desired)
+	for cell in removed:
+		_desired_rotations.erase(cell)
+
+	# Detect new cells and queue random rotation for floor tiles
+	var new_known: Dictionary = {}
+	for cell in gridmap.get_used_cells():
+		new_known[cell] = true
+		if not _known_cells.has(cell):
+			var item_id := gridmap.get_cell_item(cell)
+			if item_id == GridMap.INVALID_CELL_ITEM:
+				continue
+			var item_name := lib.get_item_name(item_id)
+			if _is_floor_tile(item_name):
+				var rand_idx: int = _y_rotation_indices.pick_random()
+				_desired_rotations[cell] = rand_idx
+				gridmap.set_cell_item(cell, item_id, rand_idx)
+	_known_cells = new_known
+
+
+func _get_selected_gridmap() -> GridMap:
+	var sel := EditorInterface.get_selection()
+	var nodes := sel.get_selected_nodes()
+	for node in nodes:
+		if node is GridMap:
+			return node as GridMap
+	return null
+
+
+func _is_floor_tile(item_name: String) -> bool:
+	var name_lower := item_name.to_lower()
+	if "door" in name_lower or "wall" in name_lower or "glass" in name_lower:
+		return false
+	return true

@@ -11,6 +11,10 @@ tab_count = 2
 tab_0/title = "  Object  "
 tab_1/title = "  Decal  "
 
+[node name="RandomRotationCheck" type="CheckButton" parent="."]
+text = "床タイル ランダム回転"
+tooltip_text = "GridMap床タイル配置時にY軸ランダム回転を適用"
+
 [node name="ModeIndicator" type="PanelContainer" parent="."]
 custom_minimum_size = Vector2(0, 28)
 
@@ -95,6 +99,7 @@ text = "Ready"
 theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
 
+[connection signal="toggled" from="RandomRotationCheck" to="." method="_on_random_rotation_toggled"]
 [connection signal="tab_changed" from="TabBar" to="." method="_on_tab_changed"]
 [connection signal="pressed" from="ObjectContainer/Header/RefreshButton" to="." method="_on_refresh_props"]
 [connection signal="pressed" from="ObjectContainer/PlaceButton" to="." method="_on_place_button_pressed"]
