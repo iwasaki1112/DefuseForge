@@ -9,6 +9,12 @@ extends Node3D
 const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
 
+## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
+const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_straight_panel.glb"
+## ドア蝶番のオフセット（タイル原点からの相対位置、Godot座標系）
+## Blender座標 (-0.5, 0.9, 0.0) → Godot座標 (-0.5, 0.0, -0.9)
+const DOOR_HINGE_OFFSET := Vector3(-0.5, 0.0, -0.9)
+
 ## マップメタデータ（.tscnのインスペクタで設定）
 @export_group("Map Info")
 @export var map_id: String = ""  ## マップID（MapRegistryで使用）
@@ -228,7 +234,7 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		var orientation := grid_map.get_cell_item_orientation(cell)
 		var cell_basis := grid_map.get_basis_with_orthogonal_index(orientation)
 
-		# StaticBody3D生成
+		# StaticBody3D生成（壁・床・ドアフレーム共通）
 		var body := StaticBody3D.new()
 		body.name = "GridCol_%s_%d_%d_%d" % [item_name, cell.x, cell.y, cell.z]
 		body.collision_layer = col_layer
@@ -236,21 +242,12 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		body.transform = Transform3D(cell_basis, local_pos)
 		grid_map.add_child(body)
 
-		# ドアグループに追加
-		if item_type == 2:
-			body.add_to_group(GameConstants.GROUP_DOORS)
-			if Debug.enabled: print("[%s] Added GridMap door: %s" % [_map_name, body.name])
-
 		# コリジョンシェイプを追加
-		var i := 0
-		while i < shapes.size():
-			if shapes[i] is Shape3D:
-				var col := CollisionShape3D.new()
-				col.shape = shapes[i]
-				if i + 1 < shapes.size() and shapes[i + 1] is Transform3D:
-					col.transform = shapes[i + 1]
-				body.add_child(col)
-			i += 2
+		_add_collision_shapes(body, shapes)
+
+		# ドアタイルの場合: フレームはGridMapに残し、パネルだけ独立ノードで回転可能にする
+		if item_type == 2:
+			_create_door_panel(grid_map, cell, local_pos, cell_basis)
 
 
 ## GridMapアイテム名からカテゴリを判定
@@ -262,6 +259,62 @@ static func _classify_gridmap_item(item_name: String) -> int:
 	elif "wall" in name_lower or "glass" in name_lower:
 		return 1
 	return 0
+
+
+## ドアパネルを独立ノードとして生成
+## フレーム（コンクリート柱）はGridMapに残し、パネル（木製ドア板）だけ独立ノードで回転可能にする
+## DoorServiceがピボットのrotation_degrees.yをTweenして開閉アニメーションする
+func _create_door_panel(grid_map: GridMap, cell: Vector3i, local_pos: Vector3, cell_basis: Basis) -> void:
+	var panel_scene := load(DOOR_PANEL_SCENE_PATH) as PackedScene
+	if not panel_scene:
+		push_warning("[%s] Could not load door panel: %s" % [_map_name, DOOR_PANEL_SCENE_PATH])
+		return
+
+	# ピボットノード（蝶番位置）— DoorServiceがrotation_degrees.yをTweenする対象
+	var pivot := Node3D.new()
+	pivot.name = "DoorPanel_%d_%d_%d" % [cell.x, cell.y, cell.z]
+
+	# 蝶番位置 = セル中心 + セル回転 * ヒンジオフセット
+	var hinge_pos := local_pos + cell_basis * DOOR_HINGE_OFFSET
+	pivot.transform = Transform3D(cell_basis, hinge_pos)
+	grid_map.add_child(pivot)
+
+	# パネルメッシュ（GLBのオリジンが蝶番位置に設定済み）
+	var panel_instance := panel_scene.instantiate()
+	panel_instance.name = "PanelMesh"
+	pivot.add_child(panel_instance)
+
+	# パネルコリジョン（閉じた状態でドア開口部をブロック）
+	var body := StaticBody3D.new()
+	body.name = "PanelCollision"
+	body.collision_layer = WALL_COLLISION_LAYER
+	body.collision_mask = 0
+	pivot.add_child(body)
+
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.0, 2.0, 0.154)
+	var col_shape := CollisionShape3D.new()
+	col_shape.shape = box
+	# パネル中心 = 蝶番からのオフセット（X: 半幅, Y: 半高さ）
+	col_shape.position = Vector3(0.5, 1.0, 0.0)
+	body.add_child(col_shape)
+
+	# ドアグループに追加
+	pivot.add_to_group(GameConstants.GROUP_DOORS)
+	if Debug.enabled: print("[%s] Created door panel: %s at %s" % [_map_name, pivot.name, hinge_pos])
+
+
+## StaticBody3Dにコリジョンシェイプを追加（MeshLibraryのshapes配列から）
+func _add_collision_shapes(body: StaticBody3D, shapes: Array) -> void:
+	var i := 0
+	while i < shapes.size():
+		if shapes[i] is Shape3D:
+			var col := CollisionShape3D.new()
+			col.shape = shapes[i]
+			if i + 1 < shapes.size() and shapes[i + 1] is Transform3D:
+				col.transform = shapes[i + 1]
+			body.add_child(col)
+		i += 2
 
 
 ## 再帰的にground_ノードを探索してバウンディングボックスを収集

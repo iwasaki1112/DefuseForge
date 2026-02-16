@@ -13,6 +13,7 @@ signal fired()
 signal throw_release()      # グレネードをリリースするタイミング
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
+signal door_open_impact()   # ドアを実際に開くインパクトタイミング
 
 # Export settings
 @export_group("Movement Speed")
@@ -114,6 +115,7 @@ const THROW_CLOSE_RELEASE_TIME := 0.333  # キー10 / 30fps
 
 # Door open animation
 const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
+const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミング（15フレーム目 @30fps）
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -551,6 +553,9 @@ func play_door_open() -> void:
 	if _anim_player.has_animation(RIFLE_OPEN_DOOR_ANIM):
 		_anim_player.play(RIFLE_OPEN_DOOR_ANIM, 0.15)
 		_anim_player.animation_finished.connect(_on_door_open_finished, CONNECT_ONE_SHOT)
+		# インパクトタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(DOOR_OPEN_IMPACT_TIME).timeout.connect(
+			func(): door_open_impact.emit(), CONNECT_ONE_SHOT)
 	else:
 		push_warning("CharacterAnimationController: Door open animation not found: %s" % RIFLE_OPEN_DOOR_ANIM)
 		_is_opening_door = false

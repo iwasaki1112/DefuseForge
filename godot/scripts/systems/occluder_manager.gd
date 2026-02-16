@@ -320,6 +320,10 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 						_occluder_parent.add_child(occluder)
 						_wall_occluders.append(occluder)
 				si += 2
+
+			# ドアの場合: 開口部にトグル可能なオクルーダーを追加（開閉時に切り替え）
+			if is_door:
+				_create_door_opening_occluder(grid_map, cell, aabb, cell_global)
 		else:
 			# 壁: AABBからオクルーダー生成
 			var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
@@ -328,6 +332,44 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 				_wall_occluders.append(occluder)
 
 	if Debug.enabled: print("[FOW] GridMap occluders extracted from: ", grid_map.name)
+
+
+## ドア開口部のトグル可能なオクルーダーを生成
+## 柱間の開口部（1m幅）をカバーし、ドア開閉時にvisibleを切り替える
+func _create_door_opening_occluder(grid_map: GridMap, cell: Vector3i, aabb: AABB, cell_global: Transform3D) -> void:
+	# 開口部サイズ: 柱間の1m幅 × 壁厚さ
+	var opening_box := BoxShape3D.new()
+	opening_box.size = Vector3(1.0, 2.0, aabb.size.z)
+	# 開口部の中心（セルローカル座標）: X=0（中央）, Y=AABB中心, Z=AABB中心
+	var opening_center := aabb.position + aabb.size / 2.0
+	opening_center.x = 0.0  # 開口部は常にセル中央
+	var opening_global := cell_global * Transform3D(Basis.IDENTITY, opening_center)
+	var occluder := _create_occluder_from_box(opening_box, opening_global)
+	if not occluder:
+		return
+
+	_occluder_parent.add_child(occluder)
+
+	# 対応するドアパネルピボットを検索（"doors"グループ内の最近傍ノード）
+	var cell_world_pos := cell_global.origin
+	var doors := grid_map.get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
+	var closest_door: Node3D = null
+	var closest_dist := 3.0  # セルサイズ(2m)より少し大きい閾値
+	for door in doors:
+		if not door is Node3D or not is_instance_valid(door):
+			continue
+		var dist := (door as Node3D).global_position.distance_to(cell_world_pos)
+		if dist < closest_dist:
+			closest_door = door as Node3D
+			closest_dist = dist
+
+	if closest_door:
+		_door_occluders[closest_door] = occluder
+		if Debug.enabled: print("[FOW] Door opening occluder mapped to: ", closest_door.name)
+	else:
+		# ドアノードが見つからない場合は固定壁オクルーダーとして追加
+		_wall_occluders.append(occluder)
+		if Debug.enabled: print("[FOW] Door opening occluder: no door node found, added as wall")
 
 
 ## BoxShape3Dからオクルーダーを生成（ドアの柱ごとに使用）

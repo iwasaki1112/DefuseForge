@@ -7,6 +7,8 @@ class_name DoorService
 
 ## ドアキックネットワークイベント（マルチプレイヤー同期用）
 signal door_kick_network_event(door_id: int, character_network_id: int)
+## ドア開けネットワークイベント（マルチプレイヤー同期用）
+signal door_open_network_event(door_id: int, character_network_id: int)
 ## ドア開閉完了シグナル
 signal door_opened(door: Node3D, character: Node)
 
@@ -113,36 +115,147 @@ func open_door(door: Node3D, character: CharacterBody3D) -> void:
 	door_to_char.y = 0.0
 	door_to_char = door_to_char.normalized()
 
-	# ドアのローカルX軸（ドア表面に垂直、蝶番回転の基準）
-	var door_right := door.global_transform.basis.x.normalized()
-	door_right.y = 0.0
-	door_right = door_right.normalized()
+	# ドアの壁面法線（Z軸 = 壁の厚み方向、キャラクターが壁のどちら側にいるかを判定）
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
 
 	# キャラクターがドアのどちら側にいるかを判定
-	var side_dot := door_right.dot(door_to_char)
+	var side_dot := door_normal.dot(door_to_char)
 
 	# ドアはキャラクターから離れる方向に開く
-	# side_dot > 0: キャラクターはドアの右側 → ドアは左に開く（-方向）
-	# side_dot < 0: キャラクターはドアの左側 → ドアは右に開く（+方向）
-	var rotation_amount := -170.0 if side_dot > 0 else 170.0
+	# side_dot > 0: キャラクターは壁の+Z側 → +Y回転（パネルが-Z方向へ）
+	# side_dot < 0: キャラクターは壁の-Z側 → -Y回転（パネルが+Z方向へ）
+	var rotation_amount := 170.0 if side_dot > 0 else -170.0
+
+	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
+	# 開く方向と逆側（キャラクターから遠い側）にずらす
+	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
+	var hinge_shift := shift_dir * 0.1
 
 	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
 	if not door.is_in_group("open_doors"):
 		door.add_to_group("open_doors")
 
-	# TweenでドアをY軸で回転（蝶番を軸に横開き）
+	# Tweenでドア回転+ヒンジシフトを並行実行
 	var tween := create_tween()
+	tween.set_parallel(true)
 	var current_y := door.rotation_degrees.y
+
+	# ヒンジ位置シフト（回転と同じ速度で同時進行）
+	tween.tween_property(door, "global_position", door.global_position + hinge_shift, 0.4) \
+		.set_ease(Tween.EASE_OUT) \
+		.set_trans(Tween.TRANS_BACK)
+
+	# ドアをY軸で回転（蝶番を軸に横開き）
 	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.4) \
 		.set_ease(Tween.EASE_OUT) \
 		.set_trans(Tween.TRANS_BACK)
 
-	# ドアが開いた後に視界を強制更新
+	# ドアが開いた後に視界を強制更新（並行Tween完了後に順次実行）
 	if _on_vision_update_callback.is_valid():
-		tween.tween_callback(_on_vision_update_callback)
+		tween.chain().tween_callback(_on_vision_update_callback)
 
 	# シグナル発火
 	door_opened.emit(door, character)
+
+
+## ドア開けインパクト時（アニメーション途中、静かに開く）
+## character: ドアを開けたキャラクター（位置から回転方向を計算）
+func on_door_open_done(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# ローカルキャラクターの開けのみネットワークイベントを送信
+	var game_char := character as GameCharacter
+	if game_char and game_char.is_local() and _is_multiplayer_mode:
+		var door_id := get_door_id(door)
+		if door_id > 0:
+			door_open_network_event.emit(door_id, game_char.network_id)
+
+	# ドアを静かに開く処理を実行
+	open_door_quietly(door, character)
+
+
+## ドアを静かに開く処理（キックより穏やか: 160°回転、0.8秒、イーズイン/アウト）
+func open_door_quietly(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# ドアからキャラクターへの方向ベクトル
+	var door_to_char := (character.global_position - door.global_position)
+	door_to_char.y = 0.0
+	door_to_char = door_to_char.normalized()
+
+	# ドアの壁面法線（Z軸 = 壁の厚み方向、キャラクターが壁のどちら側にいるかを判定）
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
+
+	# キャラクターがドアのどちら側にいるかを判定
+	var side_dot := door_normal.dot(door_to_char)
+
+	# ドアはキャラクターから離れる方向に開く（160°で大きく開放）
+	var rotation_amount := 160.0 if side_dot > 0 else -160.0
+
+	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
+	# 開く方向と逆側（キャラクターから遠い側）にずらす
+	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
+	var hinge_shift := shift_dir * 0.1
+
+	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
+	if not door.is_in_group("open_doors"):
+		door.add_to_group("open_doors")
+
+	# Tweenでドア回転+ヒンジシフトを並行実行
+	var tween := create_tween()
+	tween.set_parallel(true)
+	var current_y := door.rotation_degrees.y
+
+	# ヒンジ位置シフト（回転と同じ速度で同時進行）
+	tween.tween_property(door, "global_position", door.global_position + hinge_shift, 0.8) \
+		.set_ease(Tween.EASE_IN_OUT) \
+		.set_trans(Tween.TRANS_CUBIC)
+
+	# ドアをY軸で回転（キックより穏やかに: 0.8秒、EASE_IN_OUT）
+	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.8) \
+		.set_ease(Tween.EASE_IN_OUT) \
+		.set_trans(Tween.TRANS_CUBIC)
+
+	# ドアが開いた後に視界を強制更新（並行Tween完了後に順次実行）
+	if _on_vision_update_callback.is_valid():
+		tween.chain().tween_callback(_on_vision_update_callback)
+
+	# シグナル発火
+	door_opened.emit(door, character)
+
+
+## ネットワークからのドア開けイベントを適用（リモート側用）
+func apply_door_open_from_network(door_id: int, character_network_id: int) -> void:
+	var door := get_door_by_id(door_id)
+	if not door:
+		push_warning("[DoorService] Door not found for network open: ", door_id)
+		return
+
+	# 既に開いているドアは無視
+	if door.is_in_group("open_doors"):
+		return
+
+	if not _character_manager:
+		push_warning("[DoorService] CharacterManager not set")
+		return
+
+	var character := _character_manager.find_character_by_network_id(character_network_id)
+	if not character:
+		push_warning("[DoorService] Character not found for door open: ", character_network_id)
+		return
+
+	# ローカルキャラクターのイベントは無視（二重処理防止）
+	if character.is_local():
+		return
+
+	# ドアを静かに開く処理を実行
+	open_door_quietly(door, character)
 
 
 ## ネットワークからのドアキックイベントを適用（リモート側用）

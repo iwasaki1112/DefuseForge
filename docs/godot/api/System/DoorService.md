@@ -20,6 +20,7 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `door_kick_network_event` | `door_id: int, character_network_id: int` | ドアキック時のネットワークイベント |
+| `door_open_network_event` | `door_id: int, character_network_id: int` | ドア開け（静か）時のネットワークイベント |
 | `door_opened` | `door: Node3D, character: Node` | ドア開き処理開始時 |
 
 ## メソッド
@@ -57,6 +58,15 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 ### apply_door_kick_from_network(door_id: int, character_network_id: int) -> void
 ネットワークからのドアキックイベントを適用する（リモート側用）。
 
+### on_door_open_done(door: Node3D, character: CharacterBody3D) -> void
+ドア開けインパクト時の処理。ローカルキャラクターの開けならネットワークイベントを送信し、ドアを静かに開く。
+
+### open_door_quietly(door: Node3D, character: CharacterBody3D) -> void
+ドアを静かに開く処理。キックと異なり、90°回転・0.8秒・EASE_IN_OUTで穏やかに開く。
+
+### apply_door_open_from_network(door_id: int, character_network_id: int) -> void
+ネットワークからのドア開けイベントを適用する（リモート側用）。
+
 ### get_registered_door_count() -> int
 登録されているドア数を取得する。
 
@@ -72,8 +82,12 @@ var door_service = factory.create_door_service(character_manager, _force_update_
 # ドアキック処理
 door_service.on_door_kick_done(door, character)
 
+# ドア開け処理（静かに）
+door_service.on_door_open_done(door, character)
+
 # ネットワーク同期
 door_service.door_kick_network_event.connect(_on_door_kick_network_event)
+door_service.door_open_network_event.connect(_on_door_open_network_event)
 ```
 
 ## 関連クラス
@@ -88,7 +102,8 @@ door_service.door_kick_network_event.connect(_on_door_kick_network_event)
 | シグナル | 引数 |
 |---------|------|
 | `door_kick_network_event` | `door_id: int, character_network_id: int` |
-| `door_opened` | `door: Node3D, character: Node` | ドア開き処理開始時 |
+| `door_open_network_event` | `door_id: int, character_network_id: int` |
+| `door_opened` | `door: Node3D, character: Node` |
 
 ### メソッド
 - `setup(character_manager: CharacterManagerService) -> void`
@@ -101,6 +116,9 @@ door_service.door_kick_network_event.connect(_on_door_kick_network_event)
 - `register_all_doors_in_map() -> void`
 - `on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void`
 - `open_door(door: Node3D, character: CharacterBody3D) -> void`
+- `on_door_open_done(door: Node3D, character: CharacterBody3D) -> void`
+- `open_door_quietly(door: Node3D, character: CharacterBody3D) -> void`
 - `apply_door_kick_from_network(door_id: int, character_network_id: int) -> void`
+- `apply_door_open_from_network(door_id: int, character_network_id: int) -> void`
 - `get_registered_door_count() -> int`
 - `is_door_open(door: Node3D) -> bool`

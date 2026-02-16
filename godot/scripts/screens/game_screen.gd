@@ -57,6 +57,11 @@ var _grenade_pending_touch_time: int = 0  # タッチ開始時刻（msec）
 var _grenade_btn: TextureButton = null
 var _grenade_count_label: Label = null
 
+## Door Open（ドア開けインタラクション）
+var _door_open_btn: TextureButton = null
+var _nearby_door: Node3D = null
+var _target_door: Node3D = null  # アニメーション中のターゲットドア
+
 ## Talking（人質交渉）
 var _talking_btn: Button = null
 var _is_talking: bool = false
@@ -352,6 +357,9 @@ func _setup_tps_controller() -> void:
 	if _player_character.anim_ctrl:
 		_player_character.anim_ctrl.throw_release.connect(_on_throw_release)
 		_player_character.anim_ctrl.throw_finished.connect(_on_throw_finished)
+		# ドア開けシグナル接続
+		_player_character.anim_ctrl.door_open_impact.connect(_on_door_open_impact)
+		_player_character.anim_ctrl.door_open_finished.connect(_on_door_open_anim_finished)
 
 
 func _setup_tps_hud() -> void:
@@ -472,9 +480,9 @@ func _create_action_buttons() -> void:
 	ui_layer.add_child(vbox)
 
 	# ボタン参照を取得してシグナル接続
-	var btn_door_open: TextureButton = vbox.get_node("DoorOpenBtn")
-	btn_door_open.pressed.connect(_on_door_open_pressed)
-	ButtonAnimator.setup(btn_door_open)
+	_door_open_btn = vbox.get_node("DoorOpenBtn")
+	_door_open_btn.pressed.connect(_on_door_open_pressed)
+	ButtonAnimator.setup(_door_open_btn)
 
 	_grenade_btn = vbox.get_node("GrenadeContainer/GrenadeBtn")
 	_grenade_btn.pressed.connect(_on_grenade_btn_pressed)
@@ -546,6 +554,7 @@ func _physics_process(delta: float) -> void:
 		_update_talking(delta)
 	else:
 		_update_hostage_proximity()
+		_update_door_proximity()
 
 
 func _input(event: InputEvent) -> void:
@@ -1209,8 +1218,79 @@ func _update_grenade_count_ui() -> void:
 
 
 func _on_door_open_pressed() -> void:
-	if _player_character and _player_character.anim_ctrl:
-		_player_character.anim_ctrl.play_door_open()
+	if not _player_character or not _player_character.is_alive:
+		return
+	if not _nearby_door:
+		return
+	if _player_character.anim_ctrl and _player_character.anim_ctrl.is_opening_door():
+		return
+
+	_target_door = _nearby_door
+
+	# ドアの方を向く
+	var dir := (_target_door.global_position - _player_character.global_position).normalized()
+	dir.y = 0.0
+	_player_character.set_facing_direction_vec(dir)
+
+	# 向きをロック
+	if _tps_controller:
+		_tps_controller.lock_facing(dir)
+
+	# アニメーション再生
+	_player_character.anim_ctrl.play_door_open()
+
+	# ボタン非表示
+	if _door_open_btn:
+		_door_open_btn.visible = false
+
+
+## ドア開けアニメーションのインパクトタイミング（実際にドアを開く）
+func _on_door_open_impact() -> void:
+	if not _target_door or not _player_character:
+		return
+	if game_manager:
+		game_manager._on_door_open_done(_target_door, _player_character)
+
+
+## ドア開けアニメーション完了
+func _on_door_open_anim_finished() -> void:
+	_target_door = null
+	if _tps_controller:
+		_tps_controller.unlock_facing()
+
+
+## ドアとの近接チェック（毎フレーム）
+func _update_door_proximity() -> void:
+	if not _player_character or not _player_character.is_alive:
+		if _door_open_btn and _door_open_btn.visible:
+			_door_open_btn.visible = false
+		return
+
+	# アニメーション中は非表示維持
+	if _player_character.anim_ctrl and _player_character.anim_ctrl.is_opening_door():
+		if _door_open_btn and _door_open_btn.visible:
+			_door_open_btn.visible = false
+		return
+
+	var player_pos := _player_character.global_position
+	_nearby_door = null
+
+	var doors := get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
+	for door in doors:
+		if not door is Node3D:
+			continue
+		if not is_instance_valid(door):
+			continue
+		# 既に開いているドアは対象外
+		if door.is_in_group("open_doors"):
+			continue
+		var dist := player_pos.distance_to(door.global_position)
+		if dist <= GameConstants.DOOR_OPEN_DISTANCE:
+			_nearby_door = door
+			break
+
+	if _door_open_btn:
+		_door_open_btn.visible = _nearby_door != null
 
 
 func _on_debug_vision_toggled(enabled: bool) -> void:
@@ -1535,6 +1615,11 @@ func _cleanup_before_transition() -> void:
 			_player_character.anim_ctrl.throw_release.disconnect(_on_throw_release)
 		if _player_character.anim_ctrl.throw_finished.is_connected(_on_throw_finished):
 			_player_character.anim_ctrl.throw_finished.disconnect(_on_throw_finished)
+		# ドア開けシグナル切断
+		if _player_character.anim_ctrl.door_open_impact.is_connected(_on_door_open_impact):
+			_player_character.anim_ctrl.door_open_impact.disconnect(_on_door_open_impact)
+		if _player_character.anim_ctrl.door_open_finished.is_connected(_on_door_open_anim_finished):
+			_player_character.anim_ctrl.door_open_finished.disconnect(_on_door_open_anim_finished)
 
 	# グレネードレンジインジケーターのクリーンアップ
 	if _grenade_mesh and is_instance_valid(_grenade_mesh):

@@ -145,6 +145,17 @@ if _mode_provider is MultiplayerModeProvider:
     var is_host = mp.is_host()
 ```
 
+## ドア開けインタラクション
+
+プレイヤーがドアの近くにいるとき、DoorOpenBtnボタンが表示されます。
+
+- `_update_door_proximity()`: 毎フレーム "doors" グループの未開ドアとの近接チェック（距離 `DOOR_OPEN_DISTANCE = 2.5m`）
+- `_on_door_open_pressed()`: ボタン押下 → ドアの方を向く → 向きロック → `play_door_open()` アニメーション再生
+- `_on_door_open_impact()`: アニメーション途中（0.7秒後）で `DoorService.on_door_open_done()` を呼びドアを開く
+- `_on_door_open_anim_finished()`: アニメーション完了 → 向きロック解除
+
+**キックとの違い**: ドアキック（170°、0.4秒、バウンス）に対し、ドア開け（90°、0.8秒、イーズイン/アウト）は穏やか。
+
 ## 人質（Hostage）機能
 
 人質はTraining/Multiplayer両モードで共通にスポーンされます。

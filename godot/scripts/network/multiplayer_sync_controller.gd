@@ -413,6 +413,8 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			_apply_animation_event(event)
 		NetworkConstants.GameEventType.DOOR_KICK:
 			_apply_door_kick_event(event)
+		NetworkConstants.GameEventType.DOOR_OPEN:
+			_apply_door_open_event(event)
 
 
 func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
@@ -568,6 +570,17 @@ func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
 		return
 
 	game_manager.apply_door_kick_from_network(door_id, character_id)
+
+
+func _apply_door_open_event(event: NetworkMessages.GameEventMessage) -> void:
+	var door_id: int = event.data.get("door_id", 0)
+	var character_id: int = event.data.get("character_id", 0)
+
+	if door_id == 0:
+		push_warning("[SyncController] DOOR_OPEN event missing door_id")
+		return
+
+	game_manager.apply_door_open_from_network(door_id, character_id)
 
 
 ## アニメーションを指定秒数分進める（レイテンシ補正用）

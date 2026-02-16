@@ -39,6 +39,9 @@ func _init() -> void:
 	var wall_files: Array[String] = []
 	for f in glb_files:
 		var name_lower := f.get_basename().to_lower()
+		# _panel サフィックスはランタイムで個別ロード（MeshLibraryに入れない）
+		if "_panel" in name_lower:
+			continue
 		if name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("door"):
 			wall_files.append(f)
 		else:
@@ -56,6 +59,19 @@ func _init() -> void:
 func _build_library(files: Array[String], save_path: String, label: String) -> void:
 	var lib := MeshLibrary.new()
 
+	# 既存MeshLibraryから名前→IDマッピングを読み込み（安定ID保持）
+	var name_to_id: Dictionary = {}
+	var max_id := -1
+	if ResourceLoader.exists(save_path):
+		var existing := load(save_path) as MeshLibrary
+		if existing:
+			for item_id in existing.get_item_list():
+				var item_name := existing.get_item_name(item_id)
+				name_to_id[item_name] = item_id
+				if item_id > max_id:
+					max_id = item_id
+			print("  Loaded existing IDs: %s" % str(name_to_id))
+
 	for i in files.size():
 		var file_name2 := files[i]
 		var tile_name := file_name2.get_basename()
@@ -69,8 +85,16 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 
 		var instance := scene.instantiate()
 
-		lib.create_item(i)
-		lib.set_item_name(i, tile_name)
+		# 既存タイルはIDを保持、新規タイルは次の空きIDを割り当て
+		var item_id: int
+		if tile_name in name_to_id:
+			item_id = name_to_id[tile_name]
+		else:
+			max_id += 1
+			item_id = max_id
+
+		lib.create_item(item_id)
+		lib.set_item_name(item_id, tile_name)
 
 		# 全MeshInstance3Dを収集
 		var mesh_instances: Array[MeshInstance3D] = []
@@ -127,8 +151,8 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 			var door_shapes := _create_door_collision_shapes(combined)
 			shapes.append_array(door_shapes)
 
-		lib.set_item_mesh(i, combined)
-		lib.set_item_shapes(i, shapes)
+		lib.set_item_mesh(item_id, combined)
+		lib.set_item_shapes(item_id, shapes)
 
 		instance.free()
 		print("  Done: ", tile_name)

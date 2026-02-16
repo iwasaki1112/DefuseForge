@@ -56,6 +56,10 @@
 | シグナル | 引数 | 説明 |
 |---------|------|------|
 | `fired` | なし | 発射アクションが実行されたタイミング |
+| `throw_release` | なし | グレネードリリースタイミング |
+| `throw_finished` | なし | 投擲アニメーション完了 |
+| `door_open_finished` | なし | ドア開けアニメーション完了 |
+| `door_open_impact` | なし | ドアを実際に開くインパクトタイミング（0.7秒後） |
 
 ## Export Properties
 
@@ -167,6 +171,21 @@
 ### is_door_kicking() -> bool
 ドアキックアニメーション再生中か確認する。
 
+### play_door_open() -> void
+ドア開けアニメーションを再生する（静かにドアを開く）。0.7秒後に`door_open_impact`シグナルが発火し、アニメーション完了時に`door_open_finished`シグナルが発火する。
+
+### is_opening_door() -> bool
+ドア開けアニメーション再生中か確認する。
+
+### play_talking() -> void
+会話アニメーションをループ再生する（人質交渉用）。
+
+### stop_talking() -> void
+会話アニメーションを停止してアイドルに復帰する。
+
+### is_talking() -> bool
+会話アニメーション再生中か確認する。
+
 ## 使用例
 
 ```gdscript
@@ -222,6 +241,10 @@ anim_ctrl.fire()
 | シグナル | 引数 |
 |---------|------|
 | `fired` | なし |
+| `throw_release` | なし |
+| `throw_finished` | なし |
+| `door_open_finished` | なし |
+| `door_open_impact` | なし |
 
 ### メソッド
 - `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
@@ -240,3 +263,8 @@ anim_ctrl.fire()
 - `play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void`
 - `play_door_kick() -> void`
 - `is_door_kicking() -> bool`
+- `play_door_open() -> void`
+- `is_opening_door() -> bool`
+- `play_talking() -> void`
+- `stop_talking() -> void`
+- `is_talking() -> bool`
