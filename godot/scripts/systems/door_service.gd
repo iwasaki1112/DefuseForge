@@ -30,6 +30,17 @@ var _is_multiplayer_mode: bool = false
 ## 視界更新コールバック（ドア開閉時）
 var _on_vision_update_callback: Callable = Callable()
 
+## チーム別可視性システム（敵チームのドア開放をFoW確認まで保留）
+var _pending_enemy_doors: Dictionary = {}  ## door -> { rotation_amount, hinge_shift, is_kick }
+var _fow_system = null  ## FogOfWarSystem参照
+var _fow_check_counter: int = 0
+const _FOW_CHECK_INTERVAL: int = 15  ## ~4Hz at 60fps
+const _FOW_CHECK_OFFSET := 1.0  ## FoWチェック位置のオフセット（ヒンジ周辺4方向をチェック）
+
+
+func _ready() -> void:
+	set_process(false)
+
 
 ## セットアップ
 func setup(character_manager: CharacterManagerService = null) -> void:
@@ -44,6 +55,11 @@ func set_multiplayer_mode(enabled: bool) -> void:
 ## 視界更新コールバックを設定
 func set_vision_update_callback(callback: Callable) -> void:
 	_on_vision_update_callback = callback
+
+
+## FogOfWarSystemの参照を設定（GameManagerから呼ばれる）
+func set_fow_system(fow) -> void:
+	_fow_system = fow
 
 
 ## ドアを登録し、一意のIDを割り当て
@@ -84,6 +100,8 @@ func clear_door_registry() -> void:
 	_door_id_map.clear()
 	_id_to_door.clear()
 	_next_door_id = 1
+	_pending_enemy_doors.clear()
+	set_process(false)
 
 
 ## マップ内の全ドアを登録（"doors"グループから取得）
@@ -99,6 +117,9 @@ func register_all_doors_in_map() -> void:
 func on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
 		return
+
+	# 保留中の敵ドアをクリア（プレイヤーが先に開けた場合）
+	_pending_enemy_doors.erase(door)
 
 	# ローカルキャラクターのキックのみネットワークイベントを送信
 	var game_char := character as GameCharacter
@@ -116,58 +137,14 @@ func open_door(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
 		return
 
-	# ドアからキャラクターへの方向ベクトル
-	var door_to_char := (character.global_position - door.global_position)
-	door_to_char.y = 0.0
-	door_to_char = door_to_char.normalized()
+	# 保留中の敵ドアをクリア（プレイヤーが先に開けた場合）
+	_pending_enemy_doors.erase(door)
 
-	# ドアの壁面法線（Z軸 = 壁の厚み方向、キャラクターが壁のどちら側にいるかを判定）
-	var door_normal := door.global_transform.basis.z.normalized()
-	door_normal.y = 0.0
-	door_normal = door_normal.normalized()
+	var params := _calculate_door_open_params(door, character, true)
+	if params.is_empty():
+		return
 
-	# キャラクターがドアのどちら側にいるかを判定
-	var side_dot := door_normal.dot(door_to_char)
-
-	# ドアはキャラクターから離れる方向に開く
-	# side_dot > 0: キャラクターは壁の+Z側 → -Y回転（パネルが+Z方向へ）
-	# side_dot < 0: キャラクターは壁の-Z側 → +Y回転（パネルが-Z方向へ）
-	var rotation_amount := -170.0 if side_dot > 0 else 170.0
-
-	# 壁との衝突を考慮して最大開角度を制限
-	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
-	if is_zero_approx(rotation_amount):
-		return  # 完全にブロックされている
-
-	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
-	# 開く方向と逆側（キャラクターから遠い側）にずらす
-	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
-	var hinge_shift := shift_dir * 0.1
-
-	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
-	if not door.is_in_group("open_doors"):
-		door.add_to_group("open_doors")
-
-	# Tweenでドア回転+ヒンジシフトを並行実行
-	var tween := create_tween()
-	tween.set_parallel(true)
-	var current_y := door.rotation_degrees.y
-
-	# ヒンジ位置シフト（回転と同じ速度で同時進行）
-	tween.tween_property(door, "global_position", door.global_position + hinge_shift, 0.4) \
-		.set_ease(Tween.EASE_OUT) \
-		.set_trans(Tween.TRANS_BACK)
-
-	# ドアをY軸で回転（蝶番を軸に横開き）
-	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.4) \
-		.set_ease(Tween.EASE_OUT) \
-		.set_trans(Tween.TRANS_BACK)
-
-	# ドアが開いた後に視界を強制更新（並行Tween完了後に順次実行）
-	if _on_vision_update_callback.is_valid():
-		tween.chain().tween_callback(_on_vision_update_callback)
-
-	# シグナル発火
+	_execute_door_open(door, params)
 	door_opened.emit(door, character)
 
 
@@ -176,6 +153,9 @@ func open_door(door: Node3D, character: CharacterBody3D) -> void:
 func on_door_open_done(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
 		return
+
+	# 保留中の敵ドアをクリア（プレイヤーが先に開けた場合）
+	_pending_enemy_doors.erase(door)
 
 	# ローカルキャラクターの開けのみネットワークイベントを送信
 	var game_char := character as GameCharacter
@@ -193,56 +173,14 @@ func open_door_quietly(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
 		return
 
-	# ドアからキャラクターへの方向ベクトル
-	var door_to_char := (character.global_position - door.global_position)
-	door_to_char.y = 0.0
-	door_to_char = door_to_char.normalized()
+	# 保留中の敵ドアをクリア（プレイヤーが先に開けた場合）
+	_pending_enemy_doors.erase(door)
 
-	# ドアの壁面法線（Z軸 = 壁の厚み方向、キャラクターが壁のどちら側にいるかを判定）
-	var door_normal := door.global_transform.basis.z.normalized()
-	door_normal.y = 0.0
-	door_normal = door_normal.normalized()
+	var params := _calculate_door_open_params(door, character, false)
+	if params.is_empty():
+		return
 
-	# キャラクターがドアのどちら側にいるかを判定
-	var side_dot := door_normal.dot(door_to_char)
-
-	# ドアはキャラクターから離れる方向に開く（160°で大きく開放）
-	var rotation_amount := -160.0 if side_dot > 0 else 160.0
-
-	# 壁との衝突を考慮して最大開角度を制限
-	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
-	if is_zero_approx(rotation_amount):
-		return  # 完全にブロックされている
-
-	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
-	# 開く方向と逆側（キャラクターから遠い側）にずらす
-	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
-	var hinge_shift := shift_dir * 0.1
-
-	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
-	if not door.is_in_group("open_doors"):
-		door.add_to_group("open_doors")
-
-	# Tweenでドア回転+ヒンジシフトを並行実行
-	var tween := create_tween()
-	tween.set_parallel(true)
-	var current_y := door.rotation_degrees.y
-
-	# ヒンジ位置シフト（回転と同じ速度で同時進行）
-	tween.tween_property(door, "global_position", door.global_position + hinge_shift, 0.8) \
-		.set_ease(Tween.EASE_IN_OUT) \
-		.set_trans(Tween.TRANS_CUBIC)
-
-	# ドアをY軸で回転（キックより穏やかに: 0.8秒、EASE_IN_OUT）
-	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, 0.8) \
-		.set_ease(Tween.EASE_IN_OUT) \
-		.set_trans(Tween.TRANS_CUBIC)
-
-	# ドアが開いた後に視界を強制更新（並行Tween完了後に順次実行）
-	if _on_vision_update_callback.is_valid():
-		tween.chain().tween_callback(_on_vision_update_callback)
-
-	# シグナル発火
+	_execute_door_open(door, params)
 	door_opened.emit(door, character)
 
 
@@ -255,6 +193,10 @@ func apply_door_open_from_network(door_id: int, character_network_id: int) -> vo
 
 	# 既に開いているドアは無視
 	if door.is_in_group("open_doors"):
+		return
+
+	# 既に保留中のドアは無視
+	if _pending_enemy_doors.has(door):
 		return
 
 	if not _character_manager:
@@ -270,7 +212,14 @@ func apply_door_open_from_network(door_id: int, character_network_id: int) -> vo
 	if character.is_local():
 		return
 
-	# ドアを静かに開く処理を実行
+	# チーム判定：敵チームのドア開けはFoW確認まで保留
+	if _fow_system and character.team != PlayerState.get_player_team():
+		var params := _calculate_door_open_params(door, character, false)
+		if not params.is_empty():
+			_defer_enemy_door_open(door, params)
+		return
+
+	# 味方チーム or FoWなし → 即座に開く
 	open_door_quietly(door, character)
 
 
@@ -283,6 +232,10 @@ func apply_door_kick_from_network(door_id: int, character_network_id: int) -> vo
 
 	# 既に開いているドアは無視
 	if door.is_in_group("open_doors"):
+		return
+
+	# 既に保留中のドアは無視
+	if _pending_enemy_doors.has(door):
 		return
 
 	if not _character_manager:
@@ -298,7 +251,14 @@ func apply_door_kick_from_network(door_id: int, character_network_id: int) -> vo
 	if character.is_local():
 		return
 
-	# ドアを開く処理を実行
+	# チーム判定：敵チームのドアキックはFoW確認まで保留
+	if _fow_system and character.team != PlayerState.get_player_team():
+		var params := _calculate_door_open_params(door, character, true)
+		if not params.is_empty():
+			_defer_enemy_door_open(door, params)
+		return
+
+	# 味方チーム or FoWなし → 即座に開く
 	open_door(door, character)
 
 
@@ -311,6 +271,165 @@ func get_registered_door_count() -> int:
 func is_door_open(door: Node3D) -> bool:
 	return door.is_in_group("open_doors")
 
+
+## ========================================
+## チーム別可視性システム
+## ========================================
+
+## ドア開きパラメータを計算（open_door / open_door_quietly 共通ロジック）
+## is_kick: true=キック（170°, 0.4s, BACK）、false=静かに開く（160°, 0.8s, CUBIC）
+func _calculate_door_open_params(door: Node3D, character: CharacterBody3D, is_kick: bool) -> Dictionary:
+	# ドアからキャラクターへの方向ベクトル
+	var door_to_char := (character.global_position - door.global_position)
+	door_to_char.y = 0.0
+	door_to_char = door_to_char.normalized()
+
+	# ドアの壁面法線（Z軸 = 壁の厚み方向）
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
+
+	# キャラクターがドアのどちら側にいるかを判定
+	var side_dot := door_normal.dot(door_to_char)
+
+	# 回転量（キック: 170°、静かに: 160°）
+	var base_angle := 170.0 if is_kick else 160.0
+	var rotation_amount := -base_angle if side_dot > 0 else base_angle
+
+	# 壁との衝突を考慮して最大開角度を制限
+	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
+	if is_zero_approx(rotation_amount):
+		return {}  # 完全にブロックされている
+
+	# ヒンジシフト（パネルの壁フレームめり込み防止）
+	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
+	var hinge_shift := shift_dir * 0.1
+
+	return {
+		"rotation_amount": rotation_amount,
+		"hinge_shift": hinge_shift,
+		"is_kick": is_kick,
+	}
+
+
+## ドアを開くTweenを実行（パラメータに基づいてアニメーション再生）
+## instant: trueの場合アニメーションなしで即座に開いた状態にする
+func _execute_door_open(door: Node3D, params: Dictionary, instant: bool = false) -> void:
+	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
+	if not door.is_in_group("open_doors"):
+		door.add_to_group("open_doors")
+
+	var rotation_amount: float = params["rotation_amount"]
+	var hinge_shift: Vector3 = params["hinge_shift"]
+
+	if instant:
+		# 即座に開いた状態にする（保留ドアがFoW可視になった場合）
+		door.global_position += hinge_shift
+		door.rotation_degrees.y += rotation_amount
+		if _on_vision_update_callback.is_valid():
+			_on_vision_update_callback.call()
+		return
+
+	var is_kick: bool = params["is_kick"]
+
+	# Tween設定（キック: 0.4s BACK, 静かに: 0.8s CUBIC）
+	var duration := 0.4 if is_kick else 0.8
+	var ease_type := Tween.EASE_OUT if is_kick else Tween.EASE_IN_OUT
+	var trans_type := Tween.TRANS_BACK if is_kick else Tween.TRANS_CUBIC
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	var current_y := door.rotation_degrees.y
+
+	# ヒンジ位置シフト
+	tween.tween_property(door, "global_position", door.global_position + hinge_shift, duration) \
+		.set_ease(ease_type) \
+		.set_trans(trans_type)
+
+	# ドアをY軸で回転（蝶番を軸に横開き）
+	tween.tween_property(door, "rotation_degrees:y", current_y + rotation_amount, duration) \
+		.set_ease(ease_type) \
+		.set_trans(trans_type)
+
+	# ドアが開いた後に視界を強制更新
+	if _on_vision_update_callback.is_valid():
+		tween.chain().tween_callback(_on_vision_update_callback)
+
+
+## 敵チームのドア開放をバッファに保留（FoW確認まで開かない）
+func _defer_enemy_door_open(door: Node3D, params: Dictionary) -> void:
+	_pending_enemy_doors[door] = params
+	set_process(true)
+
+
+## 保留中のドアを公開（FoWで可視になった時点で呼ばれる）
+func _reveal_deferred_door(door: Node3D) -> void:
+	var params: Dictionary = _pending_enemy_doors.get(door, {})
+	_pending_enemy_doors.erase(door)
+
+	if not is_instance_valid(door) or params.is_empty():
+		if _pending_enemy_doors.is_empty():
+			set_process(false)
+		return
+
+	_execute_door_open(door, params, true)
+	door_opened.emit(door, null)
+
+	if _pending_enemy_doors.is_empty():
+		set_process(false)
+
+
+## 保留中のドアのFoW可視性を定期チェック
+func _process(_delta: float) -> void:
+	if _pending_enemy_doors.is_empty():
+		set_process(false)
+		return
+
+	_fow_check_counter += 1
+	if _fow_check_counter < _FOW_CHECK_INTERVAL:
+		return
+	_fow_check_counter = 0
+
+	# バッファ内のドアを可視性チェック（イテレーション中の変更を避けるため先に収集）
+	var doors_to_reveal: Array = []
+	for door: Node3D in _pending_enemy_doors:
+		if not is_instance_valid(door):
+			doors_to_reveal.append(door)
+			continue
+		if _is_door_visible_to_local_team(door):
+			doors_to_reveal.append(door)
+
+	for door in doors_to_reveal:
+		_reveal_deferred_door(door)
+
+
+## ドアがローカルチームから可視かどうか判定
+## ヒンジ周辺4方向（壁法線±1m、壁沿い±1m）をチェックし、視界が少しでも触れたら可視とみなす
+func _is_door_visible_to_local_team(door: Node3D) -> bool:
+	if not _fow_system:
+		return false
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
+	var door_right := door.global_transform.basis.x.normalized()
+	door_right.y = 0.0
+	door_right = door_right.normalized()
+	var pos := door.global_position
+	# ドア周辺4点をチェック（壁法線方向±1m、壁沿い方向±1m）
+	if _fow_system.is_position_visible_in_fow(pos + door_normal * _FOW_CHECK_OFFSET):
+		return true
+	if _fow_system.is_position_visible_in_fow(pos - door_normal * _FOW_CHECK_OFFSET):
+		return true
+	if _fow_system.is_position_visible_in_fow(pos + door_right * _FOW_CHECK_OFFSET):
+		return true
+	if _fow_system.is_position_visible_in_fow(pos - door_right * _FOW_CHECK_OFFSET):
+		return true
+	return false
+
+
+## ========================================
+## スイープテスト
+## ========================================
 
 ## ドアが壁と衝突せずに開ける最大角度を計算（スイープテスト）
 ## 10°刻みでドアパネルのコリジョンを回転させ、壁との衝突を検出

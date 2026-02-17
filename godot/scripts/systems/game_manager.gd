@@ -84,6 +84,9 @@ func setup(cam: Camera3D, mesh_parent: Node3D, ui_layer: CanvasLayer, map_size: 
 	# VisionService初期化後にFoWシステムをGrenadeServiceに渡す（リモートグレネードのFoW可視性用）
 	if grenade_service and fog_of_war_system:
 		grenade_service.set_fow_system(fog_of_war_system)
+	# DoorServiceにもFoWシステムを渡す（敵チームのドア可視性制御用）
+	if door_service and fog_of_war_system:
+		door_service.set_fow_system(fog_of_war_system)
 	_setup_map_manager()
 	_setup_round_manager()
 	_setup_character_setup_service()
