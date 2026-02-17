@@ -67,9 +67,14 @@ map_id = "map_name"          ← @export: MapRegistryが自動検出
 display_name = "MapName"     ← @export: マップ選択画面の表示名
 map_description = ""         ← @export: 説明文（任意）
 
-  [node name="GridMap" type="GridMap"]
-  mesh_library = tile_library.tres
-  cell_size = Vector3(4, 4, 4)
+  [node name="GridMapGround" type="GridMap"]
+  mesh_library = tile_library_floor.tres
+  cell_size = Vector3(1, 2, 1)     ← 床: 1m×1m
+  cell_center_y = false
+
+  [node name="GridMapWall" type="GridMap"]
+  mesh_library = tile_library_wall.tres
+  cell_size = Vector3(2, 2, 2)     ← 壁: 2m×2m
   cell_center_y = false
 
   [node name="spawn_ct_0" type="Marker3D"]
@@ -132,9 +137,15 @@ godot --headless --script res://scripts/editor/sync_map_presets.gd
 
 ## GridMap設定
 
-| 設定 | 値 | 理由 |
-|------|-----|------|
-| cell_size | Vector3(2, 2, 2) | 2m四方のタイル |
+床と壁で異なるグリッドサイズを使用:
+
+| GridMapノード | cell_size | MeshLibrary | 用途 |
+|--------------|-----------|-------------|------|
+| GridMapGround | Vector3(1, 2, 1) | tile_library_floor.tres | 床/地面タイル（1m×1m） |
+| GridMapWall | Vector3(2, 2, 2) | tile_library_wall.tres | 壁/ドア/ガラスタイル（2m×2m） |
+
+| 共通設定 | 値 | 理由 |
+|---------|-----|------|
 | cell_center_x | true（デフォルト） | セル中心にメッシュ配置 |
 | cell_center_y | false | 床がY=0に配置される |
 | cell_center_z | true（デフォルト） | セル中心にメッシュ配置 |

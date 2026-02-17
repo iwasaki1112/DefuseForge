@@ -8,7 +8,8 @@ tile_library.blend のコレクションをAppendしてグリッド配置する�
     import bpy, math, os, sys
 
     # --- 定数 ---
-    TILE_SIZE = 4.0
+    FLOOR_TILE_SIZE = 1.0   # 1m Godot = 1.0 BU（床/地面）
+    WALL_TILE_SIZE = 2.0    # 2m Godot = 2.0 BU（壁/ドア）
     LIB_PATH = "/Users/.../blender/tiles/tile_library.blend"
 
     # --- clear_scene ---
@@ -74,11 +75,14 @@ import math
 import os
 
 # === 設定 ===
-TILE_SIZE = 4.0
+FLOOR_TILE_SIZE = 1.0   # 1m Godot = 1.0 BU（床/地面タイル）
+WALL_TILE_SIZE = 2.0    # 2m Godot = 2.0 BU（壁/ドア/ガラスタイル）
 TILE_LIBRARY_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "tile_library.blend",
 )
+
+_WALL_PREFIXES = ("wall", "door", "glass", "frame")
 
 
 def clear_scene() -> None:
@@ -127,7 +131,10 @@ def place_tile(
         print(f"ERROR: Collection '{tile_name}' not found in library")
         return
 
-    wx, wy = gx * TILE_SIZE, gy * TILE_SIZE
+    # タイル名プレフィックスからグリッドサイズを自動判別
+    name_lower = tile_name.lower()
+    tile_size = WALL_TILE_SIZE if any(name_lower.startswith(p) for p in _WALL_PREFIXES) else FLOOR_TILE_SIZE
+    wx, wy = gx * tile_size, gy * tile_size
     rot_rad = math.radians(rotation_deg)
 
     suffix = f"_T{gx}_{gy}"
