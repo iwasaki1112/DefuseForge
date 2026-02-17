@@ -73,11 +73,11 @@ const SPRINT_SPEED := 6.0
 
 # Per-direction natural walk speeds (m/s) from root motion data
 const PISTOL_ANIM_SPEEDS := {
-	"fwd": 1.008, "bwd": 0.906,
-	"left": 0.831, "right": 1.071,
-	"fwd_left": 0.811, "fwd_right": 0.982,
-	"bwd_left": 0.831, "bwd_right": 0.811,
-	"sprint": 4.3,
+	"fwd": 2.016, "bwd": 1.845,
+	"left": 1.663, "right": 2.142,
+	"fwd_left": 1.724, "fwd_right": 2.016,
+	"bwd_left": 1.663, "bwd_right": 1.724,
+	"sprint": 4.299,
 }
 const RIFLE_ANIM_SPEEDS := {
 	"fwd": 2.016, "bwd": 1.845,
@@ -789,7 +789,6 @@ func _setup_recoil_modifier() -> void:
 
 func _setup_lean_modifier() -> void:
 	_lean_modifier = LeanModifier.new()
-	_lean_modifier.spine_bone_name = spine_bone
 	_lean_modifier.recovery_speed = lean_speed
 	_skeleton.add_child(_lean_modifier)
 
@@ -965,7 +964,10 @@ func _switch_weapon_animations() -> void:
 	# Sprint
 	var sprint_node := bt.get_node("Sprint") as AnimationNodeAnimation
 	if sprint_node:
-		sprint_node.animation = prefix + "_sprint"
+		var sprint_name := prefix + "_sprint"
+		if not _anim_player.has_animation(sprint_name):
+			sprint_name = prefix + "_walk_forward"
+		sprint_node.animation = sprint_name
 
 	# Shoot
 	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation

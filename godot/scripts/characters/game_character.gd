@@ -437,6 +437,10 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 	if "recoil_recovery" in anim_ctrl:
 		anim_ctrl.recoil_recovery = weapon.recoil_recovery
 
+	# 武器の視界距離をVisionComponentに適用
+	if vision and weapon:
+		vision.set_view_distance(weapon.vision_range)
+
 ## Get current weapon
 func get_current_weapon() -> WeaponPreset:
 	return current_weapon

@@ -6,8 +6,8 @@ extends RefCounted
 var enemy_visibility_system: Node = null
 var fog_of_war_system: Node3D = null
 var label_manager: CharacterLabelManager = null
-var default_weapon_id_ct: String = "mark18"
-var default_weapon_id_t: String = "ak47"
+var default_weapon_id_ct: String = "glock"
+var default_weapon_id_t: String = "glock"
 var is_vision_enabled: bool = false
 var default_vision_fov: float = 75.0
 var default_vision_range: float = 7.0

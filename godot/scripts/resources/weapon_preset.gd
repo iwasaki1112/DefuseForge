@@ -54,6 +54,12 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var damage_falloff_end: float = 50.0      ## 最低ダメージ到達距離(m)
 
 # ============================================
+# Vision
+# ============================================
+@export_group("Vision")
+@export var vision_range: float = 7.0  ## 武器装備時の視界距離（メートル）
+
+# ============================================
 # Recoil
 # ============================================
 @export_group("Recoil")

@@ -55,6 +55,10 @@ extends Node3D
 @onready var grip_z_spin: SpinBox = $UI/PanelLeft/VBoxLeft/GripZ/SpinBox
 @onready var grip_z_slider: HSlider = $UI/PanelLeft/VBoxLeft/GripZ/HSlider
 @onready var grip_preset_label: Label = $UI/PanelLeft/VBoxLeft/GripPresetLabel
+@onready var lean_angle_spin: SpinBox = $UI/Panel/VBox/LeanAngle/SpinBox
+@onready var lean_angle_slider: HSlider = $UI/Panel/VBox/LeanAngle/HSlider
+@onready var lean_speed_spin: SpinBox = $UI/Panel/VBox/LeanSpeed/SpinBox
+@onready var lean_speed_slider: HSlider = $UI/Panel/VBox/LeanSpeed/HSlider
 @onready var camera: Camera3D = $Camera3D
 
 # Preset value display (bone-local values for copying to .tres)
@@ -69,6 +73,7 @@ var current_weapon_idx: int = -1
 var _environment_setup: Node = null
 var _animation_library: AnimationLibrary = null
 var _grip_node: Node3D = null  # 武器モデル内のLeftHandGripノード
+var _lean_modifier_ref: LeanModifier = null  # リーン手動制御用
 
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 
@@ -78,6 +83,7 @@ func _ready() -> void:
 	_load_data()
 	_setup_ui()
 	_setup_camera_buttons()
+	_wrap_panels_in_scroll()
 
 	# Set initial camera position (front view, closer)
 	if camera:
@@ -108,6 +114,10 @@ func _process(delta: float) -> void:
 		if anim_ctrl:
 			# Look towards -Z (facing the camera at front view)
 			anim_ctrl.update_animation(Vector3.ZERO, Vector3.BACK, false, delta)
+		# リーンスライダーの値で手動オーバーライド（update_animation後に上書き）
+		if _lean_modifier_ref:
+			_lean_modifier_ref.recovery_speed = lean_speed_spin.value
+			_lean_modifier_ref.set_target_lean(deg_to_rad(lean_angle_spin.value))
 
 func _setup_scene(preset: CharacterPreset) -> void:
 	if not preset:
@@ -174,6 +184,15 @@ func _setup_scene(preset: CharacterPreset) -> void:
 	character.set_muzzle_flash_preview(muzzle_preview_toggle.button_pressed)
 
 	character.position = Vector3(0, 0, 0)
+
+	# LeanModifier参照を取得
+	_lean_modifier_ref = null
+	var skel := _find_skeleton(model)
+	if skel:
+		for child in skel.get_children():
+			if child is LeanModifier:
+				_lean_modifier_ref = child
+				break
 
 	# アニメーション適用後にSkeleton3Dオフセットを補正
 	await get_tree().process_frame
@@ -299,6 +318,12 @@ func _setup_ui() -> void:
 	grip_z_slider.value_changed.connect(func(v): grip_z_spin.value = v; _update_grip_position())
 	grip_z_spin.value_changed.connect(func(v): grip_z_slider.value = v; _update_grip_position())
 	grip_toggle.toggled.connect(_on_grip_toggle)
+
+	# Connect signals for Lean
+	lean_angle_slider.value_changed.connect(func(v): lean_angle_spin.value = v)
+	lean_angle_spin.value_changed.connect(func(v): lean_angle_slider.value = v)
+	lean_speed_slider.value_changed.connect(func(v): lean_speed_spin.value = v)
+	lean_speed_spin.value_changed.connect(func(v): lean_speed_slider.value = v)
 
 func _select_character(idx: int) -> void:
 	if idx < 0 or idx >= characters.size():
@@ -470,7 +495,7 @@ func _setup_camera_buttons() -> void:
 	vbox.add_child(preset_sep)
 	_preset_label = Label.new()
 	_preset_label.text = "Preset: -"
-	_preset_label.add_theme_font_size_override("font_size", 11)
+	_preset_label.add_theme_font_size_override("font_size", 9)
 	_preset_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(_preset_label)
 
@@ -648,6 +673,17 @@ func _debug_print_tree_positions(node: Node, depth: int) -> void:
 	for child in node.get_children():
 		if depth < 3:
 			_debug_print_tree_positions(child, depth + 1)
+
+
+## 両パネルをScrollContainerで包んでスクロール可能にする
+func _wrap_panels_in_scroll() -> void:
+	for panel: PanelContainer in [$UI/PanelLeft, $UI/Panel]:
+		var vbox := panel.get_child(0)
+		panel.remove_child(vbox)
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		panel.add_child(scroll)
+		scroll.add_child(vbox)
 
 
 func _find_skeleton(node: Node) -> Skeleton3D:
