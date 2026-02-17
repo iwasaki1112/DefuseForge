@@ -222,6 +222,9 @@ func _spawn_characters() -> void:
 			_mode_provider.register_character(game_manager, character, _network_id_counter)
 			_network_id_counter += 1
 			_player_character = character
+			# プライマリキャラクターとして選択（IdleManagerのスキップ対象にする）
+			if game_manager.selection_manager:
+				game_manager.selection_manager.add_to_selection(character)
 
 	# T: 全敵スポーン（ares preset）
 	var ares_preset = CharacterRegistry.get_preset("ares")
@@ -245,6 +248,11 @@ func _spawn_characters() -> void:
 	# IdleManagerにキャラクターリストを更新
 	if game_manager.idle_manager:
 		game_manager.idle_manager.set_characters(game_manager.characters)
+
+	# トレーニングモードでCPU徘徊を有効化
+	if _mode_provider.get_mode_name() == "training":
+		if game_manager.idle_manager:
+			game_manager.idle_manager.wandering_enabled = true
 
 
 ## マッププリセットから人質をスポーン
@@ -340,6 +348,9 @@ func _find_local_player_character() -> void:
 	var my_characters := game_manager.find_characters_by_owner(local_peer_id)
 	if my_characters.size() > 0:
 		_player_character = my_characters[0]
+		# プライマリキャラクターとして選択（IdleManagerのスキップ対象にする）
+		if game_manager.selection_manager:
+			game_manager.selection_manager.add_to_selection(_player_character)
 	else:
 		push_warning("[GameScreen] No characters found for local peer %d" % local_peer_id)
 
