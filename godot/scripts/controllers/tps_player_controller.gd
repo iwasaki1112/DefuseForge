@@ -27,7 +27,9 @@ var enable_aim_stick := true
 # ============================================
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
+const CAMERA_ZOOM_SMOOTH := 4.0
 const GROUND_Y := 0.0
+const DEFAULT_VISION_RANGE := 7.0
 
 # Move stick (left)
 const STICK_RADIUS := 80.0
@@ -69,6 +71,10 @@ var _is_aim_stick_active: bool = false
 var _facing_locked: bool = false
 var _locked_facing: Vector3 = Vector3.FORWARD
 
+# カメラズーム（武器視界距離連動）
+var _base_camera_height: float = 24.0
+var _target_camera_height: float = 24.0
+
 # マウス操作検知（PCのみ有効、モバイルではfalseのまま）
 var _mouse_active: bool = false
 
@@ -88,6 +94,8 @@ func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer, config:
 	_character = character
 	_camera = cam
 	_ui_layer = canvas
+	_base_camera_height = camera_height
+	_target_camera_height = camera_height
 
 	# カメラをTPS用に設定
 	if _camera:
@@ -117,8 +125,8 @@ func process(delta: float) -> void:
 		_character.combat_awareness.process(delta)
 	# フェーズ2: エイム更新（検知結果で向きを即座に設定）
 	_handle_aim(delta)
-	# フェーズ3: 射撃判定（右スティック操作中は自動射撃を一時停止）
-	if _character.combat_awareness and not _is_aim_stick_active:
+	# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
+	if _character.combat_awareness:
 		_character.combat_awareness.process_firing(delta)
 	_handle_movement(delta)
 	_update_camera(delta)
@@ -161,6 +169,12 @@ func has_move_input() -> bool:
 	if Input.get_action_strength("move_right") > 0.0:
 		return true
 	return false
+
+
+## 武器の視界距離に合わせてカメラ高さを更新する
+func update_camera_for_weapon(vision_range: float) -> void:
+	_target_camera_height = _base_camera_height * pow(vision_range / DEFAULT_VISION_RANGE, 1.2)
+	print("[TPS] update_camera_for_weapon: vision=%.1f base=%.1f target=%.1f current=%.1f" % [vision_range, _base_camera_height, _target_camera_height, camera_height])
 
 
 ## 操作対象のキャラクターを返す
@@ -259,6 +273,8 @@ func _handle_aim(_delta: float) -> void:
 func _update_camera(delta: float) -> void:
 	if not _character or not _camera:
 		return
+	# カメラ高さを目標値に向けて滑らかに遷移
+	camera_height = lerpf(camera_height, _target_camera_height, CAMERA_ZOOM_SMOOTH * delta)
 	var pitch_rad := deg_to_rad(camera_pitch_deg)
 	var offset_z := camera_height / tan(-pitch_rad)
 	var target := _character.global_position + Vector3(0, camera_height, offset_z)

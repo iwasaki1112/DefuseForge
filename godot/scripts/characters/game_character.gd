@@ -16,6 +16,7 @@ enum Team { NONE = 0, COUNTER_TERRORIST = 1, TERRORIST = 2 }
 # ============================================
 signal died(character: GameCharacter)
 signal state_changed(character: GameCharacter)  ## マルチプレイヤー用：状態変更通知
+signal weapon_changed(weapon: WeaponPreset)
 
 # ============================================
 # Export Settings
@@ -440,6 +441,8 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 	# 武器の視界距離をVisionComponentに適用
 	if vision and weapon:
 		vision.set_view_distance(weapon.vision_range)
+
+	weapon_changed.emit(weapon)
 
 ## Get current weapon
 func get_current_weapon() -> WeaponPreset:

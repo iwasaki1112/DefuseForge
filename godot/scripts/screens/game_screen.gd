@@ -364,6 +364,9 @@ func _setup_tps_controller() -> void:
 	add_child(_tps_controller)
 	_tps_controller.setup(_player_character, camera, ui_layer)
 
+	# 武器変更シグナル接続（初期装備のcall_deferred対応 + 武器切替時）
+	_player_character.weapon_changed.connect(_on_weapon_changed)
+
 	# グレネード投擲シグナル接続
 	if _player_character.anim_ctrl:
 		_player_character.anim_ctrl.throw_release.connect(_on_throw_release)
@@ -684,6 +687,11 @@ func _on_weapon_selected(idx: int) -> void:
 		return
 	var weapon: WeaponPreset = _weapon_list[idx]
 	_player_character.equip_weapon(weapon)
+
+
+func _on_weapon_changed(weapon: WeaponPreset) -> void:
+	if _tps_controller and weapon:
+		_tps_controller.update_camera_for_weapon(weapon.vision_range)
 
 
 func _on_grenade_btn_pressed() -> void:
