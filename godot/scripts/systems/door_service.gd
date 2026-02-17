@@ -12,6 +12,12 @@ signal door_open_network_event(door_id: int, character_network_id: int)
 ## ドア開閉完了シグナル
 signal door_opened(door: Node3D, character: Node)
 
+## ドアスイープテスト定数
+const _SWEEP_STEP_DEG := 10.0  ## スイープの角度ステップ（度）
+const _SWEEP_MARGIN_DEG := 3.0  ## 衝突マージン（度）
+const _DOOR_PANEL_SIZE := Vector3(1.0, 2.0, 0.154)  ## ドアパネルのコリジョンサイズ
+const _DOOR_PANEL_CENTER := Vector3(0.5, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
+
 ## ドアID管理（マルチプレイヤー同期用）
 var _next_door_id: int = 1
 var _door_id_map: Dictionary[Node3D, int] = {}  ## door_node -> door_id
@@ -128,6 +134,11 @@ func open_door(door: Node3D, character: CharacterBody3D) -> void:
 	# side_dot < 0: キャラクターは壁の-Z側 → -Y回転（パネルが+Z方向へ）
 	var rotation_amount := 170.0 if side_dot > 0 else -170.0
 
+	# 壁との衝突を考慮して最大開角度を制限
+	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
+	if is_zero_approx(rotation_amount):
+		return  # 完全にブロックされている
+
 	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
 	# 開く方向と逆側（キャラクターから遠い側）にずらす
 	var shift_dir := door_normal * (-1.0 if side_dot > 0 else 1.0)
@@ -197,6 +208,11 @@ func open_door_quietly(door: Node3D, character: CharacterBody3D) -> void:
 
 	# ドアはキャラクターから離れる方向に開く（160°で大きく開放）
 	var rotation_amount := 160.0 if side_dot > 0 else -160.0
+
+	# 壁との衝突を考慮して最大開角度を制限
+	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
+	if is_zero_approx(rotation_amount):
+		return  # 完全にブロックされている
 
 	# ヒンジを壁法線方向にシフト（パネルの壁フレームめり込み防止）
 	# 開く方向と逆側（キャラクターから遠い側）にずらす
@@ -294,3 +310,63 @@ func get_registered_door_count() -> int:
 ## ドアが開いているか確認
 func is_door_open(door: Node3D) -> bool:
 	return door.is_in_group("open_doors")
+
+
+## ドアが壁と衝突せずに開ける最大角度を計算（スイープテスト）
+## 10°刻みでドアパネルのコリジョンを回転させ、壁との衝突を検出
+func _calculate_max_opening_angle(door: Node3D, target_angle: float) -> float:
+	var space_state := door.get_world_3d().direct_space_state
+	if not space_state:
+		return target_angle
+
+	var exclude_rids: Array[RID] = _collect_door_exclude_rids(door)
+
+	var test_shape := BoxShape3D.new()
+	test_shape.size = _DOOR_PANEL_SIZE
+
+	var angle_sign := signf(target_angle)
+	var abs_target := absf(target_angle)
+
+	var angle := _SWEEP_STEP_DEG
+	while angle <= abs_target:
+		var test_rad := deg_to_rad(angle * angle_sign)
+		var rotated_basis := door.global_transform.basis * Basis(Vector3.UP, test_rad)
+		var panel_center_world := door.global_position + rotated_basis * _DOOR_PANEL_CENTER
+
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = test_shape
+		query.transform = Transform3D(rotated_basis, panel_center_world)
+		query.collision_mask = MapBase.WALL_COLLISION_LAYER
+		query.exclude = exclude_rids
+
+		var results := space_state.intersect_shape(query, 1)
+		if results.size() > 0:
+			# 衝突検出 — 前のステップの角度からマージンを引いた値を返す
+			var safe_angle := angle - _SWEEP_STEP_DEG - _SWEEP_MARGIN_DEG
+			if safe_angle <= 0.0:
+				return 0.0
+			return safe_angle * angle_sign
+
+		angle += _SWEEP_STEP_DEG
+
+	return target_angle
+
+
+## ドアの除外RIDを収集（パネル自身のコリジョン＋ドアフレーム）
+func _collect_door_exclude_rids(door: Node3D) -> Array[RID]:
+	var rids: Array[RID] = []
+
+	# ドアパネル自身のコリジョンボディ（PanelCollision）
+	for child in door.get_children():
+		if child is StaticBody3D:
+			rids.append(child.get_rid())
+
+	# ドアフレームのコリジョンボディ（同じGridMap内の近隣door系StaticBody3D）
+	var parent := door.get_parent()
+	if parent:
+		for sibling in parent.get_children():
+			if sibling is StaticBody3D and "door" in sibling.name.to_lower():
+				if sibling.global_position.distance_to(door.global_position) < 3.0:
+					rids.append(sibling.get_rid())
+
+	return rids

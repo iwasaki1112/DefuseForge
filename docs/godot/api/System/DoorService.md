@@ -53,7 +53,7 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 ドアキックインパクト時の処理。ローカルキャラクターのキックならネットワークイベントを送信し、ドアを開く。
 
 ### open_door(door: Node3D, character: CharacterBody3D) -> void
-ドアを開く処理（ローカル・リモート共通）。キャラクター位置からドアの開く方向を自動判定し、Tweenアニメーションで回転させる。
+ドアを開く処理（ローカル・リモート共通）。キャラクター位置からドアの開く方向を自動判定し、Tweenアニメーションで回転させる。開く前に壁との衝突スイープテストを行い、最大開角度を自動制限する。
 
 ### apply_door_kick_from_network(door_id: int, character_network_id: int) -> void
 ネットワークからのドアキックイベントを適用する（リモート側用）。
@@ -62,7 +62,7 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 ドア開けインパクト時の処理。ローカルキャラクターの開けならネットワークイベントを送信し、ドアを静かに開く。
 
 ### open_door_quietly(door: Node3D, character: CharacterBody3D) -> void
-ドアを静かに開く処理。キックと異なり、90°回転・0.8秒・EASE_IN_OUTで穏やかに開く。
+ドアを静かに開く処理。キックと異なり、160°回転・0.8秒・EASE_IN_OUTで穏やかに開く。開く前に壁との衝突スイープテストを行い、最大開角度を自動制限する。
 
 ### apply_door_open_from_network(door_id: int, character_network_id: int) -> void
 ネットワークからのドア開けイベントを適用する（リモート側用）。
