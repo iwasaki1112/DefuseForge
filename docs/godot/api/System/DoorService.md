@@ -137,7 +137,28 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 
 ### 内部メソッド（チーム別可視性システム）
 - `_calculate_door_open_params(door, character, is_kick) -> Dictionary` — 回転量・ヒンジシフトを計算
-- `_execute_door_open(door, params) -> void` — Tweenアニメーション実行
+- `_execute_door_open(door, params, instant) -> void` — Tweenアニメーション実行（instant=trueで即座に開く）
 - `_defer_enemy_door_open(door, params) -> void` — バッファに保留
 - `_reveal_deferred_door(door) -> void` — バッファから取り出してTween実行＋シグナル発火
 - `_process(delta) -> void` — バッファのドアをFoW可視性チェック（~4Hz）
+- `_is_door_visible_to_local_team(door) -> bool` — FoWチェック + Raycast LOSチェック
+- `_can_character_see_door(character, door, panel_center) -> bool` — 距離 + 視野角 + LOS raycast判定
+- `_calculate_max_opening_angle(door, target_angle) -> float` — スイープテストで壁衝突しない最大角度を算出
+- `_collect_door_exclude_rids(door) -> Array[RID]` — スイープテスト除外RID収集
+
+### 内部メソッド詳細
+
+#### `_calculate_max_opening_angle()`
+ドアが壁と衝突せずに開ける最大角度をスイープテストで算出する。
+
+- `_SWEEP_STEP_DEG`（10°）刻みでドアパネルのBoxShape3D（`_DOOR_PANEL_SIZE`: 1.0x2.0x0.154m）を回転
+- 各角度で `PhysicsShapeQueryParameters3D` を使い壁レイヤーとの `intersect_shape` 衝突検出
+- 衝突検出時は前のステップ角度から `_SWEEP_MARGIN_DEG`（3°）を引いた安全角度を返す
+- ドアパネル自身とドアフレーム（近隣3m以内のdoor系StaticBody3D）は除外
+
+#### `_can_character_see_door()`
+キャラクターがドアを視認できるか3段階で判定する。
+
+1. **近距離チェック**: `_DOOR_VIS_NEAR_DISTANCE`（1.5m）以内なら方向不問で可視
+2. **視野角チェック**: キャラクターの`fov_degrees / 2` + `_DOOR_VIS_FOV_MARGIN_DEG`（10°）以内か
+3. **LOS raycast**: 眼の高さから壁レイヤーのみチェック。ヒットがドア自身なら可視扱い
