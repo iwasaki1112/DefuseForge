@@ -450,7 +450,7 @@ func _on_door_kick_impact() -> void:
 
 
 func _on_door_kick_finished(_anim_name: String) -> void:
-	_is_door_kicking = false
+	# _is_door_kicking は _resume_animation_tree で解除（早期解除すると update_animation が割り込む）
 
 	# スムーズにアイドルへ遷移してからAnimationTreeを再開
 	if _anim_player and not _is_dead:
@@ -460,12 +460,25 @@ func _on_door_kick_finished(_anim_name: String) -> void:
 			_anim_player.play(idle_anim_name, crossfade_time)
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+		else:
+			_is_door_kicking = false
+	else:
+		_is_door_kicking = false
 
 
 
 ## ドアキック後のAnimationTree再開
 func _resume_animation_tree() -> void:
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door and not _is_talking:
+	# アクション完了フラグを解除
+	_is_door_kicking = false
+	_is_opening_door = false
+
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking:
+		# ブレンドパラメータをアイドル状態にリセット（古い移動状態でのピクつき防止）
+		_movement_blend = 0.0
+		_speed_blend = 0.0
+		_anim_tree.set("parameters/IdleBlend/blend_amount", 0.0)
+		_anim_tree.set("parameters/SpeedBlend/blend_amount", 0.0)
 		_anim_tree.active = true
 		# 左手IKを武器に応じて再有効化
 		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
@@ -599,7 +612,7 @@ func play_door_open() -> void:
 
 
 func _on_door_open_finished(_anim_name: String) -> void:
-	_is_opening_door = false
+	# _is_opening_door は _resume_animation_tree で解除（早期解除すると update_animation が割り込む）
 
 	if _anim_player and not _is_dead:
 		var idle_anim_name := _get_idle_anim_name()
@@ -608,6 +621,10 @@ func _on_door_open_finished(_anim_name: String) -> void:
 			_anim_player.play(idle_anim_name, crossfade_time)
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+		else:
+			_is_opening_door = false
+	else:
+		_is_opening_door = false
 
 	door_open_finished.emit()
 
