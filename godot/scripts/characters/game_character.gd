@@ -82,6 +82,7 @@ var _weapon_model: Node3D = null  # 現在の武器モデル
 var muzzle_flash: MuzzleFlashComponent = null  # マズルフラッシュコンポーネント
 var bullet_trail: BulletTrailComponent = null  # 弾道表示コンポーネント
 var shell_ejection: ShellEjectionComponent = null  # 薬莢排出コンポーネント
+var blood_effect: BloodEffectComponent = null  # 血しぶきエフェクトコンポーネント
 
 # ============================================
 # Lifecycle
@@ -115,6 +116,9 @@ func _setup_effect_components() -> void:
 	if shell_ejection == null:
 		shell_ejection = ShellEjectionComponent.new()
 		shell_ejection.setup(self, _weapon_socket)
+	if blood_effect == null:
+		blood_effect = BloodEffectComponent.new()
+		blood_effect.setup(self)
 
 # ============================================
 # HP API
@@ -128,6 +132,10 @@ func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = fal
 		return
 
 	current_health = max(0.0, current_health - amount)
+
+	# 血しぶきエフェクト
+	if blood_effect:
+		blood_effect.play()
 
 	if current_health <= 0.0:
 		_die(attacker, is_headshot)

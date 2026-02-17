@@ -45,10 +45,10 @@ data = {
 }
 
 [node name="spawn_ct_0" type="Marker3D" parent="." unique_id=2014919147]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8.122126, 0, 0.62189555)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -6.3895893, 0, 0.62189555)
 
 [node name="spawn_ct_1" type="Marker3D" parent="." unique_id=1701572218]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8.083605, 0, 2)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -6.42811, 0, 2)
 
 [node name="spawn_t_0" type="Marker3D" parent="." unique_id=1937403318]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.73781, 0, 8.24511)
