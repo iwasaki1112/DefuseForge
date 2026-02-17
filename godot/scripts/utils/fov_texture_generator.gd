@@ -3,8 +3,9 @@ extends RefCounted
 ## FOV（視野角）コーンテクスチャを動的生成するユーティリティ
 ## Light2D用の扇形グラデーションテクスチャを作成
 
-## デフォルトテクスチャサイズ
-const DEFAULT_SIZE: int = 256
+## デフォルトテクスチャサイズ（コーンエッジの滑らかさに影響）
+## ビューポート解像度とは独立。キャッシュされるため1回限りのCPUコスト
+const DEFAULT_SIZE: int = 1024
 
 ## テクスチャキャッシュ（FOV角度 -> ImageTexture）
 static var _texture_cache: Dictionary[String, ImageTexture] = {}
@@ -42,8 +43,8 @@ static func generate_fov_texture(fov_degrees: float, size: int = DEFAULT_SIZE, f
 			# 扇形の範囲内かつ距離内
 			if falloff >= 0.7:
 				# シャープエッジモード: アンチエイリアス付き
-				# ピクセル単位のアンチエイリアス幅
-				var aa_width := 1.5 / max_dist
+				# ピクセル単位のアンチエイリアス幅（大きいほど滑らかな縁）
+				var aa_width := 4.0 / max_dist
 
 				# 距離エッジのアンチエイリアス
 				var dist_aa := 1.0 - smoothstep(1.0 - aa_width, 1.0, dist)

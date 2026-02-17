@@ -250,11 +250,13 @@ func _update_fov_texture() -> void:
 	if not _light:
 		return
 
-	# FOVに応じたテクスチャを生成（falloffでエッジの鮮明度を調整）
+	# FOVテクスチャはビューポート解像度と独立して高解像度で生成
+	# コーンエッジの滑らかさに直接影響するが、キャッシュされるため初回のみのコスト
+	var fov_tex_size := FovTextureGenerator.DEFAULT_SIZE
 	if fov_degrees >= 359.0:
-		_fov_texture = FovTextureGenerator.generate_circular_texture(_texture_resolution, FOV_EDGE_FALLOFF)
+		_fov_texture = FovTextureGenerator.generate_circular_texture(fov_tex_size, FOV_EDGE_FALLOFF)
 	else:
-		_fov_texture = FovTextureGenerator.generate_fov_texture(fov_degrees, _texture_resolution, FOV_EDGE_FALLOFF)
+		_fov_texture = FovTextureGenerator.generate_fov_texture(fov_degrees, fov_tex_size, FOV_EDGE_FALLOFF)
 
 	_light.texture = _fov_texture
 	_update_light_scale()
@@ -265,7 +267,7 @@ func _update_peripheral_texture() -> void:
 		return
 
 	# 周辺視界は均一な明るさの円形テクスチャ（確実に検出されるため）
-	_peripheral_texture = FovTextureGenerator.generate_peripheral_texture(_texture_resolution)
+	_peripheral_texture = FovTextureGenerator.generate_peripheral_texture(FovTextureGenerator.DEFAULT_SIZE)
 	_peripheral_light.texture = _peripheral_texture
 
 

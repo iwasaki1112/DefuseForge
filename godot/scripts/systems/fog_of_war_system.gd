@@ -141,9 +141,9 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("map_min", map_min)
 	_fog_material.set_shader_parameter("map_max", map_max)
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
-	# デバッグ: blur無効、edge_softnessを広げて可視化しやすく
-	_fog_material.set_shader_parameter("blur_radius", 0.0)
-	_fog_material.set_shader_parameter("edge_softness", 0.4)  # 0.1〜0.9が可視範囲
+	# コーンエッジの滑らかさ: blur_radiusはテクセル単位のブラー半径
+	_fog_material.set_shader_parameter("blur_radius", 3.0)
+	_fog_material.set_shader_parameter("edge_softness", 0.4)
 
 	# OpenGL (Compatibility) は depth [0,1] → NDC [-1,1] リマップが必要
 	# Vulkan (Forward+/Mobile) は depth [0,1] がそのまま NDC

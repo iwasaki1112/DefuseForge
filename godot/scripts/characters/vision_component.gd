@@ -13,7 +13,7 @@ signal vision_updated(visible_points: PackedVector3Array)
 @export_group("Vision Settings")
 @export var fov_degrees: float = 75.0  ## Field of view in degrees
 @export var view_distance: float = 7.0  ## Vision distance in meters
-@export var peripheral_distance: float = 0.5  ## Peripheral vision distance (360 degrees, must be > collider radius=0.35)
+@export var peripheral_distance: float = 0.3  ## Peripheral vision distance (360 degrees)
 @export var eye_height: float = 1.5  ## Eye height from ground
 
 @export_group("Collision Settings")

@@ -40,23 +40,35 @@ void fragment() {
 
 	float visibility = 0.0;
 	if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
-		// Floor: single sample (sharp boundary)
-		float v_floor = texture(visibility_texture, uv).r;
+		float px = blur_radius / texture_size;
+
+		// Floor: 9-point weighted blur for smooth cone edges
+		// Center (weight 4) + cross (weight 2 each) + diagonals (weight 1 each) = 16
+		float v_floor = texture(visibility_texture, uv).r * 4.0;
+		v_floor += texture(visibility_texture, uv + vec2(px, 0.0)).r * 2.0;
+		v_floor += texture(visibility_texture, uv - vec2(px, 0.0)).r * 2.0;
+		v_floor += texture(visibility_texture, uv + vec2(0.0, px)).r * 2.0;
+		v_floor += texture(visibility_texture, uv - vec2(0.0, px)).r * 2.0;
+		v_floor += texture(visibility_texture, uv + vec2(px, px)).r;
+		v_floor += texture(visibility_texture, uv + vec2(-px, px)).r;
+		v_floor += texture(visibility_texture, uv + vec2(px, -px)).r;
+		v_floor += texture(visibility_texture, uv + vec2(-px, -px)).r;
+		v_floor /= 16.0;
 
 		// Wall: 5-point max sample (occluder blocks light at wall position)
-		float px = 2.0 / texture_size;
-		float v_wall = max(v_floor, texture(visibility_texture, uv + vec2(px, 0.0)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(px, 0.0)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv + vec2(0.0, px)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(0.0, px)).r);
+		float wpx = 2.0 / texture_size;
+		float v_wall = max(v_floor, texture(visibility_texture, uv + vec2(wpx, 0.0)).r);
+		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(wpx, 0.0)).r);
+		v_wall = max(v_wall, texture(visibility_texture, uv + vec2(0.0, wpx)).r);
+		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(0.0, wpx)).r);
 
-		// Blend: floor (Y≈0) single, wall (Y>0.15) max
+		// Blend: floor (Y≈0) blurred, wall (Y>0.15) max
 		float wall_blend = smoothstep(0.05, 0.15, surface_y);
 		visibility = mix(v_floor, v_wall, wall_blend);
 		visibility = min(visibility, 1.0);
 		// Wall top face (Y≥2.0): always fog
 		visibility *= 1.0 - smoothstep(1.9, 1.95, surface_y);
-		visibility = smoothstep(0.1, 0.3, visibility);
+		visibility = smoothstep(0.05, 0.4, visibility);
 	}
 
 	ALBEDO = fog_color.rgb;
