@@ -105,7 +105,7 @@ const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50
 
 # Far throw animation (weapon-dependent)
 const RIFLE_THROW_FAR_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_FAR
-const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING  # Pistolはfar専用がないためSingle使用
+const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_GRENADE_THROW_FAR
 const THROW_FAR_RELEASE_TIME := 0.433  # キー13 / 30fps
 
 # Close throw animation (weapon-dependent)
