@@ -115,6 +115,7 @@ const THROW_CLOSE_RELEASE_TIME := 0.333  # キー10 / 30fps
 
 # Door open animation
 const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
+const PISTOL_OPEN_DOOR_ANIM := GameConstants.ANIM_PISTOL_OPEN_DOOR
 const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミング（15フレーム目 @30fps）
 
 # Blend values
@@ -577,14 +578,21 @@ func play_door_open() -> void:
 	if _anim_tree:
 		_anim_tree.active = false
 
-	if _anim_player.has_animation(RIFLE_OPEN_DOOR_ANIM):
-		_anim_player.play(RIFLE_OPEN_DOOR_ANIM, 0.15)
+	var anim_name: String
+	match _weapon:
+		Weapon.PISTOL:
+			anim_name = PISTOL_OPEN_DOOR_ANIM
+		_:
+			anim_name = RIFLE_OPEN_DOOR_ANIM
+
+	if _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name, 0.15)
 		_anim_player.animation_finished.connect(_on_door_open_finished, CONNECT_ONE_SHOT)
 		# インパクトタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(DOOR_OPEN_IMPACT_TIME).timeout.connect(
 			func(): door_open_impact.emit(), CONNECT_ONE_SHOT)
 	else:
-		push_warning("CharacterAnimationController: Door open animation not found: %s" % RIFLE_OPEN_DOOR_ANIM)
+		push_warning("CharacterAnimationController: Door open animation not found: %s" % anim_name)
 		_is_opening_door = false
 		if _anim_tree:
 			_anim_tree.active = true

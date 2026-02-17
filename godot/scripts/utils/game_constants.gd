@@ -69,7 +69,8 @@ const ANIM_PISTOL_LOW_THROWING := "game_pistol_grenade_throw_single"
 const ANIM_PISTOL_GRENADE_THROW_CLOSE := "game_pistol_grenade_throw_close"
 const ANIM_RIFLE_GRENADE_THROW_FAR := "game_rifle_grenade_throw_far"
 const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
-const ANIM_RIFLE_OPEN_DOOR := "game_open_door"
+const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
+const ANIM_PISTOL_OPEN_DOOR := "game_pistol_open_door"
 const ANIM_TALKING := "game_rifle_talking"
 
 # ========================================================
