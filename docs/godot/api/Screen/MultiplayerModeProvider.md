@@ -7,6 +7,7 @@ Multiplayerモード用のプロバイダー。ネットワーク関連の処理
 | 項目 | 値 |
 |------|-----|
 | 継承 | GameModeProvider |
+| クラス名 | MultiplayerModeProvider |
 | パス | `scripts/screens/multiplayer_mode_provider.gd` |
 
 ## 概要
@@ -14,8 +15,8 @@ Multiplayerモード用のプロバイダー。ネットワーク関連の処理
 MultiplayerModeProviderはネットワーク同期に必要なすべての処理を担当します：
 
 - NetworkManagerとSyncControllerの保持
-- ネットワークイベントのハンドリング
-- グレネードの同期
+- ネットワークイベントのハンドリング（ドアキック/開け、グレネード、ダメージ）
+- キャラクタースポーン（peer_idソートで確定的network_id割り当て）
 - ピア切断の処理
 
 ## プロパティ
@@ -46,6 +47,38 @@ func initialize(game_screen: Node, game_manager: GameManager) -> void
 
 プロバイダーを初期化し、SyncControllerのセットアップとネットワークイベントの接続を行います。
 
+### determine_player_team
+
+```gdscript
+func determine_player_team() -> void
+```
+
+ネットワーク情報からプレイヤーのチームを決定します。`network_manager.get_players()` から自身のpeer_idに対応するteam情報を取得し、`PlayerState.set_player_team()` で設定します。
+
+### spawn_characters
+
+```gdscript
+func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool
+```
+
+マルチプレイヤー用キャラクタースポーン。peer_idでソートして確定的な順序でスポーンし、ホストとクライアントで同じnetwork_idを割り当てます。CT側は`alpha`プリセット、T側は`ares`プリセットを使用。
+
+### register_character
+
+```gdscript
+func register_character(game_manager: GameManager, character: GameCharacter, network_id: int) -> void
+```
+
+キャラクターをネットワーク対応で登録します。チームに対応するowner peer_idを自動取得して `register_character_with_network()` を呼び出します。
+
+### send_animation_event
+
+```gdscript
+func send_animation_event(character_id: int, anim_event: int, extra_data: Dictionary = {}) -> void
+```
+
+アニメーションイベントをネットワークに送信します。SyncControllerに委譲。
+
 ### is_host
 
 ```gdscript
@@ -70,6 +103,30 @@ func get_character_owner_id(team: int) -> int
 
 指定チームのキャラクターを所有するピアIDを返します。
 
+### can_start_round
+
+```gdscript
+func can_start_round() -> bool
+```
+
+ホストのみ `true` を返します。
+
+### on_round_ended
+
+```gdscript
+func on_round_ended(_winner: int, _reason: int) -> void
+```
+
+ラウンド終了時、ホストのみ `sync_controller.send_round_state()` を呼び出します。
+
+### cleanup
+
+```gdscript
+func cleanup() -> void
+```
+
+シグナル切断とWebSocket切断を実行します。GameScreen終了時に呼ばれます。
+
 ## ネットワークイベント
 
 ### _on_peer_disconnected
@@ -79,6 +136,14 @@ func _on_peer_disconnected(peer_id: int) -> void
 ```
 
 ピア切断時に呼ばれます。
+
+### _on_network_message
+
+```gdscript
+func _on_network_message(_from_peer: int, _msg_type: int, _data: Dictionary) -> void
+```
+
+ネットワークメッセージ受信時に呼ばれます。sync_controllerが処理。
 
 ### _on_grenade_network_event
 
@@ -96,6 +161,30 @@ func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: 
 
 グレネード爆発をネットワークに送信します。
 
+### _on_door_kick_network_event
+
+```gdscript
+func _on_door_kick_network_event(door_id: int, character_network_id: int) -> void
+```
+
+ドアキックイベントをネットワークに送信します。
+
+### _on_door_open_network_event
+
+```gdscript
+func _on_door_open_network_event(door_id: int, character_network_id: int) -> void
+```
+
+ドア開けイベント（静か）をネットワークに送信します。
+
+### _on_damage_network_event
+
+```gdscript
+func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool) -> void
+```
+
+ダメージイベントをネットワークに送信します。
+
 ## 人質スポーン
 
 人質のスポーンはMultiplayerModeProviderではなく、GameScreen側で共通処理として行われます。
@@ -103,12 +192,6 @@ func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: 
 GameScreenの`_spawn_hostages()`がマッププリセットに基づいて人質を配置します。
 
 人質はネットワーク同期の対象外で、各クライアントがローカルに同一の位置にスポーンします。
-
-## 同期処理
-
-### on_round_ended
-
-ラウンド終了時、ホストのみ`sync_controller.send_round_state()`を呼び出します。
 
 ## 使用例
 
@@ -141,7 +224,10 @@ initialize(game_screen, game_manager)
           ├── peer_disconnected接続
           ├── message_received接続
           ├── grenade_network_event接続
-          └── grenade_explode_network_event接続
+          ├── grenade_explode_network_event接続
+          ├── door_kick_network_event接続
+          ├── door_open_network_event接続
+          └── damage_network_event接続
 ```
 
 ## 関連クラス
