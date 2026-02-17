@@ -796,7 +796,7 @@ func _setup_grenade_indicator() -> void:
 	var plane_mesh := PlaneMesh.new()
 	plane_mesh.size = fow_map_size
 	_grenade_mesh.mesh = plane_mesh
-	_grenade_mesh.position.y = fow.fog_height + 0.01
+	_grenade_mesh.position.y = 0.03  # 地面レベル固定（fog_heightとの連動を解除）
 
 	var shader: Shader = load("res://shaders/grenade_range.gdshader")
 	_grenade_mat = ShaderMaterial.new()

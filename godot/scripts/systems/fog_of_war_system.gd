@@ -35,7 +35,7 @@ static var QUALITY_SETTINGS := {
 @export_group("Map Settings")
 @export var map_size: Vector2 = Vector2(40, 40)
 @export var map_center: Vector2 = Vector2.ZERO  ## マップ中心のワールドXZ座標
-@export var fog_height: float = 0.02
+@export var fog_height: float = 2.5  ## 壁高さ(2.0m)より上に配置し、カメラからFoWが壁を覆うようにする
 
 @export_group("Visual Settings")
 @export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.3)
@@ -145,13 +145,21 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("blur_radius", 0.0)
 	_fog_material.set_shader_parameter("edge_softness", 0.4)  # 0.1〜0.9が可視範囲
 
+	# OpenGL (Compatibility) は depth [0,1] → NDC [-1,1] リマップが必要
+	# Vulkan (Forward+/Mobile) は depth [0,1] がそのまま NDC
+	var is_gl := RenderingServer.get_rendering_device() == null
+	_fog_material.set_shader_parameter("depth_gl_remap", is_gl)
+	if Debug.enabled: print("[FOW] depth_gl_remap: ", is_gl)
+
+	_fog_material.render_priority = 100  # 透明オブジェクト描画順の保証
 	_fog_mesh.material_override = _fog_material
+	_fog_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_fog_mesh)
-	# グローバル位置は親がシーンツリーに追加された後でないと取得できない
-	_fog_mesh.ready.connect(func():
-		if Debug.enabled: print("[FOW] FogMesh global_position: ", _fog_mesh.global_position, ", FoWSystem global_position: ", global_position)
-	)
-	if Debug.enabled: print("[FOW] FogMesh local position: ", _fog_mesh.position, ", size: ", map_size)
+	if Debug.enabled:
+		_fog_mesh.ready.connect(func():
+			print("[FOW] FogMesh global_position: ", _fog_mesh.global_position, ", FoWSystem global_position: ", global_position)
+		)
+		print("[FOW] FogMesh local position: ", _fog_mesh.position, ", size: ", map_size)
 
 
 func _setup_occluder_manager() -> void:
@@ -305,99 +313,6 @@ func unregister_vision(vision) -> void:
 func extract_occluders_from_map(map_node: Node3D) -> void:
 	if _occluder_manager:
 		_occluder_manager.extract_occluders_from_map(map_node)
-	# 壁の明るさ調整は無効（環境光と同じにする）
-	# _boost_wall_brightness(map_node)
-
-
-## 壁メッシュを常に明るく表示（ライティングの影響を受けない）
-func _make_walls_always_lit(map_node: Node3D) -> void:
-	_make_walls_always_lit_recursive(map_node)
-
-
-## 再帰的に壁メッシュを探索してunshadedに設定
-func _make_walls_always_lit_recursive(node: Node) -> void:
-	var node_name_lower := node.name.to_lower()
-	var parent: Node = node.get_parent()
-	var parent_name_lower := parent.name.to_lower() if parent else ""
-
-	# 壁/ドアの判定
-	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
-	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
-
-	if (is_wall or is_door) and node is MeshInstance3D:
-		var mesh_instance := node as MeshInstance3D
-		_set_mesh_unshaded(mesh_instance)
-
-	# 子ノードを再帰的に処理
-	for child in node.get_children():
-		_make_walls_always_lit_recursive(child)
-
-
-## メッシュをunshadedに設定（常に明るく表示）- 現在未使用
-func _set_mesh_unshaded(mesh_instance: MeshInstance3D) -> void:
-	var mesh := mesh_instance.mesh
-	if not mesh:
-		return
-
-	for i in range(mesh.get_surface_count()):
-		var original_mat := mesh_instance.get_surface_override_material(i)
-		if not original_mat:
-			original_mat = mesh.surface_get_material(i)
-
-		# StandardMaterial3Dの場合、unshadedモードに設定
-		if original_mat is StandardMaterial3D:
-			var new_mat := original_mat.duplicate() as StandardMaterial3D
-			new_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			mesh_instance.set_surface_override_material(i, new_mat)
-
-
-## 壁の明るさを底上げ（emissionで自己発光を追加）
-func _boost_wall_brightness(map_node: Node3D) -> void:
-	_boost_wall_brightness_recursive(map_node)
-
-
-## 再帰的に壁メッシュを探索してemissionを追加
-func _boost_wall_brightness_recursive(node: Node) -> void:
-	var node_name_lower := node.name.to_lower()
-	var parent: Node = node.get_parent()
-	var parent_name_lower := parent.name.to_lower() if parent else ""
-
-	# 壁/ドアの判定
-	var is_wall := node_name_lower.begins_with("wall_") or parent_name_lower.begins_with("wall_")
-	var is_door := node_name_lower.begins_with("door_") or parent_name_lower.begins_with("door_")
-
-	if (is_wall or is_door) and node is MeshInstance3D:
-		var mesh_instance := node as MeshInstance3D
-		_add_emission_to_mesh(mesh_instance)
-
-	# 子ノードを再帰的に処理
-	for child in node.get_children():
-		_boost_wall_brightness_recursive(child)
-
-
-## 壁の明るさ調整用の定数
-const WALL_EMISSION_ENERGY := 0.3  # 発光の強さ（0.0〜1.0、調整可能）
-
-
-## メッシュにemissionを追加（通常ライティング＋自己発光で明るく）
-func _add_emission_to_mesh(mesh_instance: MeshInstance3D) -> void:
-	var mesh := mesh_instance.mesh
-	if not mesh:
-		return
-
-	for i in range(mesh.get_surface_count()):
-		var original_mat := mesh_instance.get_surface_override_material(i)
-		if not original_mat:
-			original_mat = mesh.surface_get_material(i)
-
-		# StandardMaterial3Dの場合、emissionを追加
-		if original_mat is StandardMaterial3D:
-			var new_mat := original_mat.duplicate() as StandardMaterial3D
-			# 通常のシェーディングを維持しつつ、emissionで明るさを底上げ
-			new_mat.emission_enabled = true
-			new_mat.emission = new_mat.albedo_color  # 元の色で発光
-			new_mat.emission_energy_multiplier = WALL_EMISSION_ENERGY
-			mesh_instance.set_surface_override_material(i, new_mat)
 
 
 ## ドアオクルーダーの有効/無効を切り替え
