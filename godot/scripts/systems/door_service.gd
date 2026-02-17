@@ -11,6 +11,10 @@ signal door_kick_network_event(door_id: int, character_network_id: int)
 signal door_open_network_event(door_id: int, character_network_id: int)
 ## ドア開閉完了シグナル
 signal door_opened(door: Node3D, character: Node)
+## ドア開放アニメーション開始シグナル（FoWリアルタイム更新用）
+signal door_opening_started(door: Node3D)
+## ドア開放アニメーション完了シグナル（FoWリアルタイム更新用）
+signal door_opening_finished(door: Node3D)
 
 ## ドアスイープテスト定数
 const _SWEEP_STEP_DEG := 10.0  ## スイープの角度ステップ（度）
@@ -330,11 +334,15 @@ func _execute_door_open(door: Node3D, params: Dictionary, instant: bool = false)
 		# 即座に開いた状態にする（保留ドアがFoW可視になった場合）
 		door.global_position += hinge_shift
 		door.rotation_degrees.y += rotation_amount
+		door_opening_finished.emit(door)
 		if _on_vision_update_callback.is_valid():
 			_on_vision_update_callback.call()
 		return
 
 	var is_kick: bool = params["is_kick"]
+
+	# FoWオクルーダーのリアルタイム更新を開始
+	door_opening_started.emit(door)
 
 	# Tween設定（キック: 0.4s BACK, 静かに: 0.8s CUBIC）
 	var duration := 0.4 if is_kick else 0.8
@@ -355,9 +363,12 @@ func _execute_door_open(door: Node3D, params: Dictionary, instant: bool = false)
 		.set_ease(ease_type) \
 		.set_trans(trans_type)
 
-	# ドアが開いた後に視界を強制更新
-	if _on_vision_update_callback.is_valid():
-		tween.chain().tween_callback(_on_vision_update_callback)
+	# ドアが開いた後にFoWオクルーダーアニメーション停止＋視界を強制更新
+	tween.chain().tween_callback(func():
+		door_opening_finished.emit(door)
+		if _on_vision_update_callback.is_valid():
+			_on_vision_update_callback.call()
+	)
 
 
 ## 敵チームのドア開放をバッファに保留（FoW確認まで開かない）

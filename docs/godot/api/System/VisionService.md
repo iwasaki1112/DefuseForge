@@ -44,7 +44,13 @@ SmokeAreaManagerを設定する。EnemyVisibilitySystemにも連携し、スモ�
 マップからFoWオクルーダーを抽出する。FogOfWarSystemに委譲。
 
 ### `set_door_open(door: Node3D, is_open: bool) -> void`
-ドアオクルーダーの有効/無効を切り替える。ドアが開いた場合はオクルーダーを無効化し、FoWの遮蔽を解除する。
+ドアオクルーダーの有効/無効を切り替える。ドアが開いた場合はオクルーダーを無効化し、FoWの遮蔽を解除する。（後方互換用。通常フローでは`start_door_opening`/`finish_door_opening`が使用される）
+
+### `start_door_opening(door: Node3D) -> void`
+ドア開放アニメーション開始時に呼ぶ。FoWオクルーダーをリアルタイム更新モードにし、ドアの回転に追従してポリゴンを毎フレーム再計算する。
+
+### `finish_door_opening(door: Node3D) -> void`
+ドア開放アニメーション完了時に呼ぶ。FoWオクルーダーを非表示にして追跡を終了する。
 
 ### `set_debug_draw(enabled: bool) -> void`
 味方キャラクターの視界デバッグ表示（視界コーン描画）を切り替える。登録済みの全VisionComponentに適用。
@@ -72,5 +78,7 @@ SmokeAreaManagerを設定する。EnemyVisibilitySystemにも連携し、スモ�
 - `set_smoke_area_manager(manager: SmokeAreaManager) -> void`
 - `extract_occluders_from_map(map_node: Node3D) -> void`
 - `set_door_open(door: Node3D, is_open: bool) -> void`
+- `start_door_opening(door: Node3D) -> void`
+- `finish_door_opening(door: Node3D) -> void`
 - `set_debug_draw(enabled: bool) -> void`
 - `is_debug_draw_enabled() -> bool`

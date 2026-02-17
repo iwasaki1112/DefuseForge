@@ -30,6 +30,8 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 | `door_kick_network_event` | `door_id: int, character_network_id: int` | ドアキック時のネットワークイベント |
 | `door_open_network_event` | `door_id: int, character_network_id: int` | ドア開け（静か）時のネットワークイベント |
 | `door_opened` | `door: Node3D, character: Node` | ドア開き処理開始時 |
+| `door_opening_started` | `door: Node3D` | ドア開放アニメーション開始時（FoWリアルタイム更新用） |
+| `door_opening_finished` | `door: Node3D` | ドア開放アニメーション完了時（FoWリアルタイム更新用） |
 
 ## メソッド
 
@@ -115,6 +117,8 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 | `door_kick_network_event` | `door_id: int, character_network_id: int` |
 | `door_open_network_event` | `door_id: int, character_network_id: int` |
 | `door_opened` | `door: Node3D, character: Node` |
+| `door_opening_started` | `door: Node3D` |
+| `door_opening_finished` | `door: Node3D` |
 
 ### メソッド
 - `setup(character_manager: CharacterManagerService) -> void`

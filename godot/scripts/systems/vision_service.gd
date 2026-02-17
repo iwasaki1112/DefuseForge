@@ -116,6 +116,20 @@ func set_door_open(door: Node3D, is_open: bool) -> void:
 		fog_of_war_system.set_door_occluder_enabled(door, not is_open)
 
 
+## ドア開放アニメーション開始（FoWオクルーダーをリアルタイム更新モードに）
+## @param door: 開放するドアノード
+func start_door_opening(door: Node3D) -> void:
+	if fog_of_war_system:
+		fog_of_war_system.start_door_occluder_animation(door)
+
+
+## ドア開放アニメーション完了（FoWオクルーダーを非表示にして追跡終了）
+## @param door: 開放完了したドアノード
+func finish_door_opening(door: Node3D) -> void:
+	if fog_of_war_system:
+		fog_of_war_system.stop_door_occluder_animation(door)
+
+
 ## 味方キャラクターの視界デバッグ表示を切り替え
 func set_debug_draw(enabled: bool) -> void:
 	_debug_draw_enabled = enabled

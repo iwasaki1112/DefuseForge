@@ -410,10 +410,14 @@ func _setup_door_service() -> void:
 		# シグナル転送
 		door_service.door_kick_network_event.connect(func(d, c): door_kick_network_event.emit(d, c))
 		door_service.door_open_network_event.connect(func(d, c): door_open_network_event.emit(d, c))
-		# ドア開放時にFoWオクルーダーを無効化
-		door_service.door_opened.connect(func(door, _char):
+		# ドア開放アニメーション中のFoWオクルーダーリアルタイム更新
+		door_service.door_opening_started.connect(func(door):
 			if vision_service:
-				vision_service.set_door_open(door, true)
+				vision_service.start_door_opening(door)
+		)
+		door_service.door_opening_finished.connect(func(door):
+			if vision_service:
+				vision_service.finish_door_opening(door)
 		)
 
 

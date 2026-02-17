@@ -406,6 +406,18 @@ func set_door_occluder_enabled(door: Node3D, enabled: bool) -> void:
 		_occluder_manager.set_door_occluder_enabled(door, enabled)
 
 
+## ドアオクルーダーアニメーション開始（ドアTween中に毎フレームポリゴン更新）
+func start_door_occluder_animation(door: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.start_door_occluder_animation(door)
+
+
+## ドアオクルーダーアニメーション停止（オクルーダー非表示）
+func stop_door_occluder_animation(door: Node3D) -> void:
+	if _occluder_manager:
+		_occluder_manager.stop_door_occluder_animation(door)
+
+
 ## プロップオクルーダーを追加
 func add_prop_occluder(prop_body: StaticBody3D) -> void:
 	if _occluder_manager:
