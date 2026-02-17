@@ -28,6 +28,7 @@ const PRESET_DIR := "res://data/characters/"
 ## DirAccess does not work with res:// in exported .pck files
 const PRESET_FILES := [
 	"res://data/characters/alpha.tres",
+	"res://data/characters/bravo.tres",
 	"res://data/characters/ares.tres",
 	"res://data/characters/dummy_ct.tres",
 	"res://data/characters/dummy_t.tres",

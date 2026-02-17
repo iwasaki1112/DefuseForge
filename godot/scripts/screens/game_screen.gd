@@ -206,15 +206,15 @@ func _spawn_characters() -> void:
 		push_error("[GameScreen] Cannot spawn characters - no map preset")
 		return
 
-	# CT: 1体のみ（alpha）— TPS操作対象
-	var alpha_preset = CharacterRegistry.get_preset("alpha")
+	# CT: 1体のみ（bravo）— TPS操作対象
+	var ct_preset = CharacterRegistry.get_preset("bravo")
 	var ct_spawns = preset.spawn_points_ct
 	var ct_rotations = preset.spawn_rotations_ct
-	if alpha_preset and ct_spawns.size() > 0:
-		var character = CharacterRegistry.create_character(alpha_preset.id, ct_spawns[0])
+	if ct_preset and ct_spawns.size() > 0:
+		var character = CharacterRegistry.create_character(ct_preset.id, ct_spawns[0])
 		if character:
 			character.team = GameCharacter.Team.COUNTER_TERRORIST
-			character.marker_name = "alpha"
+			character.marker_name = "bravo"
 			if ct_rotations.size() > 0:
 				var dir = Vector3(sin(ct_rotations[0]), 0, cos(ct_rotations[0]))
 				character.set_initial_facing(dir)
