@@ -245,7 +245,7 @@ func _scan_for_enemies() -> void:
 		return
 
 	# プレイヤーチームか判定
-	# プレイヤーチーム: enemy.visible（FoW）+ 自分のVisionComponentで可視判定
+	# プレイヤーチーム: enemy.visible（FoW）と同じ判定を使用（表示と検知を統一）
 	# 敵AI: VisionComponent（個別レイキャスト）で可視判定
 	var is_player_team := _character is GameCharacter and PlayerState.is_friendly(_character)
 	var vision: VisionComponent = null
@@ -260,6 +260,9 @@ func _scan_for_enemies() -> void:
 	var closest_distance: float = INF
 
 	var char_pos: Vector3 = _character.global_position
+	# プレイヤーチーム用: 仲間の遠方視界への反応を防ぐための距離制限
+	# FoWのLight2Dはソフトエッジでview_distanceより少し先まで照らすためマージンを追加
+	var max_detect_distance: float = (vision.view_distance if vision else 7.0) + 1.0
 
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
@@ -272,14 +275,17 @@ func _scan_for_enemies() -> void:
 
 		# 可視性チェック
 		if is_player_team:
-			# プレイヤーチーム: FoW可視 + 自分のVisionComponentで検知範囲内か確認
-			# FoW可視性だけだと仲間の視界で見えている遠方の敵にも反応してしまう
+			# プレイヤーチーム: FoW可視性（enemy.visible）をそのまま使用
+			# FoWのLight2Dコーンと完全に同じ判定になるため、表示と検知が一致する
 			if enemy is Node3D and not enemy.visible:
 				continue
-			if vision:
-				var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
-				if not vision.is_position_in_view(enemy_pos):
-					continue
+			# 距離制限: 仲間の視界で見えている遠方の敵に反応しないようにする
+			var dist_xz := Vector2(
+				enemy.global_position.x - char_pos.x,
+				enemy.global_position.z - char_pos.z
+			).length()
+			if dist_xz > max_detect_distance:
+				continue
 		else:
 			# 敵AI: VisionComponentの個別レイキャストで可視判定
 			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
@@ -287,16 +293,10 @@ func _scan_for_enemies() -> void:
 				continue
 
 		var dist: float = char_pos.distance_to(enemy.global_position)
-		if Debug.enabled:
-			print("[CAC] Visible enemy: ", enemy.name, " dist=", "%.2f" % dist, "m")
 
 		if dist < closest_distance:
 			closest_distance = dist
 			closest_enemy = enemy
-
-	if Debug.enabled:
-		if closest_enemy:
-			print("[CAC] Target: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)
@@ -387,7 +387,6 @@ func _is_facing_target() -> bool:
 			facing_dir = model.global_transform.basis.orthonormalized().z
 			facing_dir.y = 0
 	if facing_dir.length_squared() < 0.001:
-		# モデルの向きが取得できない場合は安全策として射撃を許可しない
 		return false
 	facing_dir = facing_dir.normalized()
 	return facing_dir.dot(to_target) >= FACING_ANGLE_THRESHOLD
