@@ -1227,21 +1227,24 @@ func _on_door_open_pressed() -> void:
 
 	_target_door = _nearby_door
 
-	# ドアの方を向く
+	# ドアの方向を計算
 	var dir := (_target_door.global_position - _player_character.global_position).normalized()
 	dir.y = 0.0
-	_player_character.set_facing_direction_vec(dir)
 
-	# 向きをロック
+	# 向きをロック（set_model_direction は smooth_rotate_to 中は無視される）
 	if _tps_controller:
 		_tps_controller.lock_facing(dir)
-
-	# アニメーション再生
-	_player_character.anim_ctrl.play_door_open()
 
 	# ボタン非表示
 	if _door_open_btn:
 		_door_open_btn.visible = false
+
+	# 滑らかに回転 → 完了後にドア開けアニメーション再生
+	var finished := _player_character.anim_ctrl.smooth_rotate_to(dir, 0.2)
+	await finished
+	if is_instance_valid(_player_character) and _player_character.anim_ctrl:
+		_player_character.set_facing_direction_vec(dir)
+		_player_character.anim_ctrl.play_door_open()
 
 
 ## ドア開けアニメーションのインパクトタイミング（実際にドアを開く）
@@ -1276,6 +1279,7 @@ func _update_door_proximity() -> void:
 	_nearby_door = null
 
 	var doors := get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
+	var space_state := get_viewport().get_world_3d().direct_space_state
 	for door in doors:
 		if not door is Node3D:
 			continue
@@ -1284,10 +1288,27 @@ func _update_door_proximity() -> void:
 		# 既に開いているドアは対象外
 		if door.is_in_group("open_doors"):
 			continue
-		var dist := player_pos.distance_to(door.global_position)
-		if dist <= GameConstants.DOOR_OPEN_DISTANCE:
-			_nearby_door = door
-			break
+		var door_pos: Vector3 = (door as Node3D).global_position
+		var dist := player_pos.distance_to(door_pos)
+		if dist > GameConstants.DOOR_OPEN_DISTANCE:
+			continue
+		# 壁越し防止: プレイヤーとドアの間に壁があれば対象外
+		var ray_from := player_pos + Vector3.UP * 0.5
+		var ray_to := door_pos + Vector3.UP * 0.5
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, 2)  # layer 2 = 壁
+		# ドア自身のStaticBody3Dをレイキャストから除外
+		var excludes: Array[RID] = []
+		for child in door.get_children():
+			if child is StaticBody3D:
+				excludes.append((child as StaticBody3D).get_rid())
+		if door is StaticBody3D:
+			excludes.append((door as StaticBody3D).get_rid())
+		query.exclude = excludes
+		var result := space_state.intersect_ray(query)
+		if not result.is_empty():
+			continue
+		_nearby_door = door
+		break
 
 	if _door_open_btn:
 		_door_open_btn.visible = _nearby_door != null

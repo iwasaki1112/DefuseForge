@@ -336,7 +336,7 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 
 ## ドア開口部のトグル可能なオクルーダーを生成
 ## 柱間の開口部（1m幅）をカバーし、ドア開閉時にvisibleを切り替える
-func _create_door_opening_occluder(grid_map: GridMap, cell: Vector3i, aabb: AABB, cell_global: Transform3D) -> void:
+func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AABB, cell_global: Transform3D) -> void:
 	# 開口部サイズ: 柱間の1m幅 × 壁厚さ
 	var opening_box := BoxShape3D.new()
 	opening_box.size = Vector3(1.0, 2.0, aabb.size.z)

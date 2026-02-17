@@ -298,12 +298,39 @@ func set_look_direction(direction: Vector3) -> void:
 ## !! モデルは+Zが前方向、looking_at()は-Zをターゲットに向ける      !!
 ## !! この反転は必須。削除するとモデルが逆方向を向く                 !!
 ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+var _smooth_rotating: bool = false  ## smooth_rotate_to() 中は set_model_direction を無視
+
 func set_model_direction(direction: Vector3) -> void:
+	if _smooth_rotating:
+		return
 	if not _model or direction.length_squared() < 0.001:
 		return
 	_aim_direction = direction.normalized()
 	var target_basis := Basis.looking_at(-direction, Vector3.UP)  # ← -direction 必須！
 	_model.transform.basis = target_basis
+
+
+## モデルを指定方向へ滑らかに回転（Tween SLERP）
+## 回転中は set_model_direction を無効化し、完了後に復帰する
+func smooth_rotate_to(direction: Vector3, duration: float = 0.2) -> Signal:
+	if not _model or direction.length_squared() < 0.001:
+		# 即座に完了するシグナルを返す
+		set_model_direction(direction)
+		return get_tree().process_frame
+	direction = direction.normalized()
+	direction.y = 0.0
+	_aim_direction = direction
+	_smooth_rotating = true
+	var current_quat := Quaternion(_model.transform.basis.orthonormalized())
+	var target_quat := Quaternion(Basis.looking_at(-direction, Vector3.UP))
+	var tween := _model.create_tween()
+	tween.tween_method(func(t: float) -> void:
+		_model.transform.basis = Basis(current_quat.slerp(target_quat, t))
+	, 0.0, 1.0, duration)
+	tween.tween_callback(func() -> void:
+		_smooth_rotating = false
+	)
+	return tween.finished
 
 
 ## リモートキャラクター用の回転補間速度（ローカルより少し速く追従）

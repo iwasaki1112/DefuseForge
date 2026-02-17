@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://dwu1jpv6m5usq"]
 
-[ext_resource type="MeshLibrary" uid="uid://bd0adn7fb6wdf" path="res://data/tiles/tile_library_floor.tres" id="1"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_floor.tres" id="1"]
 [ext_resource type="Script" uid="uid://lqncyhb0ni2o" path="res://scripts/maps/map_base.gd" id="2"]
-[ext_resource type="MeshLibrary" uid="uid://csbogaroo51t8" path="res://data/tiles/tile_library_wall.tres" id="4"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_wall.tres" id="4"]
 [ext_resource type="PackedScene" uid="uid://d2ej3e5py3ad0" path="res://scenes/props/car.glb" id="4_vutao"]
 
 [sub_resource type="Environment" id="Environment_editor"]

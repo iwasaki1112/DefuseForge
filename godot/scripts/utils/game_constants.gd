@@ -75,7 +75,7 @@ const ANIM_TALKING := "game_rifle_talking"
 # ========================================================
 # Door Open Settings
 # ========================================================
-const DOOR_OPEN_DISTANCE := 2.5  ## ドア開けインタラクション距離（メートル）
+const DOOR_OPEN_DISTANCE := 1.5  ## ドア開けインタラクション距離（メートル）
 
 # ========================================================
 # Hostage Talking Settings

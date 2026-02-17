@@ -571,6 +571,15 @@ func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
 
 	game_manager.apply_door_kick_from_network(door_id, character_id)
 
+	# リモートキャラクターのドアキックアニメーションを再生
+	var character := game_manager.find_character_by_network_id(character_id)
+	if character and not character.is_local():
+		var door: Node3D = game_manager.get_door_by_id(door_id)
+		if door:
+			character.face_towards(door.global_position)
+		if character.anim_ctrl:
+			character.anim_ctrl.play_door_kick()
+
 
 func _apply_door_open_event(event: NetworkMessages.GameEventMessage) -> void:
 	var door_id: int = event.data.get("door_id", 0)
@@ -581,6 +590,15 @@ func _apply_door_open_event(event: NetworkMessages.GameEventMessage) -> void:
 		return
 
 	game_manager.apply_door_open_from_network(door_id, character_id)
+
+	# リモートキャラクターのドア開けアニメーションを再生
+	var character := game_manager.find_character_by_network_id(character_id)
+	if character and not character.is_local():
+		var door: Node3D = game_manager.get_door_by_id(door_id)
+		if door:
+			character.face_towards(door.global_position)
+		if character.anim_ctrl:
+			character.anim_ctrl.play_door_open()
 
 
 ## アニメーションを指定秒数分進める（レイテンシ補正用）
