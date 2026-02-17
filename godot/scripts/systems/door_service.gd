@@ -36,6 +36,10 @@ var _fow_system = null  ## FogOfWarSystem参照
 var _fow_check_counter: int = 0
 const _FOW_CHECK_INTERVAL: int = 15  ## ~4Hz at 60fps
 const _FOW_CHECK_OFFSET := 1.0  ## FoWチェック位置のオフセット（ヒンジ周辺4方向をチェック）
+const _ANIMATION_GRACE_FRAMES: int = 30  ## 保留後この frame 数以内に可視→アニメーション再生（~500ms at 60fps）
+const _DOOR_VIS_NEAR_DISTANCE := 1.5  ## この距離以内なら方向不問で可視
+const _DOOR_VIS_MAX_RANGE := 8.0  ## LOS チェックの最大距離
+const _DOOR_VIS_FOV_MARGIN_DEG := 10.0  ## 視野角マージン（度）
 
 
 func _ready() -> void:
@@ -212,7 +216,7 @@ func apply_door_open_from_network(door_id: int, character_network_id: int) -> vo
 	if character.is_local():
 		return
 
-	# チーム判定：敵チームのドア開けはFoW確認まで保留
+	# チーム判定：敵チームのドア開けはバッファに保留（次フレームでFoWチェック）
 	if _fow_system and character.team != PlayerState.get_player_team():
 		var params := _calculate_door_open_params(door, character, false)
 		if not params.is_empty():
@@ -251,7 +255,7 @@ func apply_door_kick_from_network(door_id: int, character_network_id: int) -> vo
 	if character.is_local():
 		return
 
-	# チーム判定：敵チームのドアキックはFoW確認まで保留
+	# チーム判定：敵チームのドアキックはバッファに保留（次フレームでFoWチェック）
 	if _fow_system and character.team != PlayerState.get_player_team():
 		var params := _calculate_door_open_params(door, character, true)
 		if not params.is_empty():
@@ -358,7 +362,10 @@ func _execute_door_open(door: Node3D, params: Dictionary, instant: bool = false)
 
 ## 敵チームのドア開放をバッファに保留（FoW確認まで開かない）
 func _defer_enemy_door_open(door: Node3D, params: Dictionary) -> void:
+	params["deferred_frame"] = Engine.get_physics_frames()
 	_pending_enemy_doors[door] = params
+	# 次フレームで即座にFoWチェックを実行させる
+	_fow_check_counter = _FOW_CHECK_INTERVAL - 1
 	set_process(true)
 
 
@@ -372,7 +379,11 @@ func _reveal_deferred_door(door: Node3D) -> void:
 			set_process(false)
 		return
 
-	_execute_door_open(door, params, true)
+	# 保留から短時間ならアニメーション再生（目の前で開いた場合）
+	# 長時間経過なら即座に開いた状態にする（既に開いていたドアを後から見た場合）
+	var deferred_frame: int = params.get("deferred_frame", 0)
+	var is_recent := (Engine.get_physics_frames() - deferred_frame) < _ANIMATION_GRACE_FRAMES
+	_execute_door_open(door, params, not is_recent)
 	door_opened.emit(door, null)
 
 	if _pending_enemy_doors.is_empty():
@@ -404,26 +415,84 @@ func _process(_delta: float) -> void:
 
 
 ## ドアがローカルチームから可視かどうか判定
-## ヒンジ周辺4方向（壁法線±1m、壁沿い±1m）をチェックし、視界が少しでも触れたら可視とみなす
+## 1) FoWチェック（高速パス）
+## 2) Raycast LOSチェック（FoWオクルーダー循環依存の回避）
 func _is_door_visible_to_local_team(door: Node3D) -> bool:
-	if not _fow_system:
+	# FoWチェック（高速パス — オクルーダー問題がなければこれで検出できる）
+	if _fow_system:
+		var door_basis := door.global_transform.basis
+		var door_normal := door_basis.z
+		door_normal.y = 0.0
+		door_normal = door_normal.normalized()
+		var door_right := door_basis.x
+		door_right.y = 0.0
+		door_right = door_right.normalized()
+		var pos := door.global_position
+		if _fow_system.is_position_visible_in_fow(pos + door_normal * _FOW_CHECK_OFFSET):
+			return true
+		if _fow_system.is_position_visible_in_fow(pos - door_normal * _FOW_CHECK_OFFSET):
+			return true
+		if _fow_system.is_position_visible_in_fow(pos + door_right * _FOW_CHECK_OFFSET):
+			return true
+		if _fow_system.is_position_visible_in_fow(pos - door_right * _FOW_CHECK_OFFSET):
+			return true
+
+	# Raycast LOSチェック（FoWオクルーダー循環依存の回避）
+	if not _character_manager:
 		return false
-	var door_normal := door.global_transform.basis.z.normalized()
-	door_normal.y = 0.0
-	door_normal = door_normal.normalized()
-	var door_right := door.global_transform.basis.x.normalized()
-	door_right.y = 0.0
-	door_right = door_right.normalized()
-	var pos := door.global_position
-	# ドア周辺4点をチェック（壁法線方向±1m、壁沿い方向±1m）
-	if _fow_system.is_position_visible_in_fow(pos + door_normal * _FOW_CHECK_OFFSET):
+	var panel_center := door.global_position + door.global_transform.basis * _DOOR_PANEL_CENTER
+	for node in _character_manager.get_local_friendly_characters():
+		var character := node as GameCharacter
+		if not is_instance_valid(character) or not character.is_alive:
+			continue
+		if _can_character_see_door(character, door, panel_center):
+			return true
+	return false
+
+
+## キャラクターがドアを視認できるか判定（距離 + 視野角 + LOS raycast）
+func _can_character_see_door(character: GameCharacter, door: Node3D, panel_center: Vector3) -> bool:
+	var to_door := panel_center - character.global_position
+	to_door.y = 0.0
+	var dist := to_door.length()
+
+	# 近距離: 方向不問で可視（ドアのすぐ前に立っている場合）
+	if dist < _DOOR_VIS_NEAR_DISTANCE:
 		return true
-	if _fow_system.is_position_visible_in_fow(pos - door_normal * _FOW_CHECK_OFFSET):
-		return true
-	if _fow_system.is_position_visible_in_fow(pos + door_right * _FOW_CHECK_OFFSET):
-		return true
-	if _fow_system.is_position_visible_in_fow(pos - door_right * _FOW_CHECK_OFFSET):
-		return true
+
+	# 距離チェック
+	if dist > _DOOR_VIS_MAX_RANGE:
+		return false
+
+	# 方向チェック（視野角内か）
+	var facing := character.get_facing_direction()
+	facing.y = 0.0
+	if facing.length_squared() > 0.001 and to_door.length_squared() > 0.001:
+		var half_fov := 37.5  # デフォルト 75° / 2
+		if character.vision:
+			half_fov = character.vision.fov_degrees * 0.5
+		var angle := rad_to_deg(facing.normalized().angle_to(to_door.normalized()))
+		if angle > half_fov + _DOOR_VIS_FOV_MARGIN_DEG:
+			return false
+
+	# LOS raycast（壁のみチェック、ドア自身のヒットは許可）
+	var space := character.get_world_3d().direct_space_state
+	if not space:
+		return false
+	var eye_height := 1.5
+	if character.vision:
+		eye_height = character.vision.eye_height
+	var eye_pos := character.global_position + Vector3.UP * eye_height
+	var target := Vector3(panel_center.x, eye_pos.y, panel_center.z)
+	var query := PhysicsRayQueryParameters3D.create(eye_pos, target, MapBase.WALL_COLLISION_LAYER)
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return true  # 壁なし → 可視
+	# ヒットしたのがドア自身なら可視（ドアパネルのコリジョン）
+	var collider = hit.get("collider")
+	if collider is Node:
+		if collider == door or door.is_ancestor_of(collider as Node):
+			return true
 	return false
 
 
