@@ -1,6 +1,6 @@
 # CharacterSelectionManager
 
-キャラクター選択管理。選択状態・アウトライン表示・パス適用対象の管理を担当。
+キャラクター選択管理。選択状態・アウトライン表示の管理を担当。
 
 ## 基本情報
 
@@ -14,7 +14,6 @@
 
 - 複数キャラクターの同時選択（トグル選択）
 - プライマリキャラクター（最後に選択したキャラクター）の追跡
-- パス適用対象のスナップショット保存
 - ステンシルベースのアウトライン表示
 
 ## シグナル
@@ -30,7 +29,6 @@
 |-----------|-----|------|
 | `selected_characters` | `Array[Node]` | 選択中の全キャラクター |
 | `primary_character` | `Node` | 最後に選択したキャラクター |
-| `path_target_characters` | `Array[Node]` | パス適用対象（MOVEモード開始時に確定） |
 | `outline_color` | `Color` | アウトライン色（デフォルト: 水色） |
 | `outline_thickness` | `float` | アウトライン太さ（デフォルト: 3.5） |
 
@@ -62,22 +60,6 @@ func has_selection() -> bool
 func get_selection_count() -> int
 ```
 
-### パス適用対象管理
-
-```gdscript
-# パス適用対象を確定（MOVEモード開始時に呼ぶ）
-func capture_path_targets() -> void
-
-# パス適用対象をクリア
-func clear_path_targets() -> void
-
-# パス適用対象を取得
-func get_path_targets() -> Array[Node]
-
-# パス適用対象がいるか
-func has_path_targets() -> bool
-```
-
 ### アウトライン
 
 ```gdscript
@@ -98,12 +80,7 @@ selection_manager.primary_changed.connect(_on_primary_changed)
 # キャラクター選択
 selection_manager.toggle_selection(character)
 
-# MOVEモード開始時にパス適用対象を確定
-selection_manager.capture_path_targets()
-var targets = selection_manager.get_path_targets()
-
-# パス確定後にクリア
-selection_manager.clear_path_targets()
+# 選択解除
 selection_manager.deselect_all()
 ```
 
@@ -156,8 +133,7 @@ selection_manager.from_selection_dict(data, func(id): return game_manager.find_c
 
 ## 関連クラス
 
-- [PathExecutionManager](PathExecutionManager.md) - パス確定・実行管理
-- [GameCharacter](GameCharacter.md) - キャラクター管理
+- [GameCharacter](../Character/GameCharacter.md) - キャラクター管理
 - [NetworkMessages](NetworkMessages.md) - ネットワークメッセージ型
 
 ## APIリファレンス
@@ -175,8 +151,4 @@ selection_manager.from_selection_dict(data, func(id): return game_manager.find_c
 - `deselect_all() -> void`
 - `has_selection() -> bool`
 - `get_selection_count() -> int`
-- `capture_path_targets() -> void`
-- `clear_path_targets() -> void`
-- `get_path_targets() -> Array[Node]`
-- `has_path_targets() -> bool`
 - `clear_all_outlines() -> void`

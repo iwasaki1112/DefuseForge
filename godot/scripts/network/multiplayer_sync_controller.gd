@@ -3,13 +3,6 @@ class_name MultiplayerSyncController
 ## マルチプレイヤー同期コントローラー
 ## GameManagerとLocalNetworkBus間の同期処理を管理
 
-## 同期イベントシグナル
-signal sync_state_received(snapshot: SyncState.GameStateSnapshot)
-signal path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage)
-signal character_updated_remote(char_state: NetworkMessages.CharacterStateMessage)
-signal round_state_updated(round_state: NetworkMessages.RoundStateMessage)
-signal game_event_received(event: NetworkMessages.GameEventMessage)
-
 ## 参照（LocalNetworkBusまたはNetworkBusAdapterを受け入れ）
 var network_bus: Node
 var game_manager: GameManager
@@ -22,7 +15,7 @@ var _auto_sync_enabled: bool = true
 
 ## Tick管理（Phase 3: Tick分離）
 var _tick_counter: int = 0
-var _last_sent_states: Dictionary = {}  # character_id -> last_state for delta detection
+var _last_sent_states: Dictionary[int, NetworkMessages.CharacterStateMessage] = {}  # character_id -> last_state for delta detection
 var _idle_skip_counter: int = 0  # 静止時の送信スキップカウンター
 
 
@@ -44,7 +37,7 @@ func setup(bus: Node, gm: GameManager, my_peer_id: int, host: bool) -> void:
 		game_manager.round_manager.set_authority(is_host)
 
 
-func _process(_delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	if not _auto_sync_enabled:
 		return
 
@@ -160,37 +153,6 @@ func _has_significant_change(old_state: NetworkMessages.CharacterStateMessage, n
 	return false
 
 
-## パス確定を送信
-func send_path_confirm(path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	var data := _path_message_to_dict(path_msg)
-
-	if is_host:
-		# Hostは全Clientへブロードキャスト
-		network_bus.broadcast_from_host(
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-	else:
-		# ClientはHostへ送信
-		network_bus.send_message(
-			peer_id,
-			LocalNetworkBus.HOST_PEER_ID,
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-
-
-## パス実行を送信（Host→Client）
-func send_path_execute(run: bool) -> void:
-	if not is_host:
-		return
-
-	network_bus.broadcast_from_host(
-		NetworkConstants.MessageType.PATH_EXECUTE,
-		{"run": run}
-	)
-
-
 ## キャラクター更新を送信
 func send_character_update(char_state: NetworkMessages.CharacterStateMessage) -> void:
 	var data := _char_state_to_dict(char_state)
@@ -269,6 +231,8 @@ func send_round_state() -> void:
 ## ゲームイベントを送信
 func send_game_event(event: NetworkMessages.GameEventMessage) -> void:
 	var data := _game_event_to_dict(event)
+	# 送信元peer_idを埋め込み（受信側で自分が送ったイベントをスキップするため）
+	data["sender_peer_id"] = peer_id
 
 	if is_host:
 		network_bus.broadcast_from_host(
@@ -329,10 +293,6 @@ func _on_message_received(from_peer: int, to_peer: int, msg_type: int, data: Dic
 	match msg_type:
 		NetworkConstants.MessageType.GAME_STATE_SYNC:
 			_handle_state_sync(data)
-		NetworkConstants.MessageType.PATH_CONFIRM:
-			_handle_path_confirm(from_peer, data)
-		NetworkConstants.MessageType.PATH_EXECUTE:
-			_handle_path_execute(data)
 		NetworkConstants.MessageType.CHARACTER_UPDATE:
 			_handle_character_update(data)
 		NetworkConstants.MessageType.CHARACTER_UPDATE_BINARY:
@@ -353,33 +313,6 @@ func _handle_state_sync(data: Dictionary) -> void:
 
 	var snapshot := _dict_to_snapshot(data)
 	game_manager.apply_game_state_snapshot(snapshot)
-	sync_state_received.emit(snapshot)
-
-
-func _handle_path_confirm(from_peer: int, data: Dictionary) -> void:
-	var path_msg := _dict_to_path_message(data)
-
-	if is_host:
-		# HostはClientからのパス確定を受け取り、全体に転送
-		var character := game_manager.find_character_by_network_id(path_msg.character_id)
-		if character:
-			game_manager.confirm_path_for_player(from_peer, path_msg, character)
-		# 全Clientへ転送
-		network_bus.broadcast_from_host(
-			NetworkConstants.MessageType.PATH_CONFIRM,
-			data
-		)
-	else:
-		# Clientはパス確定を適用
-		path_confirmed_remote.emit(from_peer, path_msg)
-
-
-func _handle_path_execute(data: Dictionary) -> void:
-	if is_host:
-		return
-
-	var run: bool = data.get("run", false)
-	game_manager.execute_all_paths(run)
 
 
 func _handle_character_update(data: Dictionary) -> void:
@@ -435,7 +368,6 @@ func _apply_character_state(char_state: NetworkMessages.CharacterStateMessage) -
 	if character:
 		if not character.is_local():
 			character.apply_remote_state(char_state)
-	character_updated_remote.emit(char_state)
 
 
 func _handle_round_state(data: Dictionary) -> void:
@@ -445,12 +377,10 @@ func _handle_round_state(data: Dictionary) -> void:
 	var round_state := _dict_to_round_state(data)
 	if game_manager.round_manager:
 		game_manager.round_manager.apply_round_state(round_state)
-	round_state_updated.emit(round_state)
 
 
 func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 	var event := _dict_to_game_event(data)
-	game_event_received.emit(event)
 
 	# ホストの場合、クライアントからのイベントを他のクライアントに転送
 	if is_host and from_peer != peer_id:
@@ -458,6 +388,12 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			NetworkConstants.MessageType.GAME_EVENT,
 			data
 		)
+
+	# 自分が送信したイベントがエコーバックされた場合はスキップ
+	# （ローカルで既に処理済みのため、二重生成を防止）
+	var sender: int = data.get("sender_peer_id", -1)
+	if sender == peer_id:
+		return
 
 	# イベントに応じた処理
 	match event.event_type:
@@ -477,6 +413,8 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			_apply_animation_event(event)
 		NetworkConstants.GameEventType.DOOR_KICK:
 			_apply_door_kick_event(event)
+		NetworkConstants.GameEventType.DOOR_OPEN:
+			_apply_door_open_event(event)
 
 
 func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
@@ -526,8 +464,9 @@ func _apply_grenade_throw_event(event: NetworkMessages.GameEventMessage) -> void
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
+	var thrower_team: int = event.data.get("thrower_team", 0)
 	if Debug.enabled: print("[GRENADE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	game_manager.spawn_grenade_from_network(start_pos, velocity, grenade_id)
+	game_manager.spawn_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 func _apply_smoke_grenade_throw_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -543,8 +482,9 @@ func _apply_smoke_grenade_throw_event(event: NetworkMessages.GameEventMessage) -
 		event.data.get("vel_z", 0.0)
 	)
 	var grenade_id: int = event.data.get("grenade_id", 0)
+	var thrower_team: int = event.data.get("thrower_team", 0)
 	if Debug.enabled: print("[SMOKE RECV] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	game_manager.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id)
+	game_manager.spawn_smoke_grenade_from_network(start_pos, velocity, grenade_id, thrower_team)
 
 
 func _apply_grenade_explode_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -611,9 +551,14 @@ func _apply_animation_event(event: NetworkMessages.GameEventMessage) -> void:
 				anim_ctrl.play_death(direction, false)
 
 		NetworkConstants.AnimationEventType.GRENADE_THROW:
-			if anim_ctrl.has_method("play_grenade_throw"):
-				anim_ctrl.play_grenade_throw()
-				_seek_animation_forward(anim_ctrl, latency_sec)
+			var is_close: bool = event.data.get("is_close", false)
+			if is_close:
+				if anim_ctrl.has_method("play_throw_close"):
+					anim_ctrl.play_throw_close()
+			else:
+				if anim_ctrl.has_method("play_throw_far"):
+					anim_ctrl.play_throw_far()
+			_seek_animation_forward(anim_ctrl, latency_sec)
 
 
 func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
@@ -625,6 +570,35 @@ func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
 		return
 
 	game_manager.apply_door_kick_from_network(door_id, character_id)
+
+	# リモートキャラクターのドアキックアニメーションを再生
+	var character := game_manager.find_character_by_network_id(character_id)
+	if character and not character.is_local():
+		var door: Node3D = game_manager.get_door_by_id(door_id)
+		if door:
+			character.face_towards(door.global_position)
+		if character.anim_ctrl:
+			character.anim_ctrl.play_door_kick()
+
+
+func _apply_door_open_event(event: NetworkMessages.GameEventMessage) -> void:
+	var door_id: int = event.data.get("door_id", 0)
+	var character_id: int = event.data.get("character_id", 0)
+
+	if door_id == 0:
+		push_warning("[SyncController] DOOR_OPEN event missing door_id")
+		return
+
+	game_manager.apply_door_open_from_network(door_id, character_id)
+
+	# リモートキャラクターのドア開けアニメーションを再生
+	var character := game_manager.find_character_by_network_id(character_id)
+	if character and not character.is_local():
+		var door: Node3D = game_manager.get_door_by_id(door_id)
+		if door:
+			character.face_towards(door.global_position)
+		if character.anim_ctrl:
+			character.anim_ctrl.play_door_open()
 
 
 ## アニメーションを指定秒数分進める（レイテンシ補正用）
@@ -717,34 +691,6 @@ func _dict_to_char_snapshot(data: Dictionary) -> SyncState.CharacterSnapshot:
 	return snap
 
 
-func _path_message_to_dict(msg: NetworkMessages.PathConfirmMessage) -> Dictionary:
-	var path_array: Array[Dictionary] = []
-	for p in msg.path:
-		path_array.append({"x": p.x, "y": p.y, "z": p.z})
-
-	return {
-		"player_id": msg.player_id,
-		"character_id": msg.character_id,
-		"path": path_array,
-		"vision_points": msg.vision_points.duplicate(true),
-		"wait_points": msg.wait_points.duplicate(true),
-	}
-
-
-func _dict_to_path_message(data: Dictionary) -> NetworkMessages.PathConfirmMessage:
-	var msg := NetworkMessages.PathConfirmMessage.new()
-	msg.player_id = data.get("player_id", 0)
-	msg.character_id = data.get("character_id", 0)
-
-	for p in data.get("path", []):
-		msg.path.append(Vector3(p.get("x", 0), p.get("y", 0), p.get("z", 0)))
-
-	msg.vision_points = data.get("vision_points", []).duplicate(true)
-	msg.wait_points = data.get("wait_points", []).duplicate(true)
-
-	return msg
-
-
 func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictionary:
 	return {
 		"character_id": state.character_id,
@@ -753,7 +699,8 @@ func _char_state_to_dict(state: NetworkMessages.CharacterStateMessage) -> Dictio
 		"velocity": {"x": state.velocity.x, "y": state.velocity.y, "z": state.velocity.z},
 		"current_health": state.current_health,
 		"is_alive": state.is_alive,
-		"animation_state": state.animation_state
+		"animation_state": state.animation_state,
+		"timestamp": state.timestamp
 	}
 
 
@@ -771,6 +718,7 @@ func _dict_to_char_state(data: Dictionary) -> NetworkMessages.CharacterStateMess
 	state.current_health = data.get("current_health", 100)
 	state.is_alive = data.get("is_alive", true)
 	state.animation_state = data.get("animation_state", "")
+	state.timestamp = data.get("timestamp", 0)
 
 	return state
 

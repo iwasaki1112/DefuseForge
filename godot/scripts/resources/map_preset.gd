@@ -31,6 +31,8 @@ class_name MapPreset
 @export var spawn_points_t: Array[Vector3] = []  ## Terrorist spawn positions
 @export var spawn_rotations_ct: Array[float] = []  ## Counter-Terrorist spawn Y rotations (radians)
 @export var spawn_rotations_t: Array[float] = []  ## Terrorist spawn Y rotations (radians)
+@export var spawn_points_hostage: Array[Vector3] = []  ## Hostage spawn positions
+@export var spawn_rotations_hostage: Array[float] = []  ## Hostage spawn Y rotations (radians)
 
 # ============================================
 # UI

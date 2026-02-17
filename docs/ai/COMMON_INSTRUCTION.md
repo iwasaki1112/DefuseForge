@@ -4,14 +4,14 @@
 - **言語**: 日本語で応答すること
 
 ## プロジェクト情報
-- **エンジン**: Godot 4.5.1
+- **エンジン**: Godot 4.6
 - **プロジェクトパス**: `godot/`
 - **言語**: GDScript
 
 ## プロジェクト概要
-タクティカルシューター（モバイルゲーム）。キャラクターにパスを描いて移動・戦闘させる。
+タクティカルシューター（モバイルゲーム）。TPS直接操作で移動・自動戦闘。
 
-- **入力**: タップ/クリックのみ（モバイル前提）
+- **入力**: ツインスティック（移動+カメラ） / WASD+マウス
 - **パフォーマンス優先**: モバイル向けに最適化すること
 
 ## リポジトリ構成（概要）
@@ -63,8 +63,8 @@ WebSocketリレーサーバー方式を採用：
 ```
 
 - **リレーサーバー**: `server/relay/` (Go, Cloud Run)
-- **NetworkManager**: WebSocketPeerベースのルーム管理
-- **LobbyScreen**: ルームリスト表示・参加UI
+- **NetworkManager**: WebSocketPeerベースのマッチメイキング・ルーム管理
+- **LobbyScreen**: オートマッチングUI（画面表示で即マッチング開始）
 
 ### ローカル開発
 
@@ -143,7 +143,7 @@ gcloud run services describe rescueforge-relay --region asia-northeast1
 4. **登録済みマップ**: マップ追加・構成の流れを確認
 
 ## 現在の状態
-開発途中。Mixamo専用のキャラクターシステム。マップはBlenderで作成しGLTFインポート。
+開発途中。ARPリグ + in-placeアニメーションのキャラクターシステム。マップはBlenderで作成しGLTFインポート。
 
 ## ドキュメント
 
@@ -193,7 +193,7 @@ func _init() -> void:
     SomeScript = load("res://scripts/some_script.gd")
 
 # OK: class_nameを持つクラスは直接参照可能
-const PointType = ActionPointData.Type  # ActionPointDataはclass_name定義済み
+var msg = NetworkMessages.CharacterStateMessage.new()  # NetworkMessagesはclass_name定義済み
 ```
 
 **テスト必須:** PCで動作してもiOSで失敗することがあるため、機能追加後は必ずiOS実機でテストすること。
@@ -204,7 +204,7 @@ const PointType = ActionPointData.Type  # ActionPointDataはclass_name定義済�
 
 | 項目 | 方向 |
 |------|------|
-| Mixamoモデルの前方向 | **+Z** |
+| モデルの前方向（ARP/Mixamo共通） | **+Z** |
 | Godotの`look_at()`がターゲットに向ける軸 | **-Z** |
 
 この180度の差により、キャラクターの向きを変更する際は以下のAPIを使用する：

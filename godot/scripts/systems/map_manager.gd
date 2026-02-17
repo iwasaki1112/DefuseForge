@@ -94,7 +94,7 @@ func load_map(map_id: String, auto_cleanup: bool = true) -> Node3D:
 
 
 ## マップをアンロード
-## cleanup_characters_on_unload: trueの場合、キャラクターとパスもクリーンアップ
+## cleanup_characters_on_unload: trueの場合、キャラクターもクリーンアップ
 func unload_map(cleanup_characters_on_unload: bool = true) -> void:
 	if not has_map():
 		return
@@ -106,7 +106,6 @@ func unload_map(cleanup_characters_on_unload: bool = true) -> void:
 
 	# クリーンアップ
 	if cleanup_characters_on_unload:
-		cleanup_paths()
 		cleanup_characters()
 
 	# マップを削除
@@ -144,26 +143,6 @@ func cleanup_characters() -> void:
 			_game_manager.unregister_character(character)
 			character.queue_free()
 
-
-
-## パス関連の状態をすべてクリア
-func cleanup_paths() -> void:
-	if not _game_manager:
-		return
-
-	# パス追従停止
-	_game_manager.cancel_all_path_following()
-
-	# 保留パスクリア
-	_game_manager.clear_all_pending_paths()
-
-	# パスモードキャンセル
-	if _game_manager.is_path_mode():
-		_game_manager.cancel_path()
-
-	# 選択解除
-	if _game_manager.selection_manager:
-		_game_manager.selection_manager.deselect_all()
 
 
 

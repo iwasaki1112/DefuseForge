@@ -41,6 +41,38 @@ func is_line_of_sight_blocked(origin: Vector3, target: Vector3) -> bool:
 	return false
 
 
+## 一方通行の視線ブロック判定
+## 視線の始点（viewer）がスモーク内にいる場合、そのスモークは視線をブロックしない
+## @param origin: 視線の始点（見る側）
+## @param target: 視線の終点（見られる側）
+## @return: スモークで視線がブロックされている場合true
+func is_line_of_sight_blocked_one_way(origin: Vector3, target: Vector3) -> bool:
+	for area in _active_areas:
+		if not is_instance_valid(area):
+			continue
+		# 見る側がこのスモーク内にいる場合、このスモークはブロックしない
+		if area.has_method("is_position_inside") and area.is_position_inside(origin):
+			continue
+		if area.has_method("intersects_line_segment"):
+			if area.intersects_line_segment(origin, target):
+				return true
+	return false
+
+
+## 2つの位置が同じスモーク内にあるか判定
+## @param pos_a: 位置A
+## @param pos_b: 位置B
+## @return: 同じスモーク内にある場合true
+func are_positions_in_same_smoke(pos_a: Vector3, pos_b: Vector3) -> bool:
+	for area in _active_areas:
+		if not is_instance_valid(area):
+			continue
+		if area.has_method("is_position_inside"):
+			if area.is_position_inside(pos_a) and area.is_position_inside(pos_b):
+				return true
+	return false
+
+
 ## 指定位置がスモーク内にあるか判定
 ## @param pos: 判定位置
 ## @return: スモーク内にある場合true

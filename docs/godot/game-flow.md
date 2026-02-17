@@ -90,25 +90,37 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 **シーン**: `scenes/screens/lobby.tscn`
 **スクリプト**: `scripts/screens/lobby_screen.gd`
 
-マルチプレイヤー用のロビー画面。
+マルチプレイヤー用のオートマッチング画面。
 
 **機能**:
-- WebSocketリレーサーバーへの接続
-- ルーム作成・参加
-- プレイヤー一覧表示・準備完了状態の切り替え
-- ホストによるゲーム開始
+- 画面表示と同時にWebSocketリレーサーバーに接続しマッチング開始
+- 「マッチング中...」テキスト表示（ドットアニメーション付き）
+- 2人揃ったらサーバーがマッチ成立通知 → 即座にゲーム開始
+- マップはサーバー側でランダム選択（home, office）
+
+**フロー**:
+```
+MainMenu → [Multiplayer押下] → LobbyScreen
+  → 自動でサーバーに接続 & FIND_MATCH送信
+  → 「マッチング中...」表示 + キャンセルボタン
+  → サーバーが2人揃ったらMATCH_FOUND通知
+  → 即座にGameScreenへ遷移
+```
+
+**チーム割り当て**:
+- 先にキューに入ったプレイヤー = Host (peer_id=1) = CT
+- 後からキューに入ったプレイヤー = Client (peer_id=2) = T
 
 | ボタン | 遷移先 | 説明 |
 |--------|--------|------|
-| Back | MainMenuScreen | メインメニューに戻る |
-| Start Game | GameScreen | 全員準備完了時にホストが開始 |
+| キャンセル | MainMenuScreen | マッチングをキャンセルしてメインメニューに戻る |
 
 ### 5. GameScreen
 
 **シーン**: `scenes/screens/game.tscn`
 **スクリプト**: `scripts/screens/game_screen.gd`
 
-ゲームプレイ画面。選択したマップでキャラクターを操作する。
+ゲームプレイ画面。選択したマップでキャラクターをTPS操作する。
 
 **初期化処理**:
 1. プレイヤーチームをランダムに決定（CT/T）
@@ -116,16 +128,16 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 3. 選択マップをロード
 4. FogOfWarSystemのマップサイズを更新（`set_map_size()`を使用）
 5. キャラクターをスポーン位置に配置
-6. チーム表示UIを更新
-7. 視界システムを有効化
+6. TPSPlayerControllerをセットアップ（プレイヤーキャラクター操作用）
+7. チーム表示UIを更新
+8. 視界システムを有効化
 
 **注意**: マップロード後、`FogOfWarSystem.set_map_size()`でマップサイズを更新すること。プロパティ直接変更では反映されない。
 
 **主要システム**:
 - `GameManager` - コアシステム初期化・更新
+- `TPSPlayerController` - TPS操作（移動/エイム/カメラ/ジョイスティック）
 - `MapManager` - マップ読み込み・クリーンアップ
-- `CharacterSelectionManager` - キャラクター選択
-- `PathExecutionManager` - パス描画・実行
 - `FogOfWarSystem` - 視界システム
 - `EnemyVisibilitySystem` - 敵可視性制御
 
@@ -134,10 +146,13 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 GameScreen (Node3D)
 ├─ WorldEnvironment
 ├─ DirectionalLight3D
-├─ Camera3D (俯瞰視点)
+├─ Camera3D (TPS固定カメラ)
 ├─ MapContainer (Node3D) ← マップがロードされる
+├─ TPSPlayerController (Node) ← プレイヤー操作
 └─ UILayer (CanvasLayer)
-    └─ TeamDisplayLabel ← "You are CT/T" 表示
+    ├─ TeamDisplayLabel ← "You are CT/T" 表示
+    ├─ MoveStickBase ← 左ジョイスティック（モバイル）
+    └─ AimStickBase ← 右ジョイスティック（モバイル）
 ```
 
 ## データフロー

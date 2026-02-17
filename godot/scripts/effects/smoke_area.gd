@@ -2,7 +2,7 @@ class_name SmokeArea
 extends Node3D
 ## スモークエリア効果
 ## 時間経過による半径変化と視線ブロック機能を提供
-## GPUParticles3Dによる煙エフェクトを含む
+## GPUパーティクル + 壁クリップシェーダーで壁を越えない煙演出
 
 signal smoke_started
 signal smoke_ended
@@ -14,6 +14,11 @@ signal radius_changed
 @export var expand_time: float = GameConstants.SMOKE_EXPAND_TIME
 @export var fade_time: float = GameConstants.SMOKE_FADE_TIME
 
+## 壁コリジョンマスク（レイヤー2）
+const WALL_COLLISION_MASK: int = 2
+## 壁距離マップの方向分割数
+const NUM_DIRECTIONS: int = 64
+
 ## 現在の有効半径
 var _current_radius: float = 0.0
 ## 経過時間
@@ -24,10 +29,31 @@ var _is_active: bool = false
 ## 参照
 var _particles: GPUParticles3D = null
 var _smoke_manager: SmokeAreaManager = null
+## 壁距離マップテクスチャ（1D: R=正規化壁距離）
+var _radius_map_texture: ImageTexture = null
+## パーティクルクリップ用シェーダーマテリアル
+var _particle_clip_mat: ShaderMaterial = null
+## FogOfWarSystem参照（FoW可視性チェック用）
+var _fow_system = null
+## チーム別可視性
+var thrower_team: GameCharacter.Team = GameCharacter.Team.NONE  ## 投擲者のチーム
+var _once_seen: bool = false  ## 敵スモークが一度でもFoWで視認されたか
+
+## プリロード済みリソース（GrenadeService→SmokeGrenadeから注入、初回投擲ラグ回避）
+var clip_shader: Shader = null
+var puff_texture: Texture2D = null
+
+## デバッグ可視化
+var _debug_ring: MeshInstance3D = null
 
 
 func _ready() -> void:
 	_particles = $GPUParticles3D if has_node("GPUParticles3D") else null
+
+
+## FogOfWarSystemを設定（FoW可視性チェック用）
+func set_fow_system(fow) -> void:
+	_fow_system = fow
 
 
 ## スモークを開始
@@ -41,8 +67,20 @@ func start(manager: SmokeAreaManager = null) -> void:
 	if _smoke_manager:
 		_smoke_manager.register_area(self)
 
+	# 壁クリップシェーダーを構築・適用（位置確定後に実行）
+	_setup_particle_wall_clip()
+
+	# FoW可視性をシェーダーに適用（パーティクル単位でFoWクリッピング）
+	_apply_fow_to_shader()
+
+	# パーティクル開始
 	if _particles:
+		_particles.visible = true
 		_particles.emitting = true
+
+	# デバッグリング表示
+	if Debug.enabled:
+		_create_debug_ring()
 
 	smoke_started.emit()
 
@@ -56,7 +94,15 @@ func _physics_process(delta: float) -> void:
 	_update_radius()
 	if not is_equal_approx(prev_radius, _current_radius):
 		radius_changed.emit()
-	_update_particles()
+	_update_visuals()
+
+	# 敵スモーク「一度視認」チェック: FoWで視認されたらクリッピングを永久無効化
+	if _fow_system and _particle_clip_mat and not _once_seen \
+			and thrower_team != GameCharacter.Team.NONE \
+			and thrower_team != PlayerState.get_player_team():
+		if _fow_system.is_position_visible_in_fow(global_position):
+			_once_seen = true
+			_particle_clip_mat.set_shader_parameter("fow_enabled", 0.0)
 
 	# 持続時間終了
 	if _elapsed_time >= duration:
@@ -86,19 +132,39 @@ func _update_radius() -> void:
 			_smoke_manager = null
 
 
-## パーティクルの更新（半径に応じてスケール調整）
-func _update_particles() -> void:
-	if not _particles:
+## ビジュアルの更新（クリップシェーダーのパラメータ更新）
+func _update_visuals() -> void:
+	if _particle_clip_mat:
+		_particle_clip_mat.set_shader_parameter("current_radius", _current_radius)
+		var scale_factor := _current_radius / max_radius if max_radius > 0 else 0.0
+		_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", scale_factor)
+
+	# デバッグリング更新
+	if _debug_ring:
+		_update_debug_ring()
+
+
+## FoW可視性テクスチャをパーティクルシェーダーに適用（1回のみ呼出し）
+## ViewportTextureはライブ参照のため毎フレーム更新不要
+func _apply_fow_to_shader() -> void:
+	if not _fow_system or not _particle_clip_mat:
 		return
 
-	# パーティクルエミッターのスケールを半径に合わせる
-	var scale_factor := _current_radius / max_radius if max_radius > 0 else 0.0
-	_particles.scale = Vector3.ONE * scale_factor
+	# 味方スモーク → FoWクリッピング無効（常に表示）
+	if thrower_team != GameCharacter.Team.NONE and thrower_team == PlayerState.get_player_team():
+		_particle_clip_mat.set_shader_parameter("fow_enabled", 0.0)
+		return
 
-	# 消滅フェーズではエミッションを停止（既存パーティクルはフェードアウト）
-	var fade_start := duration - fade_time
-	if _elapsed_time >= fade_start and _particles.emitting:
-		_particles.emitting = false
+	var vis_tex = _fow_system.get_visibility_texture()
+	if not vis_tex:
+		return
+
+	var map_center: Vector2 = _fow_system.map_center
+	var half_map: Vector2 = _fow_system.map_size / 2.0
+	_particle_clip_mat.set_shader_parameter("fow_visibility_texture", vis_tex)
+	_particle_clip_mat.set_shader_parameter("fow_map_min", map_center - half_map)
+	_particle_clip_mat.set_shader_parameter("fow_map_max", map_center + half_map)
+	_particle_clip_mat.set_shader_parameter("fow_enabled", 1.0)
 
 
 ## スモークを停止
@@ -111,18 +177,92 @@ func _stop() -> void:
 
 	smoke_ended.emit()
 
-	# パーティクルが完全に消えるまで待ってから削除
-	if _particles and _particles.lifetime > 0:
-		await get_tree().create_timer(_particles.lifetime).timeout
+	if _particles:
+		_particles.emitting = false
+		_particles.visible = false
 
 	queue_free()
 
 
+## 壁距離マップを構築（全方向レイキャスト → 1Dテクスチャ）
+## ピクセルi = 角度 i*TAU/NUM_DIRECTIONS の方向の壁距離（正規化）
+func _build_radius_map() -> void:
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	var center := global_position
+	var from := Vector3(center.x, 1.0, center.z)
+
+	var image := Image.create(NUM_DIRECTIONS, 1, false, Image.FORMAT_RF)
+
+	for i in range(NUM_DIRECTIONS):
+		var angle := float(i) * TAU / float(NUM_DIRECTIONS)
+		var dir := Vector3(cos(angle), 0.0, sin(angle))
+		var to := from + dir * (max_radius + 0.5)
+
+		var query := PhysicsRayQueryParameters3D.create(from, to, WALL_COLLISION_MASK)
+		var result := space_state.intersect_ray(query)
+
+		var dist := max_radius
+		if not result.is_empty():
+			var hit_pos: Vector3 = result.position
+			var hit_dist := Vector2(hit_pos.x - center.x, hit_pos.z - center.z).length()
+			dist = maxf(0.1, hit_dist - 0.15)
+
+		# 正規化して格納（0.0〜1.0）
+		image.set_pixel(i, 0, Color(dist / max_radius, 0.0, 0.0, 1.0))
+
+	_radius_map_texture = ImageTexture.create_from_image(image)
+
+
+## パーティクルに壁クリップシェーダーを適用
+func _setup_particle_wall_clip() -> void:
+	if not _particles:
+		return
+
+	# プリロード済みでなければフォールバック
+	if not clip_shader:
+		clip_shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
+	if not clip_shader:
+		push_warning("[SmokeArea] smoke_particle_clip.gdshader not found")
+		return
+
+	# 壁距離マップを構築
+	_build_radius_map()
+	if not _radius_map_texture:
+		return
+
+	# シェーダーマテリアルを作成
+	_particle_clip_mat = ShaderMaterial.new()
+	_particle_clip_mat.shader = clip_shader
+	_particle_clip_mat.set_shader_parameter("radius_map", _radius_map_texture)
+	_particle_clip_mat.set_shader_parameter("smoke_center", global_position)
+	_particle_clip_mat.set_shader_parameter("max_radius", max_radius)
+	_particle_clip_mat.set_shader_parameter("current_radius", 0.0)
+	_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", 0.0)
+
+	# 煙パフテクスチャを適用（四角いパーティクルを自然な煙型にする）
+	var smoke_tex: Texture2D = puff_texture
+	if not smoke_tex:
+		smoke_tex = load("res://assets/textures/smoke_puff.png") as Texture2D
+	if smoke_tex:
+		_particle_clip_mat.set_shader_parameter("smoke_texture", smoke_tex)
+
+	# パーティクルのQuadMeshにクリップシェーダーを適用
+	# 元のシーンデータを変更しないようメッシュを複製
+	var quad := _particles.draw_pass_1 as QuadMesh
+	if quad:
+		var new_quad := quad.duplicate() as QuadMesh
+		new_quad.material = _particle_clip_mat
+		_particles.draw_pass_1 = new_quad
+
+
 ## 視線がこのスモークエリアと交差するか判定
-## XZ平面上での線分と円の交差判定
+## XZ平面上での線分と円の交差判定 + 壁越し判定
 ## @param from: 線分の始点
 ## @param to: 線分の終点
-## @return: 交差している場合true
+## @return: 交差している場合true（壁越しの場合はfalse）
 func intersects_line_segment(from: Vector3, to: Vector3) -> bool:
 	if _current_radius <= 0:
 		return false
@@ -146,7 +286,10 @@ func intersects_line_segment(from: Vector3, to: Vector3) -> bool:
 
 	# 線分の長さが0の場合
 	if a < 0.0001:
-		return c <= 0
+		if c > 0:
+			return false
+		# 始点がスモーク内：壁チェック
+		return not _is_wall_between(from, global_position)
 
 	var discriminant := b * b - 4.0 * a * c
 
@@ -158,20 +301,27 @@ func intersects_line_segment(from: Vector3, to: Vector3) -> bool:
 	var t1 := (-b - sqrt_disc) / (2.0 * a)
 	var t2 := (-b + sqrt_disc) / (2.0 * a)
 
+	var intersects := false
+
 	# t ∈ [0, 1] に交点があるかチェック
 	if (t1 >= 0 and t1 <= 1) or (t2 >= 0 and t2 <= 1):
-		return true
+		intersects = true
 
 	# 線分が完全に円の内部にある場合
-	if t1 < 0 and t2 > 1:
-		return true
+	if not intersects and t1 < 0 and t2 > 1:
+		intersects = true
 
-	return false
+	if not intersects:
+		return false
+
+	# 壁チェック: 視点からスモーク中心への経路に壁があればスモークは影響しない
+	return not _is_wall_between(from, global_position)
 
 
 ## 指定位置がこのスモークエリア内にあるか判定
+## 壁越しの場合はスモーク外と判定
 ## @param pos: 判定位置
-## @return: エリア内にある場合true
+## @return: エリア内にある場合true（壁越しの場合はfalse）
 func is_position_inside(pos: Vector3) -> bool:
 	if _current_radius <= 0:
 		return false
@@ -181,7 +331,28 @@ func is_position_inside(pos: Vector3) -> bool:
 	var dz := pos.z - global_position.z
 	var dist_sq := dx * dx + dz * dz
 
-	return dist_sq <= _current_radius * _current_radius
+	if dist_sq > _current_radius * _current_radius:
+		return false
+
+	# 壁チェック: 位置からスモーク中心への経路に壁があればスモーク外と判定
+	return not _is_wall_between(pos, global_position)
+
+
+## 2点間に壁があるかレイキャストで判定
+## @param from_pos: 始点
+## @param to_pos: 終点
+## @return: 壁がある場合true
+func _is_wall_between(from_pos: Vector3, to_pos: Vector3) -> bool:
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return false
+	# 壁の中間高さでレイキャスト（地面すれすれだと検出漏れの可能性）
+	var check_height := 1.0
+	var from_adj := Vector3(from_pos.x, check_height, from_pos.z)
+	var to_adj := Vector3(to_pos.x, check_height, to_pos.z)
+	var query := PhysicsRayQueryParameters3D.create(from_adj, to_adj, WALL_COLLISION_MASK)
+	var result := space_state.intersect_ray(query)
+	return not result.is_empty()
 
 
 ## 現在の有効半径を取得
@@ -202,3 +373,31 @@ func get_elapsed_time() -> float:
 ## 残り時間を取得
 func get_remaining_time() -> float:
 	return max(0.0, duration - _elapsed_time)
+
+
+## デバッグ用リングメッシュを作成（スモーク半径を可視化）
+func _create_debug_ring() -> void:
+	_debug_ring = MeshInstance3D.new()
+	# 単位円を作成（スケールで半径を制御）
+	var im := ImmediateMesh.new()
+	var segments := 64
+	im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	for i in range(segments + 1):
+		var angle := float(i) * TAU / float(segments)
+		im.surface_add_vertex(Vector3(cos(angle), 0.0, sin(angle)))
+	im.surface_end()
+	_debug_ring.mesh = im
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.3, 0.0, 0.9)  # オレンジ
+	mat.no_depth_test = true
+	_debug_ring.material_override = mat
+
+	add_child(_debug_ring)
+	_debug_ring.position.y = 0.15
+
+
+## デバッグリングのスケールを更新
+func _update_debug_ring() -> void:
+	_debug_ring.scale = Vector3(_current_radius, 1.0, _current_radius)

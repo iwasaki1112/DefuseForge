@@ -12,7 +12,7 @@ extends Node
 
 ## ログを有効にするかどうか（手動設定用）
 ## falseにすると全てのログが無効になる
-const ENABLE_LOGS: bool = true
+const ENABLE_LOGS: bool = false
 
 ## デバッグビルドでのみログを出力するかどうか
 ## trueにするとリリースビルドでログが自動的に無効化される

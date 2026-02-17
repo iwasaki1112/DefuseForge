@@ -6,6 +6,15 @@ class_name GameConstants
 ## 文字列リテラルをコード内に散在させないために使用する。
 
 # ========================================================
+# Character Model
+# ========================================================
+
+# ========================================================
+# Weapon Visibility
+# ========================================================
+const WEAPON_VISIBILITY_SCALE: float = 1.3  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
+
+# ========================================================
 # Node Names
 # ========================================================
 const NODE_CHARACTER_MODEL := "CharacterModel"
@@ -16,14 +25,10 @@ const NODE_ANIMATION_TREE := "AnimationTree"
 const NODE_VISION_COMPONENT := "VisionComponent"
 const NODE_COMBAT_AWARENESS := "CombatAwarenessComponent"
 const NODE_SELECTION_MANAGER := "SelectionManager"
-const NODE_PATH_EXECUTION_MANAGER := "PathExecutionManager"
 const NODE_IDLE_MANAGER := "IdleCharacterManager"
-const NODE_PATH_DRAWER := "PathDrawer"
-const NODE_PATH_MODE_CONTROLLER := "PathModeController"
 const NODE_VISION_SERVICE := "VisionService"
 const NODE_MAP_MANAGER := "MapManager"
 const NODE_LABEL_MANAGER := "CharacterLabelManager"
-const NODE_PATH_SERVICE := "PathService"
 
 # ========================================================
 # Group Names
@@ -32,23 +37,51 @@ const GROUP_CHARACTERS := "characters"
 const GROUP_DOORS := "doors"
 
 # ========================================================
-# Bone Names (Mixamo Standard)
+# Bone Names (ARP / Unity Humanoid)
 # ========================================================
-const BONE_RIGHT_HAND := "mixamorig_RightHand"
-const BONE_SPINE_1 := "mixamorig_Spine1"
-const BONE_SPINE_2 := "mixamorig_Spine2"
+const BONE_RIGHT_HAND := "RightHand"
+const BONE_SPINE := "Spine"
+const BONE_UPPER_CHEST := "UpperChest"
+const BONE_LEFT_ARM := "LeftUpperArm"
+const BONE_LEFT_FOREARM := "LeftLowerArm"
+const BONE_LEFT_HAND := "LeftHand"
+# 後方互換エイリアス
+const BONE_SPINE_1 := BONE_SPINE
+const BONE_SPINE_2 := BONE_UPPER_CHEST
+
+# ========================================================
+# Node Names (Left Hand IK)
+# ========================================================
+const NODE_LEFT_HAND_GRIP := "LeftHandGrip"
+const NODE_LEFT_HAND_IK_TARGET := "LeftHandIKTarget"
 
 # ========================================================
 # Animation Names
 # ========================================================
-const ANIM_DEATH := "death_backward"  # デフォルト死亡アニメーション（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_FORWARD := "death_backward"  # 仮: death_backward（TODO: death_forward追加後に戻す）
-const ANIM_DEATH_BACKWARD := "death_backward"  # 後ろから撃たれて前に倒れる
-const ANIM_DEATH_RIGHT := "death_right"  # 右から撃たれて左に倒れる
-# Note: death_left は存在しない → フォールバック処理で対応
-const ANIM_RIFLE_DOOR_KICK := "rifle_door_kick"
-const ANIM_PISTOL_DOOR_KICK := "pistol_door_kick"
-const ANIM_PISTOL_LOW_THROWING := "pistol_low_throwing"
+const ANIM_DEATH := "game_rifle_death_forward"
+const ANIM_DEATH_FORWARD := "game_rifle_death_forward"
+const ANIM_DEATH_BACKWARD := "game_rifle_death_backward"
+const ANIM_DEATH_LEFT := "game_rifle_death_left"
+const ANIM_DEATH_RIGHT := "game_rifle_death_right"
+const ANIM_RIFLE_DOOR_KICK := "game_rifle_melee_kick"
+const ANIM_PISTOL_DOOR_KICK := "game_pistol_melee_kick"
+const ANIM_PISTOL_LOW_THROWING := "game_pistol_grenade_throw_single"
+const ANIM_PISTOL_GRENADE_THROW_CLOSE := "game_pistol_grenade_throw_close"
+const ANIM_RIFLE_GRENADE_THROW_FAR := "game_rifle_grenade_throw_far"
+const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
+const ANIM_RIFLE_OPEN_DOOR := "game_open_door"
+const ANIM_TALKING := "game_rifle_talking"
+
+# ========================================================
+# Door Open Settings
+# ========================================================
+const DOOR_OPEN_DISTANCE := 1.5  ## ドア開けインタラクション距離（メートル）
+
+# ========================================================
+# Hostage Talking Settings
+# ========================================================
+const HOSTAGE_TALK_DISTANCE := 2.0    # 近接判定距離（メートル）
+const HOSTAGE_TALK_DURATION := 10.0   # 会話に必要な時間（秒）
 
 # ========================================================
 # Grenade Settings
@@ -65,10 +98,18 @@ const GRENADE_MASS := 0.4  # 質量
 # Smoke Grenade Settings
 # ========================================================
 const SMOKE_DURATION := 10.0  # スモーク持続時間（秒）
-const SMOKE_RADIUS := 5.0  # スモーク半径（メートル）
-const SMOKE_EXPAND_TIME := 1.5  # 展開時間（秒）
+const SMOKE_RADIUS := 3.5  # スモーク半径（メートル）
+const SMOKE_EXPAND_TIME := 0.5  # 展開時間（秒）
 const SMOKE_FADE_TIME := 2.5  # 消滅時間（秒）
 const SMOKE_FUSE_TIME := 3.0  # 導火線時間（秒）
+
+# ========================================================
+# Grenade Throw Settings
+# ========================================================
+const GRENADE_THROW_MAX_DISTANCE := 6.5    # 最大投擲距離（メートル）
+const GRENADE_THROW_CLOSE_THRESHOLD := 4.0 # 近投/遠投の閾値（メートル）
+const GRENADE_START_HEIGHT := 1.5          # 発射高さ（手の位置近似）
+const SMOKE_GRENADE_PER_ROUND := 99        # ラウンドあたりのスモーク数（デバッグ用、本番は1）
 
 # ========================================================
 # Scene Paths (Use with load/preload if class_name not available)
@@ -77,16 +118,6 @@ const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
 const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
-
-# ========================================================
-# Path Settings (パス描画・クリック判定)
-# ========================================================
-## パスの線幅（視覚的な太さ）
-const PATH_LINE_WIDTH: float = 0.15
-## パスのクリック判定エリア（PC向け、線幅と統一）
-const PATH_CLICK_THRESHOLD: float = 0.15
-## パスのクリック判定エリア（モバイル向け、タッチ精度を考慮して大きめ）
-const PATH_CLICK_THRESHOLD_MOBILE: float = 0.5
 
 # ========================================================
 # Round Settings
@@ -106,6 +137,3 @@ const NODE_ROUND_HUD := "RoundHUD"
 ## チームカラー
 const CT_COLOR := Color(0.4, 0.6, 1.0)   # CT（青）
 const T_COLOR := Color(1.0, 0.6, 0.3)    # T（オレンジ）
-## ショップUI
-const AFFORDABLE_COLOR := Color(0.2, 0.6, 0.2)  # 購入可能時
-const SELECTED_COLOR := Color(0.3, 0.5, 0.7)    # 選択時

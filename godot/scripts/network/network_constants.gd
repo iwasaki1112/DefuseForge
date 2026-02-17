@@ -12,10 +12,7 @@ extends RefCounted
 enum MessageType {
 	## ゲーム状態の同期
 	GAME_STATE_SYNC = 0,
-	## パス確定メッセージ
-	PATH_CONFIRM = 1,
-	## パス実行開始メッセージ
-	PATH_EXECUTE = 2,
+	## Historical: Values 1-2 were PATH_CONFIRM/PATH_EXECUTE (removed in TPS migration)
 	## キャラクター状態更新
 	CHARACTER_UPDATE = 3,
 	## ラウンド状態
@@ -44,11 +41,11 @@ enum MessageType {
 const SIMULATION_TICK_HZ: int = 60
 
 ## ネットワーク送信Tick（Hz）- ネットワーク更新頻度
-const NETWORK_SEND_HZ: int = 15
+const NETWORK_SEND_HZ: int = 20
 
 ## 送信間隔（シミュレーションTickごと）
 @warning_ignore("integer_division")
-const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 4
+const SEND_EVERY_N_TICKS: int = SIMULATION_TICK_HZ / NETWORK_SEND_HZ  # = 3
 
 ## 同期レート（Hz）- 後方互換用（NETWORK_SEND_HZを使用推奨）
 const SYNC_RATE_HZ: int = NETWORK_SEND_HZ
@@ -57,8 +54,8 @@ const SYNC_RATE_HZ: int = NETWORK_SEND_HZ
 const SYNC_INTERVAL: float = 1.0 / NETWORK_SEND_HZ
 
 ## 補間バッファ遅延（秒）- リモートキャラクターの描画遅延
-## 高いほど滑らかだがラグが増える（推奨: 60-120ms）
-const INTERPOLATION_DELAY: float = 0.08
+## 高いほど滑らかだがラグが増える（推奨: 80-150ms）
+const INTERPOLATION_DELAY: float = 0.12
 
 ## スナップショットバッファサイズ（約1秒分のデータを保持）
 const SNAPSHOT_BUFFER_SIZE: int = 30
@@ -79,11 +76,6 @@ const POSITION_PRECISION: int = 100
 ## 回転精度（0.001ラジアン単位 = 1000）
 const ROTATION_PRECISION: int = 1000
 
-## パス座標の最大数
-const MAX_PATH_POINTS: int = 256
-
-## ポイントの最大数（各種類ごと）
-const MAX_POINTS_PER_TYPE: int = 32
 
 # ============================================
 # リレーサーバー設定
@@ -156,6 +148,8 @@ enum GameEventType {
 	SMOKE_DEPLOY = 8,
 	## アニメーションイベント（即時同期）
 	ANIMATION_EVENT = 9,
+	## ドア開け（静かに開く）
+	DOOR_OPEN = 10,
 }
 
 
@@ -182,10 +176,6 @@ static func message_type_to_string(msg_type: MessageType) -> String:
 	match msg_type:
 		MessageType.GAME_STATE_SYNC:
 			return "GAME_STATE_SYNC"
-		MessageType.PATH_CONFIRM:
-			return "PATH_CONFIRM"
-		MessageType.PATH_EXECUTE:
-			return "PATH_EXECUTE"
 		MessageType.CHARACTER_UPDATE:
 			return "CHARACTER_UPDATE"
 		MessageType.ROUND_STATE:
@@ -225,5 +215,9 @@ static func event_type_to_string(event_type: GameEventType) -> String:
 			return "GRENADE_EXPLODE"
 		GameEventType.SMOKE_DEPLOY:
 			return "SMOKE_DEPLOY"
+		GameEventType.ANIMATION_EVENT:
+			return "ANIMATION_EVENT"
+		GameEventType.DOOR_OPEN:
+			return "DOOR_OPEN"
 		_:
 			return "UNKNOWN"

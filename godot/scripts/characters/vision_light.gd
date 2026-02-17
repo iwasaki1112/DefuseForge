@@ -15,14 +15,15 @@ var _character: Node3D = null
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
+var _map_center: Vector2 = Vector2.ZERO
 var _texture_resolution: int = 256
 
 ## 視界設定
-var fov_degrees: float = 90.0
-var view_distance: float = 15.0
+var fov_degrees: float = 75.0
+var view_distance: float = 7.0
 
 ## 周辺視界設定（至近距離の360度視界）
-var peripheral_distance: float = 0.75
+var peripheral_distance: float = 0.5
 
 ## 回転補間用
 var _current_rotation: float = 0.0  ## 現在の補間された回転角度
@@ -148,10 +149,10 @@ func sync_transform() -> void:
 	if _light:
 		_light.position = _current_position
 		# 3D Y軸回転 → 2D回転
-		# Mixamoモデルの前方向は+Z
+		# モデルの前方向は+Z
 		# ビューポート座標系: X=WorldX, Y=WorldZ
 		# FOVテクスチャ: 上方向(-Y)が0度（rotation=0でビューポート上向き）
-		# +Z（Mixamo前方）= ビューポート+Y（下）→ rotation=PI必要
+		# +Z（モデル前方）= ビューポート+Y（下）→ rotation=PI必要
 		var facing := _get_facing_direction()
 		# atan2(z, x)で3D角度を取得し、PI/2加算してビューポート座標に変換
 		var target_angle := atan2(facing.z, facing.x) + PI / 2.0
@@ -218,9 +219,9 @@ func cleanup() -> void:
 # ============================================
 
 func _world_to_viewport(world_pos: Vector3) -> Vector2:
-	var half_map := _map_size / 2.0
-	var uv_x := (world_pos.x + half_map.x) / _map_size.x
-	var uv_y := (world_pos.z + half_map.y) / _map_size.y
+	var map_min := _map_center - _map_size / 2.0
+	var uv_x := (world_pos.x - map_min.x) / _map_size.x
+	var uv_y := (world_pos.z - map_min.y) / _map_size.y
 	return Vector2(uv_x * _texture_resolution, uv_y * _texture_resolution)
 
 

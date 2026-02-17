@@ -21,7 +21,7 @@ var _characters: Array[Node] = []
 # ============================================
 # State
 # ============================================
-var _visibility_cache: Dictionary = {}  # { instance_id: bool }
+var _visibility_cache: Dictionary[int, bool] = {}  # { instance_id: bool }
 var _is_enabled: bool = true
 
 # SmokeAreaManager reference
@@ -130,6 +130,12 @@ func update_visibility() -> void:
 	for friendly in _get_friendly_characters():
 		friendly.visible = true
 
+	# T側は人質を常に表示（T側が人質を警備しているため）
+	if PlayerState.get_player_team() == GameCharacter.Team.TERRORIST:
+		for character in _characters:
+			if character is GameCharacter and character.team == GameCharacter.Team.NONE:
+				character.visible = true
+
 	# 敵リストを取得
 	var enemies := _get_enemy_characters()
 	if enemies.is_empty():
@@ -162,21 +168,46 @@ func _check_enemy_visibility(enemy: Node) -> void:
 	var enemy_pos: Vector3 = enemy_node3d.global_position
 	var is_visible := _is_position_visible_to_friendlies(enemy_pos)
 
-	# スモーク内の敵は常に非表示（FoWテクスチャだけではスモーク内部手前側が可視になるため）
-	if is_visible and _smoke_area_manager and _smoke_area_manager.is_position_in_smoke(enemy_pos):
-		is_visible = false
+	# スモーク可視性チェック（双方向で不透明）
+	var _hide_reason := ""
+	if is_visible and _smoke_area_manager:
+		if _smoke_area_manager.is_position_in_smoke(enemy_pos):
+			# 敵がスモーク内 → 非表示（外から中が見えない）
+			is_visible = false
+			_hide_reason = "in_smoke"
+		elif _are_all_friendlies_in_smoke():
+			# 全味方がスモーク内 → 外の敵も非表示（中から外が見えない）
+			is_visible = false
+			_hide_reason = "all_friendlies_in_smoke"
+	elif not is_visible:
+		_hide_reason = "fow"
 
 	var instance_id := enemy.get_instance_id()
 
 	# Update only if changed
 	if _visibility_cache.get(instance_id) != is_visible:
-		var start_time := Time.get_ticks_usec()
 		_visibility_cache[instance_id] = is_visible
 		enemy.visible = is_visible
 		visibility_changed.emit(enemy, is_visible)
-		var elapsed := Time.get_ticks_usec() - start_time
-		if Debug.enabled and elapsed > 1000:  # 1ms以上かかった場合のみログ
-			print("[EVS] Visibility change took ", elapsed / 1000.0, "ms for ", enemy.name, " -> ", is_visible)
+		if Debug.enabled:
+			var state_str := "VISIBLE" if is_visible else "HIDDEN"
+			var smoke_info := _get_nearest_smoke_debug_info(enemy_pos)
+			print("[EVS] ", enemy.name, " -> ", state_str,
+				" reason=", _hide_reason if not is_visible else "ok",
+				" enemy_pos=", enemy_pos, smoke_info)
+
+
+## 全ての生存味方がスモーク内にいるか判定
+func _are_all_friendlies_in_smoke() -> bool:
+	if not _smoke_area_manager:
+		return false
+	for friendly in _get_friendly_characters():
+		var game_char := friendly as GameCharacter
+		if not game_char or not game_char.is_alive:
+			continue
+		if not _smoke_area_manager.is_position_in_smoke(friendly.global_position):
+			return false  # スモーク外の味方がいる → false
+	return true  # 全味方がスモーク内
 
 
 ## Check if a world position is visible to any friendly character
@@ -222,7 +253,15 @@ func _get_friendly_characters() -> Array[Node]:
 
 
 func _get_enemy_characters() -> Array[Node]:
-	return PlayerState.filter_enemies(_characters)
+	var result: Array[Node] = []
+	for character in _characters:
+		if PlayerState.is_enemy(character):
+			result.append(character)
+		# Team.NONE（hostage等）: CT側はFoWで可視性を制御、T側は常に表示（update_visibilityで処理済み）
+		elif character is GameCharacter and character.team == GameCharacter.Team.NONE:
+			if PlayerState.get_player_team() != GameCharacter.Team.TERRORIST:
+				result.append(character)
+	return result
 
 
 # ============================================
@@ -232,3 +271,26 @@ func _get_enemy_characters() -> Array[Node]:
 func _on_player_team_changed(_new_team: GameCharacter.Team) -> void:
 	_visibility_cache.clear()
 	update_visibility()
+
+
+## デバッグ用: 最寄りスモークエリアの情報を文字列で返す
+func _get_nearest_smoke_debug_info(pos: Vector3) -> String:
+	if not _smoke_area_manager:
+		return ""
+	var areas: Array[Node3D] = _smoke_area_manager._active_areas
+	if areas.is_empty():
+		return " smoke_areas=0"
+	var nearest_dist := INF
+	var nearest_radius := 0.0
+	var nearest_pos := Vector3.ZERO
+	for area in areas:
+		if not is_instance_valid(area):
+			continue
+		var dist := pos.distance_to(area.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_pos = area.global_position
+			if area.has_method("get_current_radius"):
+				nearest_radius = area.get_current_radius()
+	return " smoke_areas=%d nearest_smoke_dist=%.1f smoke_radius=%.1f smoke_pos=%s" % [
+		areas.size(), nearest_dist, nearest_radius, str(nearest_pos)]

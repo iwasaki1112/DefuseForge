@@ -2,74 +2,8 @@ class_name NetworkMessages
 extends RefCounted
 ## ネットワーク同期用メッセージ型定義
 ##
-## パス確定、ラウンド状態、キャラクター状態、ゲームイベントなど
+## ラウンド状態、キャラクター状態、ゲームイベントなど
 ## ネットワーク越しにやり取りするデータ構造を定義
-
-# ============================================
-# PathConfirmMessage - パス確定データ
-# ============================================
-
-## パス確定時に送信するメッセージ
-## キャラクターの移動パスと全ポイント情報を含む
-class PathConfirmMessage extends RefCounted:
-	## 送信元プレイヤーID（peer_id）
-	var player_id: int = 0
-
-	## 対象キャラクターID
-	var character_id: int = 0
-
-	## パス座標配列
-	var path: Array[Vector3] = []
-
-	## 視線ポイントデータ配列
-	## 各要素: { path_ratio, target_point/direction, has_target }
-	var vision_points: Array[Dictionary] = []
-
-	## Waitポイントデータ配列
-	## 各要素: { path_ratio, anchor, wait_duration }
-	var wait_points: Array[Dictionary] = []
-
-	## メッセージ生成タイムスタンプ（msec）
-	var timestamp: int = 0
-
-
-	## Dictionaryに変換（シリアライズ用）
-	func to_dict() -> Dictionary:
-		return {
-			"player_id": player_id,
-			"character_id": character_id,
-			"path": _path_to_array(),
-			"vision_points": vision_points,
-			"wait_points": wait_points,
-			"timestamp": timestamp,
-		}
-
-
-	## Dictionaryから復元（デシリアライズ用）
-	func from_dict(data: Dictionary) -> void:
-		player_id = data.get("player_id", 0)
-		character_id = data.get("character_id", 0)
-		_array_to_path(data.get("path", []))
-		vision_points.assign(data.get("vision_points", []))
-		wait_points.assign(data.get("wait_points", []))
-		timestamp = data.get("timestamp", 0)
-
-
-	## パスをArray[Array]形式に変換（JSON互換）
-	func _path_to_array() -> Array:
-		var result: Array = []
-		for point in path:
-			result.append([point.x, point.y, point.z])
-		return result
-
-
-	## Array形式からパスを復元
-	func _array_to_path(arr: Array) -> void:
-		path.clear()
-		for item in arr:
-			if item is Array and item.size() >= 3:
-				path.append(Vector3(item[0], item[1], item[2]))
-
 
 # ============================================
 # RoundStateMessage - ラウンド状態
@@ -146,6 +80,7 @@ class CharacterStateMessage extends RefCounted:
 	var is_alive: bool = true
 
 	## 現在のアニメーション状態
+	## @deprecated TPS移行後は move_state ベースの同期に変更。後方互換のため残す。
 	var animation_state: String = ""
 
 	## 移動速度（m/s）
@@ -275,16 +210,6 @@ class PlayerReadyMessage extends RefCounted:
 ## 現在時刻のタイムスタンプを取得
 static func get_timestamp() -> int:
 	return Time.get_ticks_msec()
-
-
-## PathConfirmMessageを作成
-static func create_path_confirm(player_id: int, character_id: int, path: Array[Vector3]) -> PathConfirmMessage:
-	var msg := PathConfirmMessage.new()
-	msg.player_id = player_id
-	msg.character_id = character_id
-	msg.path = path.duplicate()
-	msg.timestamp = get_timestamp()
-	return msg
 
 
 ## RoundStateMessageを作成

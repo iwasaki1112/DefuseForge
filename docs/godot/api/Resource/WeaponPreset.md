@@ -41,29 +41,92 @@
 |-----------|-----|----------|------|
 | `damage` | `float` | `30.0` | 1発あたりのダメージ |
 | `fire_rate` | `float` | `0.1` | 発射間隔（秒） |
-| `accuracy` | `float` | `0.9` | 精度（0.0〜1.0） |
-| `spread` | `float` | `0.1` | 散布（0.0〜1.0、低いほど集弾） |
-| `effective_range` | `float` | `20.0` | 有効射程（メートル） |
+
+### Accuracy Curve（精度カーブ）
+
+距離に応じた精度を定義する。最適距離帯（スイートスポット）を中心に、至近距離と遠距離で精度が変化する。
+
+```
+精度
+  peak |         ___________
+       |        /           \
+       |       /             \
+  far  |______/               \__________
+       0   range_min  range_max  max_distance   距離(m)
+            最適距離帯
+```
+
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `accuracy_peak` | `float` | `0.85` | 最適距離での命中精度 |
+| `accuracy_close` | `float` | `0.75` | 至近距離(0m)での命中精度 |
+| `accuracy_far` | `float` | `0.15` | 最大距離以降の命中精度 |
+| `accuracy_range_min` | `float` | `0.0` | 最適距離帯の開始(m) |
+| `accuracy_range_max` | `float` | `15.0` | 最適距離帯の終了(m) |
+| `accuracy_max_distance` | `float` | `40.0` | 精度最低到達距離(m) |
+
+#### 距離別の精度計算
+
+| 距離帯 | 計算 |
+|--------|------|
+| 0 〜 range_min | `lerp(accuracy_close, accuracy_peak, distance/range_min)` |
+| range_min 〜 range_max | `accuracy_peak` 固定 |
+| range_max 〜 max_distance | `lerp(accuracy_peak, accuracy_far, 正規化距離)` |
+| max_distance以降 | `accuracy_far` 固定 |
+
+### Movement Penalties（移動ペナルティ）
+
+射手とターゲットの移動状態による精度への乗数。
+
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `shooter_walk_penalty` | `float` | `0.8` | 歩行時の精度乗数 |
+| `shooter_sprint_penalty` | `float` | `0.4` | スプリント時の精度乗数 |
+| `target_move_penalty` | `float` | `0.15` | ターゲット移動ペナルティ係数 |
+| `target_speed_reference` | `float` | `6.0` | ターゲット速度基準値(m/s) |
+
+#### 射手移動ペナルティの計算
+
+| 速度 | 精度乗数 |
+|------|----------|
+| 0〜0.5 m/s | 1.0（静止） |
+| 0.5〜4.0 m/s | `lerp(1.0, shooter_walk_penalty, 正規化)` |
+| 4.0 m/s以上 | `shooter_sprint_penalty` |
+
+#### ターゲット移動ペナルティの計算
+
+```
+multiplier = 1.0 - clamp(target_speed / target_speed_reference, 0, 1) * target_move_penalty
+```
+
+### Damage Falloff（ダメージ距離減衰）
+
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `damage_falloff_enabled` | `bool` | `false` | ダメージ距離減衰の有効化 |
+| `damage_falloff_start` | `float` | `20.0` | 減衰開始距離(m) |
+| `damage_falloff_min` | `float` | `0.5` | 最低ダメージ倍率 |
+| `damage_falloff_end` | `float` | `50.0` | 最低ダメージ到達距離(m) |
 
 ### 武器カテゴリ別推奨値
 
-| カテゴリ | accuracy | spread | effective_range |
-|---------|----------|--------|-----------------|
-| SNIPER | 0.95 | 0.05 | 50.0 |
-| RIFLE | 0.75-0.85 | 0.10-0.20 | 25.0 |
-| SMG | 0.65-0.75 | 0.25-0.35 | 15.0 |
-| PISTOL | 0.65-0.75 | 0.20-0.30 | 15.0 |
+| パラメータ | SMG | Rifle(AK) | Sniper | Pistol |
+|-----------|-----|-----------|--------|--------|
+| accuracy_peak | 0.80 | 0.85 | 0.95 | 0.80 |
+| accuracy_close | 0.80 | 0.70 | 0.40 | 0.85 |
+| accuracy_far | 0.05 | 0.10 | 0.30 | 0.08 |
+| range_min(m) | 0 | 3 | 15 | 0 |
+| range_max(m) | 8 | 20 | 40 | 10 |
+| max_distance(m) | 25 | 45 | 60 | 25 |
+| walk_penalty | 0.90 | 0.75 | 0.50 | 0.85 |
+| sprint_penalty | 0.55 | 0.35 | 0.15 | 0.50 |
+| target_move_penalty | 0.12 | 0.15 | 0.08 | 0.20 |
 
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `recoil_strength` | `float` | `0.08` | リコイルアニメーション強度 |
 | `recoil_recovery` | `float` | `10.0` | リコイル回復速度 |
-
-### Economy
-| プロパティ | 型 | デフォルト | 説明 |
-|-----------|-----|----------|------|
-| `price` | `int` | `0` | 購入価格 |
 
 ### Visual
 | プロパティ | 型 | デフォルト | 説明 |
@@ -142,9 +205,9 @@ weapon.display_name = "M4A1"
 weapon.category = WeaponPreset.WeaponCategory.RIFLE
 weapon.damage = 33.0
 weapon.fire_rate = 0.09
-weapon.accuracy = 0.85
+weapon.accuracy_peak = 0.85
+weapon.accuracy_range_max = 20.0
 weapon.recoil_strength = 0.08
-weapon.price = 3100
 ```
 
 ### .tresファイル（エディタで作成）
@@ -158,9 +221,16 @@ display_name = "M4A1"
 category = 0
 damage = 33.0
 fire_rate = 0.09
-accuracy = 0.85
+accuracy_peak = 0.85
+accuracy_close = 0.70
+accuracy_far = 0.10
+accuracy_range_min = 3.0
+accuracy_range_max = 20.0
+accuracy_max_distance = 45.0
+shooter_walk_penalty = 0.75
+shooter_sprint_penalty = 0.35
+target_move_penalty = 0.15
 recoil_strength = 0.08
-price = 3100
 ```
 
 ## WeaponRegistryとの連携
@@ -178,11 +248,11 @@ character.equip_weapon(weapon)
 
 ## 武器モデルの装着に関する重要な注意点
 
-### Mixamoキャラクターのスケルトンスケール問題
+### ARPキャラクターのスケルトンスケール
 
-Mixamoからエクスポートしたキャラクターモデルは、**スケルトンに約1/100のスケールが適用されている**場合がある。
+ARPリグのキャラクターモデルは、**スケルトンのスケールが1.0（等倍）**となっている。
 
-これにより、`BoneAttachment3D`に配置したオブジェクトは継承されたスケールの影響を受け、**極端に小さく（約1/100）描画される**。
+これにより、`BoneAttachment3D`に配置したオブジェクトはそのままのスケールで描画される。旧Mixamoリグで必要だったスケール補正（*100）は不要。
 
 #### 確認方法
 
@@ -190,25 +260,19 @@ Mixamoからエクスポートしたキャラクターモデルは、**スケル
 # BoneAttachment3Dのglobal_transformを確認
 print("Attachment global_transform: ", attachment.global_transform)
 # 正常: X, Y, Zベクトルの長さが約1.0
-# 問題あり: X, Y, Zベクトルの長さが約0.01
-```
-
-出力例（問題あり）:
-```
-[X: (0.001729, 0.009372, 0.00303), Y: (-0.000516, 0.003158, -0.009474), Z: (-0.009836, 0.001482, 0.001029), O: ...]
 ```
 
 ### 武器モデルの調整
 
-スケルトンスケールを補正するため、武器モデルには以下の調整が必要：
+ARPリグではスケルトンスケールが等倍のため、武器モデルのスケール補正は不要：
 
 | 項目 | 値 | 説明 |
 |------|-----|------|
-| `scale` | `Vector3.ONE * 100` | スケルトン補正（Mixamoスケルトンが0.01のため） |
+| `scale` | `Vector3.ONE` | スケール補正不要（ARPスケルトンが1.0のため） |
 | `rotation_degrees` | 武器固有 | GLBモデルの向きにより調整 |
 | `position` | 武器固有 | GLBモデルの原点位置により調整 |
 
-※ 武器モデルが現実的なサイズ（メートル単位）であれば、スケールは全武器で100に統一可能
+※ 武器モデルが現実的なサイズ（メートル単位）であれば、スケールは全武器でVector3.ONEに統一可能
 
 ### 武器GLBモデルの推奨設定
 

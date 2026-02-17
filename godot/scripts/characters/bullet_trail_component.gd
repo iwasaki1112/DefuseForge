@@ -77,6 +77,11 @@ func set_weapon_socket(socket: Node3D) -> void:
 func set_combat_awareness(awareness) -> void:
 	_combat_awareness = awareness
 
+
+## ウォームアップ: ノード生成とシェーダーコンパイルを事前に行う
+func warm_up() -> void:
+	_ensure_trail_nodes()
+
 # ============================================
 # Public API
 # ============================================
@@ -151,6 +156,51 @@ func _get_bullet_target_position() -> Vector3:
 	return _character.global_position + Vector3(0, 1.5, 0) + forward * BULLET_TRAIL_MAX_DISTANCE
 
 
+## トレイルノードとシェーダーマテリアルを事前生成
+func _ensure_trail_nodes() -> void:
+	if _bullet_trail and is_instance_valid(_bullet_trail):
+		return
+	if not _character or not _character.is_inside_tree():
+		return
+
+	_bullet_trail = Node3D.new()
+	_bullet_trail.name = "BulletTrail"
+
+	# シェーダーマテリアル作成
+	_bullet_trail_mat = ShaderMaterial.new()
+	_bullet_trail_mat.shader = BULLET_TRAIL_SHADER
+	_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.95, 0.85, 1.0))
+	_bullet_trail_mat.set_shader_parameter("edge_softness", 0.3)
+	_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.12)
+	_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
+	_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)
+	_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.8)
+	_bullet_trail_mat.set_shader_parameter("overall_alpha", 0.0)
+
+	# Quad 1（水平面）
+	_bullet_trail_quad1 = MeshInstance3D.new()
+	var mesh1 = QuadMesh.new()
+	mesh1.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
+	_bullet_trail_quad1.mesh = mesh1
+	_bullet_trail_quad1.rotation_degrees.x = 90
+	_bullet_trail_quad1.material_override = _bullet_trail_mat
+	_bullet_trail.add_child(_bullet_trail_quad1)
+
+	# Quad 2（垂直面）
+	_bullet_trail_quad2 = MeshInstance3D.new()
+	var mesh2 = QuadMesh.new()
+	mesh2.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
+	_bullet_trail_quad2.mesh = mesh2
+	_bullet_trail_quad2.rotation_degrees.x = 90
+	_bullet_trail_quad2.rotate_object_local(Vector3.UP, deg_to_rad(90))
+	_bullet_trail_quad2.material_override = _bullet_trail_mat
+	_bullet_trail.add_child(_bullet_trail_quad2)
+
+	# ワールド空間に追加（_ready中のblocked回避）
+	# visible=trueのままalpha=0で追加し、GPUシェーダーを事前コンパイルさせる
+	_character.get_tree().root.add_child.call_deferred(_bullet_trail)
+
+
 func _create_trail(start: Vector3, end: Vector3) -> void:
 	if _bullet_trail_tween and _bullet_trail_tween.is_running():
 		_bullet_trail_tween.kill()
@@ -159,43 +209,9 @@ func _create_trail(start: Vector3, end: Vector3) -> void:
 	if length < 0.1:
 		return
 
-	if not _bullet_trail or not is_instance_valid(_bullet_trail):
-		_bullet_trail = Node3D.new()
-		_bullet_trail.name = "BulletTrail"
-
-		# シェーダーマテリアル作成
-		_bullet_trail_mat = ShaderMaterial.new()
-		_bullet_trail_mat.shader = BULLET_TRAIL_SHADER
-		_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.95, 0.85, 1.0))
-		_bullet_trail_mat.set_shader_parameter("edge_softness", 0.3)
-		_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.12)
-		_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
-		_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)
-		_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.8)
-		_bullet_trail_mat.set_shader_parameter("overall_alpha", 1.0)
-
-		# Quad 1（水平面）
-		_bullet_trail_quad1 = MeshInstance3D.new()
-		var mesh1 = QuadMesh.new()
-		mesh1.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
-		_bullet_trail_quad1.mesh = mesh1
-		_bullet_trail_quad1.rotation_degrees.x = 90
-		_bullet_trail_quad1.material_override = _bullet_trail_mat
-		_bullet_trail.add_child(_bullet_trail_quad1)
-
-		# Quad 2（垂直面）
-		_bullet_trail_quad2 = MeshInstance3D.new()
-		var mesh2 = QuadMesh.new()
-		mesh2.size = Vector2(BULLET_TRAIL_WIDTH, 1.0)
-		_bullet_trail_quad2.mesh = mesh2
-		_bullet_trail_quad2.rotation_degrees.x = 90
-		_bullet_trail_quad2.rotate_object_local(Vector3.UP, deg_to_rad(90))
-		_bullet_trail_quad2.material_override = _bullet_trail_mat
-		_bullet_trail.add_child(_bullet_trail_quad2)
-
-		# ワールド空間に追加（キャラクターがツリー内の場合のみ）
-		if _character and _character.is_inside_tree():
-			_character.get_tree().root.add_child(_bullet_trail)
+	_ensure_trail_nodes()
+	if not _bullet_trail:
+		return
 
 	# Quadサイズを更新
 	var quad1_mesh = _bullet_trail_quad1.mesh as QuadMesh

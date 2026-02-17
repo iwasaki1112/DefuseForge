@@ -155,21 +155,15 @@ func _setup_enemy_visibility_system() -> void:
 # スモーク連携
 # ============================================
 
-func _on_smoke_area_added(area: Node3D) -> void:
-	if fog_of_war_system:
-		fog_of_war_system.add_smoke_occluder(area)
-
-	# スモークの半径変更シグナルに接続
-	if area.has_signal("radius_changed"):
-		if not area.radius_changed.is_connected(_on_smoke_radius_changed):
-			area.radius_changed.connect(_on_smoke_radius_changed.bind(area))
+func _on_smoke_area_added(_area: Node3D) -> void:
+	# FoWオクルーダーは追加しない（扇形の視界表示はそのまま維持）
+	# 敵キャラクターの表示/非表示はEnemyVisibilitySystemで制御
+	pass
 
 
-func _on_smoke_area_removed(area: Node3D) -> void:
-	if fog_of_war_system:
-		fog_of_war_system.remove_smoke_occluder(area)
+func _on_smoke_area_removed(_area: Node3D) -> void:
+	pass
 
 
-func _on_smoke_radius_changed(area: Node3D) -> void:
-	if fog_of_war_system:
-		fog_of_war_system.update_smoke_radius(area)
+func _on_smoke_radius_changed(_area: Node3D) -> void:
+	pass

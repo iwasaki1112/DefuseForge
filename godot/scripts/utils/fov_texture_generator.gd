@@ -7,7 +7,7 @@ extends RefCounted
 const DEFAULT_SIZE: int = 256
 
 ## テクスチャキャッシュ（FOV角度 -> ImageTexture）
-static var _texture_cache: Dictionary = {}
+static var _texture_cache: Dictionary[String, ImageTexture] = {}
 
 
 ## 扇形FOVテクスチャを生成

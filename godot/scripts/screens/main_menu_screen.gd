@@ -67,6 +67,14 @@ func _setup_ui() -> void:
 	multiplayer_btn.pressed.connect(_on_multiplayer_pressed)
 	button_container.add_child(multiplayer_btn)
 
+	# COOPボタン（テキスト）
+	var coop_btn := Button.new()
+	coop_btn.text = "COOP"
+	coop_btn.custom_minimum_size = Vector2(500, 60)
+	coop_btn.add_theme_font_size_override("font_size", 24)
+	coop_btn.pressed.connect(_on_coop_pressed)
+	button_container.add_child(coop_btn)
+
 	# Optionボタン（右上に配置、最後に追加して最前面に）
 	var option_btn := _create_texture_button(OPTION_BUTTON_TEXTURE)
 	option_btn.pressed.connect(_on_option_pressed)
@@ -101,4 +109,10 @@ func _on_option_pressed() -> void:
 
 
 func _on_multiplayer_pressed() -> void:
+	SettingsManager.set_game_mode("multiplayer")
+	get_tree().change_scene_to_file(LOBBY_SCENE)
+
+
+func _on_coop_pressed() -> void:
+	SettingsManager.set_game_mode("coop")
 	get_tree().change_scene_to_file(LOBBY_SCENE)

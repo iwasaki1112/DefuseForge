@@ -10,9 +10,8 @@ func get_mode_name() -> String:
 
 
 func determine_player_team() -> void:
-	var teams = [GameCharacter.Team.COUNTER_TERRORIST, GameCharacter.Team.TERRORIST]
-	var random_team = teams[randi() % 2]
-	PlayerState.set_player_team(random_team)
+	# トレーニングはCT固定（alphaプリセットでスポーンするため）
+	PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 
 
 func register_character(game_manager: GameManager, character: GameCharacter, _network_id: int) -> void:

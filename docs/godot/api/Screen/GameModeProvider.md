@@ -59,22 +59,6 @@ func register_character(_game_manager: GameManager, _character: GameCharacter, _
 - **Training**: `game_manager.register_character()`
 - **Multiplayer**: `game_manager.register_character_with_network()`
 
-### on_path_confirmed
-
-```gdscript
-func on_path_confirmed() -> void
-```
-
-パス確定時に呼ばれます。Multiplayerモードではネットワーク同期を行います。
-
-### on_execute_paths
-
-```gdscript
-func on_execute_paths(_count: int) -> void
-```
-
-パス実行時に呼ばれます。Multiplayerモードではネットワーク同期を行います。
-
 ### on_round_ended
 
 ```gdscript

@@ -30,16 +30,6 @@ func spawn_characters(_game_screen: Node, _game_manager: GameManager) -> bool:
 	return false  # デフォルトはGameScreenの処理を使用
 
 
-## パス確定時のコールバック
-func on_path_confirmed() -> void:
-	pass
-
-
-## パス実行時のコールバック
-func on_execute_paths(_count: int) -> void:
-	pass
-
-
 ## ラウンド終了時のコールバック
 func on_round_ended(_winner: int, _reason: int) -> void:
 	pass
@@ -48,6 +38,11 @@ func on_round_ended(_winner: int, _reason: int) -> void:
 ## ラウンド開始可能か
 func can_start_round() -> bool:
 	return true
+
+
+## アニメーションイベント送信（Multiplayer/Coopでオーバーライド）
+func send_animation_event(_character_id: int, _anim_event: int, _extra_data: Dictionary = {}) -> void:
+	pass
 
 
 ## クリーンアップ

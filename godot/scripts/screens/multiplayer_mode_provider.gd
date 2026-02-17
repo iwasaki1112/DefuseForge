@@ -61,11 +61,10 @@ func _connect_network_events() -> void:
 	_game_manager.grenade_network_event.connect(_on_grenade_network_event)
 	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
 	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
+	_game_manager.door_open_network_event.connect(_on_door_open_network_event)
 	_game_manager.damage_network_event.connect(_on_damage_network_event)
 
-	# リモートプレイヤーからのパス確定を処理
-	if sync_controller:
-		sync_controller.path_confirmed_remote.connect(_on_path_confirmed_remote)
+
 
 
 func determine_player_team() -> void:
@@ -115,13 +114,13 @@ func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
 		var info: Dictionary = players[peer_id]
 		var team: int = info.get("team", GameCharacter.Team.NONE)
 
-		# チームに基づいてキャラクターをスポーン
+		# チームに基づいてキャラクターをスポーン（TPS: 1プレイヤー1体）
 		if team == GameCharacter.Team.COUNTER_TERRORIST:
 			network_id_counter = _spawn_team_characters_for_player(
 				game_screen, game_manager, preset,
 				peer_id, team,
 				preset.spawn_points_ct, preset.spawn_rotations_ct,
-				["alpha", "bravo"], "alpha",
+				["alpha"], "alpha",
 				network_id_counter
 			)
 		elif team == GameCharacter.Team.TERRORIST:
@@ -129,7 +128,7 @@ func spawn_characters(game_screen: Node, game_manager: GameManager) -> bool:
 				game_screen, game_manager, preset,
 				peer_id, team,
 				preset.spawn_points_t, preset.spawn_rotations_t,
-				["ares", "brim"], "ares",
+				["ares"], "ares",
 				network_id_counter
 			)
 
@@ -158,7 +157,7 @@ func _spawn_team_characters_for_player(
 		push_error("[MultiplayerModeProvider] Character preset not found: %s" % preset_id)
 		return network_id_counter
 
-	var count := mini(2, spawn_points.size())  # 各プレイヤー2体
+	var count := mini(marker_names.size(), spawn_points.size())
 
 	for i in range(count):
 		var spawn_pos: Vector3 = spawn_points[i]
@@ -172,7 +171,7 @@ func _spawn_team_characters_for_player(
 			if i < spawn_rotations.size():
 				var spawn_rot: float = spawn_rotations[i]
 				var direction := Vector3(sin(spawn_rot), 0, cos(spawn_rot))
-				character._facing_direction = direction
+				character.set_initial_facing(direction)
 
 			var character_parent = game_manager.get_character_parent()
 			character_parent.add_child(character)
@@ -184,15 +183,9 @@ func _spawn_team_characters_for_player(
 	return network_id_counter
 
 
-func on_path_confirmed() -> void:
+func send_animation_event(character_id: int, anim_event: int, extra_data: Dictionary = {}) -> void:
 	if sync_controller:
-		sync_controller.send_state_sync()
-
-
-func on_execute_paths(_count: int) -> void:
-	# 各プレイヤーは自分のキャラクターのみを操作するため、
-	# PATH_EXECUTEの送信は不要（各自がGOを押したときに自分のキャラクターのみ実行）
-	pass
+		sync_controller.send_animation_event(character_id, anim_event, extra_data)
 
 
 func on_round_ended(_winner: int, _reason: int) -> void:
@@ -231,11 +224,10 @@ func cleanup() -> void:
 		_game_manager.grenade_explode_network_event.disconnect(_on_grenade_explode_network_event)
 	if _game_manager and _game_manager.door_kick_network_event.is_connected(_on_door_kick_network_event):
 		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
+	if _game_manager and _game_manager.door_open_network_event.is_connected(_on_door_open_network_event):
+		_game_manager.door_open_network_event.disconnect(_on_door_open_network_event)
 	if _game_manager and _game_manager.damage_network_event.is_connected(_on_damage_network_event):
 		_game_manager.damage_network_event.disconnect(_on_damage_network_event)
-
-	if sync_controller and sync_controller.path_confirmed_remote.is_connected(_on_path_confirmed_remote):
-		sync_controller.path_confirmed_remote.disconnect(_on_path_confirmed_remote)
 
 
 ## ========================================
@@ -267,6 +259,7 @@ func _on_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: 
 		"vel_y": velocity.y,
 		"vel_z": velocity.z,
 		"grenade_id": grenade_id,
+		"thrower_team": PlayerState.get_player_team(),
 	}
 	sync_controller.send_game_event(event)
 
@@ -303,6 +296,21 @@ func _on_door_kick_network_event(door_id: int, character_network_id: int) -> voi
 	sync_controller.send_game_event(event)
 
 
+func _on_door_open_network_event(door_id: int, character_network_id: int) -> void:
+	if not sync_controller:
+		return
+
+	var event := NetworkMessages.GameEventMessage.new()
+	event.event_type = NetworkConstants.GameEventType.DOOR_OPEN
+	event.source_id = character_network_id
+	event.target_id = 0
+	event.data = {
+		"door_id": door_id,
+		"character_id": character_network_id,
+	}
+	sync_controller.send_game_event(event)
+
+
 func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool) -> void:
 	if not sync_controller:
 		return
@@ -316,22 +324,3 @@ func _on_damage_network_event(attacker_id: int, target_id: int, damage: float, i
 		"is_headshot": is_headshot,
 	}
 	sync_controller.send_game_event(event)
-
-
-## リモートプレイヤーからのパス確定を処理
-func _on_path_confirmed_remote(player_id: int, path_msg: NetworkMessages.PathConfirmMessage) -> void:
-	if not _game_manager:
-		return
-
-	# 自分のパスはすでにローカルで登録済みなのでスキップ
-	if player_id == _local_peer_id:
-		return
-
-	# キャラクターを検索
-	var character := _game_manager.find_character_by_network_id(path_msg.character_id)
-	if not character:
-		if Debug.enabled: print("[MultiplayerModeProvider] Character not found for path_confirm: ", path_msg.character_id)
-		return
-
-	# リモートプレイヤーのパスを登録
-	_game_manager.confirm_path_for_player(player_id, path_msg, character)

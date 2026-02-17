@@ -10,8 +10,6 @@ class_name CombatAwarenessComponent
 signal enemy_spotted(enemy: Node)
 signal enemy_lost(enemy: Node)
 signal target_changed(new_target: Node, old_target: Node)
-signal shot_missed(target: Node, miss_offset: Vector3)
-signal critical_hit(target: Node, damage: float)  ## Emitted when a critical hit occurs
 signal damage_dealt(attacker: Node, target: Node, damage: float, is_headshot: bool)  ## ダメージを与えた時（ネットワーク同期用）
 
 # ============================================
@@ -21,8 +19,9 @@ const SCAN_INTERVAL: float = 0.05  ## Scan every 50ms (matches EnemyVisibilitySy
 const TRACKING_TIMEOUT: float = 0.75  ## Time to track last known position after losing sight
 const CHARACTERS_CACHE_INTERVAL: float = 0.2  ## キャラクターキャッシュ更新間隔（200ms）
 const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
-const MOVEMENT_ACCURACY_PENALTY: float = 0.3  ## Accuracy penalty when moving
 const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
+const SPRINT_THRESHOLD: float = 4.0  ## Velocity threshold to consider "sprinting"
+const FACING_ANGLE_THRESHOLD: float = 0.866  ## cos(30°) — 射撃許可の角度閾値
 
 # ============================================
 # State
@@ -34,6 +33,8 @@ var _time_since_lost: float = 0.0
 var _is_tracking_last_known: bool = false
 var _scan_timer: float = 0.0
 var _ignored_enemies: Array[Node] = []  ## Enemies dismissed by user action (e.g., rotation)
+var _ignored_enemies_timer: float = 0.0  ## 無視リスト時間制限タイマー
+const IGNORE_TIMEOUT: float = 3.0  ## 無視リスト自動解除時間（秒）
 var _firing_enabled: bool = false  ## Whether automatic firing is enabled
 var _fire_timer: float = 0.0  ## 発砲タイマー
 
@@ -117,10 +118,11 @@ func clear_target() -> void:
 
 
 ## Dismiss current target due to user action (adds to ignore list)
-## The enemy will be ignored until it leaves the field of view
+## The enemy will be ignored for IGNORE_TIMEOUT seconds or until it becomes invisible
 func dismiss_current_target() -> void:
 	if _current_target and is_instance_valid(_current_target):
 		_ignored_enemies.append(_current_target)
+		_ignored_enemies_timer = 0.0  # Reset timeout
 	clear_target()
 
 
@@ -148,7 +150,8 @@ func get_last_shot_result() -> Dictionary:
 	}
 
 
-## Process function - call from owner's _physics_process
+## 検知・追跡フェーズ（エイム更新前に呼ぶ）
+## 射撃ロジックは process_firing() に分離されている
 func process(delta: float) -> void:
 	if not _character:
 		return
@@ -166,27 +169,41 @@ func process(delta: float) -> void:
 			_is_tracking_last_known = false
 			_time_since_lost = 0.0
 
+	# Update ignored enemies timer (real delta for accuracy)
+	_update_ignored_list(delta)
+
 	# Periodic enemy scan
 	_scan_timer += delta
 	if _scan_timer >= SCAN_INTERVAL:
 		_scan_timer = 0.0
 		_scan_for_enemies()
 
-	# Firing logic (when tracking enemy and firing is enabled)
+
+## 射撃フェーズ（エイム更新後に呼ぶ）
+## process() で検知 → 呼び出し側でエイム更新 → この関数で射撃判定
+func process_firing(delta: float) -> void:
+	if not _character:
+		return
 	if _firing_enabled and _current_target and is_instance_valid(_current_target):
 		_process_firing(delta)
 	else:
-		_reset_firing_state()  # Reset state when not firing
+		_reset_firing_state()
 
 
 # ============================================
 # Internal Methods
 # ============================================
 
-## Update ignored enemies list - remove enemies that are no longer in view
-func _update_ignored_list() -> void:
-	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
-	if not vision:
+## Update ignored enemies list - remove enemies by timeout or invisibility
+func _update_ignored_list(delta: float) -> void:
+	if _ignored_enemies.is_empty():
+		return
+
+	# 時間経過で自動解除（チーム共有視界では不可視にならないケースがあるため）
+	_ignored_enemies_timer += delta
+	if _ignored_enemies_timer >= IGNORE_TIMEOUT:
+		_ignored_enemies.clear()
+		_ignored_enemies_timer = 0.0
 		return
 
 	var to_remove: Array[Node] = []
@@ -194,15 +211,18 @@ func _update_ignored_list() -> void:
 		if not is_instance_valid(enemy):
 			to_remove.append(enemy)
 			continue
-		# Remove from ignore list when enemy leaves field of view
-		if not vision.is_position_in_view(enemy.global_position):
+		# Remove from ignore list when enemy becomes invisible (EnemyVisibilitySystem)
+		if enemy is Node3D and not enemy.visible:
 			to_remove.append(enemy)
 
 	for enemy in to_remove:
 		_ignored_enemies.erase(enemy)
 
 
-## Scan for enemies in vision cone
+## Scan for visible enemies and select closest target
+## プレイヤーチーム: EnemyVisibilitySystem（FoWテクスチャ）の結果（enemy.visible）を使用
+## 敵AI: VisionComponent（個別レイキャスト）を使用
+## 射撃制限は_is_facing_target()で行う（向いていないと撃たない）
 func _scan_for_enemies() -> void:
 	if not _character:
 		return
@@ -211,13 +231,6 @@ func _scan_for_enemies() -> void:
 	if _current_target and is_instance_valid(_current_target):
 		if "is_alive" in _current_target and not _current_target.is_alive:
 			clear_target()
-
-	var vision = _character.get_vision_component() if _character.has_method("get_vision_component") else null
-	if not vision:
-		return
-
-	# Update ignored list (remove enemies that left field of view)
-	_update_ignored_list()
 
 	# Check if character is alive
 	if _character.has_method("is_alive") or "is_alive" in _character:
@@ -231,50 +244,59 @@ func _scan_for_enemies() -> void:
 		_handle_no_enemy_in_sight()
 		return
 
+	# プレイヤーチームか判定
+	# プレイヤーチーム: enemy.visible（FoW）と同じ判定を使用（表示と検知を統一）
+	# 敵AI: VisionComponent（個別レイキャスト）で可視判定
+	var is_player_team := _character is GameCharacter and PlayerState.is_friendly(_character)
+	var vision: VisionComponent = null
+	if _character.has_method("get_vision_component"):
+		vision = _character.get_vision_component()
+	if not is_player_team and not vision:
+		_handle_no_enemy_in_sight()
+		return
+
 	# Find closest visible enemy
 	var closest_enemy: Node = null
 	var closest_distance: float = INF
 
 	var char_pos: Vector3 = _character.global_position
-
-	# 可視性チェックの計測
-	var start_time := Time.get_ticks_usec() if Debug.enabled else 0
+	# プレイヤーチーム用: 仲間の遠方視界への反応を防ぐための距離制限
+	# FoWのLight2Dはソフトエッジでview_distanceより少し先まで照らすためマージンを追加
+	var max_detect_distance: float = (vision.view_distance if vision else 7.0) + 1.0
 
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)
 		if enemy in _ignored_enemies:
-			if Debug.enabled: print("[CAC] Skip ignored enemy: ", enemy.name)
 			continue
 
 		# Skip dead enemies
 		if "is_alive" in enemy and not enemy.is_alive:
-			if Debug.enabled: print("[CAC] Skip dead enemy: ", enemy.name)
 			continue
 
-		# 敵の胴体中心の位置を使用（足元ではなく）
-		# レイキャストが目線から敵の足元に向かうと、近距離で検知できない問題がある
-		var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
-		var dist_to_enemy: float = char_pos.distance_to(enemy.global_position)
-
-		# Check if enemy is visible (uses single raycast per enemy)
-		var is_visible := _is_enemy_visible(enemy_pos, vision)
-		if Debug.enabled:
-			print("[CAC] Check enemy: ", enemy.name, " dist=", "%.2f" % dist_to_enemy, "m visible=", is_visible)
-
-		if is_visible:
-			var dist: float = char_pos.distance_to(enemy_pos)
-			if dist < closest_distance:
-				closest_distance = dist
-				closest_enemy = enemy
-
-	if Debug.enabled:
-		var elapsed := Time.get_ticks_usec() - start_time
-		if elapsed > 2000:  # 2ms以上かかった場合のみログ
-			print("[CAC] Enemy scan took ", elapsed / 1000.0, "ms for ", enemies.size(), " enemies")
-		if closest_enemy:
-			print("[CAC] Closest enemy: ", closest_enemy.name, " dist=", "%.2f" % closest_distance, "m")
+		# 可視性チェック
+		if is_player_team:
+			# プレイヤーチーム: FoW可視性（enemy.visible）をそのまま使用
+			# FoWのLight2Dコーンと完全に同じ判定になるため、表示と検知が一致する
+			if enemy is Node3D and not enemy.visible:
+				continue
+			# 距離制限: 仲間の視界で見えている遠方の敵に反応しないようにする
+			var dist_xz := Vector2(
+				enemy.global_position.x - char_pos.x,
+				enemy.global_position.z - char_pos.z
+			).length()
+			if dist_xz > max_detect_distance:
+				continue
 		else:
-			print("[CAC] No visible enemy found (checked ", enemies.size(), " enemies)")
+			# 敵AI: VisionComponentの個別レイキャストで可視判定
+			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+			if not vision.is_position_in_view(enemy_pos):
+				continue
+
+		var dist: float = char_pos.distance_to(enemy.global_position)
+
+		if dist < closest_distance:
+			closest_distance = dist
+			closest_enemy = enemy
 
 	if closest_enemy:
 		_handle_enemy_in_sight(closest_enemy)
@@ -312,16 +334,6 @@ func _handle_no_enemy_in_sight() -> void:
 		target_changed.emit(null, old_target)
 
 
-## 敵が視界内にいるかを判定
-## 戦闘ターゲティングでは、このキャラクター自身が見える敵だけを攻撃対象にする
-## （FoWテクスチャは全味方の視界を合成しているため、ここでは使用しない）
-func _is_enemy_visible(enemy_pos: Vector3, vision: VisionComponent) -> bool:
-	# 各キャラクターは自分自身のVisionComponentで判定
-	# これにより、壁越しに敵を攻撃することを防ぐ
-	if vision:
-		return vision.is_position_in_view(enemy_pos)
-
-	return false
 
 
 ## Get all enemy characters
@@ -354,54 +366,141 @@ func _get_enemy_characters() -> Array[Node]:
 	return enemies
 
 
+
+
+## キャラクターが現在のターゲット方向を向いているかチェック
+## モデルの実際の回転状態（SLERP途中を含む）を使って判定する
+func _is_facing_target() -> bool:
+	if not _current_target or not is_instance_valid(_current_target):
+		return false
+	var to_target: Vector3 = _current_target.global_position - _character.global_position
+	to_target.y = 0
+	if to_target.length_squared() < 0.01:
+		return true
+	to_target = to_target.normalized()
+	# モデルの実際の向きを取得（SLERP途中の状態を反映）
+	var facing_dir := Vector3.ZERO
+	var anim_ctrl = _character.get_anim_controller()
+	if anim_ctrl:
+		var model = anim_ctrl.get_model()
+		if model:
+			facing_dir = model.global_transform.basis.orthonormalized().z
+			facing_dir.y = 0
+	if facing_dir.length_squared() < 0.001:
+		return false
+	facing_dir = facing_dir.normalized()
+	return facing_dir.dot(to_target) >= FACING_ANGLE_THRESHOLD
+
+
 ## Attempt to fire at current target
-func _try_fire() -> void:
+## Returns true if shot was taken, false if blocked (e.g. not facing target)
+func _try_fire() -> bool:
 	if not _character:
-		return
+		return false
+	# 投擲・ドアキック・ドア開放中は射撃しない（アニメーション完了まで待機）
+	var anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
+	if anim_ctrl:
+		if anim_ctrl.is_throwing() or anim_ctrl.is_door_kicking() or anim_ctrl.is_opening_door():
+			return false
+	if not _is_facing_target():
+		return false
 	# ダメージ計算を先に行い、命中/外れ結果をセットしてからシグナルを発火
 	# これによりBulletTrailComponentが正しい射撃結果を取得できる
 	_apply_damage_to_target()
-	var anim_ctrl = _character.get_anim_controller()
+	if not anim_ctrl:
+		anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
 	if anim_ctrl and anim_ctrl.has_method("fire"):
 		anim_ctrl.fire()  # Trigger recoil animation + fired signal
+	return true
 
 
-## Calculate hit chance based on weapon stats, distance, and movement
+## 距離カーブから基礎精度を取得
+func _get_accuracy_from_curve(weapon: WeaponPreset, distance: float) -> float:
+	if distance <= weapon.accuracy_range_min:
+		# 0 〜 range_min: accuracy_close → accuracy_peak
+		if weapon.accuracy_range_min <= 0.0:
+			return weapon.accuracy_peak
+		var t: float = distance / weapon.accuracy_range_min
+		return lerpf(weapon.accuracy_close, weapon.accuracy_peak, t)
+	elif distance <= weapon.accuracy_range_max:
+		# range_min 〜 range_max: accuracy_peak 固定（スイートスポット）
+		return weapon.accuracy_peak
+	elif distance <= weapon.accuracy_max_distance:
+		# range_max 〜 max_distance: accuracy_peak → accuracy_far
+		var range_span: float = weapon.accuracy_max_distance - weapon.accuracy_range_max
+		if range_span <= 0.0:
+			return weapon.accuracy_far
+		var t: float = (distance - weapon.accuracy_range_max) / range_span
+		return lerpf(weapon.accuracy_peak, weapon.accuracy_far, t)
+	else:
+		# max_distance以降: accuracy_far 固定
+		return weapon.accuracy_far
+
+
+## 射手の移動状態による精度乗数を取得
+func _get_shooter_movement_multiplier(weapon: WeaponPreset) -> float:
+	if not (_character is CharacterBody3D):
+		return 1.0
+	var speed: float = _character.velocity.length()
+	if speed <= MOVEMENT_THRESHOLD:
+		return 1.0  # 静止
+	elif speed >= SPRINT_THRESHOLD:
+		return weapon.shooter_sprint_penalty
+	else:
+		# 歩行〜スプリント間を補間
+		var t: float = (speed - MOVEMENT_THRESHOLD) / (SPRINT_THRESHOLD - MOVEMENT_THRESHOLD)
+		return lerpf(1.0, weapon.shooter_walk_penalty, t)
+
+
+## ターゲットの移動状態による精度乗数を取得
+func _get_target_movement_multiplier(weapon: WeaponPreset) -> float:
+	if not _current_target or not is_instance_valid(_current_target):
+		return 1.0
+	if not (_current_target is CharacterBody3D):
+		return 1.0
+	var target_speed: float = _current_target.velocity.length()
+	var speed_ratio: float = clampf(target_speed / weapon.target_speed_reference, 0.0, 1.0)
+	return 1.0 - speed_ratio * weapon.target_move_penalty
+
+
+## ダメージ距離減衰倍率を取得
+func _get_damage_multiplier(weapon: WeaponPreset, distance: float) -> float:
+	if not weapon.damage_falloff_enabled:
+		return 1.0
+	if distance <= weapon.damage_falloff_start:
+		return 1.0
+	if distance >= weapon.damage_falloff_end:
+		return weapon.damage_falloff_min
+	var range_span: float = weapon.damage_falloff_end - weapon.damage_falloff_start
+	if range_span <= 0.0:
+		return weapon.damage_falloff_min
+	var t: float = (distance - weapon.damage_falloff_start) / range_span
+	return lerpf(1.0, weapon.damage_falloff_min, t)
+
+
+## Calculate hit chance based on weapon accuracy curve, distance, and movement
 func _calculate_hit_chance(weapon: WeaponPreset, distance: float) -> float:
 	if not weapon:
 		return 0.5  # Default 50% if no weapon
 
-	# Base accuracy from weapon
-	var base_accuracy: float = weapon.accuracy
+	# 距離カーブから基礎精度
+	var base_accuracy: float = _get_accuracy_from_curve(weapon, distance)
 
 	# Apply auto firing mode accuracy modifier if applicable
 	if _supports_auto_firing_mode():
 		base_accuracy *= _get_current_accuracy_modifier()
 
-	# Spread penalty (random factor)
-	var spread_penalty: float = weapon.spread * randf() * 0.5
+	# 射手の移動ペナルティ
+	var shooter_mult: float = _get_shooter_movement_multiplier(weapon)
 
-	# Distance factor
-	var distance_factor: float = 1.0
-	if distance > weapon.effective_range:
-		distance_factor = weapon.effective_range / distance  # e.g., 2x range = 50%
+	# ターゲットの移動ペナルティ
+	var target_mult: float = _get_target_movement_multiplier(weapon)
 
-	# Close range bonus: within 30% of effective range, accuracy increases up to +20%
-	var close_range_threshold: float = weapon.effective_range * 0.3
-	if distance < close_range_threshold and close_range_threshold > 0.0:
-		var closeness: float = 1.0 - (distance / close_range_threshold)  # 1.0 at 0m, 0.0 at threshold
-		base_accuracy += closeness * 0.2  # Up to +20% accuracy bonus
-		spread_penalty *= (1.0 - closeness * 0.7)  # Reduce spread up to 70% at point blank
+	# 精度が高いほどバラつきが小さい
+	var spread: float = (1.0 - base_accuracy) * randf() * 0.3
 
-	# Movement penalty
-	var movement_penalty: float = 0.0
-	if _character is CharacterBody3D:
-		var velocity: Vector3 = _character.velocity
-		if velocity.length() > MOVEMENT_THRESHOLD:
-			movement_penalty = MOVEMENT_ACCURACY_PENALTY
-
-	# Final accuracy calculation
-	var final_accuracy: float = (base_accuracy - spread_penalty - movement_penalty) * distance_factor
+	# 最終命中率
+	var final_accuracy: float = (base_accuracy - spread) * shooter_mult * target_mult
 	return clampf(final_accuracy, 0.05, 1.0)  # Minimum 5% hit chance
 
 
@@ -412,6 +511,7 @@ func _roll_hit_check(weapon: WeaponPreset, distance: float) -> bool:
 
 
 ## Calculate miss offset vector (perpendicular to target direction)
+## 距離が遠いほどミスの散らばりが大きくなる
 func _calculate_miss_offset() -> Vector3:
 	if not _current_target or not is_instance_valid(_current_target):
 		return Vector3.ZERO
@@ -421,16 +521,21 @@ func _calculate_miss_offset() -> Vector3:
 	to_target.y = 0
 	if to_target.length_squared() < 0.01:
 		return Vector3.ZERO
+
+	# 距離スケーリング: 遠いほどミスの散らばり大
+	var distance: float = to_target.length()
+	var distance_scale: float = clampf(distance / 20.0, 0.5, 2.5)
+
 	to_target = to_target.normalized()
 
 	# Perpendicular vector to target direction (horizontal)
 	var right: Vector3 = to_target.cross(Vector3.UP).normalized()
 
-	# Horizontal offset: left or right with random distance
-	var horizontal_offset: float = (randf() * 2.0 - 1.0) * randf_range(0.3, 1.2)
+	# Horizontal offset: left or right with random distance (距離スケーリング適用)
+	var horizontal_offset: float = (randf() * 2.0 - 1.0) * randf_range(0.3, 1.2) * distance_scale
 
-	# Vertical offset (smaller range)
-	var vertical_offset: float = randf_range(-0.4, 0.4)
+	# Vertical offset (smaller range, 距離スケーリング適用)
+	var vertical_offset: float = randf_range(-0.4, 0.4) * distance_scale
 
 	return right * horizontal_offset + Vector3.UP * vertical_offset
 
@@ -457,14 +562,16 @@ func _apply_damage_to_target() -> void:
 	_last_shot_hit = is_hit
 
 	if is_hit:
-		# Hit - apply damage (with critical hit check)
+		# Hit - apply damage (with critical hit check and distance falloff)
 		_last_shot_miss_offset = Vector3.ZERO
 		var final_damage: float = damage
+		# ダメージ距離減衰
+		if weapon:
+			final_damage *= _get_damage_multiplier(weapon, distance)
 		var critical_rate: float = _get_current_critical_rate()
 		_last_critical_hit = randf() < critical_rate
 		if _last_critical_hit:
 			final_damage *= 2.0  # Critical hit: 2x damage
-			critical_hit.emit(_current_target, final_damage)
 		_current_target.take_damage(final_damage, _character, _last_critical_hit)
 		# ネットワーク同期用シグナル
 		damage_dealt.emit(_character, _current_target, final_damage, _last_critical_hit)
@@ -472,7 +579,6 @@ func _apply_damage_to_target() -> void:
 		# Miss - calculate miss offset and emit signal
 		_last_shot_miss_offset = _calculate_miss_offset()
 		_last_critical_hit = false
-		shot_missed.emit(_current_target, _last_shot_miss_offset)
 
 
 # ============================================
@@ -614,10 +720,15 @@ func _process_firing(delta: float) -> void:
 
 ## Legacy firing for pistols and other non-auto mode weapons
 func _process_legacy_firing(delta: float) -> void:
+	var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+	var interval: float = weapon.fire_rate if weapon and weapon.fire_rate > 0.0 else FIRE_INTERVAL
 	_fire_timer += delta
-	if _fire_timer >= FIRE_INTERVAL:
-		_fire_timer = 0.0
-		_try_fire()
+	if _fire_timer >= interval:
+		if _try_fire():
+			_fire_timer = 0.0
+		else:
+			# 向き未完了：タイマーを維持し、次フレームで即リトライ
+			_fire_timer = interval
 
 
 ## Start a new burst sequence
@@ -633,8 +744,9 @@ func _start_burst() -> void:
 	elif _current_firing_mode == WeaponPreset.FiringMode.SINGLE or shots == 1:
 		# Single shot mode
 		_is_in_burst = false
-		_try_fire()
-		_post_burst_pause_timer = _get_current_pause_after_burst()
+		if _try_fire():
+			_post_burst_pause_timer = _get_current_pause_after_burst()
+		# 発射失敗時はpauseを設定しない→次フレームで再度_start_burst()が呼ばれる
 	else:
 		# Burst mode
 		_is_in_burst = true
@@ -648,14 +760,16 @@ func _fire_burst_shot() -> void:
 		_end_burst()
 		return
 
-	_try_fire()
-	_burst_shots_remaining -= 1
-
-	if _burst_shots_remaining <= 0 or (_current_firing_mode != WeaponPreset.FiringMode.FULL_AUTO and _burst_shots_remaining <= 0):
-		_end_burst()
+	if _try_fire():
+		_burst_shots_remaining -= 1
+		if _burst_shots_remaining <= 0 or (_current_firing_mode != WeaponPreset.FiringMode.FULL_AUTO and _burst_shots_remaining <= 0):
+			_end_burst()
+		else:
+			# Schedule next shot in burst
+			_burst_interval_timer = _get_current_burst_interval()
 	else:
-		# Schedule next shot in burst
-		_burst_interval_timer = _get_current_burst_interval()
+		# 向き未完了：ショット数を消費せず次フレームで即リトライ
+		_burst_interval_timer = 0.0
 
 
 ## End the current burst

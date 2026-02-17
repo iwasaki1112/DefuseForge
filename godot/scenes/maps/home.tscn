@@ -1,7 +1,59 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://dwu1jpv6m5usq"]
 
-[ext_resource type="PackedScene" path="res://scenes/maps/home.gltf" id="1_gltf"]
-[ext_resource type="Script" path="res://scripts/maps/home.gd" id="2_script"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_floor.tres" id="1"]
+[ext_resource type="Script" uid="uid://lqncyhb0ni2o" path="res://scripts/maps/map_base.gd" id="2"]
+[ext_resource type="MeshLibrary" path="res://data/tiles/tile_library_wall.tres" id="4"]
+[ext_resource type="PackedScene" uid="uid://d2ej3e5py3ad0" path="res://scenes/props/car.glb" id="4_vutao"]
 
-[node name="Home" instance=ExtResource("1_gltf")]
-script = ExtResource("2_script")
+[sub_resource type="Environment" id="Environment_editor"]
+background_mode = 1
+background_color = Color(0.13, 0.18, 0.24, 1)
+ambient_light_source = 1
+ambient_light_color = Color(0.72, 0.69, 0.66, 1)
+ambient_light_energy = 0.07
+tonemap_mode = 2
+
+[node name="Home" type="Node3D" unique_id=1289749173]
+script = ExtResource("2")
+map_id = "home"
+display_name = "Home"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1652575078]
+environment = SubResource("Environment_editor")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=925898219]
+transform = Transform3D(0.866025, 0, -0.5, 0.383022, 0.642788, 0.663414, 0.321394, -0.766044, 0.55667, 0, 10, 0)
+light_color = Color(1, 0.98, 0.95, 1)
+light_energy = 0.49
+shadow_enabled = true
+shadow_blur = 1.2
+directional_shadow_max_distance = 40.0
+
+[node name="GridMapGround" type="GridMap" parent="." unique_id=1413045907]
+mesh_library = ExtResource("1")
+cell_center_y = false
+data = {
+"cells": PackedInt32Array(1, 65535, 1048584, 2, 65535, 655368, 3, 65535, 8, 4, 65535, 1441800, 5, 65535, 8, 5, 0, 8, 4, 0, 1048584, 3, 0, 1048584, 2, 0, 1048584, 1, 0, 1048579, 1, 1, 1048579, 2, 1, 1048579, 3, 1, 1048584, 4, 1, 8, 5, 1, 8, 5, 2, 655368, 4, 2, 1441800, 3, 2, 1048584, 2, 2, 1048584, 1, 2, 1048579, 1, 3, 8, 2, 3, 1441800, 3, 3, 1048584, 4, 3, 1441800, 5, 3, 1441800, 5, 65534, 8, 4, 65534, 655368, 3, 65534, 1048584, 2, 65534, 655368, 1, 65534, 8, 5, 4, 1441800, 4, 4, 1441800, 3, 4, 8, 2, 4, 1441800, 1, 4, 8, 65533, 65535, 4, 65533, 0, 1048580, 65533, 1, 1048580, 65533, 2, 1048580, 65533, 3, 1048580, 65534, 3, 1048580, 65534, 2, 1048580, 65534, 1, 1048580, 65534, 0, 1048580, 65534, 65535, 4, 65535, 65535, 1048580, 65535, 0, 1441802, 65535, 1, 10, 65535, 2, 1048580, 65535, 3, 1048580, 0, 3, 1048580, 0, 2, 1048580, 0, 1, 1048586, 0, 0, 655370, 0, 65535, 1048580, 0, 65533, 4, 0, 65534, 4, 65535, 65533, 4, 65535, 65534, 4, 65534, 65533, 4, 65534, 65534, 4, 0, 4, 4, 65535, 4, 4, 65534, 4, 4, 65533, 4, 4, 0, 5, 4, 65535, 5, 4, 65534, 5, 4, 65533, 5, 4, 65532, 5, 4, 65531, 5, 4, 65530, 5, 4, 65529, 5, 4, 65529, 4, 4, 65530, 4, 4, 65531, 4, 4, 65532, 4, 4, 65533, 65533, 4, 65533, 65534, 4, 65532, 65533, 4, 65532, 65534, 4, 65532, 65535, 4, 65532, 0, 4, 65532, 1, 4, 65532, 2, 4, 65532, 3, 4, 65531, 3, 4, 65531, 2, 4, 65531, 1, 4, 65531, 0, 4, 65531, 65535, 4, 65531, 65534, 4, 65531, 65533, 4, 65530, 65533, 4, 65530, 65534, 4, 65530, 65535, 4, 65530, 0, 4, 65530, 1, 4, 65530, 2, 4, 65530, 3, 4, 65529, 3, 4, 65529, 2, 4, 65529, 1, 4, 65529, 0, 4, 65529, 65535, 4, 65529, 65534, 4, 65529, 65533, 4)
+}
+
+[node name="GridMapWall" type="GridMap" parent="." unique_id=2117126198]
+mesh_library = ExtResource("4")
+cell_center_y = false
+data = {
+"cells": PackedInt32Array(0, 65535, 655360, 65535, 65535, 655363, 65535, 0, 1048579, 65535, 1, 1048576, 65535, 2, 3, 65533, 0, 1441795, 65533, 1, 1441795, 65533, 2, 1441795, 65533, 65535, 1441795, 65533, 65534, 1441792, 65533, 65533, 1, 65534, 65533, 3, 65535, 65533, 3, 0, 65533, 3, 65532, 65533, 3, 65531, 65533, 3, 65530, 65533, 3, 65529, 65533, 3, 65528, 65533, 1441795, 65528, 65534, 1441795, 65528, 65535, 1441795, 65528, 0, 1441795, 65528, 1, 1441795, 65528, 2, 1441795, 65528, 3, 1441795, 65528, 4, 1441795, 65528, 5, 1441795, 65529, 5, 655363, 65530, 5, 655363, 65531, 5, 655363, 65532, 5, 655363, 65533, 5, 655363, 65534, 5, 655363, 65535, 5, 655363, 1, 65535, 1048579, 1, 0, 1048579, 1, 65534, 1048579, 1, 65533, 1048579, 0, 5, 655363, 1, 5, 1048579, 1, 4, 1048579, 1, 3, 1048579, 1, 2, 1048579, 1, 1, 1048576, 0, 2, 0)
+}
+
+[node name="spawn_ct_0" type="Marker3D" parent="." unique_id=2014919147]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 0, -2)
+
+[node name="spawn_ct_1" type="Marker3D" parent="." unique_id=1701572218]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 0, 2)
+
+[node name="spawn_t_0" type="Marker3D" parent="." unique_id=1937403318]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.826885, 0, 1.1284451)
+
+[node name="spawn_t_1" type="Marker3D" parent="." unique_id=873732991]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.826885, 0, 2)
+
+[node name="car" parent="." unique_id=289592129 instance=ExtResource("4_vutao")]
+transform = Transform3D(0.7459527, 0, -0.6659989, 0, 1, 0, 0.6659989, 0, 0.7459527, 7.555868, 0, 0.9712338)

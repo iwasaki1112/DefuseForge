@@ -1,7 +1,7 @@
 extends Node
 class_name CharacterSelectionManager
 ## キャラクター選択管理
-## 選択状態・アウトライン表示・パス適用対象の管理を担当
+## 選択状態・アウトライン表示の管理を担当
 
 ## 選択変更時のシグナル
 signal selection_changed(selected: Array[Node], primary: Node)
@@ -10,17 +10,15 @@ signal primary_changed(character: Node)
 
 ## 選択中の全キャラクター
 var selected_characters: Array[Node] = []
-## 最後に選択したキャラクター（コンテキストメニュー・パス描画基準）
+## 最後に選択したキャラクター
 var primary_character: Node = null
-## パス適用対象キャラクター（MOVEモード開始時に確定）
-var path_target_characters: Array[Node] = []
 
 ## アウトライン適用中のメッシュ { character_id: Array[MeshInstance3D] }
-var _outlined_meshes_by_character: Dictionary = {}
+var _outlined_meshes_by_character: Dictionary[int, Array] = {}
 ## 元のマテリアルオーバーライドを保存 { character_id: { mesh_instance_id: { surface_index: Material } } }
 var _original_materials_by_character: Dictionary = {}
 ## 選択マーカー { character_id: CharacterSelectedMarker }
-var _selection_markers: Dictionary = {}
+var _selection_markers: Dictionary[int, CharacterSelectedMarker] = {}
 
 ## アウトライン設定
 var outline_color: Color = Color(0.0, 0.8, 1.0, 1.0)
@@ -94,26 +92,6 @@ func has_selection() -> bool:
 ## 選択数を取得
 func get_selection_count() -> int:
 	return selected_characters.size()
-
-
-## パス適用対象を確定（MOVEモード開始時に呼ぶ）
-func capture_path_targets() -> void:
-	path_target_characters = selected_characters.duplicate()
-
-
-## パス適用対象をクリア
-func clear_path_targets() -> void:
-	path_target_characters.clear()
-
-
-## パス適用対象を取得
-func get_path_targets() -> Array[Node]:
-	return path_target_characters.duplicate()
-
-
-## パス適用対象がいるか
-func has_path_targets() -> bool:
-	return not path_target_characters.is_empty()
 
 
 ## アウトラインを適用（ステンシル方式）

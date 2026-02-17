@@ -49,6 +49,7 @@
 | `anim_ctrl` | `Node` | `null` | CharacterAnimationControllerへの参照 |
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
+| `shell_ejection` | `ShellEjectionComponent` | `null` | 薬莢排出コンポーネント |
 | `_weapon_socket` | `Node3D` | `null` | 武器調整用のソケットノード |
 
 ## Public API
@@ -103,7 +104,7 @@ VisionComponentを設定する。
 #### get_vision_component() -> VisionComponent
 VisionComponentを取得する。
 
-#### setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent
+#### setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent
 VisionComponentをセットアップする（存在しなければ自動作成）。
 
 **引数:**
@@ -118,7 +119,7 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 
 > **重要: キャラクターの向きを変更する場合**
 >
-> `CharacterBody3D.look_at()`を直接使用しないでください。Mixamoモデルは+Z方向が前方ですが、Godotの`look_at()`は-Z軸をターゲットに向けるため、180度ずれます。
+> `CharacterBody3D.look_at()`を直接使用しないでください。ARPモデルは+Z方向が前方ですが、Godotの`look_at()`は-Z軸をターゲットに向けるため、180度ずれます。
 >
 > 代わりに以下のメソッドを使用してください：
 > - `face_towards(target_pos)` - ターゲット位置を向く
@@ -138,7 +139,7 @@ VisionComponentをセットアップする（存在しなければ自動作成�
 - `y_rotation` - Y軸回転（0 = +Z方向）
 
 #### face_towards(target_pos: Vector3) -> void
-指定位置の方向を向く。内部で`set_facing_direction_vec()`を呼び出し、Mixamoモデルの向きを正しく処理する。
+指定位置の方向を向く。内部で`set_facing_direction_vec()`を呼び出し、ARPモデルの向きを正しく処理する。
 
 **引数:**
 - `target_pos` - ターゲット位置
@@ -157,8 +158,6 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** 正規化された向きベクトル
 
-**重要**: PathFollowingControllerは移動中に`_facing_direction`を直接更新する。これにより、移動中も視界の向きが正しく追従する。
-
 ### Weapon API
 
 #### equip_weapon(weapon: Resource) -> void
@@ -168,7 +167,7 @@ character.face_towards(enemy.global_position)
 - `weapon` - WeaponPresetリソース
 
 **動作:**
-- 武器モデルを`mixamorig_RightHand`ボーンにBoneAttachment3Dでアタッチ
+- 武器モデルを`RightHand`ボーンにBoneAttachment3Dでアタッチ
 - WeaponPresetの`attach_offset`/`attach_rotation`でオフセット調整
 - WeaponCategoryをCharacterAnimationController.Weaponに変換
 - PISTOL → Weapon.PISTOL、それ以外 → Weapon.RIFLE
@@ -176,7 +175,7 @@ character.face_towards(enemy.global_position)
 
 **前提条件:**
 - キャラクターモデルに`CharacterModel`ノードが存在すること
-- Mixamo標準のSkeleton（`mixamorig_RightHand`ボーン）
+- ARP標準のSkeleton（`RightHand`ボーン）
 
 #### get_current_weapon() -> Resource
 装備中の武器を取得する。
@@ -188,7 +187,7 @@ character.face_towards(enemy.global_position)
 
 **戻り値:** `WeaponSocket`ノードまたは`null`
 
-### Muzzle Flash & Bullet Trail API
+### Muzzle Flash, Bullet Trail & Shell Ejection API
 
 #### set_muzzle_flash_preview(enabled: bool) -> void
 マズルフラッシュの常時プレビュー表示を切り替える（調整用）。
@@ -201,6 +200,12 @@ character.face_towards(enemy.global_position)
 - Shaderベースのマテリアルを使用
 - ターゲット（敵または最大距離）に向かって描画
 - 時間経過でフェードアウト
+
+#### _eject_shell_casing() -> void
+発砲時に薬莢を排出する。ShellEjectionComponentに委譲。
+- 銃の右側から薬莢が放物線を描いて排出
+- 地面に落下後、3秒間静止してからフェードアウト
+- オブジェクトプール（最大20個）で管理、モバイル最適化
 
 ## ライフサイクル
 
@@ -302,11 +307,9 @@ CharacterSnapshotから状態を復元する（リモートキャラクター用
 - `set_facing_direction(y_rotation: float) -> void`
 - `face_towards(target_pos: Vector3) -> void`
 - `get_facing_direction() -> Vector3`
-- `is_crouching() -> bool`
-- `toggle_crouch() -> void`
 - `set_vision_component(component: VisionComponent) -> void`
 - `get_vision_component() -> VisionComponent`
-- `setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent`
+- `setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent`
 - `setup_combat_awareness() -> CombatAwarenessComponent`
 - `get_combat_awareness() -> CombatAwarenessComponent`
 - `equip_weapon(weapon: WeaponPreset) -> void`

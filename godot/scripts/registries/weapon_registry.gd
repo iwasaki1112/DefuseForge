@@ -8,10 +8,10 @@ extends Node
 # ============================================
 
 ## All registered presets indexed by ID
-var _presets: Dictionary = {}  # { id: WeaponPreset }
+var _presets: Dictionary[String, WeaponPreset] = {}  # { id: WeaponPreset }
 
 ## Presets organized by category
-var _by_category: Dictionary = {}  # { WeaponCategory: Array[WeaponPreset] }
+var _by_category: Dictionary[WeaponPreset.WeaponCategory, Array] = {}  # { WeaponCategory: Array[WeaponPreset] }
 
 # ============================================
 # Preset Directory
@@ -25,6 +25,7 @@ const PRESET_DIR := "res://data/weapons/"
 const PRESET_FILES := [
 	"res://data/weapons/ak47.tres",
 	"res://data/weapons/glock.tres",
+	"res://data/weapons/mark18.tres",
 ]
 
 # ============================================

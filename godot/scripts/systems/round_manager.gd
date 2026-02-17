@@ -9,7 +9,7 @@ class_name RoundManager
 # ============================================
 
 enum RoundPhase { NONE, ACTIVE, ENDED }
-enum EndReason { TIME_UP, CT_ELIMINATED, T_ELIMINATED }
+enum EndReason { TIME_UP, CT_ELIMINATED, T_ELIMINATED, HOSTAGE_RESCUED }
 
 # ============================================
 # Signals

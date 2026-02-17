@@ -5,13 +5,6 @@ extends RefCounted
 ## 各create_*メソッドはシステムインスタンスを生成・初期化して返す。
 ## シグナル接続はGameManager側で行う（コールバックがGameManagerのメソッドのため）。
 
-## iOS互換性のため遅延ロード（preloadは使用しない）
-var PathDrawerScript: GDScript = null
-
-
-func _init() -> void:
-	PathDrawerScript = load("res://scripts/effects/path_drawer.gd")
-
 
 ## CharacterSelectionManagerを生成
 func create_selection_manager() -> CharacterSelectionManager:
@@ -20,23 +13,14 @@ func create_selection_manager() -> CharacterSelectionManager:
 	return manager
 
 
-## PathExecutionManagerを生成・初期化
-func create_path_execution_manager(mesh_parent: Node3D) -> PathExecutionManager:
-	var manager := PathExecutionManager.new()
-	manager.name = GameConstants.NODE_PATH_EXECUTION_MANAGER
-	manager.setup(mesh_parent)
-	return manager
-
-
 ## IdleCharacterManagerを生成・初期化
 func create_idle_manager(
 	characters_ref: Array[Node],
-	is_following_callback: Callable,
 	get_primary_callback: Callable
 ) -> IdleCharacterManager:
 	var manager := IdleCharacterManager.new()
 	manager.name = GameConstants.NODE_IDLE_MANAGER
-	manager.setup(characters_ref, is_following_callback, get_primary_callback)
+	manager.setup(characters_ref, get_primary_callback)
 	return manager
 
 
@@ -45,32 +29,6 @@ func create_smoke_area_manager() -> SmokeAreaManager:
 	var manager := SmokeAreaManager.new()
 	manager.name = "SmokeAreaManager"
 	return manager
-
-
-## PathDrawerを生成・初期化
-func create_path_drawer(_cam: Camera3D, _path_execution_manager: PathExecutionManager) -> Node3D:
-	var drawer := Node3D.new()
-	drawer.set_script(PathDrawerScript)
-	drawer.name = GameConstants.NODE_PATH_DRAWER
-	return drawer
-
-
-## PathDrawerのセットアップ（add_child後に呼ぶ）
-func setup_path_drawer(drawer: Node3D, cam: Camera3D, path_execution_manager: PathExecutionManager) -> void:
-	drawer.setup(cam, null)
-	drawer.set_path_execution_manager(path_execution_manager)
-
-
-## PathModeControllerを生成・初期化
-func create_path_mode_controller(
-	drawer: Node3D,
-	selection_manager: CharacterSelectionManager,
-	path_execution_manager: PathExecutionManager
-) -> PathModeController:
-	var controller := PathModeController.new()
-	controller.name = GameConstants.NODE_PATH_MODE_CONTROLLER
-	controller.setup(drawer, selection_manager, path_execution_manager)
-	return controller
 
 
 ## VisionServiceを生成・初期化
@@ -95,19 +53,6 @@ func create_map_manager(map_container: Node3D, game_manager: GameManager) -> Map
 	return manager
 
 
-## PathServiceを生成・初期化
-func create_path_service(
-	drawer: Node3D,
-	selection_manager: CharacterSelectionManager,
-	path_execution_manager: PathExecutionManager,
-	path_mode_controller: PathModeController
-) -> PathService:
-	var service := PathService.new()
-	service.name = GameConstants.NODE_PATH_SERVICE
-	service.setup(drawer, selection_manager, path_execution_manager, path_mode_controller)
-	return service
-
-
 ## RoundManagerを生成・初期化
 func create_round_manager(game_manager: GameManager) -> RoundManager:
 	var manager := RoundManager.new()
@@ -121,7 +66,8 @@ func create_character_setup_service(
 	enemy_visibility_system: Node,
 	fog_of_war_system: Node3D,
 	label_manager: CharacterLabelManager,
-	default_weapon_id: String,
+	default_weapon_id_ct: String,
+	default_weapon_id_t: String,
 	is_vision_enabled: bool,
 	default_vision_fov: float,
 	default_vision_range: float
@@ -131,7 +77,8 @@ func create_character_setup_service(
 		enemy_visibility_system,
 		fog_of_war_system,
 		label_manager,
-		default_weapon_id,
+		default_weapon_id_ct,
+		default_weapon_id_t,
 		is_vision_enabled,
 		default_vision_fov,
 		default_vision_range
@@ -163,11 +110,4 @@ func create_door_service(
 	service.name = "DoorService"
 	service.setup(character_manager)
 	service.set_vision_update_callback(vision_update_callback)
-	return service
-
-
-## MovingPathVisionServiceを生成・初期化
-func create_moving_path_vision_service(mesh_parent: Node3D, path_execution_manager: PathExecutionManager) -> MovingPathVisionService:
-	var service := MovingPathVisionService.new()
-	service.setup(mesh_parent, path_execution_manager)
 	return service

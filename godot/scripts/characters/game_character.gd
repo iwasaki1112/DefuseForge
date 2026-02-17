@@ -48,6 +48,7 @@ var character_preset_id: String = ""
 # ============================================
 var current_health: float = 100.0
 var is_alive: bool = true
+var is_invulnerable: bool = false
 
 # ============================================
 # Remote Interpolation (リモートキャラクター用補間)
@@ -79,6 +80,7 @@ var _weapon_socket: Node3D = null  # 武器調整用ソケットノード
 var _weapon_model: Node3D = null  # 現在の武器モデル
 var muzzle_flash: MuzzleFlashComponent = null  # マズルフラッシュコンポーネント
 var bullet_trail: BulletTrailComponent = null  # 弾道表示コンポーネント
+var shell_ejection: ShellEjectionComponent = null  # 薬莢排出コンポーネント
 
 # ============================================
 # Lifecycle
@@ -109,6 +111,9 @@ func _setup_effect_components() -> void:
 	if bullet_trail == null:
 		bullet_trail = BulletTrailComponent.new()
 		bullet_trail.setup(self, _weapon_socket, muzzle_flash, combat_awareness)
+	if shell_ejection == null:
+		shell_ejection = ShellEjectionComponent.new()
+		shell_ejection.setup(self, _weapon_socket)
 
 # ============================================
 # HP API
@@ -117,6 +122,8 @@ func _setup_effect_components() -> void:
 ## Take damage
 func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = false) -> void:
 	if not is_alive:
+		return
+	if is_invulnerable:
 		return
 
 	current_health = max(0.0, current_health - amount)
@@ -174,6 +181,13 @@ func get_anim_controller() -> CharacterAnimationController:
 # Facing Direction API (一元管理)
 # ============================================
 
+## 初期向きを設定（scene tree追加前に使用）
+## set_facing_direction_vec()はanim_ctrl依存のため、add_child前はこちらを使用
+func set_initial_facing(direction: Vector3) -> void:
+	if direction.length_squared() > 0.001:
+		_facing_direction = direction.normalized()
+
+
 ## キャラクターの向きを設定（ベクトル）
 ## Animation、Visionすべてがこの向きを参照する
 func set_facing_direction_vec(direction: Vector3) -> void:
@@ -189,7 +203,7 @@ func set_facing_direction_vec(direction: Vector3) -> void:
 
 ## キャラクターの向きを設定（Y軸回転、ラジアン）
 func set_facing_direction(y_rotation: float) -> void:
-	# y_rotation=0 → +Z方向（Mixamoモデルの前方向）
+	# y_rotation=0 → +Z方向（モデルの前方向）
 	var direction := Vector3(sin(y_rotation), 0, cos(y_rotation))
 	set_facing_direction_vec(direction)
 
@@ -227,7 +241,7 @@ func get_vision_component() -> VisionComponent:
 	return vision
 
 ## Setup vision component (auto-create if not exists)
-func setup_vision(fov: float = 90.0, view_dist: float = 15.0) -> VisionComponent:
+func setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent:
 	if vision == null:
 		vision = VisionComponent.new()
 		vision.name = GameConstants.NODE_VISION_COMPONENT
@@ -290,7 +304,7 @@ func _ensure_weapon_attachment() -> BoneAttachment3D:
 
 	var bone_idx = skeleton.find_bone(GameConstants.BONE_RIGHT_HAND)
 	if bone_idx < 0:
-		push_warning("GameCharacter: mixamorig_RightHand bone not found")
+		push_warning("GameCharacter: RightHand bone not found")
 		return null
 
 	_weapon_attachment = BoneAttachment3D.new()
@@ -316,12 +330,16 @@ func _ensure_weapon_socket(attachment: BoneAttachment3D) -> Node3D:
 	return _weapon_socket
 
 
-## エフェクトコンポーネントの武器ソケット参照を更新
+## エフェクトコンポーネントの武器ソケット参照を更新し、事前生成する
 func _update_effect_component_sockets() -> void:
 	if muzzle_flash:
 		muzzle_flash.set_weapon_socket(_weapon_socket)
+		muzzle_flash.warm_up()
 	if bullet_trail:
 		bullet_trail.set_weapon_socket(_weapon_socket)
+		bullet_trail.warm_up()
+	if shell_ejection:
+		shell_ejection.set_weapon_socket(_weapon_socket)
 
 
 ## Attach weapon model to right hand
@@ -347,24 +365,44 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 	_weapon_model.name = GameConstants.NODE_WEAPON_MODEL
 	socket.add_child(_weapon_model)
 
-	# Mixamo skeleton is 0.01 scale, so weapon needs 100x scale
-	_weapon_model.scale = Vector3.ONE * 100.0
+	# ARP skeleton is 1.0 scale, weapon enlarged for top-down visibility
+	_weapon_model.scale = Vector3.ONE * GameConstants.WEAPON_VISIBILITY_SCALE
 	_weapon_model.position = Vector3.ZERO
 	_weapon_model.rotation_degrees = Vector3.ZERO
 
-	# Apply offset from WeaponPreset (use defaults for Mixamo if not set)
+	# Apply offset from WeaponPreset (use defaults for ARP if not set)
 	if weapon.attach_offset != Vector3.ZERO:
 		socket.position = weapon.attach_offset
 	else:
-		# Default offset for Mixamo right hand
-		socket.position = Vector3(1, 7, 2)
+		# Default offset for ARP right hand (要実機調整)
+		socket.position = Vector3(0.01, 0.07, 0.02)
 
 	if weapon.attach_rotation != Vector3.ZERO:
 		socket.rotation_degrees = weapon.attach_rotation
 	else:
-		# Default rotation for Mixamo right hand
+		# Default rotation for ARP right hand (要実機調整)
 		socket.rotation_degrees = Vector3(-79, -66, -28)
 
+	# 左手IKグリップ設定
+	_update_left_hand_ik(weapon)
+
+
+
+## 左手IKグリップを武器モデルから検出してAnimationControllerに通知
+func _update_left_hand_ik(weapon: WeaponPreset) -> void:
+	if not anim_ctrl:
+		return
+	if not weapon or not weapon.left_hand_grip_enabled or not _weapon_model:
+		anim_ctrl.set_left_hand_grip(null)
+		return
+
+	var grip_node := _weapon_model.get_node_or_null(GameConstants.NODE_LEFT_HAND_GRIP) as Node3D
+	if grip_node:
+		if weapon.left_hand_grip_offset != Vector3.ZERO:
+			grip_node.position = weapon.left_hand_grip_offset
+		anim_ctrl.set_left_hand_grip(grip_node)
+	else:
+		anim_ctrl.set_left_hand_grip(null)
 
 
 ## Equip a weapon from WeaponPreset
@@ -414,6 +452,7 @@ func get_weapon_socket() -> Node3D:
 func _on_anim_fired() -> void:
 	_play_muzzle_flash()
 	_play_bullet_trail()
+	_eject_shell_casing()
 
 
 func set_muzzle_flash_preview(enabled: bool) -> void:
@@ -434,6 +473,11 @@ func _play_muzzle_flash() -> void:
 func _play_bullet_trail() -> void:
 	if bullet_trail:
 		bullet_trail.play(current_weapon, _weapon_model)
+
+
+func _eject_shell_casing() -> void:
+	if shell_ejection:
+		shell_ejection.play(current_weapon, _weapon_model)
 
 
 ## Set Quad1 X offset for muzzle flash adjustment
@@ -560,7 +604,6 @@ func _die(killer: Node3D = null, is_headshot: bool = false) -> void:
 	# Make corpse passable by other characters but keep ground collision
 	_make_corpse_passable()
 
-	# Emit died signal for path cleanup
 	died.emit(self)
 
 ## Calculate HitDirection from attacker position

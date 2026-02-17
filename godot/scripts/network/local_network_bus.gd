@@ -175,10 +175,6 @@ func get_message_type_name(msg_type: int) -> String:
 	match msg_type:
 		NetworkConstants.MessageType.GAME_STATE_SYNC:
 			return "GAME_STATE_SYNC"
-		NetworkConstants.MessageType.PATH_CONFIRM:
-			return "PATH_CONFIRM"
-		NetworkConstants.MessageType.PATH_EXECUTE:
-			return "PATH_EXECUTE"
 		NetworkConstants.MessageType.CHARACTER_UPDATE:
 			return "CHARACTER_UPDATE"
 		NetworkConstants.MessageType.ROUND_STATE:

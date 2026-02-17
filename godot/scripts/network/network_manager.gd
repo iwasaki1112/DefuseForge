@@ -20,10 +20,8 @@ signal message_received(from_peer: int, msg_type: int, data: Dictionary)
 signal all_peers_ready()
 signal players_updated()
 
-## ルーム関連シグナル
-signal room_list_received(rooms: Array)
-signal room_created(room_id: String)
-signal room_joined(room_id: String)
+## マッチメイキングシグナル
+signal match_found(room_id: String, map_id: String)
 
 ## 設定
 const MAX_PLAYERS: int = 4
@@ -32,7 +30,6 @@ const MAX_PLAYERS: int = 4
 var _state: ConnectionState = ConnectionState.DISCONNECTED
 var _local_peer_id: int = 0
 var _room_id: String = ""
-var _room_name: String = ""
 
 ## WebSocket
 var _ws: WebSocketPeer = null
@@ -46,7 +43,7 @@ const PENDING_ACTION_TIMEOUT: float = 3.0  # 3秒でリトライ
 const PENDING_ACTION_MAX_RETRIES: int = 3
 
 ## プレイヤー情報
-var _players: Dictionary = {}  # { peer_id: { "name": String, "ready": bool, "team": int } }
+var _players: Dictionary[int, Dictionary] = {}  # { peer_id: { "name": String, "ready": bool, "team": int } }
 
 
 func _ready() -> void:
@@ -123,8 +120,11 @@ func _connect_to_relay() -> bool:
 	return true
 
 
-## ルームを作成（ホストとして開始）
-func create_room(room_name: String = "Room", player_name: String = "Host") -> bool:
+var _pending_action: Dictionary = {}
+
+
+## マッチメイキング開始
+func find_match(player_name: String = "Player") -> bool:
 	if _state != ConnectionState.DISCONNECTED:
 		push_warning("NetworkManager: Already connected")
 		return false
@@ -134,72 +134,22 @@ func create_room(room_name: String = "Room", player_name: String = "Host") -> bo
 		return false
 
 	_state = ConnectionState.CONNECTING
-	_room_name = room_name
-	connection_state_changed.emit(_state)
-
-	# 接続完了後にルーム作成を送信（_process内で接続完了を検出）
-	_pending_action = {
-		"type": "CREATE_ROOM",
-		"room_name": room_name,
-		"player_name": player_name
-	}
-
-	# 仮のプレイヤー情報
-	_players[0] = {
-		"name": player_name,
-		"ready": false,
-		"team": GameCharacter.Team.COUNTER_TERRORIST
-	}
-
-	if Debug.enabled: print("NetworkManager: Creating room: %s" % room_name)
-	return true
-
-var _pending_action: Dictionary = {}
-
-
-## ルーム一覧を取得
-func request_room_list() -> bool:
-	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		# 未接続の場合は一時的に接続
-		if not _connect_to_relay():
-			return false
-
-		_pending_action = {"type": "LIST_ROOMS"}
-		return true
-
-	_send_to_server({"type": "LIST_ROOMS"})
-	return true
-
-
-## ルームに参加
-func join_room(room_id: String, player_name: String = "Client") -> bool:
-	if _state != ConnectionState.DISCONNECTED:
-		push_warning("NetworkManager: Already connected")
-		return false
-
-	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		if not _connect_to_relay():
-			connection_failed.emit("リレーサーバーへの接続失敗")
-			return false
-
-	_state = ConnectionState.CONNECTING
 	connection_state_changed.emit(_state)
 
 	_pending_action = {
-		"type": "JOIN_ROOM",
-		"room_id": room_id,
+		"type": "FIND_MATCH",
 		"player_name": player_name
 	}
 
-	# 仮のプレイヤー情報
-	_players[0] = {
-		"name": player_name,
-		"ready": false,
-		"team": GameCharacter.Team.NONE
-	}
-
-	if Debug.enabled: print("NetworkManager: Joining room: %s" % room_id)
+	if Debug.enabled: print("NetworkManager: Finding match as %s" % player_name)
 	return true
+
+
+## マッチメイキングキャンセル
+func cancel_match() -> void:
+	if _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		_send_to_server({"type": "CANCEL_MATCH"})
+	disconnect_from_game()
 
 
 ## 切断
@@ -213,7 +163,6 @@ func disconnect_from_game() -> void:
 	_state = ConnectionState.DISCONNECTED
 	_local_peer_id = 0
 	_room_id = ""
-	_room_name = ""
 	_players.clear()
 	_pending_action = {}
 
@@ -374,28 +323,22 @@ func _split_json_messages(data: String) -> Array[String]:
 
 ## 単一のJSONメッセージを処理
 func _process_single_message(json_string: String) -> void:
-	var json := JSON.new()
-	if json.parse(json_string) != OK:
+	var msg = JSON.parse_string(json_string)
+	if msg == null:
 		push_error("NetworkManager: Invalid JSON: %s" % json_string)
 		return
-
-	var msg: Dictionary = json.data
 	var msg_type: String = msg.get("type", "")
 	var payload = msg.get("payload", {})
 
 	match msg_type:
-		"ROOM_CREATED":
-			_on_room_created(payload)
-		"ROOM_LIST":
-			_on_room_list(payload)
-		"ROOM_JOINED":
-			_on_room_joined(payload)
 		"PEER_CONNECTED":
 			_on_peer_connected_relay(payload)
 		"PEER_DISCONNECTED":
 			_on_peer_disconnected_relay(payload)
 		"MESSAGE":
 			_on_relay_message(payload)
+		"MATCH_FOUND":
+			_on_match_found(payload)
 		"ERROR":
 			_on_error(payload)
 		"HEARTBEAT_ACK":
@@ -415,7 +358,12 @@ func _check_pending_action() -> void:
 	if Debug.enabled: print("NetworkManager: Sending pending action: %s" % _pending_action.get("type", "unknown"))
 	_send_to_server(_pending_action)
 
-	# リトライ用に保存
+	# FIND_MATCHはマッチ待機なのでリトライ不要（相手が来るまで無制限に待つ）
+	if _pending_action.get("type", "") == "FIND_MATCH":
+		_pending_action = {}
+		return
+
+	# それ以外のアクションはリトライ用に保存
 	_pending_action_sent = _pending_action.duplicate()
 	_pending_action_timer = 0.0
 	_pending_action_retries = 0
@@ -454,60 +402,34 @@ func _clear_pending_action_sent() -> void:
 ## サーバーメッセージハンドラ
 ## ========================================
 
-func _on_room_created(payload: Dictionary) -> void:
-	_clear_pending_action_sent()
-	_room_id = payload.get("room_id", "")
-	_local_peer_id = payload.get("peer_id", 1)
-	_state = ConnectionState.HOST
-
-	# 仮プレイヤー情報を正式IDで更新
-	if _players.has(0):
-		var info: Dictionary = _players[0]
-		_players.erase(0)
-		_players[_local_peer_id] = info
-
-	connection_state_changed.emit(_state)
-	room_created.emit(_room_id)
-	players_updated.emit()
-	if Debug.enabled: print("NetworkManager: Room created - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
-
-
-func _on_room_list(payload: Dictionary) -> void:
-	_clear_pending_action_sent()
-	var rooms: Array = payload.get("rooms", [])
-	room_list_received.emit(rooms)
-
-
-func _on_room_joined(payload: Dictionary) -> void:
+func _on_match_found(payload: Dictionary) -> void:
 	_clear_pending_action_sent()
 	_room_id = payload.get("room_id", "")
 	_local_peer_id = payload.get("peer_id", 0)
-	_state = ConnectionState.CONNECTED
+	var map_id: String = payload.get("map_id", "home")
 
-	# 仮プレイヤー情報を正式IDで更新
-	if _players.has(0):
-		var info: Dictionary = _players[0]
-		_players.erase(0)
-		_players[_local_peer_id] = info
+	# peer_id=1ならホスト
+	if _local_peer_id == 1:
+		_state = ConnectionState.HOST
+	else:
+		_state = ConnectionState.CONNECTED
 
-	# 既存プレイヤー情報を追加
+	# プレイヤー情報を構築
+	_players.clear()
 	var players_data: Array = payload.get("players", [])
 	for player in players_data:
 		var pid: int = player.get("peer_id", 0)
-		if pid != _local_peer_id and pid > 0:
+		if pid > 0:
 			_players[pid] = {
 				"name": player.get("name", "Player"),
-				"ready": false,
-				"team": GameCharacter.Team.COUNTER_TERRORIST if pid == 1 else GameCharacter.Team.NONE
+				"ready": true,
+				"team": GameCharacter.Team.COUNTER_TERRORIST if pid == 1 else GameCharacter.Team.TERRORIST
 			}
 
-	# チーム自動割り当て
-	_auto_assign_team()
-
 	connection_state_changed.emit(_state)
-	room_joined.emit(_room_id)
 	players_updated.emit()
-	if Debug.enabled: print("NetworkManager: Joined room - ID: %s, PeerID: %d" % [_room_id, _local_peer_id])
+	match_found.emit(_room_id, map_id)
+	if Debug.enabled: print("NetworkManager: Match found! Room: %s, Map: %s, PeerID: %d" % [_room_id, map_id, _local_peer_id])
 
 
 func _on_peer_connected_relay(payload: Dictionary) -> void:
@@ -576,14 +498,6 @@ func _on_error(payload: Dictionary) -> void:
 ## チーム割り当て
 ## ========================================
 
-func _auto_assign_team() -> void:
-	if _local_peer_id == 1:
-		# ホストは常にCT
-		_players[_local_peer_id]["team"] = GameCharacter.Team.COUNTER_TERRORIST
-	else:
-		_players[_local_peer_id]["team"] = _get_team_to_assign()
-
-
 func _get_team_to_assign() -> int:
 	var ct_count := 0
 	var t_count := 0
@@ -628,36 +542,3 @@ func get_state() -> ConnectionState:
 ## ルームIDを取得
 func get_room_id() -> String:
 	return _room_id
-
-
-## ルーム名を取得
-func get_room_name() -> String:
-	return _room_name
-
-
-## ポートを取得（互換性のため維持）
-func get_port() -> int:
-	return 0
-
-
-## ローカルIPを取得（互換性のため維持 - リレー方式では不使用）
-func get_local_ip() -> String:
-	return ""
-
-
-## ========================================
-## 後方互換性のためのAPI（非推奨）
-## ========================================
-
-## [非推奨] host_game - create_room()を使用してください
-func host_game(_port: int = 0, player_name: String = "Host") -> bool:
-	push_warning("NetworkManager: host_game() is deprecated. Use create_room() instead.")
-	return create_room("Room", player_name)
-
-
-## [非推奨] join_game - join_room()を使用してください
-func join_game(_ip: String, _port: int = 0, _player_name: String = "Client") -> bool:
-	push_warning("NetworkManager: join_game() is deprecated. Use join_room() instead.")
-	# IPからルームID抽出を試みる（互換性のため）
-	# 実際にはルームリストからIDを取得して使用すべき
-	return false

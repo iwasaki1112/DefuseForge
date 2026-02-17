@@ -1,0 +1,47 @@
+[gd_scene format=3 uid="uid://bljkbdl7l7p35"]
+
+[ext_resource type="Texture2D" uid="uid://tume5xbjh5ts" path="res://assets/ui/game/controller-door-button.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://br2r71qfd6ycd" path="res://assets/ui/game/controller-hand-granade-button.png" id="2"]
+
+[node name="ActionButtons" type="VBoxContainer" unique_id=1552857211]
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -120.0
+offset_top = -249.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="DoorOpenBtn" type="TextureButton" parent="." unique_id=1843887604]
+visible = false
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+texture_normal = ExtResource("1")
+ignore_texture_size = true
+stretch_mode = 3
+
+[node name="GrenadeContainer" type="VBoxContainer" parent="." unique_id=1540108574]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="GrenadeBtn" type="TextureButton" parent="GrenadeContainer" unique_id=1238020196]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+texture_normal = ExtResource("2")
+ignore_texture_size = true
+stretch_mode = 3
+
+[node name="GrenadeCountLabel" type="Label" parent="GrenadeContainer" unique_id=2022302667]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "99"
+horizontal_alignment = 1
+
+[node name="TalkingBtn" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(80, 40)
+layout_mode = 2
+text = "Talk"
