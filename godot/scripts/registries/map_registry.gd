@@ -215,6 +215,7 @@ func _setup_wall_groups(node: Node) -> void:
 ## Spawn marker naming patterns
 const SPAWN_CT_PATTERNS := ["spawn_ct_", "SpawnCT"]
 const SPAWN_T_PATTERNS := ["spawn_t_", "SpawnT"]
+const SPAWN_HOSTAGE_PATTERNS := ["spawn_hostage_", "SpawnHostage"]
 
 ## Extract spawn points and rotations from scene markers and update preset
 ## Markers should be named: spawn_ct_1, spawn_ct_2, ... or SpawnCT1, SpawnCT2, ...
@@ -224,9 +225,11 @@ func _extract_spawn_points(map_instance: Node3D, preset: MapPreset) -> void:
 	var ct_rotations: Array[float] = []
 	var t_spawns: Array[Vector3] = []
 	var t_rotations: Array[float] = []
+	var hostage_spawns: Array[Vector3] = []
+	var hostage_rotations: Array[float] = []
 
 	# Recursively find spawn markers
-	_find_spawn_markers(map_instance, ct_spawns, ct_rotations, t_spawns, t_rotations)
+	_find_spawn_markers(map_instance, ct_spawns, ct_rotations, t_spawns, t_rotations, hostage_spawns, hostage_rotations)
 
 	# Update preset if markers were found
 	if ct_spawns.size() > 0:
@@ -235,6 +238,9 @@ func _extract_spawn_points(map_instance: Node3D, preset: MapPreset) -> void:
 	if t_spawns.size() > 0:
 		preset.spawn_points_t = t_spawns
 		preset.spawn_rotations_t = t_rotations
+	if hostage_spawns.size() > 0:
+		preset.spawn_points_hostage = hostage_spawns
+		preset.spawn_rotations_hostage = hostage_rotations
 
 ## Recursively find spawn marker nodes
 func _find_spawn_markers(
@@ -242,7 +248,9 @@ func _find_spawn_markers(
 	ct_spawns: Array[Vector3],
 	ct_rotations: Array[float],
 	t_spawns: Array[Vector3],
-	t_rotations: Array[float]
+	t_rotations: Array[float],
+	hostage_spawns: Array[Vector3],
+	hostage_rotations: Array[float]
 ) -> void:
 	var node_name := node.name.to_lower()
 
@@ -264,6 +272,15 @@ func _find_spawn_markers(
 				t_rotations.append(node3d.rotation.y)
 			break
 
+	# Check for Hostage spawn markers
+	for pattern in SPAWN_HOSTAGE_PATTERNS:
+		if node_name.begins_with(pattern.to_lower()):
+			if node is Node3D:
+				var node3d := node as Node3D
+				hostage_spawns.append(node3d.position)
+				hostage_rotations.append(node3d.rotation.y)
+			break
+
 	# Recursively process children
 	for child in node.get_children():
-		_find_spawn_markers(child, ct_spawns, ct_rotations, t_spawns, t_rotations)
+		_find_spawn_markers(child, ct_spawns, ct_rotations, t_spawns, t_rotations, hostage_spawns, hostage_rotations)

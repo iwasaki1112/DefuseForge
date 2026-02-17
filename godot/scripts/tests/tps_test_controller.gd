@@ -16,7 +16,7 @@ extends Node3D
 # ============================================
 const GROUND_SIZE := 50.0
 
-const CHARACTER_PRESET_ID := "bravo"
+const CHARACTER_PRESET_ID := "alpha"
 const ENEMY_PRESET_ID := "ares"
 const DEFAULT_WEAPON_ID := "glock"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"

@@ -377,11 +377,28 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 			if is_door:
 				_create_door_opening_occluder(grid_map, cell, aabb, cell_global)
 		else:
-			# 壁: AABBからオクルーダー生成
-			var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
-			if occluder:
-				_occluder_parent.add_child(occluder)
-				_wall_occluders.append(occluder)
+			# 壁: MeshLibraryのコリジョンシェイプからオクルーダー生成（L字/T字対応）
+			var item_shapes := lib.get_item_shapes(item_id)
+			if item_shapes.size() >= 2:
+				var si := 0
+				while si < item_shapes.size():
+					if item_shapes[si] is BoxShape3D:
+						var box_shape: BoxShape3D = item_shapes[si]
+						var shape_transform: Transform3D = item_shapes[si + 1] if (si + 1 < item_shapes.size() and item_shapes[si + 1] is Transform3D) else Transform3D.IDENTITY
+						var shape_top_y := cell_global.origin.y + shape_transform.origin.y + box_shape.size.y / 2.0
+						if shape_top_y >= MIN_OCCLUSION_HEIGHT:
+							var shape_global := cell_global * shape_transform
+							var occluder := _create_occluder_from_box(box_shape, shape_global)
+							if occluder:
+								_occluder_parent.add_child(occluder)
+								_wall_occluders.append(occluder)
+					si += 2
+			else:
+				# シェイプがない場合はAABBフォールバック
+				var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
+				if occluder:
+					_occluder_parent.add_child(occluder)
+					_wall_occluders.append(occluder)
 
 	if Debug.enabled: print("[FOW] GridMap occluders extracted from: ", grid_map.name)
 

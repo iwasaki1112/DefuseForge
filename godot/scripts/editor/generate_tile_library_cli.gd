@@ -135,21 +135,26 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 				if mat:
 					combined.surface_set_material(combined.get_surface_count() - 1, mat)
 					print("  Surface: ", mat.resource_name)
-
-			if not has_opening:
-				# 非ドア: メッシュごとにAABB BoxShape3D
-				var aabb := mesh.get_aabb()
-				var box := BoxShape3D.new()
-				box.size = aabb.size
-				var center := mi.transform * aabb.get_center()
-				shapes.append(box)
-				shapes.append(Transform3D(Basis.IDENTITY, center))
 			print("  Mesh: ", mi.name, " AABB: ", mi.mesh.get_aabb().size)
 
-		# ドアタイル: 開口部を除いた柱ごとにBoxShape3Dを生成
+		# コリジョン生成（3分岐）
 		if has_opening:
+			# ドア/窓タイル: 開口部を除いた柱ごとにBoxShape3Dを生成
 			var door_shapes := _create_door_collision_shapes(combined)
 			shapes.append_array(door_shapes)
+		else:
+			var combined_aabb := combined.get_aabb()
+			if combined_aabb.size.x > 0.5 and combined_aabb.size.y > 0.5 and combined_aabb.size.z > 0.5:
+				# 複合形状壁（L字/T字等）: 三角形BBox分類で壁アームを分解
+				var complex_shapes := _create_complex_wall_shapes(combined)
+				shapes.append_array(complex_shapes)
+			else:
+				# 単純壁（wall_straight等）: 全体AABBから単一BoxShape3D
+				var box := BoxShape3D.new()
+				box.size = combined_aabb.size
+				shapes.append(box)
+				shapes.append(Transform3D(Basis.IDENTITY, combined_aabb.get_center()))
+				print("  Simple wall collision: size=", box.size)
 
 		lib.set_item_mesh(item_id, combined)
 		lib.set_item_shapes(item_id, shapes)
@@ -278,3 +283,122 @@ func _create_door_collision_shapes(mesh: ArrayMesh) -> Array:
 			print("  Opening collision: sill size=", box.size, " center=", center)
 
 	return shapes
+
+
+## 複合形状壁タイル（L字/T字等）のコリジョンを三角形バウンディングボックス分類で壁アームに分解
+## 各三角形のXZ平面でのバウンディングボックスから薄い次元を検出し、同じアームの三角形をクラスタリング
+func _create_complex_wall_shapes(mesh: ArrayMesh) -> Array:
+	var shapes: Array = []
+
+	# 全サーフェスから三角形の頂点・インデックスを収集
+	var all_verts: PackedVector3Array = PackedVector3Array()
+	var all_indices: PackedInt32Array = PackedInt32Array()
+	var vert_offset := 0
+
+	for surf_idx in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(surf_idx)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices = arrays[Mesh.ARRAY_INDEX]
+		all_verts.append_array(verts)
+		if indices and indices.size() > 0:
+			for idx in indices:
+				all_indices.append(idx + vert_offset)
+		else:
+			for vi in verts.size():
+				all_indices.append(vi + vert_offset)
+		vert_offset += verts.size()
+
+	if all_verts.is_empty() or all_indices.size() < 3:
+		var aabb := mesh.get_aabb()
+		var box := BoxShape3D.new()
+		box.size = aabb.size
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, aabb.get_center()))
+		print("  Complex wall: fallback AABB (no triangles)")
+		return shapes
+
+	var THIN_THRESHOLD := 0.5  # 三角形のバウンディングボックスがこの厚み以下なら「薄い」
+	var CLUSTER_GAP := 0.5  # この距離以上離れたら別クラスタ
+	var MIN_BOX_DIM := 0.05  # これ以下の次元のボックスはスキップ
+
+	# 各三角形をバウンディングボックスの薄さで分類
+	# x_arm_data: [[z_center, v0, v1, v2], ...] — Z方向に薄い → X方向に走る壁
+	# z_arm_data: [[x_center, v0, v1, v2], ...] — X方向に薄い → Z方向に走る壁
+	var x_arm_data: Array = []
+	var z_arm_data: Array = []
+
+	var tri_count := all_indices.size() / 3
+	for ti in tri_count:
+		var v0 := all_verts[all_indices[ti * 3]]
+		var v1 := all_verts[all_indices[ti * 3 + 1]]
+		var v2 := all_verts[all_indices[ti * 3 + 2]]
+
+		var tri_z_ext: float = maxf(v0.z, maxf(v1.z, v2.z)) - minf(v0.z, minf(v1.z, v2.z))
+		var tri_x_ext: float = maxf(v0.x, maxf(v1.x, v2.x)) - minf(v0.x, minf(v1.x, v2.x))
+
+		if tri_z_ext <= THIN_THRESHOLD:
+			var z_center := (v0.z + v1.z + v2.z) / 3.0
+			x_arm_data.append([z_center, v0, v1, v2])
+		if tri_x_ext <= THIN_THRESHOLD:
+			var x_center := (v0.x + v1.x + v2.x) / 3.0
+			z_arm_data.append([x_center, v0, v1, v2])
+
+	# X-arm三角形をZ重心でクラスタリング → 各クラスタがX方向の壁セグメント
+	_cluster_and_generate_boxes(x_arm_data, CLUSTER_GAP, MIN_BOX_DIM, shapes, "X-arm")
+
+	# Z-arm三角形をX重心でクラスタリング → 各クラスタがZ方向の壁セグメント
+	_cluster_and_generate_boxes(z_arm_data, CLUSTER_GAP, MIN_BOX_DIM, shapes, "Z-arm")
+
+	if shapes.is_empty():
+		var aabb := mesh.get_aabb()
+		var box := BoxShape3D.new()
+		box.size = aabb.size
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, aabb.get_center()))
+		print("  Complex wall: fallback AABB (no arms detected)")
+	else:
+		print("  Complex wall: %d segments generated" % (shapes.size() / 2))
+
+	return shapes
+
+
+## 三角形データを重心値でソート・クラスタリングし、各クラスタからBoxShape3Dを生成
+func _cluster_and_generate_boxes(tri_data: Array, cluster_gap: float, min_dim: float, shapes: Array, label: String) -> void:
+	if tri_data.is_empty():
+		return
+
+	# 重心値（index 0）でソート
+	tri_data.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+
+	# 隣接する三角形を重心間距離でクラスタリング
+	var clusters: Array = []
+	var current_cluster: Array = [tri_data[0]]
+
+	for i in range(1, tri_data.size()):
+		if tri_data[i][0] - tri_data[i - 1][0] > cluster_gap:
+			clusters.append(current_cluster)
+			current_cluster = []
+		current_cluster.append(tri_data[i])
+	clusters.append(current_cluster)
+
+	# 各クラスタの頂点AABBからBoxShape3Dを生成
+	for cluster in clusters:
+		var vmin := Vector3(INF, INF, INF)
+		var vmax := Vector3(-INF, -INF, -INF)
+		for entry in cluster:
+			for vi in range(1, 4):
+				var v: Vector3 = entry[vi]
+				vmin.x = min(vmin.x, v.x); vmin.y = min(vmin.y, v.y); vmin.z = min(vmin.z, v.z)
+				vmax.x = max(vmax.x, v.x); vmax.y = max(vmax.y, v.y); vmax.z = max(vmax.z, v.z)
+
+		var box_size := vmax - vmin
+		# 退化したボックス（非常に薄い面）をスキップ
+		if box_size.x < min_dim or box_size.y < min_dim or box_size.z < min_dim:
+			continue
+
+		var box := BoxShape3D.new()
+		box.size = box_size
+		var center := (vmin + vmax) / 2.0
+		shapes.append(box)
+		shapes.append(Transform3D(Basis.IDENTITY, center))
+		print("  Complex wall: %s size=%s center=%s" % [label, str(box_size), str(center)])
