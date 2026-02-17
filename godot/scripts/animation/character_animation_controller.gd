@@ -28,12 +28,12 @@ signal door_open_impact()   # ドアを実際に開くインパクトタイミ�
 @export var recoil_recovery := 10.0
 
 @export_group("Lean")
-@export var max_lean_degrees := 25.0
+@export var max_lean_degrees := 10.0
 @export var lean_speed := 10.0
 @export var lean_deadzone := 0.15
 
 @export_group("Turn Lean")
-@export var turn_lean_degrees := 35.0    ## 方向転換時の最大リーン角度（度）
+@export var turn_lean_degrees := 15.0    ## 方向転換時の最大リーン角度（度）
 @export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
 @export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
 
