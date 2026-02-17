@@ -8,7 +8,12 @@
 |------|------|
 | スクリプト | `res://scripts/resources/map_preset.gd` |
 | 基底クラス | Resource |
-| プリセット配置 | `res://data/maps/` |
+
+## マップ定義方式
+
+マッププリセットは `.tscn` マップシーン内の `MapBase` @export から自動生成される。MapRegistryが `scenes/maps/` の `.tscn` をスキャンし、`map_id` 付きシーンからプリセットを自動作成する。
+
+個別の `.tres` ファイルは不要。
 
 ## プロパティ
 
@@ -16,7 +21,7 @@
 
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|-----------|------|
-| `id` | String | `""` | ユニークID（例: "test_map", "warehouse"） |
+| `id` | String | `""` | ユニークID（例: "home"） |
 | `display_name` | String | `""` | UI表示用の名前 |
 | `description` | String | `""` | マップの説明文 |
 
@@ -38,6 +43,8 @@
 |-----------|-----|-----------|------|
 | `spawn_points_ct` | Array[Vector3] | `[]` | Counter-Terroristスポーン位置 |
 | `spawn_points_t` | Array[Vector3] | `[]` | Terroristスポーン位置 |
+| `spawn_rotations_ct` | Array[float] | `[]` | CTスポーン向き（Y回転ラジアン） |
+| `spawn_rotations_t` | Array[float] | `[]` | Tスポーン向き（Y回転ラジアン） |
 
 ### UI
 
@@ -45,56 +52,50 @@
 |-----------|-----|-----------|------|
 | `thumbnail` | Texture2D | `null` | マップ選択UI用サムネイル |
 
-## 使用例
+## マップシーン構造（GridMapタイルシステム）
 
-### プリセット作成（.tres）
+マップは GridMap + MapBase 方式で構築する。
+
+```
+MapRoot (Node3D) [script: MapBase]
+├── GridMap (GridMap)
+│   ├── Layer 0: 床タイル（floor*, ground*）
+│   └── Layer 1: 壁タイル（wall*, glass*, door*）
+├── SpawnCT1 (Marker3D) ← CTスポーン位置
+├── SpawnCT2 (Marker3D)
+├── SpawnT1 (Marker3D) ← Tスポーン位置
+└── SpawnT2 (Marker3D)
+```
+
+MapBase の @export プロパティでメタデータを埋め込む:
 
 ```gdscript
-[gd_resource type="Resource" script_class="MapPreset" load_steps=2 format=3]
-
-[ext_resource type="Script" path="res://scripts/resources/map_preset.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://scenes/maps/my_map.tscn" id="2_scene"]
-
-[resource]
-script = ExtResource("1_script")
-id = "my_map"
-display_name = "My Custom Map"
-description = "A custom tactical map"
-map_scene = ExtResource("2_scene")
-map_size = Vector2(60, 60)
-spawn_points_ct = Array[Vector3]([Vector3(-20, 0, -20), Vector3(-18, 0, -20)])
-spawn_points_t = Array[Vector3]([Vector3(20, 0, 20), Vector3(18, 0, 20)])
+@export var map_id: String = ""
+@export var display_name: String = ""
+@export var map_description: String = ""
 ```
 
-### コードから取得
+### GridMapタイル分類
 
-```gdscript
-# MapRegistryからプリセット取得
-var preset = MapRegistry.get_preset("test_map")
-print(preset.display_name)  # "Test Map"
-print(preset.map_size)      # Vector2(50, 50)
+| タイル名パターン | Layer | 用途 |
+|-----------------|-------|------|
+| `floor*`, `ground*` | 0（床） | 床面 |
+| `wall*`, `glass*` | 1（壁） | 壁・障害物 |
+| `door*` | 1（壁） + `doors` グループ | ドア |
 
-# スポーン位置を取得
-for pos in preset.spawn_points_ct:
-    print("CT spawn: ", pos)
-```
+### グリッドサイズ
 
-## マップシーン構造
+`cell_size = Vector3(2, 2, 2)` — 2m x 2m x 2m グリッド
 
-MapPresetが参照するマップシーン（.tscn）の推奨構造:
+## マップの作成方法
 
-```
-MapRoot (Node3D)
-├── Floor (CSGBox3D / MeshInstance3D) [use_collision=true]
-├── Walls (Node3D)
-│   └── Wall_* (CSGBox3D / StaticBody3D) [collision_layer=2]
-├── SpawnPoints (Node3D) [オプション - MapPresetで座標指定も可]
-│   ├── CT_Spawns (Node3D)
-│   │   └── Spawn* (Marker3D)
-│   └── T_Spawns (Node3D)
-│       └── Spawn* (Marker3D)
-└── Navigation (NavigationRegion3D) [オプション]
-```
+1. CLIでテンプレート生成: `godot --headless --script res://scripts/editor/new_gridmap_map.gd -- <map_id>`
+2. Godotエディタでタイル配置
+3. `scenes/maps/` に保存 → MapRegistryが自動検出・登録
+
+## ランタイム処理
+
+`MapBase._ready()` が GridMap セルから `StaticBody3D` を自動生成（GridMap built-in コリジョンは無効化）。
 
 **重要: 環境設定について**
 
@@ -110,69 +111,6 @@ MapRoot (Node3D)
 | 2 | `2` | 壁・障害物（VisionComponent用） |
 
 壁（collision_layer=2）はVisionComponentの視界計算で遮蔽物として検出される。
-
-## GLTFマップの作成
-
-BlenderでGLTFマップを作成する際の注意点：
-
-### コリジョン自動生成
-
-Godotはメッシュ名のサフィックスでコリジョンを自動生成する：
-
-| サフィックス | 生成されるコリジョン | 用途 |
-|-------------|---------------------|------|
-| `-col` | ConvexPolygonShape3D | 壁、障害物 |
-| `-colonly` | ConvexPolygonShape3D（メッシュ非表示） | 不可視コリジョン |
-| `-trimesh` | ConcavePolygonShape3D | 複雑な形状 |
-
-**例:**
-```
-Map_Ground-col    → 床メッシュ + コリジョン
-Wall_Center-col   → 壁メッシュ + コリジョン
-```
-
-### 壁のcollision_layer設定
-
-**重要**: GLTFインポート時に生成されるStaticBody3Dの`collision_layer`はデフォルト（1）。
-VisionComponentで壁として検出するには`collision_layer = 2`に変更が必要。
-
-マップシーン（.tscn）にスクリプトをアタッチして設定する：
-
-```gdscript
-# scripts/maps/my_map.gd
-extends Node3D
-
-const WALL_COLLISION_LAYER: int = 2
-
-func _ready() -> void:
-    _setup_wall_collisions(self)
-
-func _setup_wall_collisions(node: Node) -> void:
-    if node is StaticBody3D:
-        var parent = node.get_parent()
-        # 親ノード名に"wall"を含むStaticBody3Dを壁として扱う
-        if parent and "wall" in parent.name.to_lower():
-            node.collision_layer = WALL_COLLISION_LAYER
-    for child in node.get_children():
-        _setup_wall_collisions(child)
-```
-
-### GLTFマップのシーン構造例
-
-```
-scenes/maps/my_map.tscn
-├── [instance: my_map.gltf]
-└── script: scripts/maps/my_map.gd
-
-my_map.gltf (Blenderからエクスポート)
-├── Map_Ground-col (床 + コリジョン)
-├── Wall_North-col (壁 + コリジョン)
-├── Wall_South-col (壁 + コリジョン)
-├── spawn_ct_1 (Empty → スポーン位置)
-├── spawn_ct_2
-├── spawn_t_1
-└── spawn_t_2
-```
 
 ## 関連クラス
 
