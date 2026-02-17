@@ -16,7 +16,7 @@ signal door_opened(door: Node3D, character: Node)
 const _SWEEP_STEP_DEG := 10.0  ## スイープの角度ステップ（度）
 const _SWEEP_MARGIN_DEG := 3.0  ## 衝突マージン（度）
 const _DOOR_PANEL_SIZE := Vector3(1.0, 2.0, 0.154)  ## ドアパネルのコリジョンサイズ
-const _DOOR_PANEL_CENTER := Vector3(0.5, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
+const _DOOR_PANEL_CENTER := Vector3(-0.5, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
 
 ## ドアID管理（マルチプレイヤー同期用）
 var _next_door_id: int = 1
@@ -130,9 +130,9 @@ func open_door(door: Node3D, character: CharacterBody3D) -> void:
 	var side_dot := door_normal.dot(door_to_char)
 
 	# ドアはキャラクターから離れる方向に開く
-	# side_dot > 0: キャラクターは壁の+Z側 → +Y回転（パネルが-Z方向へ）
-	# side_dot < 0: キャラクターは壁の-Z側 → -Y回転（パネルが+Z方向へ）
-	var rotation_amount := 170.0 if side_dot > 0 else -170.0
+	# side_dot > 0: キャラクターは壁の+Z側 → -Y回転（パネルが+Z方向へ）
+	# side_dot < 0: キャラクターは壁の-Z側 → +Y回転（パネルが-Z方向へ）
+	var rotation_amount := -170.0 if side_dot > 0 else 170.0
 
 	# 壁との衝突を考慮して最大開角度を制限
 	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)
@@ -207,7 +207,7 @@ func open_door_quietly(door: Node3D, character: CharacterBody3D) -> void:
 	var side_dot := door_normal.dot(door_to_char)
 
 	# ドアはキャラクターから離れる方向に開く（160°で大きく開放）
-	var rotation_amount := 160.0 if side_dot > 0 else -160.0
+	var rotation_amount := -160.0 if side_dot > 0 else 160.0
 
 	# 壁との衝突を考慮して最大開角度を制限
 	rotation_amount = _calculate_max_opening_angle(door, rotation_amount)

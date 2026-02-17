@@ -1227,8 +1227,9 @@ func _on_door_open_pressed() -> void:
 
 	_target_door = _nearby_door
 
-	# ドアの方向を計算
-	var dir := (_target_door.global_position - _player_character.global_position).normalized()
+	# ドアパネル中心の方向を計算（ヒンジではなくパネル中央に向く）
+	var door_center := _target_door.global_position + _target_door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
+	var dir := (door_center - _player_character.global_position).normalized()
 	dir.y = 0.0
 
 	# 向きをロック（set_model_direction は smooth_rotate_to 中は無視される）
@@ -1288,7 +1289,9 @@ func _update_door_proximity() -> void:
 		# 既に開いているドアは対象外
 		if door.is_in_group("open_doors"):
 			continue
-		var door_pos: Vector3 = (door as Node3D).global_position
+		# パネル中心位置を使用（ヒンジ位置ではなくドアの中央で距離判定）
+		var door_node := door as Node3D
+		var door_pos: Vector3 = door_node.global_position + door_node.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
 		var dist := player_pos.distance_to(door_pos)
 		if dist > GameConstants.DOOR_OPEN_DISTANCE:
 			continue

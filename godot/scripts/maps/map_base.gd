@@ -12,8 +12,8 @@ const WALL_COLLISION_LAYER: int = 2
 ## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
 const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_straight_panel.glb"
 ## ドア蝶番のオフセット（タイル原点からの相対位置、Godot座標系）
-## Blender座標 (-0.5, 0.9, 0.0) → Godot座標 (-0.5, 0.0, -0.9)
-const DOOR_HINGE_OFFSET := Vector3(-0.5, 0.0, -0.9)
+## 取っ手の反対側（+X端）にヒンジを配置
+const DOOR_HINGE_OFFSET := Vector3(0.5, 0.0, -0.9)
 
 ## マップメタデータ（.tscnのインスペクタで設定）
 @export_group("Map Info")
@@ -279,9 +279,10 @@ func _create_door_panel(grid_map: GridMap, cell: Vector3i, local_pos: Vector3, c
 	pivot.transform = Transform3D(cell_basis, hinge_pos)
 	grid_map.add_child(pivot)
 
-	# パネルメッシュ（GLBのオリジンが蝶番位置に設定済み）
+	# パネルメッシュ（ヒンジが+X端なので、モデルを-Xにオフセット）
 	var panel_instance := panel_scene.instantiate()
 	panel_instance.name = "PanelMesh"
+	panel_instance.position = Vector3(-1.0, 0.0, 0.0)
 	pivot.add_child(panel_instance)
 
 	# パネルコリジョン（閉じた状態でドア開口部をブロック）
@@ -295,8 +296,8 @@ func _create_door_panel(grid_map: GridMap, cell: Vector3i, local_pos: Vector3, c
 	box.size = Vector3(1.0, 2.0, 0.154)
 	var col_shape := CollisionShape3D.new()
 	col_shape.shape = box
-	# パネル中心 = 蝶番からのオフセット（X: 半幅, Y: 半高さ）
-	col_shape.position = Vector3(0.5, 1.0, 0.0)
+	# パネル中心 = 蝶番からのオフセット（-X方向: 半幅, Y: 半高さ）
+	col_shape.position = Vector3(-0.5, 1.0, 0.0)
 	body.add_child(col_shape)
 
 	# ドアグループに追加
