@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b6fqsascwjjfe"
-path="res://.godot/imported/floor_tile_ceramic.glb-ff40082023885dca5a74a7c782b69278.scn"
+uid="uid://d37c6affej41u"
+path="res://.godot/imported/floor_wood_worn.glb-e14702bdddaa2f9fe2e1cb4c53d916ec.scn"
 
 [deps]
 
-source_file="res://scenes/tiles/floor_tile_ceramic.glb"
-dest_files=["res://.godot/imported/floor_tile_ceramic.glb-ff40082023885dca5a74a7c782b69278.scn"]
+source_file="res://scenes/tiles/floor_wood_worn.glb"
+dest_files=["res://.godot/imported/floor_wood_worn.glb-e14702bdddaa2f9fe2e1cb4c53d916ec.scn"]
 
 [params]
 

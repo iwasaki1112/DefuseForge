@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cnqqjnys2ty1v"
-path.s3tc="res://.godot/imported/floor_tile_ceramic_Tiles074_2K-JPG_Color.jpg-7b3706a15c649d8a8d51f3b9a845d88b.s3tc.ctex"
-path.etc2="res://.godot/imported/floor_tile_ceramic_Tiles074_2K-JPG_Color.jpg-7b3706a15c649d8a8d51f3b9a845d88b.etc2.ctex"
+uid="uid://15jq0eae7luw"
+path.s3tc="res://.godot/imported/floor_wood_worn_tmprkexanwq.png-51a3c55d3e1cea85e11fa722de0b9027.s3tc.ctex"
+path.etc2="res://.godot/imported/floor_wood_worn_tmprkexanwq.png-51a3c55d3e1cea85e11fa722de0b9027.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "c27b58587ed38aa4761a69ea57e50427"
+"md5": "31d78f8225fde22e787736ba9e9063e1"
 }
 
 [deps]
 
-source_file="res://scenes/tiles/floor_tile_ceramic_Tiles074_2K-JPG_Color.jpg"
-dest_files=["res://.godot/imported/floor_tile_ceramic_Tiles074_2K-JPG_Color.jpg-7b3706a15c649d8a8d51f3b9a845d88b.s3tc.ctex", "res://.godot/imported/floor_tile_ceramic_Tiles074_2K-JPG_Color.jpg-7b3706a15c649d8a8d51f3b9a845d88b.etc2.ctex"]
+source_file="res://scenes/tiles/floor_wood_worn_tmprkexanwq.png"
+dest_files=["res://.godot/imported/floor_wood_worn_tmprkexanwq.png-51a3c55d3e1cea85e11fa722de0b9027.s3tc.ctex", "res://.godot/imported/floor_wood_worn_tmprkexanwq.png-51a3c55d3e1cea85e11fa722de0b9027.etc2.ctex"]
 
 [params]
 

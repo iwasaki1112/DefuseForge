@@ -8,6 +8,7 @@ extends SceneTree
 
 const TILES_DIR := "res://scenes/tiles/"
 const SAVE_DIR := "res://data/tiles/"
+const PREVIEW_DIR := "res://data/tiles/previews/"
 const FLOOR_SAVE_PATH := "res://data/tiles/tile_library_floor.tres"
 const WALL_SAVE_PATH := "res://data/tiles/tile_library_wall.tres"
 
@@ -158,6 +159,19 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 
 		lib.set_item_mesh(item_id, combined)
 		lib.set_item_shapes(item_id, shapes)
+
+		# プレビュー画像の読み込み（Blenderでレンダリング済みPNG）
+		var preview_abs := ProjectSettings.globalize_path(PREVIEW_DIR + tile_name + ".png")
+		if FileAccess.file_exists(preview_abs):
+			var img := Image.new()
+			if img.load(preview_abs) == OK:
+				var tex := ImageTexture.create_from_image(img)
+				lib.set_item_preview(item_id, tex)
+				print("  Preview: loaded")
+			else:
+				print("  Preview: load error")
+		else:
+			print("  Preview: not found (%s)" % preview_abs)
 
 		instance.free()
 		print("  Done: ", tile_name)
