@@ -245,7 +245,7 @@ func _setup_particle_wall_clip() -> void:
 	# 煙パフテクスチャを適用（四角いパーティクルを自然な煙型にする）
 	var smoke_tex: Texture2D = puff_texture
 	if not smoke_tex:
-		smoke_tex = load("res://assets/textures/smoke_puff.png") as Texture2D
+		smoke_tex = load("res://assets/effects/smoke_puff.png") as Texture2D
 	if smoke_tex:
 		_particle_clip_mat.set_shader_parameter("smoke_texture", smoke_tex)
 

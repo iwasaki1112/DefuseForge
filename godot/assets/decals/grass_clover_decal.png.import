@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://baebk8o1pdhp4"
-path.s3tc="res://.godot/imported/grass1.png-2a4b8def66ff84704316ac660f9f2d7e.s3tc.ctex"
-path.etc2="res://.godot/imported/grass1.png-2a4b8def66ff84704316ac660f9f2d7e.etc2.ctex"
+uid="uid://yb74nbvr6rth"
+path.s3tc="res://.godot/imported/grass_clover_decal.png-e43c9a24a9b328dd2966aeb053c51f96.s3tc.ctex"
+path.etc2="res://.godot/imported/grass_clover_decal.png-e43c9a24a9b328dd2966aeb053c51f96.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://textures/decals/grass1.png"
-dest_files=["res://.godot/imported/grass1.png-2a4b8def66ff84704316ac660f9f2d7e.s3tc.ctex", "res://.godot/imported/grass1.png-2a4b8def66ff84704316ac660f9f2d7e.etc2.ctex"]
+source_file="res://assets/decals/grass_clover_decal.png"
+dest_files=["res://.godot/imported/grass_clover_decal.png-e43c9a24a9b328dd2966aeb053c51f96.s3tc.ctex", "res://.godot/imported/grass_clover_decal.png-e43c9a24a9b328dd2966aeb053c51f96.etc2.ctex"]
 
 [params]
 
