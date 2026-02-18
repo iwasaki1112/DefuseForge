@@ -12,13 +12,13 @@ signal exploded(position: Vector3)
 @export var explosion_damage: float = 100.0  ## 最大ダメージ
 
 ## 投擲設定
-@export var default_arc_height: float = 2.0  ## デフォルトの放物線高さ
+@export var default_arc_height: float = 1.0  ## デフォルトの放物線高さ
 
 ## 物理設定
 @export var throw_gravity: float = 9.8  ## 重力
-@export var bounce_factor: float = 0.4  ## 跳ね返り係数（複数回の小バウンド用）
+@export var bounce_factor: float = 0.25  ## 跳ね返り係数（軽いバウンド用）
 @export var friction: float = 0.8  ## 摩擦係数（着地後の減速用）
-@export var min_bounce_velocity: float = 0.3  ## バウンス判定の最小速度（小さいほど細かいバウンドが出る）
+@export var min_bounce_velocity: float = 0.8  ## バウンス判定の最小速度（大きいほど早く着地）
 @export var collision_radius: float = 0.08  ## 衝突判定の半径
 
 ## 内部状態
@@ -225,8 +225,8 @@ func _handle_collision(collision: Dictionary) -> void:
 			# バウンス（垂直方向を反射＋減衰）
 			_velocity = _velocity.bounce(normal) * bounce_factor
 			# 水平速度も毎バウンスで減衰
-			_velocity.x *= 0.7
-			_velocity.z *= 0.7
+			_velocity.x *= 0.5
+			_velocity.z *= 0.5
 	else:
 		# 壁にバウンス
 		_velocity = _velocity.bounce(normal) * bounce_factor
@@ -311,7 +311,7 @@ func _calculate_throw_velocity(start: Vector3, target: Vector3, arc_height: floa
 		peak_height = arc_height
 	else:
 		# デフォルト: 距離に応じた低い弧
-		peak_height = clampf(horizontal_distance * 0.1, 0.3, 2.0)
+		peak_height = clampf(horizontal_distance * 0.06, 0.3, 1.0)
 		# 下向きに投げる場合は弧を高くする必要がある
 		if delta_y < 0:
 			peak_height = maxf(peak_height, absf(delta_y) * 0.3 + 0.3)
