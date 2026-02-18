@@ -2,7 +2,7 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
 
 // Fog appearance
-uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.5);
+uniform vec4 fog_color : source_color = vec4(0.15, 0.15, 0.15, 0.5);
 
 // Visibility texture (generated from SubViewport Light2D shadow)
 uniform sampler2D visibility_texture : filter_linear, hint_default_black;

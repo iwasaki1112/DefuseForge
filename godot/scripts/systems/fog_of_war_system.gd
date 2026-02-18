@@ -38,7 +38,7 @@ static var QUALITY_SETTINGS := {
 @export var fog_height: float = 2.5  ## 壁高さ(2.0m)より上に配置し、カメラからFoWが壁を覆うようにする
 
 @export_group("Visual Settings")
-@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.5)
+@export var fog_color: Color = Color(0.15, 0.15, 0.15, 0.5)
 @export var quality: Quality = Quality.MEDIUM  # パフォーマンス/品質バランス
 
 ## Internal settings (auto-configured from quality)
