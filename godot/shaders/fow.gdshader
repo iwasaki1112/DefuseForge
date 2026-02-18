@@ -2,7 +2,7 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
 
 // Fog appearance
-uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.3);
+uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.5);
 
 // Visibility texture (generated from SubViewport Light2D shadow)
 uniform sampler2D visibility_texture : filter_linear, hint_default_black;
@@ -42,31 +42,21 @@ void fragment() {
 	if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
 		float px = blur_radius / texture_size;
 
-		// Floor: 9-point weighted blur for smooth cone edges
+		// 9-point weighted blur for smooth cone edges
 		// Center (weight 4) + cross (weight 2 each) + diagonals (weight 1 each) = 16
-		float v_floor = texture(visibility_texture, uv).r * 4.0;
-		v_floor += texture(visibility_texture, uv + vec2(px, 0.0)).r * 2.0;
-		v_floor += texture(visibility_texture, uv - vec2(px, 0.0)).r * 2.0;
-		v_floor += texture(visibility_texture, uv + vec2(0.0, px)).r * 2.0;
-		v_floor += texture(visibility_texture, uv - vec2(0.0, px)).r * 2.0;
-		v_floor += texture(visibility_texture, uv + vec2(px, px)).r;
-		v_floor += texture(visibility_texture, uv + vec2(-px, px)).r;
-		v_floor += texture(visibility_texture, uv + vec2(px, -px)).r;
-		v_floor += texture(visibility_texture, uv + vec2(-px, -px)).r;
-		v_floor /= 16.0;
+		visibility = texture(visibility_texture, uv).r * 4.0;
+		visibility += texture(visibility_texture, uv + vec2(px, 0.0)).r * 2.0;
+		visibility += texture(visibility_texture, uv - vec2(px, 0.0)).r * 2.0;
+		visibility += texture(visibility_texture, uv + vec2(0.0, px)).r * 2.0;
+		visibility += texture(visibility_texture, uv - vec2(0.0, px)).r * 2.0;
+		visibility += texture(visibility_texture, uv + vec2(px, px)).r;
+		visibility += texture(visibility_texture, uv + vec2(-px, px)).r;
+		visibility += texture(visibility_texture, uv + vec2(px, -px)).r;
+		visibility += texture(visibility_texture, uv + vec2(-px, -px)).r;
+		visibility /= 16.0;
 
-		// Wall: 5-point max sample (occluder blocks light at wall position)
-		float wpx = 2.0 / texture_size;
-		float v_wall = max(v_floor, texture(visibility_texture, uv + vec2(wpx, 0.0)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(wpx, 0.0)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv + vec2(0.0, wpx)).r);
-		v_wall = max(v_wall, texture(visibility_texture, uv - vec2(0.0, wpx)).r);
-
-		// Blend: floor (Y≈0) blurred, wall (Y>0.15) max
-		float wall_blend = smoothstep(0.05, 0.15, surface_y);
-		visibility = mix(v_floor, v_wall, wall_blend);
 		visibility = min(visibility, 1.0);
-		// Wall top face (Y≥2.0): always fog
+		// Wall top face (Y>=2.0): always fog
 		visibility *= 1.0 - smoothstep(1.9, 1.95, surface_y);
 		visibility = smoothstep(0.05, 0.4, visibility);
 	}

@@ -38,7 +38,7 @@ static var QUALITY_SETTINGS := {
 @export var fog_height: float = 2.5  ## 壁高さ(2.0m)より上に配置し、カメラからFoWが壁を覆うようにする
 
 @export_group("Visual Settings")
-@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.3)
+@export var fog_color: Color = Color(0.1, 0.15, 0.25, 0.5)
 @export var quality: Quality = Quality.MEDIUM  # パフォーマンス/品質バランス
 
 ## Internal settings (auto-configured from quality)
@@ -142,7 +142,8 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("map_max", map_max)
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
 	# コーンエッジの滑らかさ: blur_radiusはテクセル単位のブラー半径
-	_fog_material.set_shader_parameter("blur_radius", 3.0)
+	# 薄い壁オクルーダー（~2.5px）を貫通しない範囲に抑える
+	_fog_material.set_shader_parameter("blur_radius", 1.0)
 	_fog_material.set_shader_parameter("edge_softness", 0.4)
 
 	# OpenGL (Compatibility) は depth [0,1] → NDC [-1,1] リマップが必要
