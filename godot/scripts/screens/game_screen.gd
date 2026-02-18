@@ -1194,6 +1194,10 @@ func _on_door_open_pressed() -> void:
 	var finished := _player_character.anim_ctrl.smooth_rotate_to(dir, 0.2)
 	await finished
 	if is_instance_valid(_player_character) and _player_character.anim_ctrl:
+		# 回転中にプレイヤーが移動した場合の距離再チェック
+		if not _is_door_in_range(_target_door, _player_character):
+			_cancel_door_open()
+			return
 		_player_character.set_facing_direction_vec(dir)
 		_player_character.anim_ctrl.play_door_open()
 
@@ -1202,12 +1206,31 @@ func _on_door_open_pressed() -> void:
 func _on_door_open_impact() -> void:
 	if not _target_door or not _player_character:
 		return
+	# アニメーション中にプレイヤーが移動した場合の距離再チェック
+	if not _is_door_in_range(_target_door, _player_character):
+		return
 	if game_manager:
 		game_manager._on_door_open_done(_target_door, _player_character)
 
 
 ## ドア開けアニメーション完了
 func _on_door_open_anim_finished() -> void:
+	_target_door = null
+	if _tps_controller:
+		_tps_controller.unlock_facing()
+
+
+## ドアがインタラクション距離内か判定
+func _is_door_in_range(door: Node3D, character: CharacterBody3D) -> bool:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return false
+	var door_pos := door.global_position + door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
+	var dist := character.global_position.distance_to(door_pos)
+	return dist <= GameConstants.DOOR_OPEN_DISTANCE
+
+
+## ドア開け操作をキャンセル（距離超過時）
+func _cancel_door_open() -> void:
 	_target_door = null
 	if _tps_controller:
 		_tps_controller.unlock_facing()

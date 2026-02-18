@@ -56,7 +56,6 @@ var _left_hand_ik: LeftHandIKModifier = null
 # State
 var _weapon := Weapon.RIFLE
 var _is_dead := false
-var _is_door_kicking := false
 var _is_throwing := false
 var _is_opening_door := false
 var _is_talking := false
@@ -93,11 +92,6 @@ const DEATH_ANIM_FORWARD := GameConstants.ANIM_DEATH_FORWARD
 const DEATH_ANIM_BACKWARD := GameConstants.ANIM_DEATH_BACKWARD
 const DEATH_ANIM_LEFT := GameConstants.ANIM_DEATH_LEFT
 const DEATH_ANIM_RIGHT := GameConstants.ANIM_DEATH_RIGHT
-
-# Door kick animation names
-const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
-const PISTOL_DOOR_KICK_ANIM := GameConstants.ANIM_PISTOL_DOOR_KICK
-const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレーム36 / 30fps）
 
 # Throw animation
 const PISTOL_LOW_THROWING_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING
@@ -165,7 +159,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	# is_running パラメータをスプリントとして使用
@@ -241,7 +235,7 @@ func fire() -> void:
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return 0.0
 	if _is_sprinting:
 		return SPRINT_SPEED
@@ -409,68 +403,9 @@ func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
 
 
-## Play door kick animation (weapon-appropriate version)
-func play_door_kick() -> void:
-	if _is_dead or _is_door_kicking or _is_opening_door:
-		return
-
-	_is_door_kicking = true
-
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
-
-	# Stop AnimationTree during door kick
-	if _anim_tree:
-		_anim_tree.active = false
-
-	# Select animation based on weapon type
-	var anim_name: String
-	match _weapon:
-		Weapon.PISTOL:
-			anim_name = PISTOL_DOOR_KICK_ANIM
-		_:
-			anim_name = RIFLE_DOOR_KICK_ANIM
-
-	# Play door kick animation (crossfade from current pose)
-	if _anim_player.has_animation(anim_name):
-		_anim_player.play(anim_name, 0.15)
-		_anim_player.animation_finished.connect(_on_door_kick_finished, CONNECT_ONE_SHOT)
-		# インパクトタイミングでシグナルを発火するタイマー
-		get_tree().create_timer(DOOR_KICK_IMPACT_TIME).timeout.connect(_on_door_kick_impact, CONNECT_ONE_SHOT)
-	else:
-		push_warning("CharacterAnimationController: Door kick animation not found: %s" % anim_name)
-		_is_door_kicking = false
-		if _anim_tree:
-			_anim_tree.active = true
-
-
-func _on_door_kick_impact() -> void:
-	pass  # Impact timing (available for future use)
-
-
-func _on_door_kick_finished(_anim_name: String) -> void:
-	# _is_door_kicking は _resume_animation_tree で解除（早期解除すると update_animation が割り込む）
-
-	# スムーズにアイドルへ遷移してからAnimationTreeを再開
-	if _anim_player and not _is_dead:
-		var idle_anim_name := _get_idle_anim_name()
-		var crossfade_time := 0.3
-		if _anim_player.has_animation(idle_anim_name):
-			_anim_player.play(idle_anim_name, crossfade_time)
-		if _anim_tree:
-			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
-		else:
-			_is_door_kicking = false
-	else:
-		_is_door_kicking = false
-
-
-
-## ドアキック後のAnimationTree再開
+## アクション後のAnimationTree再開
 func _resume_animation_tree() -> void:
 	# アクション完了フラグを解除
-	_is_door_kicking = false
 	_is_opening_door = false
 
 	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking:
@@ -485,14 +420,9 @@ func _resume_animation_tree() -> void:
 			_left_hand_ik.set_enabled(true)
 
 
-## Check if door kick animation is playing
-func is_door_kicking() -> bool:
-	return _is_door_kicking
-
-
 ## Play throw animation (legacy: underhand grenade throw with pistol)
 func play_throw() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 	_start_throw(PISTOL_LOW_THROWING_ANIM, THROW_RELEASE_TIME)
 
@@ -519,7 +449,7 @@ func _on_throw_finished(_anim_name: String) -> void:
 
 ## Play far throw animation (weapon-appropriate overhand throw)
 func play_throw_far() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	var anim_name: String
@@ -534,7 +464,7 @@ func play_throw_far() -> void:
 
 ## Play close throw animation (weapon-appropriate underhand throw)
 func play_throw_close() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	var anim_name: String
@@ -579,7 +509,7 @@ func is_throwing() -> bool:
 
 ## Play door open animation (quietly open door)
 func play_door_open() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	_is_opening_door = true
@@ -636,7 +566,7 @@ func is_opening_door() -> bool:
 
 ## Play talking animation (looping, used during hostage negotiation)
 func play_talking() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	_is_talking = true
@@ -705,7 +635,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	var parts := state.split(",")

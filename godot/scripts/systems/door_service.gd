@@ -2,11 +2,9 @@ extends Node
 class_name DoorService
 
 ## ドア管理サービス
-## ドアID管理・キック処理・ネットワーク同期を一元管理
+## ドアID管理・ネットワーク同期を一元管理
 ## GameManagerから抽出されたコンポーネント
 
-## ドアキックネットワークイベント（マルチプレイヤー同期用）
-signal door_kick_network_event(door_id: int, character_network_id: int)
 ## ドア開けネットワークイベント（マルチプレイヤー同期用）
 signal door_open_network_event(door_id: int, character_network_id: int)
 ## ドア開閉完了シグナル
@@ -120,26 +118,6 @@ func register_all_doors_in_map() -> void:
 			register_door(door)
 
 
-## ドアキックインパクト時（フレーム36/66）
-## character: ドアをキックしたキャラクター（位置から回転方向を計算）
-func on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
-	if not is_instance_valid(door) or not is_instance_valid(character):
-		return
-
-	# 保留中の敵ドアをクリア（プレイヤーが先に開けた場合）
-	_pending_enemy_doors.erase(door)
-
-	# ローカルキャラクターのキックのみネットワークイベントを送信
-	var game_char := character as GameCharacter
-	if game_char and game_char.is_local() and _is_multiplayer_mode:
-		var door_id := get_door_id(door)
-		if door_id > 0:
-			door_kick_network_event.emit(door_id, game_char.network_id)
-
-	# ドアを開く処理を実行
-	open_door(door, character)
-
-
 ## ドアを開く処理（ローカル・リモート共通）
 func open_door(door: Node3D, character: CharacterBody3D) -> void:
 	if not is_instance_valid(door) or not is_instance_valid(character):
@@ -229,45 +207,6 @@ func apply_door_open_from_network(door_id: int, character_network_id: int) -> vo
 
 	# 味方チーム or FoWなし → 即座に開く
 	open_door_quietly(door, character)
-
-
-## ネットワークからのドアキックイベントを適用（リモート側用）
-func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void:
-	var door := get_door_by_id(door_id)
-	if not door:
-		push_warning("[DoorService] Door not found for network kick: ", door_id)
-		return
-
-	# 既に開いているドアは無視
-	if door.is_in_group("open_doors"):
-		return
-
-	# 既に保留中のドアは無視
-	if _pending_enemy_doors.has(door):
-		return
-
-	if not _character_manager:
-		push_warning("[DoorService] CharacterManager not set")
-		return
-
-	var character := _character_manager.find_character_by_network_id(character_network_id)
-	if not character:
-		push_warning("[DoorService] Character not found for door kick: ", character_network_id)
-		return
-
-	# ローカルキャラクターのイベントは無視（二重処理防止）
-	if character.is_local():
-		return
-
-	# チーム判定：敵チームのドアキックはバッファに保留（次フレームでFoWチェック）
-	if _fow_system and character.team != PlayerState.get_player_team():
-		var params := _calculate_door_open_params(door, character, true)
-		if not params.is_empty():
-			_defer_enemy_door_open(door, params)
-		return
-
-	# 味方チーム or FoWなし → 即座に開く
-	open_door(door, character)
 
 
 ## 登録されているドア数を取得

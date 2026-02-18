@@ -134,8 +134,6 @@ enum GameEventType {
 	DEATH = 1,
 	## グレネード投擲
 	GRENADE_THROW = 2,
-	## ドアキック
-	DOOR_KICK = 3,
 	## 武器発射
 	WEAPON_FIRE = 4,
 	## リロード
@@ -203,8 +201,6 @@ static func event_type_to_string(event_type: GameEventType) -> String:
 			return "DEATH"
 		GameEventType.GRENADE_THROW:
 			return "GRENADE_THROW"
-		GameEventType.DOOR_KICK:
-			return "DOOR_KICK"
 		GameEventType.WEAPON_FIRE:
 			return "WEAPON_FIRE"
 		GameEventType.RELOAD:

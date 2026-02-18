@@ -418,10 +418,10 @@ func _is_facing_target() -> bool:
 func _try_fire() -> bool:
 	if not _character:
 		return false
-	# 投擲・ドアキック・ドア開放中は射撃しない（アニメーション完了まで待機）
+	# 投擲・ドア開放中は射撃しない（アニメーション完了まで待機）
 	var anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
 	if anim_ctrl:
-		if anim_ctrl.is_throwing() or anim_ctrl.is_door_kicking() or anim_ctrl.is_opening_door():
+		if anim_ctrl.is_throwing() or anim_ctrl.is_opening_door():
 			return false
 	if not _is_facing_target():
 		return false
