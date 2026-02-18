@@ -31,8 +31,6 @@ var _weapon_option: OptionButton = null
 var _weapon_list: Array = []
 var _timer_label: Label = null
 var _debug_vision_btn: Button = null
-var _hp_bar: ProgressBar = null
-var _hp_label: Label = null
 var _crosshair: Control = null
 var _crosshair_color: Color = Color.WHITE
 
@@ -415,58 +413,8 @@ func _setup_tps_hud() -> void:
 	# アクションボタン（右中央）
 	_create_action_buttons()
 
-	# HPバー（左下、ジョイスティックの上）
-	_create_hp_bar()
-
 	# クロスヘア（画面中央）
 	#_create_crosshair()  # TODO: 一時的に無効化
-
-
-func _create_hp_bar() -> void:
-	# コンテナ（バー + ラベルを横並び）
-	var container := HBoxContainer.new()
-	container.name = "HPContainer"
-	container.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	container.position = Vector2(40, 10)
-	container.add_theme_constant_override("separation", 8)
-	ui_layer.add_child(container)
-
-	_hp_bar = ProgressBar.new()
-	_hp_bar.name = "HPBar"
-	_hp_bar.custom_minimum_size = Vector2(160, 20)
-	_hp_bar.size = Vector2(160, 20)
-	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_hp_bar.min_value = 0.0
-	_hp_bar.max_value = 1.0
-	_hp_bar.value = 1.0
-	_hp_bar.show_percentage = false
-	# スタイル設定
-	var fill_style := StyleBoxFlat.new()
-	fill_style.bg_color = Color(0.2, 0.8, 0.2)
-	fill_style.corner_radius_top_left = 4
-	fill_style.corner_radius_top_right = 4
-	fill_style.corner_radius_bottom_left = 4
-	fill_style.corner_radius_bottom_right = 4
-	_hp_bar.add_theme_stylebox_override("fill", fill_style)
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.15, 0.15, 0.15, 0.7)
-	bg_style.corner_radius_top_left = 4
-	bg_style.corner_radius_top_right = 4
-	bg_style.corner_radius_bottom_left = 4
-	bg_style.corner_radius_bottom_right = 4
-	_hp_bar.add_theme_stylebox_override("background", bg_style)
-	container.add_child(_hp_bar)
-
-	# HP数値ラベル
-	_hp_label = Label.new()
-	_hp_label.name = "HPLabel"
-	_hp_label.add_theme_font_size_override("font_size", 18)
-	_hp_label.add_theme_color_override("font_color", Color.WHITE)
-	_hp_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
-	_hp_label.add_theme_constant_override("shadow_offset_x", 1)
-	_hp_label.add_theme_constant_override("shadow_offset_y", 1)
-	_hp_label.text = "100"
-	container.add_child(_hp_label)
 
 
 func _create_crosshair() -> void:
@@ -648,23 +596,6 @@ func _input(event: InputEvent) -> void:
 func _update_tps_hud() -> void:
 	if not _player_character:
 		return
-
-	# HPバー更新
-	if _hp_bar:
-		var ratio := _player_character.get_health_ratio()
-		_hp_bar.value = ratio
-		# HP割合に応じて色変更
-		var fill := _hp_bar.get_theme_stylebox("fill") as StyleBoxFlat
-		if fill:
-			if ratio > 0.5:
-				fill.bg_color = Color(0.2, 0.8, 0.2)  # 緑
-			elif ratio > 0.25:
-				fill.bg_color = Color(0.9, 0.7, 0.1)  # 黄色
-			else:
-				fill.bg_color = Color(0.9, 0.2, 0.2)  # 赤
-		# 数値ラベル更新
-		if _hp_label:
-			_hp_label.text = str(int(_player_character.current_health))
 
 	# クロスヘア色更新（敵追跡中は赤）
 	if _crosshair and _player_character.combat_awareness:

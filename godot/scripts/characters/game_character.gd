@@ -83,6 +83,7 @@ var muzzle_flash: MuzzleFlashComponent = null  # マズルフラッシュコン�
 var bullet_trail: BulletTrailComponent = null  # 弾道表示コンポーネント
 var shell_ejection: ShellEjectionComponent = null  # 薬莢排出コンポーネント
 var blood_effect: BloodEffectComponent = null  # 血しぶきエフェクトコンポーネント
+var health_ring: CharacterHealthRing = null  # 足元HPリング
 
 # ============================================
 # Lifecycle
@@ -96,6 +97,8 @@ func _ready() -> void:
 	_setup_remote_interpolation()
 	# エフェクトコンポーネントをセットアップ
 	_setup_effect_components()
+	# 足元HPリングをセットアップ
+	_setup_health_ring()
 
 
 ## リモート補間コンポーネントをセットアップ
@@ -103,6 +106,15 @@ func _setup_remote_interpolation() -> void:
 	if remote_interpolation == null:
 		remote_interpolation = RemoteInterpolationComponent.new()
 		remote_interpolation.setup(self)
+
+
+## 足元HPリングをセットアップ
+func _setup_health_ring() -> void:
+	if health_ring == null:
+		health_ring = CharacterHealthRing.new()
+		health_ring.name = "HealthRing"
+		add_child(health_ring)
+		health_ring.setup(self)
 
 
 ## エフェクトコンポーネントをセットアップ

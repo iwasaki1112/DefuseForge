@@ -50,6 +50,7 @@
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
 | `shell_ejection` | `ShellEjectionComponent` | `null` | 薬莢排出コンポーネント |
+| `health_ring` | `CharacterHealthRing` | `null` | 足元HPリング |
 | `_weapon_socket` | `Node3D` | `null` | 武器調整用のソケットノード |
 
 ## Public API
@@ -210,7 +211,7 @@ character.face_towards(enemy.global_position)
 
 ## ライフサイクル
 
-- `_ready()`: HP初期化、`"characters"`グループに追加
+- `_ready()`: HP初期化、`"characters"`グループに追加、足元HPリング(`CharacterHealthRing`)を自動作成
 
 ## 使用例
 
