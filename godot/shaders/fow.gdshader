@@ -56,8 +56,8 @@ void fragment() {
 		visibility /= 16.0;
 
 		visibility = min(visibility, 1.0);
-		// Wall top face (Y>=2.0): always fog
-		visibility *= 1.0 - smoothstep(1.9, 1.95, surface_y);
+		// Wall top face (Y>=1.9): always visible (no fog)
+		visibility = max(visibility, smoothstep(1.9, 1.95, surface_y));
 		visibility = smoothstep(0.05, 0.4, visibility);
 	}
 
