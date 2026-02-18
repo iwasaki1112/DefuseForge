@@ -1,44 +1,44 @@
-[gd_resource type="MeshLibrary" format=4 uid="uid://ybwt0p5ucru5"]
+[gd_resource type="MeshLibrary" format=4 uid="uid://cpidjm76qnowb"]
 
 [ext_resource type="Texture2D" uid="uid://hqrtfhm1snwe" path="res://scenes/tiles/floor_carpet_Carpet016_2K-JPG_Color.jpg" id="1_so37t"]
-[ext_resource type="Texture2D" uid="uid://cx30la5hw5hd6" path="res://scenes/tiles/floor_carpet_Carpet016_2K-JPG_Roughness.png" id="2_s0r4e"]
+[ext_resource type="Texture2D" uid="uid://cwvq3q0mgyui4" path="res://scenes/tiles/floor_carpet_Carpet016_2K-JPG_Roughness.jpg" id="2_eb4p8"]
 [ext_resource type="Texture2D" uid="uid://dloj4iewdc5m0" path="res://scenes/tiles/floor_carpet_Carpet016_2K-JPG_NormalGL.jpg" id="3_ebaix"]
 [ext_resource type="Texture2D" uid="uid://dyt4875hh6a6n" path="res://scenes/tiles/floor_concrete_Concrete047A_2K-JPG_Color.jpg" id="4_vtp7o"]
-[ext_resource type="Texture2D" uid="uid://bra6c70dmuw6o" path="res://scenes/tiles/floor_concrete_Concrete047A_2K-JPG_Roughness.png" id="5_7pj50"]
+[ext_resource type="Texture2D" uid="uid://dia4fogrthwf4" path="res://scenes/tiles/floor_concrete_Concrete047A_2K-JPG_Roughness.jpg" id="5_w6e1i"]
 [ext_resource type="Texture2D" uid="uid://13l3imoyiy3u" path="res://scenes/tiles/floor_concrete_Concrete047A_2K-JPG_NormalGL.jpg" id="6_rbywl"]
+[ext_resource type="Texture2D" uid="uid://juj8hf74lfgn" path="res://scenes/tiles/floor_hardwood_WoodFloor051_2K-JPG_Roughness.jpg" id="10_dc5av"]
 [ext_resource type="Texture2D" uid="uid://dax1ekpojky4v" path="res://scenes/tiles/ground_wasteland_ground_wasteland_diffuse.jpg" id="10_wi1yk"]
 [ext_resource type="Texture2D" uid="uid://dwn6yrwkvqbeg" path="res://scenes/tiles/ground_wasteland_tmpulrkp8i1.jpg" id="11_rhk8q"]
 [ext_resource type="Texture2D" uid="uid://bxtubskgechmo" path="res://scenes/tiles/floor_hardwood_WoodFloor051_2K-JPG_Color.jpg" id="12_iwcho"]
 [ext_resource type="Texture2D" uid="uid://cr5571vnpnuw2" path="res://scenes/tiles/ground_alley_2_ground_alley_baked_color.jpg" id="12_vtp7o"]
 [ext_resource type="Texture2D" uid="uid://bsv7e0w4c7bnn" path="res://scenes/tiles/ground_alley_2_tmpesr1k71m.jpg" id="13_7pj50"]
-[ext_resource type="Texture2D" uid="uid://bj5vfgai7uoeo" path="res://scenes/tiles/floor_hardwood_WoodFloor051_2K-JPG_Roughness.png" id="13_colty"]
+[ext_resource type="Texture2D" uid="uid://cc5ly8nna1pde" path="res://scenes/tiles/floor_wood_worn_tmprkexanwq.jpg" id="13_pda5x"]
 [ext_resource type="Texture2D" uid="uid://x8bq8mtpa1hh" path="res://scenes/tiles/floor_hardwood_WoodFloor051_2K-JPG_NormalGL.jpg" id="14_0b5f5"]
 [ext_resource type="Texture2D" uid="uid://pu8268rqq1qw" path="res://scenes/tiles/ground_alley_2_tmpo0t7enou.jpg" id="14_rbywl"]
 [ext_resource type="Texture2D" uid="uid://xs4tdlep4r6d" path="res://scenes/tiles/floor_wood_worn_tmpf5tvcax4.jpg" id="15_rbywl"]
-[ext_resource type="Texture2D" uid="uid://15jq0eae7luw" path="res://scenes/tiles/floor_wood_worn_tmprkexanwq.png" id="16_r3dv2"]
 [ext_resource type="Texture2D" uid="uid://ciwiqdcoreqfv" path="res://scenes/tiles/ground_alley_ground_alley_baked_color.jpg" id="18_y0wk5"]
 [ext_resource type="Texture2D" uid="uid://nac0tb7jj6hs" path="res://scenes/tiles/ground_alley_tmpesr1k71m.jpg" id="19_pks3q"]
 [ext_resource type="Texture2D" uid="uid://yn7juqy8nftj" path="res://scenes/tiles/ground_alley_tmpo0t7enou.jpg" id="20_06bub"]
+[ext_resource type="Texture2D" uid="uid://dua433hybm7f8" path="res://scenes/tiles/ground_garden_tmpsj0coc_1.jpg" id="21_so37t"]
 [ext_resource type="Texture2D" uid="uid://d2kvsjygdb5t" path="res://scenes/tiles/ground_garden_tmpv4o1a0d1.jpg" id="21_vep82"]
-[ext_resource type="Texture2D" uid="uid://ychlgcgdgylf" path="res://scenes/tiles/ground_garden_tmpsj0coc_1.png" id="22_x1vd8"]
 [ext_resource type="Texture2D" uid="uid://bpiprn2q8yfag" path="res://scenes/tiles/ground_garden_tmp6_rpukcl.jpg" id="23_xnsrh"]
 [ext_resource type="Texture2D" uid="uid://crbf4thq3lukv" path="res://scenes/tiles/ground_grass_tmp1wfoturn.jpg" id="24_f5ugd"]
-[ext_resource type="Texture2D" uid="uid://dnehw7bkrq5ac" path="res://scenes/tiles/ground_grass_tmpezos3kmo.png" id="25_his6k"]
+[ext_resource type="Texture2D" uid="uid://unmiu7wc3jx7" path="res://scenes/tiles/ground_grass_tmpezos3kmo.jpg" id="24_s0r4e"]
 [ext_resource type="Texture2D" uid="uid://cywcpcybb538x" path="res://scenes/tiles/ground_grass_tmpo1r2i07j.jpg" id="26_ucx08"]
+[ext_resource type="Texture2D" uid="uid://yk6j5g1sxsrs" path="res://scenes/tiles/ground_lawn_Grass001_2K-JPG_Roughness.jpg" id="27_ebaix"]
 [ext_resource type="Texture2D" uid="uid://v6xli2u1rbh4" path="res://scenes/tiles/ground_lawn_Grass001_2K-JPG_Color.jpg" id="27_ka5gv"]
-[ext_resource type="Texture2D" uid="uid://gl3swjufyu13" path="res://scenes/tiles/ground_lawn_Grass001_2K-JPG_Roughness.png" id="28_naomx"]
 [ext_resource type="Texture2D" uid="uid://0sfgbx8nup5c" path="res://scenes/tiles/ground_lawn_Grass001_2K-JPG_NormalGL.jpg" id="29_f22am"]
 [ext_resource type="Texture2D" uid="uid://r8p4f7nopv16" path="res://scenes/tiles/ground_road_Asphalt023S_2K-JPG_Color.jpg" id="30_ilxip"]
-[ext_resource type="Texture2D" uid="uid://75cnr0mdkecm" path="res://scenes/tiles/ground_road_Asphalt023S_2K-JPG_Roughness.png" id="31_bc5u8"]
+[ext_resource type="Texture2D" uid="uid://dwrfooascxvb8" path="res://scenes/tiles/ground_road_Asphalt023S_2K-JPG_Roughness.jpg" id="30_vtp7o"]
 [ext_resource type="Texture2D" uid="uid://ciolerbrocbmp" path="res://scenes/tiles/ground_road_Asphalt023S_2K-JPG_NormalGL.jpg" id="32_qj83h"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_t4qhg"]
 resource_name = "floor_carpet"
 cull_mode = 2
 albedo_texture = ExtResource("1_so37t")
-metallic_texture = ExtResource("2_s0r4e")
+metallic_texture = ExtResource("2_eb4p8")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("2_s0r4e")
+roughness_texture = ExtResource("2_eb4p8")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("3_ebaix")
@@ -76,9 +76,9 @@ size = Vector3(1.5, 0.10000001, 1.5)
 resource_name = "floor_concrete"
 cull_mode = 2
 albedo_texture = ExtResource("4_vtp7o")
-metallic_texture = ExtResource("5_7pj50")
+metallic_texture = ExtResource("5_w6e1i")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("5_7pj50")
+roughness_texture = ExtResource("5_w6e1i")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("6_rbywl")
@@ -152,9 +152,9 @@ size = Vector3(1.5, 0.1, 1.5)
 resource_name = "floor_hardwood"
 cull_mode = 2
 albedo_texture = ExtResource("12_iwcho")
-metallic_texture = ExtResource("13_colty")
+metallic_texture = ExtResource("10_dc5av")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("13_colty")
+roughness_texture = ExtResource("10_dc5av")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("14_0b5f5")
@@ -192,9 +192,9 @@ size = Vector3(1.5, 0.10000001, 1.5)
 resource_name = "wood_floor_worn"
 cull_mode = 2
 albedo_texture = ExtResource("15_rbywl")
-metallic_texture = ExtResource("16_r3dv2")
+metallic_texture = ExtResource("13_pda5x")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("16_r3dv2")
+roughness_texture = ExtResource("13_pda5x")
 roughness_texture_channel = 1
 
 [sub_resource type="ArrayMesh" id="ArrayMesh_colty"]
@@ -312,9 +312,9 @@ size = Vector3(1.5, 0.1, 1.5)
 resource_name = "leafy_grass"
 cull_mode = 2
 albedo_texture = ExtResource("21_vep82")
-metallic_texture = ExtResource("22_x1vd8")
+metallic_texture = ExtResource("21_so37t")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("22_x1vd8")
+roughness_texture = ExtResource("21_so37t")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("23_xnsrh")
@@ -352,9 +352,9 @@ size = Vector3(1.5, 0.10000001, 1.5)
 resource_name = "sparse_grass"
 cull_mode = 2
 albedo_texture = ExtResource("24_f5ugd")
-metallic_texture = ExtResource("25_his6k")
+metallic_texture = ExtResource("24_s0r4e")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("25_his6k")
+roughness_texture = ExtResource("24_s0r4e")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("26_ucx08")
@@ -392,9 +392,9 @@ size = Vector3(1.5, 0.10000001, 1.5)
 resource_name = "grass001_lawn"
 cull_mode = 2
 albedo_texture = ExtResource("27_ka5gv")
-metallic_texture = ExtResource("28_naomx")
+metallic_texture = ExtResource("27_ebaix")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("28_naomx")
+roughness_texture = ExtResource("27_ebaix")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("29_f22am")
@@ -432,9 +432,9 @@ size = Vector3(1.5, 0.10000001, 1.5)
 resource_name = "ground_road"
 cull_mode = 2
 albedo_texture = ExtResource("30_ilxip")
-metallic_texture = ExtResource("31_bc5u8")
+metallic_texture = ExtResource("30_vtp7o")
 metallic_texture_channel = 2
-roughness_texture = ExtResource("31_bc5u8")
+roughness_texture = ExtResource("30_vtp7o")
 roughness_texture_channel = 1
 normal_enabled = true
 normal_texture = ExtResource("32_qj83h")
