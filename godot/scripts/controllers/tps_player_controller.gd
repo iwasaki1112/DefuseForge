@@ -18,8 +18,8 @@ extends Node
 # ============================================
 # Configurable Parameters
 # ============================================
-var camera_height := 16.0
-var camera_pitch_deg := -75.0
+var camera_height := 14.0
+var camera_pitch_deg := -90.0
 var enable_aim_stick := true
 
 # ============================================
@@ -72,8 +72,8 @@ var _facing_locked: bool = false
 var _locked_facing: Vector3 = Vector3.FORWARD
 
 # カメラズーム（武器視界距離連動）
-var _base_camera_height: float = 16.0
-var _target_camera_height: float = 16.0
+var _base_camera_height: float = 14.0
+var _target_camera_height: float = 14.0
 
 # マウス操作検知（PCのみ有効、モバイルではfalseのまま）
 var _mouse_active: bool = false

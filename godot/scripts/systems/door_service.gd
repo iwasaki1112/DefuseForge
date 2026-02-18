@@ -19,8 +19,8 @@ signal door_opening_finished(door: Node3D)
 ## ドアスイープテスト定数
 const _SWEEP_STEP_DEG := 10.0  ## スイープの角度ステップ（度）
 const _SWEEP_MARGIN_DEG := 3.0  ## 衝突マージン（度）
-const _DOOR_PANEL_SIZE := Vector3(1.0, 2.0, 0.154)  ## ドアパネルのコリジョンサイズ
-const _DOOR_PANEL_CENTER := Vector3(-0.5, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
+const _DOOR_PANEL_SIZE := Vector3(1.2, 2.0, 0.154)  ## ドアパネルのコリジョンサイズ（実寸1.0m + マージン0.1m×2）
+const _DOOR_PANEL_CENTER := Vector3(-0.6, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
 
 ## ドアID管理（マルチプレイヤー同期用）
 var _next_door_id: int = 1
