@@ -122,11 +122,22 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 				var xform := mi.transform
 				var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var normals = arrays[Mesh.ARRAY_NORMAL]
+				var tangents = arrays[Mesh.ARRAY_TANGENT]
 				for vi in verts.size():
 					verts[vi] = xform * verts[vi]
 				if normals:
 					for ni in normals.size():
-						normals[ni] = xform.basis * normals[ni]
+						normals[ni] = (xform.basis * normals[ni]).normalized()
+				# タンジェント変換（xyzをbasisで変換、w符号は保持）
+				if tangents and tangents.size() > 0:
+					for ti in range(0, tangents.size(), 4):
+						var t := Vector3(tangents[ti], tangents[ti + 1], tangents[ti + 2])
+						t = (xform.basis * t).normalized()
+						tangents[ti] = t.x
+						tangents[ti + 1] = t.y
+						tangents[ti + 2] = t.z
+						# tangents[ti + 3] (w/bitangent sign) は保持
+					arrays[Mesh.ARRAY_TANGENT] = tangents
 				arrays[Mesh.ARRAY_VERTEX] = verts
 				if normals:
 					arrays[Mesh.ARRAY_NORMAL] = normals
@@ -137,6 +148,18 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 					combined.surface_set_material(combined.get_surface_count() - 1, mat)
 					print("  Surface: ", mat.resource_name)
 			print("  Mesh: ", mi.name, " AABB: ", mi.mesh.get_aabb().size)
+
+		# SurfaceToolでタンジェントを再生成（TBN整合性を保証）
+		var regenerated := ArrayMesh.new()
+		for surf_idx in combined.get_surface_count():
+			var st := SurfaceTool.new()
+			st.create_from(combined, surf_idx)
+			st.generate_tangents()
+			st.commit(regenerated)
+			var mat := combined.surface_get_material(surf_idx)
+			if mat:
+				regenerated.surface_set_material(regenerated.get_surface_count() - 1, mat)
+		combined = regenerated
 
 		# コリジョン生成（3分岐）
 		if has_opening:
