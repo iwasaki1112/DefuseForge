@@ -53,6 +53,8 @@ var _burst_interval_timer: float = 0.0  ## バースト内射撃間隔タイマ�
 var _post_burst_pause_timer: float = 0.0  ## バースト後の待機タイマー
 var _current_firing_mode: int = -1  ## 現在の射撃モード（WeaponPreset.FiringMode）
 var _last_critical_hit: bool = false  ## 最後の射撃がクリティカルだったか
+var _stationary_time: float = 0.0  ## 静止継続時間（Steady Aim用）
+var _reaction_timer: float = 0.0  ## 初弾リアクションタイマー
 
 
 # ============================================
@@ -162,6 +164,12 @@ func process(delta: float) -> void:
 		_characters_cache_timer = 0.0
 		_characters_cache = get_tree().get_nodes_in_group("characters")
 
+	# Steady Aim: 静止時間の更新
+	if _character is CharacterBody3D and _character.velocity.length() <= MOVEMENT_THRESHOLD:
+		_stationary_time += delta
+	else:
+		_stationary_time = 0.0
+
 	# Update tracking timeout
 	if _is_tracking_last_known:
 		_time_since_lost += delta
@@ -185,6 +193,10 @@ func process_firing(delta: float) -> void:
 	if not _character:
 		return
 	if _firing_enabled and _current_target and is_instance_valid(_current_target):
+		# リアクションタイム消化中は射撃しない
+		if _reaction_timer > 0.0:
+			_reaction_timer -= delta
+			return
 		_process_firing(delta)
 	else:
 		_reset_firing_state()
@@ -316,6 +328,15 @@ func _handle_enemy_in_sight(enemy: Node) -> void:
 		var old_target := _current_target
 		_current_target = enemy
 
+		# 初弾リアクションタイム: Steady Aim進行度に応じて短縮
+		# 完全静止（steady_aim_time経過）→ 0秒、移動中 → reaction_time
+		var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+		if weapon:
+			var steady_t: float = clampf(_stationary_time / weapon.steady_aim_time, 0.0, 1.0)
+			_reaction_timer = weapon.reaction_time * (1.0 - steady_t)
+		else:
+			_reaction_timer = 0.0
+
 		if old_target == null:
 			enemy_spotted.emit(enemy)
 
@@ -443,7 +464,9 @@ func _get_shooter_movement_multiplier(weapon: WeaponPreset) -> float:
 		return 1.0
 	var speed: float = _character.velocity.length()
 	if speed <= MOVEMENT_THRESHOLD:
-		return 1.0  # 静止
+		# Steady Aim: 静止継続時間に応じてボーナス
+		var steady_t: float = clampf(_stationary_time / weapon.steady_aim_time, 0.0, 1.0)
+		return lerpf(1.0, weapon.steady_aim_bonus, steady_t)
 	elif speed >= SPRINT_THRESHOLD:
 		return weapon.shooter_sprint_penalty
 	else:
@@ -798,3 +821,4 @@ func _reset_firing_state() -> void:
 	_burst_interval_timer = 0.0
 	_post_burst_pause_timer = 0.0
 	_current_firing_mode = -1
+	_reaction_timer = 0.0

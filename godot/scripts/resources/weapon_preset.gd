@@ -43,6 +43,9 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var shooter_sprint_penalty: float = 0.4 ## スプリント時の精度乗数
 @export var target_move_penalty: float = 0.15   ## ターゲット移動ペナルティ係数
 @export var target_speed_reference: float = 6.0 ## ターゲット速度基準値(m/s)
+@export var steady_aim_bonus: float = 1.25      ## 静止時の最大精度ボーナス（Steady Aim）
+@export var steady_aim_time: float = 0.5        ## ボーナス最大到達までの時間（秒）
+@export var reaction_time: float = 0.3          ## 移動中に敵検知時の初弾リアクションタイム（秒）
 
 # ============================================
 # Damage Falloff

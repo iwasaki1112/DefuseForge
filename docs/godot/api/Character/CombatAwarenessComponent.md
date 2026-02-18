@@ -205,9 +205,10 @@ base_accuracy = get_accuracy_from_curve(weapon, distance)
 # 2. Auto Firing Mode修正値（RIFLE/SMG）
 base_accuracy *= accuracy_modifier  # CQB:0.85x, Medium:1.0x, Long:1.15x
 
-# 3. 射手の移動ペナルティ
+# 3. 射手の移動ペナルティ / Steady Aimボーナス
 shooter_mult = get_shooter_movement_multiplier(weapon)
-  # 静止(〜0.5m/s): 1.0
+  # 静止(〜0.5m/s): lerp(1.0, steady_aim_bonus, 静止時間/steady_aim_time)
+  #   → 静止直後: 1.0、0.5秒後: steady_aim_bonus(default 1.25)
   # 歩行(0.5〜4.0m/s): lerp(1.0, shooter_walk_penalty)
   # スプリント(4.0m/s〜): shooter_sprint_penalty
 
@@ -250,6 +251,49 @@ var shot_result = combat_awareness.get_last_shot_result()
 if not shot_result.hit:
     target_pos += shot_result.miss_offset
 ```
+
+## Steady Aim（安定射撃）システム
+
+静止を継続すると精度が段階的に向上するシステム。待ち伏せに戦術的価値を与える。
+
+### 動作
+
+- 移動停止後、`steady_aim_time`（デフォルト0.5秒）かけて精度が`steady_aim_bonus`（デフォルト×1.25）まで上昇
+- 移動を開始すると即座にリセットされ、通常の移動ペナルティが適用される
+
+### 精度乗数
+
+| 状態 | 精度乗数 |
+|------|---------|
+| 静止（直後） | ×1.0 |
+| 静止（0.25秒） | ×1.125 |
+| 静止（0.5秒） | ×1.25 |
+| 歩行 | ×0.8（shooter_walk_penalty） |
+| スプリント | ×0.4（shooter_sprint_penalty） |
+
+### WeaponPresetパラメータ
+
+| パラメータ | デフォルト | 説明 |
+|-----------|----------|------|
+| `steady_aim_bonus` | `1.25` | 静止時の最大精度ボーナス |
+| `steady_aim_time` | `0.5` | ボーナス最大到達までの時間（秒） |
+| `reaction_time` | `0.3` | 移動中に敵検知時の初弾リアクションタイム（秒） |
+
+### リアクションタイム
+
+敵を新たに検知した際、移動状態に応じて初弾までの遅延が発生する。Steady Aimの進行度と連動し、静止が長いほどリアクションが短くなる。
+
+| 状態 | リアクションタイム |
+|------|-----------------|
+| 完全静止（0.5秒以上） | 0秒（即射撃） |
+| 静止直後 | reaction_time（0.3秒） |
+| 歩行中 | reaction_time（0.3秒） |
+
+**計算式:** `reaction_time * (1.0 - steady_aim_progress)`
+
+CQB距離（フルオート、burst_interval=0.08秒）での効果：
+- 待ち伏せ側は即座に射撃開始 → 0.3秒間に約3-4発の先制射撃
+- 侵入側は0.3秒後に射撃開始 → 既にHPが削られた状態で交戦
 
 ## 距離ベース射撃モードシステム（Auto Firing Mode）
 
@@ -307,6 +351,9 @@ accuracy_max_distance = 45.0
 shooter_walk_penalty = 0.75
 shooter_sprint_penalty = 0.35
 target_move_penalty = 0.15
+steady_aim_bonus = 1.25   # 静止0.5秒で+25%精度
+steady_aim_time = 0.5
+reaction_time = 0.3       # 移動中の初弾ディレイ
 
 # CQB (0-5m): フルオート
 cqb_max_distance = 5.0
