@@ -59,6 +59,8 @@ var _grenade_count_label: Label = null
 var _door_open_btn: TextureButton = null
 var _nearby_door: Node3D = null
 var _target_door: Node3D = null  # アニメーション中のターゲットドア
+var _is_door_action: bool = false  # ドア開けアクション中フラグ
+var _door_contact_detected: bool = false  # ハンドボーン接触検知済みフラグ
 
 ## Talking（人質交渉）
 var _talking_btn: Button = null
@@ -507,7 +509,7 @@ func _setup_label_manager() -> void:
 func _physics_process(delta: float) -> void:
 	if game_manager:
 		game_manager.process_frame(delta)
-	if _tps_controller and not _is_grenade_aiming and not _is_talking:
+	if _tps_controller and not _is_grenade_aiming and not _is_talking and not _is_door_action:
 		_tps_controller.process(delta)
 	_update_tps_hud()
 	if _is_grenade_aiming:
@@ -517,6 +519,9 @@ func _physics_process(delta: float) -> void:
 	else:
 		_update_hostage_proximity()
 		_update_door_proximity()
+	# ドア開けアクション中: ハンドボーン接触チェック
+	if _is_door_action and not _door_contact_detected and _target_door and _player_character:
+		_check_hand_door_contact()
 
 
 func _input(event: InputEvent) -> void:
@@ -1176,6 +1181,8 @@ func _on_door_open_pressed() -> void:
 		return
 
 	_target_door = _nearby_door
+	_is_door_action = true
+	_door_contact_detected = false
 
 	# ドアパネル中心の方向を計算（ヒンジではなくパネル中央に向く）
 	var door_center := _target_door.global_position + _target_door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
@@ -1203,8 +1210,12 @@ func _on_door_open_pressed() -> void:
 
 
 ## ドア開けアニメーションのインパクトタイミング（実際にドアを開く）
+## ハンド接触で既に開き始めている場合はスキップ（フォールバック用）
 func _on_door_open_impact() -> void:
 	if not _target_door or not _player_character:
+		return
+	# ハンド接触で既にオープン開始済みならスキップ
+	if _door_contact_detected:
 		return
 	# アニメーション中にプレイヤーが移動した場合の距離再チェック
 	if not _is_door_in_range(_target_door, _player_character):
@@ -1213,9 +1224,35 @@ func _on_door_open_impact() -> void:
 		game_manager._on_door_open_done(_target_door, _player_character)
 
 
+## ハンドボーンとドアパネルの接触チェック（ドア開けアクション中に毎フレーム実行）
+func _check_hand_door_contact() -> void:
+	if not _player_character.anim_ctrl or not _player_character.anim_ctrl.is_opening_door():
+		return
+
+	var hand_pos := _player_character.anim_ctrl.get_bone_global_position(GameConstants.BONE_LEFT_HAND)
+	if hand_pos == Vector3.ZERO:
+		return
+
+	# ドアパネル中心（ヒンジからローカル-X方向0.5m）
+	var panel_center := _target_door.global_position + _target_door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
+
+	# 水平距離のみでチェック（高さの差は無視）
+	var hand_xz := Vector2(hand_pos.x, hand_pos.z)
+	var panel_xz := Vector2(panel_center.x, panel_center.z)
+	var dist := hand_xz.distance_to(panel_xz)
+
+	if dist < GameConstants.HAND_DOOR_CONTACT_THRESHOLD:
+		_door_contact_detected = true
+		# 接触時に直接フルオープン開始（crack不要、1つの滑らかな動きに）
+		if game_manager:
+			game_manager._on_door_open_done(_target_door, _player_character)
+
+
 ## ドア開けアニメーション完了
 func _on_door_open_anim_finished() -> void:
 	_target_door = null
+	_is_door_action = false
+	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
 
@@ -1232,6 +1269,8 @@ func _is_door_in_range(door: Node3D, character: CharacterBody3D) -> bool:
 ## ドア開け操作をキャンセル（距離超過時）
 func _cancel_door_open() -> void:
 	_target_door = null
+	_is_door_action = false
+	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
 
