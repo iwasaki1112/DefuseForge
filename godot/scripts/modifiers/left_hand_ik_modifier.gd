@@ -8,7 +8,7 @@ class_name LeftHandIKModifier
 # Constants
 # ============================================
 const IK_BLEND_SPEED := 15.0  ## influence遷移速度（高い=素早い追従）
-const POLE_DOWN_OFFSET := 0.3  ## ポールターゲットの下方向オフセット（肘方向制御）
+const POLE_OFFSET := 0.3  ## ポールターゲットのオフセット（肘方向制御）
 
 # ============================================
 # State
@@ -117,14 +117,15 @@ func _process(delta: float) -> void:
 	elif current != _target_influence:
 		_ik_node.influence = _target_influence
 
-	# ポール位置を更新（肘が下を向くように）
+	# ポール位置を更新（肘が外側を向くように → 手が横から握る）
 	if _grip_source and is_instance_valid(_grip_source) and _ik_pole and _ik_node.influence > 0.001:
 		var grip_pos := _grip_source.global_position
 		var root_bone_idx := _skeleton.find_bone(GameConstants.BONE_LEFT_ARM)
 		if root_bone_idx >= 0:
 			var root_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(root_bone_idx)
 			var mid := (root_global.origin + grip_pos) * 0.5
-			_ik_pole.global_position = mid + Vector3.DOWN * POLE_DOWN_OFFSET
+			var char_right := _skeleton.global_transform.basis.x.normalized()
+			_ik_pole.global_position = mid + char_right * POLE_OFFSET
 
 # ============================================
 # Cleanup
