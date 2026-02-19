@@ -64,6 +64,7 @@ var _door_contact_detected: bool = false  # ハンドボーン接触検知済み
 
 ## Sprint（スプリント）
 var _sprint_btn: Button = null
+var _sprint_touch_idx: int = -1  # スプリントボタンを押しているタッチインデックス
 
 ## Talking（人質交渉）
 var _talking_btn: Button = null
@@ -567,27 +568,25 @@ func _create_action_buttons() -> void:
 	var vbox: VBoxContainer = action_scene.instantiate()
 	ui_layer.add_child(vbox)
 
-	# ボタン参照を取得してシグナル接続
+	# ボタン参照を取得（シグナル接続なし — マルチタッチ対応のため_input()で手動判定）
 	_door_open_btn = vbox.get_node("DoorOpenBtn")
-	_door_open_btn.pressed.connect(_on_door_open_pressed)
 	ButtonAnimator.setup(_door_open_btn)
 
 	_grenade_btn = vbox.get_node("GrenadeContainer/GrenadeBtn")
-	_grenade_btn.pressed.connect(_on_grenade_btn_pressed)
 	ButtonAnimator.setup(_grenade_btn)
 
 	_grenade_count_label = vbox.get_node("GrenadeContainer/GrenadeCountLabel")
 	_grenade_count_label.text = str(_smoke_grenade_count)
 
-	# Talkingボタン
 	_talking_btn = vbox.get_node("TalkingBtn")
-	_talking_btn.pressed.connect(_on_talking_btn_pressed)
 	ButtonAnimator.setup(_talking_btn)
 
-	# Sprintボタン（押している間スプリント）
 	_sprint_btn = vbox.get_node("SprintBtn")
-	_sprint_btn.button_down.connect(_on_sprint_btn_down)
-	_sprint_btn.button_up.connect(_on_sprint_btn_up)
+
+	# Godot GUIはマルチタッチ非対応（1本目のタッチのみマウスイベントとしてエミュレート）
+	# 2本目以降の指でボタンを押せるよう、GUIイベントを無効化して手動処理する
+	for btn in [_door_open_btn, _grenade_btn, _talking_btn, _sprint_btn]:
+		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if Debug.enabled:
 		_debug_vision_btn = Button.new()
@@ -656,6 +655,11 @@ func _physics_process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	# イントロ中は入力を無視
 	if _is_intro_playing:
+		return
+
+	# マルチタッチ対応: アクションボタンのタッチ/クリック判定
+	if _handle_action_button_input(event):
+		get_viewport().set_input_as_handled()
 		return
 
 	# グレネードエイミング中: 左側は素早いタップのみターゲット選択、それ以外はキャンセル
@@ -1442,6 +1446,66 @@ func _update_door_proximity() -> void:
 func _on_debug_vision_toggled(enabled: bool) -> void:
 	if game_manager and game_manager.vision_service:
 		game_manager.vision_service.set_debug_draw(enabled)
+
+
+## ========================================
+## マルチタッチ対応ボタン入力
+## ========================================
+
+## アクションボタンのタッチ/クリック判定（Godot GUIはマルチタッチ非対応のため手動処理）
+## Returns: true if event was consumed by a button
+func _handle_action_button_input(event: InputEvent) -> bool:
+	var pos: Vector2
+	var pressed: bool
+	var touch_idx: int = -1
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		pos = touch.position
+		pressed = touch.pressed
+		touch_idx = touch.index
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		pos = mb.position
+		pressed = mb.pressed
+		touch_idx = 100  # マウスクリック用の仮想インデックス
+	else:
+		return false
+
+	# Sprint button (hold: press/release tracking)
+	if _sprint_btn and _sprint_btn.visible:
+		if pressed and _sprint_touch_idx < 0:
+			if _sprint_btn.get_global_rect().has_point(pos):
+				_sprint_touch_idx = touch_idx
+				_on_sprint_btn_down()
+				return true
+		elif not pressed and touch_idx == _sprint_touch_idx:
+			_sprint_touch_idx = -1
+			_on_sprint_btn_up()
+			return true
+
+	# Tap buttons: pressed only
+	if not pressed:
+		return false
+
+	if _door_open_btn and _door_open_btn.visible:
+		if _door_open_btn.get_global_rect().has_point(pos):
+			_on_door_open_pressed()
+			return true
+
+	if _grenade_btn and _grenade_btn.visible:
+		if _grenade_btn.get_global_rect().has_point(pos):
+			_on_grenade_btn_pressed()
+			return true
+
+	if _talking_btn and _talking_btn.visible:
+		if _talking_btn.get_global_rect().has_point(pos):
+			_on_talking_btn_pressed()
+			return true
+
+	return false
 
 
 ## ========================================
