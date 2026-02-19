@@ -287,17 +287,23 @@ func _scan_for_enemies() -> void:
 
 		# 可視性チェック
 		if is_player_team:
-			# プレイヤーチーム: FoW可視性（enemy.visible）をそのまま使用
-			# FoWのLight2Dコーンと完全に同じ判定になるため、表示と検知が一致する
+			# FoW可視性チェック: チーム全体の共有視界で非表示なら確実にスキップ
 			if enemy is Node3D and not enemy.visible:
 				continue
-			# 距離制限: 仲間の視界で見えている遠方の敵に反応しないようにする
-			var dist_xz := Vector2(
-				enemy.global_position.x - char_pos.x,
-				enemy.global_position.z - char_pos.z
-			).length()
-			if dist_xz > max_detect_distance:
-				continue
+			# 個別視界チェック: 自分自身のVisionComponentで見えているか判定
+			# COOPで味方の視界に映っているだけの敵に反応しないようにする
+			if vision:
+				var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+				if not vision.is_position_in_view(enemy_pos):
+					continue
+			else:
+				# VisionComponentがない場合は距離制限でフォールバック
+				var dist_xz := Vector2(
+					enemy.global_position.x - char_pos.x,
+					enemy.global_position.z - char_pos.z
+				).length()
+				if dist_xz > max_detect_distance:
+					continue
 		else:
 			# 敵AI: VisionComponentの個別レイキャストで可視判定
 			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
