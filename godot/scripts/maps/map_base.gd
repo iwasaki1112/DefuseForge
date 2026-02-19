@@ -242,8 +242,20 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		body.transform = Transform3D(cell_basis, local_pos)
 		grid_map.add_child(body)
 
-		# コリジョンシェイプを追加
-		_add_collision_shapes(body, shapes)
+		# 窓タイル: MeshLibraryには柱シェイプ（FoWオクルーダー用）が入っているが、
+		# コリジョンはガラスを含む全幅ボックスで塞ぐ
+		if "window" in item_name.to_lower():
+			var mesh := lib.get_item_mesh(item_id)
+			if mesh:
+				var aabb := mesh.get_aabb()
+				var col := CollisionShape3D.new()
+				var box := BoxShape3D.new()
+				box.size = aabb.size
+				col.shape = box
+				col.position = aabb.get_center()
+				body.add_child(col)
+		else:
+			_add_collision_shapes(body, shapes)
 
 		# ドアタイルの場合: フレームはGridMapに残し、パネルだけ独立ノードで回転可能にする
 		if item_type == 2:
