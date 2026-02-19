@@ -50,6 +50,7 @@
 | `vision` | `VisionComponent` | `null` | VisionComponentへの参照 |
 | `current_weapon` | `Resource` | `null` | WeaponPresetへの参照 |
 | `shell_ejection` | `ShellEjectionComponent` | `null` | 薬莢排出コンポーネント |
+| `health_ring` | `CharacterHealthRing` | `null` | 足元HPリング |
 | `_weapon_socket` | `Node3D` | `null` | 武器調整用のソケットノード |
 
 ## Public API
@@ -161,7 +162,7 @@ character.face_towards(enemy.global_position)
 ### Weapon API
 
 #### equip_weapon(weapon: Resource) -> void
-武器を装備する。WeaponPresetから武器タイプとリコイル設定をCharacterAnimationControllerに適用し、武器モデルを右手ボーンにアタッチする。
+武器を装備する。WeaponPresetから武器タイプとリコイル設定をCharacterAnimationControllerに適用し、武器モデルを右手ボーンにアタッチする。また、武器の`vision_range`をVisionComponentに反映する。
 
 **引数:**
 - `weapon` - WeaponPresetリソース
@@ -172,6 +173,7 @@ character.face_towards(enemy.global_position)
 - WeaponCategoryをCharacterAnimationController.Weaponに変換
 - PISTOL → Weapon.PISTOL、それ以外 → Weapon.RIFLE
 - リコイル強度・回復速度をコントローラーに適用
+- VisionComponentの`view_distance`を武器の`vision_range`で更新（FoWシステムが自動的にVisionLightに反映）
 
 **前提条件:**
 - キャラクターモデルに`CharacterModel`ノードが存在すること
@@ -209,7 +211,7 @@ character.face_towards(enemy.global_position)
 
 ## ライフサイクル
 
-- `_ready()`: HP初期化、`"characters"`グループに追加
+- `_ready()`: HP初期化、`"characters"`グループに追加、足元HPリング(`CharacterHealthRing`)を自動作成
 
 ## 使用例
 

@@ -18,8 +18,8 @@ extends Node
 # ============================================
 # Configurable Parameters
 # ============================================
-var camera_height := 24.0
-var camera_pitch_deg := -75.0
+var camera_height := 14.0
+var camera_pitch_deg := -90.0
 var enable_aim_stick := true
 
 # ============================================
@@ -27,7 +27,9 @@ var enable_aim_stick := true
 # ============================================
 const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
+const CAMERA_ZOOM_SMOOTH := 4.0
 const GROUND_Y := 0.0
+const DEFAULT_VISION_RANGE := 7.0
 
 # Move stick (left)
 const STICK_RADIUS := 80.0
@@ -65,9 +67,16 @@ var _last_move_dir: Vector3 = Vector3.ZERO
 # 右スティック操作中フラグ（自動エイム・自動射撃を一時停止するため）
 var _is_aim_stick_active: bool = false
 
+# スプリント状態（ボタン押下中）
+var _is_sprinting: bool = false
+
 # 向き固定（投擲アニメーション中など）
 var _facing_locked: bool = false
 var _locked_facing: Vector3 = Vector3.FORWARD
+
+# カメラズーム（武器視界距離連動）
+var _base_camera_height: float = 14.0
+var _target_camera_height: float = 14.0
 
 # マウス操作検知（PCのみ有効、モバイルではfalseのまま）
 var _mouse_active: bool = false
@@ -88,6 +97,8 @@ func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer, config:
 	_character = character
 	_camera = cam
 	_ui_layer = canvas
+	_base_camera_height = camera_height
+	_target_camera_height = camera_height
 
 	# カメラをTPS用に設定
 	if _camera:
@@ -115,11 +126,14 @@ func process(delta: float) -> void:
 	# フェーズ1: 敵検知（ターゲット特定のみ、射撃しない）
 	if _character.combat_awareness:
 		_character.combat_awareness.process(delta)
-	# フェーズ2: エイム更新（検知結果で向きを即座に設定）
-	_handle_aim(delta)
-	# フェーズ3: 射撃判定（右スティック操作中は自動射撃を一時停止）
-	if _character.combat_awareness and not _is_aim_stick_active:
-		_character.combat_awareness.process_firing(delta)
+	# スプリント中は右スティックエイムと自動射撃を無効化
+	var is_sprint_active := _is_sprinting or Input.is_key_pressed(KEY_SHIFT)
+	if not is_sprint_active:
+		# フェーズ2: エイム更新（検知結果で向きを即座に設定）
+		_handle_aim(delta)
+		# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
+		if _character.combat_awareness:
+			_character.combat_awareness.process_firing(delta)
 	_handle_movement(delta)
 	_update_camera(delta)
 
@@ -163,6 +177,17 @@ func has_move_input() -> bool:
 	return false
 
 
+## 武器の視界距離に合わせてカメラ高さを更新する
+func update_camera_for_weapon(vision_range: float) -> void:
+	_target_camera_height = _base_camera_height * pow(vision_range / DEFAULT_VISION_RANGE, 1.2)
+	print("[TPS] update_camera_for_weapon: vision=%.1f base=%.1f target=%.1f current=%.1f" % [vision_range, _base_camera_height, _target_camera_height, camera_height])
+
+
+## スプリント状態を設定（スプリントボタンから呼ばれる）
+func set_sprinting(value: bool) -> void:
+	_is_sprinting = value
+
+
 ## 操作対象のキャラクターを返す
 func get_character() -> GameCharacter:
 	return _character
@@ -196,13 +221,22 @@ func _handle_movement(delta: float) -> void:
 	else:
 		_last_move_dir = Vector3.ZERO
 
+	# PC: Shiftキーでもスプリント可能
+	var is_sprint_input := _is_sprinting or Input.is_key_pressed(KEY_SHIFT)
+
+	if _character.anim_ctrl:
+		var aim_dir: Vector3
+		if is_sprint_input and has_input:
+			# スプリント中は移動方向を向く
+			_character.set_facing_direction_vec(move_dir)
+			aim_dir = move_dir
+		else:
+			aim_dir = _character.get_facing_direction()
+		_character.anim_ctrl.update_animation(move_dir, aim_dir, is_sprint_input, delta)
+
 	var base_speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
 	_character.velocity = move_dir * base_speed
 	_character.move_and_slide()
-
-	if _character.anim_ctrl:
-		var aim_dir := _character.get_facing_direction()
-		_character.anim_ctrl.update_animation(move_dir, aim_dir, false, delta)
 
 
 # ============================================
@@ -259,6 +293,8 @@ func _handle_aim(_delta: float) -> void:
 func _update_camera(delta: float) -> void:
 	if not _character or not _camera:
 		return
+	# カメラ高さを目標値に向けて滑らかに遷移
+	camera_height = lerpf(camera_height, _target_camera_height, CAMERA_ZOOM_SMOOTH * delta)
 	var pitch_rad := deg_to_rad(camera_pitch_deg)
 	var offset_z := camera_height / tan(-pitch_rad)
 	var target := _character.global_position + Vector3(0, camera_height, offset_z)

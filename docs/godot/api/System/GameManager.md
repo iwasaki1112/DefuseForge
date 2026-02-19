@@ -43,6 +43,7 @@ signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
 signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
 signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
 signal door_kick_network_event(door_id: int, character_network_id: int)
+signal door_open_network_event(door_id: int, character_network_id: int)
 signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
 ```
 
@@ -77,9 +78,10 @@ var characters: Array[Node]
 
 # 設定
 var fow_map_size: Vector2 = Vector2(50, 50)
-var default_vision_fov: float = 90.0
-var default_vision_range: float = 15.0
-var default_weapon_id: String = "glock"
+var default_vision_fov: float = 75.0
+var default_vision_range: float = 7.0
+var default_weapon_id_ct: String = "mark18"
+var default_weapon_id_t: String = "ak47"
 var is_vision_enabled: bool = false
 ```
 
@@ -156,6 +158,7 @@ func get_door_id(door: Node3D) -> int
 func clear_door_registry() -> void
 func register_all_doors_in_map() -> void
 func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void
+func apply_door_open_from_network(door_id: int, character_network_id: int) -> void
 ```
 
 ### グレネード関連

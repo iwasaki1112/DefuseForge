@@ -96,7 +96,7 @@ RescueForgeのゲーム起動からプレイまでの画面遷移とシステム
 - 画面表示と同時にWebSocketリレーサーバーに接続しマッチング開始
 - 「マッチング中...」テキスト表示（ドットアニメーション付き）
 - 2人揃ったらサーバーがマッチ成立通知 → 即座にゲーム開始
-- マップはサーバー側でランダム選択（home, office）
+- マップはサーバー側でランダム選択（home）
 
 **フロー**:
 ```
@@ -123,7 +123,7 @@ MainMenu → [Multiplayer押下] → LobbyScreen
 ゲームプレイ画面。選択したマップでキャラクターをTPS操作する。
 
 **初期化処理**:
-1. プレイヤーチームをランダムに決定（CT/T）
+1. プレイヤーチームを決定（Training: CT固定、Multiplayer: ネットワーク情報から決定）
 2. GameManagerをセットアップ
 3. 選択マップをロード
 4. FogOfWarSystemのマップサイズを更新（`set_map_size()`を使用）
@@ -172,7 +172,7 @@ GameScreen (Node3D)
 
 4. GameScreen読み込み
    └─ GameScreen._ready()
-       ├─ PlayerState.set_player_team() でランダムチーム決定
+       ├─ _mode_provider.determine_player_team() でチーム決定（Training: CT固定 / Multiplayer: ネットワーク情報）
        ├─ GameManager.setup() でシステム初期化
        ├─ GameManager.load_map() でマップロード
        │   └─ SettingsManager.get_selected_map() でマップID取得
@@ -197,24 +197,19 @@ GameScreen._spawn_characters()
 
 ## 登録済みマップ
 
-マッププリセットは `data/maps/` ディレクトリに `.tres` ファイルとして配置。
-`MapRegistry` が起動時に自動読み込み。
+マップは自己記述型の `.tscn` シーンとして `scenes/maps/` に配置。
+各マップは `MapBase` を継承し、`@export` でメタデータ（`map_id`, `display_name`, `map_description`）を埋め込む。
+`MapRegistry` が起動時に `scenes/maps/` をスキャンし、`map_id` 付きシーンを自動検出・登録。
 
 | ID | 表示名 | シーン | 説明 |
 |----|--------|--------|------|
-| `iwasaki_test` | Iwasaki Test | `scenes/maps/iwasaki_test.tscn` | 開発用マップ |
+| `home` | Home | `scenes/maps/home.tscn` | GridMapタイルマップ |
 
 ### マップの追加方法
 
-1. マップシーンを `scenes/maps/` に作成
-2. `data/maps/` にMapPresetリソース（.tres）を作成
-3. プリセットに以下を設定:
-   - `id`: 一意のID
-   - `display_name`: 表示名
-   - `description`: 説明文
-   - `map_scene`: マップシーンへの参照
-   - `map_size`: マップサイズ（FoW用）
-   - `spawn_points_ct` / `spawn_points_t`: スポーン位置
+1. `godot --headless --script res://scripts/editor/new_gridmap_map.gd -- <map_id>` でテンプレート生成
+2. Godotエディタでタイル配置
+3. `scenes/maps/` に保存 → MapRegistryが自動検出
 
 ## 関連クラス
 
@@ -227,7 +222,7 @@ GameScreen._spawn_characters()
 | GameScreen | ゲームプレイ画面 |
 | SettingsManager | 設定永続化・選択マップ保持 |
 | MapRegistry | マッププリセット管理 |
-| MapPreset | マップ定義リソース |
+| MapPreset | マップ定義リソース（MapBase @exportから自動生成） |
 | MapManager | マップライフサイクル管理 |
 | GameManager | ゲームシステム統括 |
 | PlayerState | プレイヤーチーム管理 |

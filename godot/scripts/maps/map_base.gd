@@ -8,12 +8,13 @@ extends Node3D
 
 const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
+const WINDOW_GLASS_COLLISION_LAYER: int = 4
 
 ## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
 const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_straight_panel.glb"
 ## ドア蝶番のオフセット（タイル原点からの相対位置、Godot座標系）
-## 取っ手の反対側（+X端）にヒンジを配置
-const DOOR_HINGE_OFFSET := Vector3(0.5, 0.0, -0.9)
+## 開口部の+X端にヒンジを配置（1.5mタイル、1.0m開口）
+const DOOR_HINGE_OFFSET := Vector3(0.5, 0.0, -0.65)
 
 ## マップメタデータ（.tscnのインスペクタで設定）
 @export_group("Map Info")
@@ -242,8 +243,27 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		body.transform = Transform3D(cell_basis, local_pos)
 		grid_map.add_child(body)
 
-		# コリジョンシェイプを追加
-		_add_collision_shapes(body, shapes)
+		# 窓タイル: 柱シェイプ→レイヤー2（壁構造、グレネード・射撃はここで判定）
+		# ガラスブロッカー→レイヤー4（キャラ移動ブロック専用、グレネード・視線は透過）
+		if "window" in item_name.to_lower():
+			_add_collision_shapes(body, shapes)
+			var mesh := lib.get_item_mesh(item_id)
+			if mesh:
+				var aabb := mesh.get_aabb()
+				var glass_body := StaticBody3D.new()
+				glass_body.name = "WindowGlass_%s_%d_%d_%d" % [item_name, cell.x, cell.y, cell.z]
+				glass_body.collision_layer = WINDOW_GLASS_COLLISION_LAYER
+				glass_body.collision_mask = 0
+				glass_body.transform = Transform3D(cell_basis, local_pos)
+				grid_map.add_child(glass_body)
+				var col := CollisionShape3D.new()
+				var box := BoxShape3D.new()
+				box.size = aabb.size
+				col.shape = box
+				col.position = aabb.get_center()
+				glass_body.add_child(col)
+		else:
+			_add_collision_shapes(body, shapes)
 
 		# ドアタイルの場合: フレームはGridMapに残し、パネルだけ独立ノードで回転可能にする
 		if item_type == 2:

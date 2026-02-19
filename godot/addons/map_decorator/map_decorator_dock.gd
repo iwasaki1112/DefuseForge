@@ -2,7 +2,7 @@
 extends VBoxContainer
 
 const PROPS_DIR := "res://scenes/props/"
-const DECALS_DIR := "res://textures/decals/"
+const DECALS_DIR := "res://assets/decals/"
 
 enum Mode { OBJECT, DECAL }
 

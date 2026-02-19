@@ -2,7 +2,7 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never;
 
 // フォグの色と透明度
-uniform vec4 fog_color : source_color = vec4(0.1, 0.15, 0.25, 0.9);
+uniform vec4 fog_color : source_color = vec4(0.15, 0.15, 0.15, 0.9);
 
 // 可視性テクスチャ
 // filter_linear: バイリニア補間でエッジをソフト化

@@ -63,19 +63,20 @@ const ANIM_DEATH_FORWARD := "game_rifle_death_forward"
 const ANIM_DEATH_BACKWARD := "game_rifle_death_backward"
 const ANIM_DEATH_LEFT := "game_rifle_death_left"
 const ANIM_DEATH_RIGHT := "game_rifle_death_right"
-const ANIM_RIFLE_DOOR_KICK := "game_rifle_melee_kick"
-const ANIM_PISTOL_DOOR_KICK := "game_pistol_melee_kick"
 const ANIM_PISTOL_LOW_THROWING := "game_pistol_grenade_throw_single"
 const ANIM_PISTOL_GRENADE_THROW_CLOSE := "game_pistol_grenade_throw_close"
+const ANIM_PISTOL_GRENADE_THROW_FAR := "game_pistol_grenade_throw_far"
 const ANIM_RIFLE_GRENADE_THROW_FAR := "game_rifle_grenade_throw_far"
 const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
-const ANIM_RIFLE_OPEN_DOOR := "game_open_door"
+const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
+const ANIM_PISTOL_OPEN_DOOR := "game_pistol_open_door"
 const ANIM_TALKING := "game_rifle_talking"
 
 # ========================================================
 # Door Open Settings
 # ========================================================
-const DOOR_OPEN_DISTANCE := 1.5  ## ドア開けインタラクション距離（メートル）
+const DOOR_OPEN_DISTANCE := 1.0  ## ドア開けインタラクション距離（メートル）
+const HAND_DOOR_CONTACT_THRESHOLD := 0.2  ## ハンドボーンとドアパネルの接触判定閾値（メートル）
 
 # ========================================================
 # Hostage Talking Settings
@@ -109,7 +110,7 @@ const SMOKE_FUSE_TIME := 3.0  # 導火線時間（秒）
 const GRENADE_THROW_MAX_DISTANCE := 6.5    # 最大投擲距離（メートル）
 const GRENADE_THROW_CLOSE_THRESHOLD := 4.0 # 近投/遠投の閾値（メートル）
 const GRENADE_START_HEIGHT := 1.5          # 発射高さ（手の位置近似）
-const SMOKE_GRENADE_PER_ROUND := 99        # ラウンドあたりのスモーク数（デバッグ用、本番は1）
+const SMOKE_GRENADE_PER_ROUND := 1          # ラウンドあたりのスモーク数
 
 # ========================================================
 # Scene Paths (Use with load/preload if class_name not available)

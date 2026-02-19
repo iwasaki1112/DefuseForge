@@ -39,7 +39,7 @@ func _init() -> void:
 	SmokeGrenadeScene = load("res://scenes/weapons/smoke_grenade.tscn")
 	SmokeAreaScene = load(GameConstants.SCENE_SMOKE_AREA)
 	smoke_clip_shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
-	smoke_puff_texture = load("res://assets/textures/smoke_puff.png") as Texture2D
+	smoke_puff_texture = load("res://assets/effects/smoke_puff.png") as Texture2D
 
 
 ## セットアップ

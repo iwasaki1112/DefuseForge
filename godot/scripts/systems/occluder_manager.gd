@@ -16,6 +16,11 @@ var _door_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # door_node -> Li
 var _smoke_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # smoke_area -> LightOccluder2D
 var _prop_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # prop_body -> LightOccluder2D
 
+## ドアオクルーダーアニメーション用
+var _door_occluder_world_corners: Dictionary[Node3D, PackedVector3Array] = {}  # door -> 初期ワールド3Dコーナー
+var _animating_doors: Dictionary[Node3D, Array] = {}  # door -> Array[Vector3] (ドアローカル座標のコーナー)
+var _door_local_corners: Dictionary[Node3D, Array] = {}  # door -> Array[Vector3] (事前計算されたドアローカルコーナー)
+
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
 var _map_center: Vector2 = Vector2.ZERO
@@ -156,6 +161,55 @@ func clear_all_occluders() -> void:
 	_clear_door_occluders()
 	_clear_smoke_occluders()
 	_clear_prop_occluders()
+
+
+## ドアオクルーダーアニメーション開始（ドアTween中に毎フレームポリゴンを更新）
+## @param door: アニメーション対象のドアノード
+func start_door_occluder_animation(door: Node3D) -> void:
+	if door not in _door_local_corners:
+		return
+	if door not in _door_occluders:
+		return
+	# 事前計算したローカルコーナーを使って追跡開始
+	_animating_doors[door] = _door_local_corners[door]
+	set_process(true)
+
+
+## ドアオクルーダーアニメーション停止（ドアの最終位置でポリゴンを更新して追跡終了）
+## @param door: アニメーション対象のドアノード
+func stop_door_occluder_animation(door: Node3D) -> void:
+	_animating_doors.erase(door)
+	# ドアの最終位置でポリゴンを更新（開いたドアパネルがFoWを遮蔽し続ける）
+	if door in _door_occluders and door in _door_local_corners:
+		_update_door_occluder_polygon_from_local(door, _door_local_corners[door])
+		_door_occluders[door].visible = true
+	if _animating_doors.is_empty():
+		set_process(false)
+
+
+func _process(_delta: float) -> void:
+	for door: Node3D in _animating_doors:
+		if is_instance_valid(door):
+			_update_door_occluder_polygon(door)
+
+
+## ドアのglobal_transformからオクルーダーポリゴンをリアルタイム更新
+func _update_door_occluder_polygon(door: Node3D) -> void:
+	var local_corners: Array = _animating_doors[door]
+	_update_door_occluder_polygon_from_local(door, local_corners)
+
+
+## ローカルコーナーからドアオクルーダーポリゴンを更新
+func _update_door_occluder_polygon_from_local(door: Node3D, local_corners: Array) -> void:
+	var occluder: LightOccluder2D = _door_occluders.get(door)
+	if not occluder or not occluder.occluder:
+		return
+	var door_transform := door.global_transform
+	var polygon_2d := PackedVector2Array()
+	for corner: Vector3 in local_corners:
+		var world: Vector3 = door_transform * corner
+		polygon_2d.append(_world_to_viewport(world))
+	occluder.occluder.polygon = polygon_2d
 
 
 ## マップサイズを更新（後方互換）
@@ -325,11 +379,28 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 			if is_door:
 				_create_door_opening_occluder(grid_map, cell, aabb, cell_global)
 		else:
-			# 壁: AABBからオクルーダー生成
-			var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
-			if occluder:
-				_occluder_parent.add_child(occluder)
-				_wall_occluders.append(occluder)
+			# 壁: MeshLibraryのコリジョンシェイプからオクルーダー生成（L字/T字対応）
+			var item_shapes := lib.get_item_shapes(item_id)
+			if item_shapes.size() >= 2:
+				var si := 0
+				while si < item_shapes.size():
+					if item_shapes[si] is BoxShape3D:
+						var box_shape: BoxShape3D = item_shapes[si]
+						var shape_transform: Transform3D = item_shapes[si + 1] if (si + 1 < item_shapes.size() and item_shapes[si + 1] is Transform3D) else Transform3D.IDENTITY
+						var shape_top_y := cell_global.origin.y + shape_transform.origin.y + box_shape.size.y / 2.0
+						if shape_top_y >= MIN_OCCLUSION_HEIGHT:
+							var shape_global := cell_global * shape_transform
+							var occluder := _create_occluder_from_box(box_shape, shape_global)
+							if occluder:
+								_occluder_parent.add_child(occluder)
+								_wall_occluders.append(occluder)
+					si += 2
+			else:
+				# シェイプがない場合はAABBフォールバック
+				var occluder := _create_occluder_from_gridmap_cell(aabb, cell_global)
+				if occluder:
+					_occluder_parent.add_child(occluder)
+					_wall_occluders.append(occluder)
 
 	if Debug.enabled: print("[FOW] GridMap occluders extracted from: ", grid_map.name)
 
@@ -337,7 +408,7 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 ## ドア開口部のトグル可能なオクルーダーを生成
 ## 柱間の開口部（1m幅）をカバーし、ドア開閉時にvisibleを切り替える
 func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AABB, cell_global: Transform3D) -> void:
-	# 開口部サイズ: 柱間の1m幅 × 壁厚さ
+	# 開口部サイズ: 柱間の1.0m幅 × 壁厚さ
 	var opening_box := BoxShape3D.new()
 	opening_box.size = Vector3(1.0, 2.0, aabb.size.z)
 	# 開口部の中心（セルローカル座標）: X=0（中央）, Y=AABB中心, Z=AABB中心
@@ -354,7 +425,7 @@ func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AAB
 	var cell_world_pos := cell_global.origin
 	var doors := grid_map.get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
 	var closest_door: Node3D = null
-	var closest_dist := 3.0  # セルサイズ(2m)より少し大きい閾値
+	var closest_dist := 2.5  # セルサイズ(1.5m)より少し大きい閾値
 	for door in doors:
 		if not door is Node3D or not is_instance_valid(door):
 			continue
@@ -365,6 +436,19 @@ func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AAB
 
 	if closest_door:
 		_door_occluders[closest_door] = occluder
+		# ワールド3Dコーナーを保存（アニメーション時のポリゴン再計算用）
+		var half := opening_box.size / 2.0
+		var world_corners := PackedVector3Array()
+		for c in [Vector3(-half.x, 0, -half.z), Vector3(half.x, 0, -half.z),
+				  Vector3(half.x, 0, half.z), Vector3(-half.x, 0, half.z)]:
+			world_corners.append(opening_global * c)
+		_door_occluder_world_corners[closest_door] = world_corners
+		# ドアローカル座標のコーナーを事前計算（アニメーション・即時開放の両方で使用）
+		var inv_transform := closest_door.global_transform.affine_inverse()
+		var local_corners: Array[Vector3] = []
+		for corner in world_corners:
+			local_corners.append(inv_transform * corner)
+		_door_local_corners[closest_door] = local_corners
 		if Debug.enabled: print("[FOW] Door opening occluder mapped to: ", closest_door.name)
 	else:
 		# ドアノードが見つからない場合は固定壁オクルーダーとして追加
@@ -578,6 +662,9 @@ func _clear_door_occluders() -> void:
 		if is_instance_valid(occluder):
 			occluder.queue_free()
 	_door_occluders.clear()
+	_door_occluder_world_corners.clear()
+	_animating_doors.clear()
+	_door_local_corners.clear()
 
 
 func _clear_smoke_occluders() -> void:

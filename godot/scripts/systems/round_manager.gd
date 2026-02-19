@@ -34,6 +34,7 @@ var end_reason: int = 0  # EndReason
 var _game_manager: GameManager = null
 var _registered_characters: Array[GameCharacter] = []
 var _last_timer_second: int = -1  # タイマー更新の最適化用
+var _elimination_check_pending: bool = false  # 全滅判定の遅延フラグ（相打ち対応）
 
 ## マルチプレイヤー用：このインスタンスが権限を持つか（ホスト/サーバー）
 var _is_authority: bool = true
@@ -164,7 +165,22 @@ func _on_character_died(_character: GameCharacter) -> void:
 	# 生存者数を更新
 	_update_survivor_counts()
 
-	# 全滅判定
+	# 全滅判定を遅延（同フレーム内の相打ちに対応）
+	if not _elimination_check_pending:
+		_elimination_check_pending = true
+		_check_elimination.call_deferred()
+
+
+## 全滅判定（フレーム末尾で実行）
+## 同フレーム内の複数死亡をすべて反映してから勝敗を判定する
+func _check_elimination() -> void:
+	_elimination_check_pending = false
+	if current_phase != RoundPhase.ACTIVE:
+		return
+
+	# 最新の生存者数で再カウント
+	_update_survivor_counts()
+
 	if ct_alive_count == 0 and t_alive_count > 0:
 		# CT全滅 → T勝利
 		end_round(GameCharacter.Team.TERRORIST, EndReason.CT_ELIMINATED)

@@ -60,7 +60,6 @@ func _connect_network_events() -> void:
 	network_manager.message_received.connect(_on_network_message)
 	_game_manager.grenade_network_event.connect(_on_grenade_network_event)
 	_game_manager.grenade_explode_network_event.connect(_on_grenade_explode_network_event)
-	_game_manager.door_kick_network_event.connect(_on_door_kick_network_event)
 	_game_manager.door_open_network_event.connect(_on_door_open_network_event)
 	_game_manager.damage_network_event.connect(_on_damage_network_event)
 
@@ -222,8 +221,6 @@ func cleanup() -> void:
 		_game_manager.grenade_network_event.disconnect(_on_grenade_network_event)
 	if _game_manager and _game_manager.grenade_explode_network_event.is_connected(_on_grenade_explode_network_event):
 		_game_manager.grenade_explode_network_event.disconnect(_on_grenade_explode_network_event)
-	if _game_manager and _game_manager.door_kick_network_event.is_connected(_on_door_kick_network_event):
-		_game_manager.door_kick_network_event.disconnect(_on_door_kick_network_event)
 	if _game_manager and _game_manager.door_open_network_event.is_connected(_on_door_open_network_event):
 		_game_manager.door_open_network_event.disconnect(_on_door_open_network_event)
 	if _game_manager and _game_manager.damage_network_event.is_connected(_on_damage_network_event):
@@ -277,21 +274,6 @@ func _on_grenade_explode_network_event(grenade_id: int, pos: Vector3, is_smoke: 
 		"pos_x": pos.x,
 		"pos_y": pos.y,
 		"pos_z": pos.z,
-	}
-	sync_controller.send_game_event(event)
-
-
-func _on_door_kick_network_event(door_id: int, character_network_id: int) -> void:
-	if not sync_controller:
-		return
-
-	var event := NetworkMessages.GameEventMessage.new()
-	event.event_type = NetworkConstants.GameEventType.DOOR_KICK
-	event.source_id = character_network_id
-	event.target_id = 0
-	event.data = {
-		"door_id": door_id,
-		"character_id": character_network_id,
 	}
 	sync_controller.send_game_event(event)
 

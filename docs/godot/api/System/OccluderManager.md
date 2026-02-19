@@ -51,6 +51,20 @@ Light2D用のLightOccluder2D管理システム。
 - `door`: ドアのノード
 - `enabled`: 有効にするかどうか
 
+### ドアオクルーダーアニメーション
+
+#### `start_door_occluder_animation(door: Node3D) -> void`
+ドア開放アニメーション中にオクルーダーポリゴンをリアルタイム更新する。ドアのワールドコーナー座標をドアローカル座標に変換し、毎フレーム `door.global_transform` から2Dポリゴンを再計算する。
+
+**引数:**
+- `door`: アニメーション対象のドアノード
+
+#### `stop_door_occluder_animation(door: Node3D) -> void`
+ドアオクルーダーアニメーションを停止し、ドアの最終位置（回転後）でポリゴンを更新する。開いたドアパネルがFoW遮蔽を維持するため、オクルーダーは表示されたまま残る。
+
+**引数:**
+- `door`: アニメーション対象のドアノード
+
 ### スモーク制御
 
 #### `add_smoke_occluder(smoke_area: Node3D) -> void`

@@ -16,6 +16,7 @@ enum Team { NONE = 0, COUNTER_TERRORIST = 1, TERRORIST = 2 }
 # ============================================
 signal died(character: GameCharacter)
 signal state_changed(character: GameCharacter)  ## マルチプレイヤー用：状態変更通知
+signal weapon_changed(weapon: WeaponPreset)
 
 # ============================================
 # Export Settings
@@ -81,6 +82,8 @@ var _weapon_model: Node3D = null  # 現在の武器モデル
 var muzzle_flash: MuzzleFlashComponent = null  # マズルフラッシュコンポーネント
 var bullet_trail: BulletTrailComponent = null  # 弾道表示コンポーネント
 var shell_ejection: ShellEjectionComponent = null  # 薬莢排出コンポーネント
+var blood_effect: BloodEffectComponent = null  # 血しぶきエフェクトコンポーネント
+var health_ring: CharacterHealthRing = null  # 足元HPリング
 
 # ============================================
 # Lifecycle
@@ -94,6 +97,8 @@ func _ready() -> void:
 	_setup_remote_interpolation()
 	# エフェクトコンポーネントをセットアップ
 	_setup_effect_components()
+	# 足元HPリングをセットアップ
+	_setup_health_ring()
 
 
 ## リモート補間コンポーネントをセットアップ
@@ -101,6 +106,15 @@ func _setup_remote_interpolation() -> void:
 	if remote_interpolation == null:
 		remote_interpolation = RemoteInterpolationComponent.new()
 		remote_interpolation.setup(self)
+
+
+## 足元HPリングをセットアップ
+func _setup_health_ring() -> void:
+	if health_ring == null:
+		health_ring = CharacterHealthRing.new()
+		health_ring.name = "HealthRing"
+		add_child(health_ring)
+		health_ring.setup(self)
 
 
 ## エフェクトコンポーネントをセットアップ
@@ -114,6 +128,9 @@ func _setup_effect_components() -> void:
 	if shell_ejection == null:
 		shell_ejection = ShellEjectionComponent.new()
 		shell_ejection.setup(self, _weapon_socket)
+	if blood_effect == null:
+		blood_effect = BloodEffectComponent.new()
+		blood_effect.setup(self)
 
 # ============================================
 # HP API
@@ -127,6 +144,10 @@ func take_damage(amount: float, attacker: Node3D = null, is_headshot: bool = fal
 		return
 
 	current_health = max(0.0, current_health - amount)
+
+	# 血しぶきエフェクト
+	if blood_effect:
+		blood_effect.play()
 
 	if current_health <= 0.0:
 		_die(attacker, is_headshot)
@@ -340,6 +361,9 @@ func _update_effect_component_sockets() -> void:
 		bullet_trail.warm_up()
 	if shell_ejection:
 		shell_ejection.set_weapon_socket(_weapon_socket)
+		shell_ejection.warm_up()
+	if blood_effect:
+		blood_effect.warm_up()
 
 
 ## Attach weapon model to right hand
@@ -436,6 +460,13 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 
 	if "recoil_recovery" in anim_ctrl:
 		anim_ctrl.recoil_recovery = weapon.recoil_recovery
+
+	# 武器の視界パラメータをVisionComponentに適用
+	if vision and weapon:
+		vision.set_view_distance(weapon.vision_range)
+		vision.set_fov(weapon.vision_fov)
+
+	weapon_changed.emit(weapon)
 
 ## Get current weapon
 func get_current_weapon() -> WeaponPreset:

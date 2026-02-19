@@ -92,6 +92,10 @@ round_manager.register_character(character)
 3. **両チーム全滅** → ドロー（winner_team = NONE）
 4. **タイムアップ** → ドロー（EndReason.TIME_UP）
 
+### 相打ち（同フレーム死亡）対応
+
+キャラクター死亡時の全滅判定は `call_deferred` で遅延実行される。これにより同一フレーム内で複数のキャラクターが死亡した場合（相打ち）、すべての死亡が反映された後に勝敗を判定する。
+
 ## 使用例
 
 ```gdscript

@@ -53,6 +53,8 @@ var _burst_interval_timer: float = 0.0  ## バースト内射撃間隔タイマ�
 var _post_burst_pause_timer: float = 0.0  ## バースト後の待機タイマー
 var _current_firing_mode: int = -1  ## 現在の射撃モード（WeaponPreset.FiringMode）
 var _last_critical_hit: bool = false  ## 最後の射撃がクリティカルだったか
+var _stationary_time: float = 0.0  ## 静止継続時間（Steady Aim用）
+var _reaction_timer: float = 0.0  ## 初弾リアクションタイマー
 
 
 # ============================================
@@ -162,6 +164,12 @@ func process(delta: float) -> void:
 		_characters_cache_timer = 0.0
 		_characters_cache = get_tree().get_nodes_in_group("characters")
 
+	# Steady Aim: 静止時間の更新
+	if _character is CharacterBody3D and _character.velocity.length() <= MOVEMENT_THRESHOLD:
+		_stationary_time += delta
+	else:
+		_stationary_time = 0.0
+
 	# Update tracking timeout
 	if _is_tracking_last_known:
 		_time_since_lost += delta
@@ -185,6 +193,10 @@ func process_firing(delta: float) -> void:
 	if not _character:
 		return
 	if _firing_enabled and _current_target and is_instance_valid(_current_target):
+		# リアクションタイム消化中は射撃しない
+		if _reaction_timer > 0.0:
+			_reaction_timer -= delta
+			return
 		_process_firing(delta)
 	else:
 		_reset_firing_state()
@@ -275,17 +287,23 @@ func _scan_for_enemies() -> void:
 
 		# 可視性チェック
 		if is_player_team:
-			# プレイヤーチーム: FoW可視性（enemy.visible）をそのまま使用
-			# FoWのLight2Dコーンと完全に同じ判定になるため、表示と検知が一致する
+			# FoW可視性チェック: チーム全体の共有視界で非表示なら確実にスキップ
 			if enemy is Node3D and not enemy.visible:
 				continue
-			# 距離制限: 仲間の視界で見えている遠方の敵に反応しないようにする
-			var dist_xz := Vector2(
-				enemy.global_position.x - char_pos.x,
-				enemy.global_position.z - char_pos.z
-			).length()
-			if dist_xz > max_detect_distance:
-				continue
+			# 個別視界チェック: 自分自身のVisionComponentで見えているか判定
+			# COOPで味方の視界に映っているだけの敵に反応しないようにする
+			if vision:
+				var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+				if not vision.is_position_in_view(enemy_pos):
+					continue
+			else:
+				# VisionComponentがない場合は距離制限でフォールバック
+				var dist_xz := Vector2(
+					enemy.global_position.x - char_pos.x,
+					enemy.global_position.z - char_pos.z
+				).length()
+				if dist_xz > max_detect_distance:
+					continue
 		else:
 			# 敵AI: VisionComponentの個別レイキャストで可視判定
 			var enemy_pos: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
@@ -315,6 +333,15 @@ func _handle_enemy_in_sight(enemy: Node) -> void:
 	if enemy != _current_target:
 		var old_target := _current_target
 		_current_target = enemy
+
+		# 初弾リアクションタイム: Steady Aim進行度に応じて短縮
+		# 完全静止（steady_aim_time経過）→ 0秒、移動中 → reaction_time
+		var weapon = _character.get_current_weapon() if _character.has_method("get_current_weapon") else null
+		if weapon:
+			var steady_t: float = clampf(_stationary_time / weapon.steady_aim_time, 0.0, 1.0)
+			_reaction_timer = weapon.reaction_time * (1.0 - steady_t)
+		else:
+			_reaction_timer = 0.0
 
 		if old_target == null:
 			enemy_spotted.emit(enemy)
@@ -397,10 +424,10 @@ func _is_facing_target() -> bool:
 func _try_fire() -> bool:
 	if not _character:
 		return false
-	# 投擲・ドアキック・ドア開放中は射撃しない（アニメーション完了まで待機）
+	# 投擲・ドア開放中は射撃しない（アニメーション完了まで待機）
 	var anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
 	if anim_ctrl:
-		if anim_ctrl.is_throwing() or anim_ctrl.is_door_kicking() or anim_ctrl.is_opening_door():
+		if anim_ctrl.is_throwing() or anim_ctrl.is_opening_door():
 			return false
 	if not _is_facing_target():
 		return false
@@ -443,7 +470,9 @@ func _get_shooter_movement_multiplier(weapon: WeaponPreset) -> float:
 		return 1.0
 	var speed: float = _character.velocity.length()
 	if speed <= MOVEMENT_THRESHOLD:
-		return 1.0  # 静止
+		# Steady Aim: 静止継続時間に応じてボーナス
+		var steady_t: float = clampf(_stationary_time / weapon.steady_aim_time, 0.0, 1.0)
+		return lerpf(1.0, weapon.steady_aim_bonus, steady_t)
 	elif speed >= SPRINT_THRESHOLD:
 		return weapon.shooter_sprint_penalty
 	else:
@@ -798,3 +827,4 @@ func _reset_firing_state() -> void:
 	_burst_interval_timer = 0.0
 	_post_burst_pause_timer = 0.0
 	_current_firing_mode = -1
+	_reaction_timer = 0.0

@@ -28,12 +28,12 @@ signal door_open_impact()   # ドアを実際に開くインパクトタイミ�
 @export var recoil_recovery := 10.0
 
 @export_group("Lean")
-@export var max_lean_degrees := 25.0
+@export var max_lean_degrees := 10.0
 @export var lean_speed := 10.0
 @export var lean_deadzone := 0.15
 
 @export_group("Turn Lean")
-@export var turn_lean_degrees := 35.0    ## 方向転換時の最大リーン角度（度）
+@export var turn_lean_degrees := 15.0    ## 方向転換時の最大リーン角度（度）
 @export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
 @export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
 
@@ -56,7 +56,6 @@ var _left_hand_ik: LeftHandIKModifier = null
 # State
 var _weapon := Weapon.RIFLE
 var _is_dead := false
-var _is_door_kicking := false
 var _is_throwing := false
 var _is_opening_door := false
 var _is_talking := false
@@ -73,11 +72,11 @@ const SPRINT_SPEED := 6.0
 
 # Per-direction natural walk speeds (m/s) from root motion data
 const PISTOL_ANIM_SPEEDS := {
-	"fwd": 1.008, "bwd": 0.906,
-	"left": 0.831, "right": 1.071,
-	"fwd_left": 0.811, "fwd_right": 0.982,
-	"bwd_left": 0.831, "bwd_right": 0.811,
-	"sprint": 4.3,
+	"fwd": 2.016, "bwd": 1.845,
+	"left": 1.663, "right": 2.142,
+	"fwd_left": 1.724, "fwd_right": 2.016,
+	"bwd_left": 1.663, "bwd_right": 1.724,
+	"sprint": 4.299,
 }
 const RIFLE_ANIM_SPEEDS := {
 	"fwd": 2.016, "bwd": 1.845,
@@ -94,28 +93,28 @@ const DEATH_ANIM_BACKWARD := GameConstants.ANIM_DEATH_BACKWARD
 const DEATH_ANIM_LEFT := GameConstants.ANIM_DEATH_LEFT
 const DEATH_ANIM_RIGHT := GameConstants.ANIM_DEATH_RIGHT
 
-# Door kick animation names
-const RIFLE_DOOR_KICK_ANIM := GameConstants.ANIM_RIFLE_DOOR_KICK
-const PISTOL_DOOR_KICK_ANIM := GameConstants.ANIM_PISTOL_DOOR_KICK
-const DOOR_KICK_IMPACT_TIME := 1.2  # インパクトタイミング（フレーム36 / 30fps）
-
 # Throw animation
 const PISTOL_LOW_THROWING_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING
 const THROW_RELEASE_TIME := 1.67  # リリースタイミング（フレーム50 / 30fps）
 
 # Far throw animation (weapon-dependent)
 const RIFLE_THROW_FAR_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_FAR
-const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_LOW_THROWING  # Pistolはfar専用がないためSingle使用
+const PISTOL_THROW_FAR_ANIM := GameConstants.ANIM_PISTOL_GRENADE_THROW_FAR
 const THROW_FAR_RELEASE_TIME := 0.433  # キー13 / 30fps
+const THROW_FAR_IK_RESUME_TIME := 34.0 / 30.0  # IKブレンドイン開始（34フレーム目 @30fps）
 
 # Close throw animation (weapon-dependent)
 const RIFLE_THROW_CLOSE_ANIM := GameConstants.ANIM_RIFLE_GRENADE_THROW_CLOSE
 const PISTOL_THROW_CLOSE_ANIM := GameConstants.ANIM_PISTOL_GRENADE_THROW_CLOSE
 const THROW_CLOSE_RELEASE_TIME := 0.333  # キー10 / 30fps
+const THROW_CLOSE_IK_RESUME_TIME := 29.0 / 30.0  # IKブレンドイン開始（29フレーム目 @30fps）
 
 # Door open animation
 const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
+const PISTOL_OPEN_DOOR_ANIM := GameConstants.ANIM_PISTOL_OPEN_DOOR
 const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミング（15フレーム目 @30fps）
+const DOOR_OPEN_IK_RESUME_TIME := 29.0 / 30.0  # IKブレンドイン開始（29フレーム目 @30fps）
+const ACTION_IK_BLEND_SPEED := 5.0  # アクション復帰時のゆっくりIKブレンド速度
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -164,7 +163,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	# is_running パラメータをスプリントとして使用
@@ -240,7 +239,7 @@ func fire() -> void:
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return 0.0
 	if _is_sprinting:
 		return SPRINT_SPEED
@@ -408,77 +407,27 @@ func _on_death_animation_finished(_anim_name: String) -> void:
 	pass  # Death animation completed
 
 
-## Play door kick animation (weapon-appropriate version)
-func play_door_kick() -> void:
-	if _is_dead or _is_door_kicking or _is_opening_door:
-		return
-
-	_is_door_kicking = true
-
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
-
-	# Stop AnimationTree during door kick
-	if _anim_tree:
-		_anim_tree.active = false
-
-	# Select animation based on weapon type
-	var anim_name: String
-	match _weapon:
-		Weapon.PISTOL:
-			anim_name = PISTOL_DOOR_KICK_ANIM
-		_:
-			anim_name = RIFLE_DOOR_KICK_ANIM
-
-	# Play door kick animation (crossfade from current pose)
-	if _anim_player.has_animation(anim_name):
-		_anim_player.play(anim_name, 0.15)
-		_anim_player.animation_finished.connect(_on_door_kick_finished, CONNECT_ONE_SHOT)
-		# インパクトタイミングでシグナルを発火するタイマー
-		get_tree().create_timer(DOOR_KICK_IMPACT_TIME).timeout.connect(_on_door_kick_impact, CONNECT_ONE_SHOT)
-	else:
-		push_warning("CharacterAnimationController: Door kick animation not found: %s" % anim_name)
-		_is_door_kicking = false
-		if _anim_tree:
-			_anim_tree.active = true
-
-
-func _on_door_kick_impact() -> void:
-	pass  # Impact timing (available for future use)
-
-
-func _on_door_kick_finished(_anim_name: String) -> void:
-	_is_door_kicking = false
-
-	# スムーズにアイドルへ遷移してからAnimationTreeを再開
-	if _anim_player and not _is_dead:
-		var idle_anim_name := _get_idle_anim_name()
-		var crossfade_time := 0.3
-		if _anim_player.has_animation(idle_anim_name):
-			_anim_player.play(idle_anim_name, crossfade_time)
-		if _anim_tree:
-			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
-
-
-
-## ドアキック後のAnimationTree再開
+## アクション後のAnimationTree再開
 func _resume_animation_tree() -> void:
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_door_kicking and not _is_throwing and not _is_opening_door and not _is_talking:
+	# アクション完了フラグを解除
+	_is_opening_door = false
+
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking:
+		# ブレンドパラメータをアイドル状態にリセット（古い移動状態でのピクつき防止）
+		_movement_blend = 0.0
+		_speed_blend = 0.0
+		_anim_tree.set("parameters/IdleBlend/blend_amount", 0.0)
+		_anim_tree.set("parameters/SpeedBlend/blend_amount", 0.0)
 		_anim_tree.active = true
-		# 左手IKを武器に応じて再有効化
+		# 左手IKを武器に応じて再有効化（ブレンド速度をデフォルトに戻す）
 		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+			_left_hand_ik.reset_blend_speed()
 			_left_hand_ik.set_enabled(true)
-
-
-## Check if door kick animation is playing
-func is_door_kicking() -> bool:
-	return _is_door_kicking
 
 
 ## Play throw animation (legacy: underhand grenade throw with pistol)
 func play_throw() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 	_start_throw(PISTOL_LOW_THROWING_ANIM, THROW_RELEASE_TIME)
 
@@ -486,6 +435,15 @@ func play_throw() -> void:
 func _on_throw_release() -> void:
 	if _is_throwing:
 		throw_release.emit()
+
+
+## 投擲アニメーション後半からIKをゆっくりブレンドイン
+func _start_throw_ik_blend() -> void:
+	if not _is_throwing or _is_dead:
+		return
+	if _left_hand_ik:
+		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
+		_left_hand_ik.set_enabled(true)
 
 
 func _on_throw_finished(_anim_name: String) -> void:
@@ -505,7 +463,7 @@ func _on_throw_finished(_anim_name: String) -> void:
 
 ## Play far throw animation (weapon-appropriate overhand throw)
 func play_throw_far() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	var anim_name: String
@@ -515,12 +473,12 @@ func play_throw_far() -> void:
 		_:
 			anim_name = RIFLE_THROW_FAR_ANIM
 
-	_start_throw(anim_name, THROW_FAR_RELEASE_TIME)
+	_start_throw(anim_name, THROW_FAR_RELEASE_TIME, THROW_FAR_IK_RESUME_TIME)
 
 
 ## Play close throw animation (weapon-appropriate underhand throw)
 func play_throw_close() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	var anim_name: String
@@ -530,11 +488,11 @@ func play_throw_close() -> void:
 		_:
 			anim_name = RIFLE_THROW_CLOSE_ANIM
 
-	_start_throw(anim_name, THROW_CLOSE_RELEASE_TIME)
+	_start_throw(anim_name, THROW_CLOSE_RELEASE_TIME, THROW_CLOSE_IK_RESUME_TIME)
 
 
 ## 投擲アニメーション共通処理
-func _start_throw(anim_name: String, release_time: float) -> void:
+func _start_throw(anim_name: String, release_time: float, ik_resume_time: float = 0.0) -> void:
 	_is_throwing = true
 
 	# 左手IKを無効化
@@ -551,6 +509,10 @@ func _start_throw(anim_name: String, release_time: float) -> void:
 		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
 		# リリースタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(release_time).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
+		# アニメーション後半からIKを徐々にブレンドイン（左手のスナップ防止）
+		if ik_resume_time > 0.0 and _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+			get_tree().create_timer(ik_resume_time).timeout.connect(
+				_start_throw_ik_blend, CONNECT_ONE_SHOT)
 	else:
 		push_warning("CharacterAnimationController: Throw animation not found: %s" % anim_name)
 		_is_throwing = false
@@ -565,7 +527,7 @@ func is_throwing() -> bool:
 
 ## Play door open animation (quietly open door)
 func play_door_open() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door:
 		return
 
 	_is_opening_door = true
@@ -577,21 +539,41 @@ func play_door_open() -> void:
 	if _anim_tree:
 		_anim_tree.active = false
 
-	if _anim_player.has_animation(RIFLE_OPEN_DOOR_ANIM):
-		_anim_player.play(RIFLE_OPEN_DOOR_ANIM, 0.15)
+	var anim_name: String
+	match _weapon:
+		Weapon.PISTOL:
+			anim_name = PISTOL_OPEN_DOOR_ANIM
+		_:
+			anim_name = RIFLE_OPEN_DOOR_ANIM
+
+	if _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name, 0.15)
 		_anim_player.animation_finished.connect(_on_door_open_finished, CONNECT_ONE_SHOT)
 		# インパクトタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(DOOR_OPEN_IMPACT_TIME).timeout.connect(
 			func(): door_open_impact.emit(), CONNECT_ONE_SHOT)
+		# アニメーション後半からIKを徐々にブレンドイン（左手のスナップ防止）
+		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+			get_tree().create_timer(DOOR_OPEN_IK_RESUME_TIME).timeout.connect(
+				_start_door_ik_blend, CONNECT_ONE_SHOT)
 	else:
-		push_warning("CharacterAnimationController: Door open animation not found: %s" % RIFLE_OPEN_DOOR_ANIM)
+		push_warning("CharacterAnimationController: Door open animation not found: %s" % anim_name)
 		_is_opening_door = false
 		if _anim_tree:
 			_anim_tree.active = true
 
 
+## ドアアニメーション後半からIKをゆっくりブレンドイン
+func _start_door_ik_blend() -> void:
+	if not _is_opening_door or _is_dead:
+		return
+	if _left_hand_ik:
+		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
+		_left_hand_ik.set_enabled(true)
+
+
 func _on_door_open_finished(_anim_name: String) -> void:
-	_is_opening_door = false
+	# _is_opening_door は _resume_animation_tree で解除（早期解除すると update_animation が割り込む）
 
 	if _anim_player and not _is_dead:
 		var idle_anim_name := _get_idle_anim_name()
@@ -600,6 +582,10 @@ func _on_door_open_finished(_anim_name: String) -> void:
 			_anim_player.play(idle_anim_name, crossfade_time)
 		if _anim_tree:
 			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+		else:
+			_is_opening_door = false
+	else:
+		_is_opening_door = false
 
 	door_open_finished.emit()
 
@@ -611,7 +597,7 @@ func is_opening_door() -> bool:
 
 ## Play talking animation (looping, used during hostage negotiation)
 func play_talking() -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	_is_talking = true
@@ -680,7 +666,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_door_kicking or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
 		return
 
 	var parts := state.split(",")
@@ -789,7 +775,6 @@ func _setup_recoil_modifier() -> void:
 
 func _setup_lean_modifier() -> void:
 	_lean_modifier = LeanModifier.new()
-	_lean_modifier.spine_bone_name = spine_bone
 	_lean_modifier.recovery_speed = lean_speed
 	_skeleton.add_child(_lean_modifier)
 
@@ -965,7 +950,10 @@ func _switch_weapon_animations() -> void:
 	# Sprint
 	var sprint_node := bt.get_node("Sprint") as AnimationNodeAnimation
 	if sprint_node:
-		sprint_node.animation = prefix + "_sprint"
+		var sprint_name := prefix + "_sprint"
+		if not _anim_player.has_animation(sprint_name):
+			sprint_name = prefix + "_walk_forward"
+		sprint_node.animation = sprint_name
 
 	# Shoot
 	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation

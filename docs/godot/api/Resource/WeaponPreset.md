@@ -122,6 +122,22 @@ multiplier = 1.0 - clamp(target_speed / target_speed_reference, 0, 1) * target_m
 | sprint_penalty | 0.55 | 0.35 | 0.15 | 0.50 |
 | target_move_penalty | 0.12 | 0.15 | 0.08 | 0.20 |
 
+### Vision
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `vision_range` | `float` | `7.0` | 武器装備時の視界距離（メートル）。`equip_weapon()`で自動的にVisionComponentに適用される |
+| `vision_fov` | `float` | `60.0` | 武器装備時の視界角度（度）。`equip_weapon()`で自動的にVisionComponentに適用される |
+
+#### 武器カテゴリ別推奨視界設定
+
+| カテゴリ | 推奨距離 | 推奨FOV | 説明 |
+|---------|----------|---------|------|
+| RIFLE | 7.0m | 55-60° | 標準視界 |
+| PISTOL | 5.0m | 65° | 近距離戦向け、視野広め |
+| SMG | 6.0m | 60° | 中近距離戦向け |
+| SHOTGUN | 5.0m | 65° | 近距離戦向け |
+| SNIPER | 12.0m | 40° | 長距離索敵向け、視野狭い |
+
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|

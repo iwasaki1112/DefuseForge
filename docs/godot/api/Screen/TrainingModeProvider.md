@@ -27,12 +27,11 @@ func get_mode_name() -> String:
 
 ```gdscript
 func determine_player_team() -> void:
-    var teams = [GameCharacter.Team.COUNTER_TERRORIST, GameCharacter.Team.TERRORIST]
-    var random_team = teams[randi() % 2]
-    PlayerState.set_player_team(random_team)
+    # トレーニングはCT固定（alphaプリセットでスポーンするため）
+    PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 ```
 
-ランダムにCTまたはTを割り当てます。
+CT固定で割り当てます。
 
 ### register_character
 

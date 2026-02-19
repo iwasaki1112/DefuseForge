@@ -43,6 +43,9 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var shooter_sprint_penalty: float = 0.4 ## スプリント時の精度乗数
 @export var target_move_penalty: float = 0.15   ## ターゲット移動ペナルティ係数
 @export var target_speed_reference: float = 6.0 ## ターゲット速度基準値(m/s)
+@export var steady_aim_bonus: float = 1.25      ## 静止時の最大精度ボーナス（Steady Aim）
+@export var steady_aim_time: float = 0.5        ## ボーナス最大到達までの時間（秒）
+@export var reaction_time: float = 0.3          ## 移動中に敵検知時の初弾リアクションタイム（秒）
 
 # ============================================
 # Damage Falloff
@@ -52,6 +55,13 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var damage_falloff_start: float = 20.0    ## 減衰開始距離(m)
 @export var damage_falloff_min: float = 0.5       ## 最低ダメージ倍率
 @export var damage_falloff_end: float = 50.0      ## 最低ダメージ到達距離(m)
+
+# ============================================
+# Vision
+# ============================================
+@export_group("Vision")
+@export var vision_range: float = 7.0  ## 武器装備時の視界距離（メートル）
+@export var vision_fov: float = 60.0  ## 武器装備時の視界角度（度）
 
 # ============================================
 # Recoil

@@ -147,7 +147,6 @@ class GameEventMessage extends RefCounted:
 	## DAMAGE: { damage: float, is_headshot: bool }
 	## DEATH: { killer_id: int, is_headshot: bool }
 	## GRENADE_THROW: { target_pos: Array, grenade_type: int }
-	## DOOR_KICK: { door_id: int }
 	## WEAPON_FIRE: { weapon_id: String }
 	var data: Dictionary = {}
 
