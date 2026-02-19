@@ -51,7 +51,7 @@ func set_characters(char_list: Array[Node]) -> void:
 
 
 ## アイドル中のキャラクターを更新（毎フレーム呼ぶ）
-func process_idle_characters(delta: float) -> void:
+func process_idle_characters(_delta: float) -> void:
 	var primary = get_primary_callback.call() if get_primary_callback.is_valid() else null
 
 	for character in characters:
