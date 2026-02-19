@@ -123,9 +123,9 @@ func _update_radius() -> void:
 		# 維持フェーズ
 		_current_radius = max_radius
 	else:
-		# 消滅フェーズ: max_radius → 0（線形）
+		# 消滅フェーズ: 半径は維持、アルファフェードで消す
 		var t := (_elapsed_time - fade_start) / fade_time
-		_current_radius = max_radius * (1.0 - t)
+		_current_radius = max_radius
 		# フェード半ばでスモーク管理から解除（演出が消える前にキャラクターを表示）
 		if _smoke_manager and t >= 0.5:
 			_smoke_manager.unregister_area(self)
@@ -136,8 +136,16 @@ func _update_radius() -> void:
 func _update_visuals() -> void:
 	if _particle_clip_mat:
 		_particle_clip_mat.set_shader_parameter("current_radius", _current_radius)
-		var scale_factor := _current_radius / max_radius if max_radius > 0 else 0.0
-		_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", scale_factor)
+		var fade_start := duration - fade_time
+		var alpha_mult := 1.0
+		if _elapsed_time < expand_time and max_radius > 0:
+			# 展開フェーズ: アルファをランプアップ
+			alpha_mult = _current_radius / max_radius
+		elif _elapsed_time >= fade_start:
+			# 消滅フェーズ: 半径はそのまま、アルファだけフェードアウト
+			var t := (_elapsed_time - fade_start) / fade_time
+			alpha_mult = 1.0 - t
+		_particle_clip_mat.set_shader_parameter("smoke_alpha_multiplier", alpha_mult)
 
 	# デバッグリング更新
 	if _debug_ring:
