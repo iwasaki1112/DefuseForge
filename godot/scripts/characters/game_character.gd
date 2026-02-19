@@ -361,6 +361,9 @@ func _update_effect_component_sockets() -> void:
 		bullet_trail.warm_up()
 	if shell_ejection:
 		shell_ejection.set_weapon_socket(_weapon_socket)
+		shell_ejection.warm_up()
+	if blood_effect:
+		blood_effect.warm_up()
 
 
 ## Attach weapon model to right hand

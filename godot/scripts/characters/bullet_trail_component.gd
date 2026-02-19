@@ -198,6 +198,8 @@ func _ensure_trail_nodes() -> void:
 
 	# ワールド空間に追加（_ready中のblocked回避）
 	# visible=trueのままalpha=0で追加し、GPUシェーダーを事前コンパイルさせる
+	# キャラクター付近に配置してフラスタムカリングを防ぐ
+	_bullet_trail.position = _character.global_position
 	_character.get_tree().root.add_child.call_deferred(_bullet_trail)
 
 

@@ -83,9 +83,13 @@ func set_weapon_socket(socket: Node3D) -> void:
 	_weapon_socket = socket
 
 
-## ウォームアップ（現在は不要だが、他コンポーネントとのインターフェース一貫性のため）
+## ウォームアップ: ケーシングノードを1つ事前生成しGPUシェーダーをコンパイルさせる
 func warm_up() -> void:
-	pass
+	if _pool.is_empty() and _casing_mesh and _character and _character.is_inside_tree():
+		var c := _create_casing_node()
+		if c:
+			_pool.append(c)
+			_pool_tweens.append(null)
 
 
 func _on_character_tree_exited() -> void:
