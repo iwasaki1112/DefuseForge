@@ -7,7 +7,10 @@ uniform vec2 map_min = vec2(-20.0, -20.0);
 uniform vec2 map_max = vec2(20.0, 20.0);
 uniform vec2 char_position = vec2(0.0, 0.0);
 uniform float throw_range = 5.0;
-uniform float visibility_threshold : hint_range(0.0, 1.0) = 0.5;
+
+// Blur settings for smooth edges (same as fow.gdshader)
+uniform float blur_radius : hint_range(0.0, 4.0) = 1.5;
+uniform float texture_size = 256.0;
 
 varying vec3 world_position;
 
@@ -19,13 +22,26 @@ void fragment() {
 	vec2 world_xz = world_position.xz;
 	vec2 uv = (world_xz - map_min) / (map_max - map_min);
 
-	float raw_visibility = 0.0;
+	float visibility = 0.0;
 	if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
-		raw_visibility = texture(visibility_texture, uv).r;
-	}
+		float px = blur_radius / texture_size;
 
-	// エッジグラデーション: 閾値を上げて内側に寄せ、控えめに表示
-	float visibility = smoothstep(0.4, 0.9, raw_visibility);
+		// 9-point weighted blur for smooth edges (same as fow.gdshader)
+		// Center (weight 4) + cross (weight 2 each) + diagonals (weight 1 each) = 16
+		visibility = texture(visibility_texture, uv).r * 4.0;
+		visibility += texture(visibility_texture, uv + vec2(px, 0.0)).r * 2.0;
+		visibility += texture(visibility_texture, uv - vec2(px, 0.0)).r * 2.0;
+		visibility += texture(visibility_texture, uv + vec2(0.0, px)).r * 2.0;
+		visibility += texture(visibility_texture, uv - vec2(0.0, px)).r * 2.0;
+		visibility += texture(visibility_texture, uv + vec2(px, px)).r;
+		visibility += texture(visibility_texture, uv + vec2(-px, px)).r;
+		visibility += texture(visibility_texture, uv + vec2(px, -px)).r;
+		visibility += texture(visibility_texture, uv + vec2(-px, -px)).r;
+		visibility /= 16.0;
+
+		visibility = min(visibility, 1.0);
+		visibility = smoothstep(0.05, 0.4, visibility);
+	}
 
 	// 投擲範囲を内側にオフセットしてグラデーション
 	float dist = length(world_xz - char_position);
