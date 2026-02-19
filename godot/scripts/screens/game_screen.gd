@@ -286,7 +286,7 @@ func _spawn_characters() -> void:
 	if game_manager.idle_manager:
 		game_manager.idle_manager.set_characters(game_manager.characters)
 
-	# トレーニングモードでCPU徘徊を有効化
+	# トレーニングモードでCPU徘徊を有効化（実際の処理開始はラウンドACTIVE時）
 	if _mode_provider.get_mode_name() == "training":
 		if game_manager.idle_manager:
 			game_manager.idle_manager.wandering_enabled = true

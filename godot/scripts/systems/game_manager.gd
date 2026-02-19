@@ -265,8 +265,8 @@ func process_frame(delta: float) -> void:
 	if round_manager:
 		round_manager.process(delta)
 
-	# アイドルキャラクターを処理
-	if idle_manager:
+	# アイドルキャラクターを処理（ラウンド進行中のみ）
+	if idle_manager and round_manager and round_manager.current_phase == RoundManager.RoundPhase.ACTIVE:
 		idle_manager.process_idle_characters(delta)
 
 	# リモートキャラクターの補間更新
