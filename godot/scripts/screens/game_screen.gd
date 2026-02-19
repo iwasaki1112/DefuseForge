@@ -1468,6 +1468,9 @@ func _handle_action_button_input(event: InputEvent) -> bool:
 		var mb := event as InputEventMouseButton
 		if mb.button_index != MOUSE_BUTTON_LEFT:
 			return false
+		# タッチからエミュレートされた擬似マウスイベントをスキップ（InputEventScreenTouchで処理済み）
+		if mb.device < 0:
+			return false
 		pos = mb.position
 		pressed = mb.pressed
 		touch_idx = 100  # マウスクリック用の仮想インデックス
