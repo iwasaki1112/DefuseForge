@@ -145,6 +145,8 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 				var mat := mi.get_active_material(surf_idx)
 				combined.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 				if mat:
+					if mat is StandardMaterial3D and arrays[Mesh.ARRAY_COLOR] != null:
+						mat.vertex_color_use_as_albedo = true
 					combined.surface_set_material(combined.get_surface_count() - 1, mat)
 					print("  Surface: ", mat.resource_name)
 			print("  Mesh: ", mi.name, " AABB: ", mi.mesh.get_aabb().size)
