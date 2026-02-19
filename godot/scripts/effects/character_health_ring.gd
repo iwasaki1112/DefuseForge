@@ -6,10 +6,12 @@ extends MeshInstance3D
 
 const RING_SIZE := 1.3  ## リングメッシュのサイズ（m）
 const HEIGHT_OFFSET := 0.05  ## 地面からの高さ
+const DRAIN_SPEED := 5.0  ## HP減少アニメーション速度（大きいほど速い）
 
 var _character: GameCharacter = null
 var _material: ShaderMaterial = null
-var _prev_ratio: float = -1.0  ## 前フレームのHP割合（無駄な更新回避）
+var _display_ratio: float = 1.0  ## 表示用HP割合（実際のHPに向かって補間）
+var _prev_ratio: float = -1.0  ## 前フレームの表示HP割合（無駄な更新回避）
 
 
 func setup(character: GameCharacter) -> void:
@@ -32,7 +34,7 @@ func _setup_mesh() -> void:
 	position = Vector3(0, HEIGHT_OFFSET, 0)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not _character or not is_instance_valid(_character):
 		return
 
@@ -45,8 +47,11 @@ func _process(_delta: float) -> void:
 	if not visible:
 		visible = true
 
-	# HP割合が変わった時だけシェーダーパラメータを更新
-	var ratio := _character.get_health_ratio()
-	if absf(ratio - _prev_ratio) > 0.001:
-		_prev_ratio = ratio
-		_material.set_shader_parameter("health_ratio", ratio)
+	# 表示用HP割合を実際のHP割合に向かって滑らかに補間
+	var target_ratio := _character.get_health_ratio()
+	_display_ratio = lerpf(_display_ratio, target_ratio, 1.0 - exp(-DRAIN_SPEED * delta))
+
+	# 表示値が変わった時だけシェーダーパラメータを更新
+	if absf(_display_ratio - _prev_ratio) > 0.001:
+		_prev_ratio = _display_ratio
+		_material.set_shader_parameter("health_ratio", _display_ratio)
