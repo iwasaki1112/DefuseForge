@@ -62,6 +62,9 @@ var _target_door: Node3D = null  # アニメーション中のターゲットド
 var _is_door_action: bool = false  # ドア開けアクション中フラグ
 var _door_contact_detected: bool = false  # ハンドボーン接触検知済みフラグ
 
+## Sprint（スプリント）
+var _sprint_btn: Button = null
+
 ## Talking（人質交渉）
 var _talking_btn: Button = null
 var _is_talking: bool = false
@@ -580,6 +583,11 @@ func _create_action_buttons() -> void:
 	_talking_btn = vbox.get_node("TalkingBtn")
 	_talking_btn.pressed.connect(_on_talking_btn_pressed)
 	ButtonAnimator.setup(_talking_btn)
+
+	# Sprintボタン（押している間スプリント）
+	_sprint_btn = vbox.get_node("SprintBtn")
+	_sprint_btn.button_down.connect(_on_sprint_btn_down)
+	_sprint_btn.button_up.connect(_on_sprint_btn_up)
 
 	if Debug.enabled:
 		_debug_vision_btn = Button.new()
@@ -1434,6 +1442,20 @@ func _update_door_proximity() -> void:
 func _on_debug_vision_toggled(enabled: bool) -> void:
 	if game_manager and game_manager.vision_service:
 		game_manager.vision_service.set_debug_draw(enabled)
+
+
+## ========================================
+## Sprint（スプリント）
+## ========================================
+
+func _on_sprint_btn_down() -> void:
+	if _tps_controller:
+		_tps_controller.set_sprinting(true)
+
+
+func _on_sprint_btn_up() -> void:
+	if _tps_controller:
+		_tps_controller.set_sprinting(false)
 
 
 ## ========================================

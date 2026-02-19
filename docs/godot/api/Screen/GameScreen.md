@@ -155,6 +155,19 @@ if _mode_provider is MultiplayerModeProvider:
     var is_host = mp.is_host()
 ```
 
+## スプリント
+
+SprintBtnボタンを押している間、キャラクターがスプリントモードで移動します。
+
+- **ボタン**: `action_buttons.tscn` の SprintBtn（常時表示）
+- **操作**: ボタンを押し続けながら左スティック/WASDで移動
+- **PC**: Shiftキーでもスプリント可能
+- **スプリント中の制限**:
+  - 右スティックエイム無効化（キャラクターは移動方向を向く）
+  - 自動射撃無効化
+  - 移動速度 6.0m/s（通常歩行 2.0m/s）
+- **アニメーション**: `game_rifle_sprint` / `game_pistol_sprint`（SpeedBlendで切替）
+
 ## ドア開けインタラクション
 
 プレイヤーがドアの近くにいるとき、DoorOpenBtnボタンが表示されます。

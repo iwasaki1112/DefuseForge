@@ -67,6 +67,9 @@ var _last_move_dir: Vector3 = Vector3.ZERO
 # 右スティック操作中フラグ（自動エイム・自動射撃を一時停止するため）
 var _is_aim_stick_active: bool = false
 
+# スプリント状態（ボタン押下中）
+var _is_sprinting: bool = false
+
 # 向き固定（投擲アニメーション中など）
 var _facing_locked: bool = false
 var _locked_facing: Vector3 = Vector3.FORWARD
@@ -123,11 +126,14 @@ func process(delta: float) -> void:
 	# フェーズ1: 敵検知（ターゲット特定のみ、射撃しない）
 	if _character.combat_awareness:
 		_character.combat_awareness.process(delta)
-	# フェーズ2: エイム更新（検知結果で向きを即座に設定）
-	_handle_aim(delta)
-	# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
-	if _character.combat_awareness:
-		_character.combat_awareness.process_firing(delta)
+	# スプリント中は右スティックエイムと自動射撃を無効化
+	var is_sprint_active := _is_sprinting or Input.is_key_pressed(KEY_SHIFT)
+	if not is_sprint_active:
+		# フェーズ2: エイム更新（検知結果で向きを即座に設定）
+		_handle_aim(delta)
+		# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
+		if _character.combat_awareness:
+			_character.combat_awareness.process_firing(delta)
 	_handle_movement(delta)
 	_update_camera(delta)
 
@@ -177,6 +183,11 @@ func update_camera_for_weapon(vision_range: float) -> void:
 	print("[TPS] update_camera_for_weapon: vision=%.1f base=%.1f target=%.1f current=%.1f" % [vision_range, _base_camera_height, _target_camera_height, camera_height])
 
 
+## スプリント状態を設定（スプリントボタンから呼ばれる）
+func set_sprinting(value: bool) -> void:
+	_is_sprinting = value
+
+
 ## 操作対象のキャラクターを返す
 func get_character() -> GameCharacter:
 	return _character
@@ -210,13 +221,22 @@ func _handle_movement(delta: float) -> void:
 	else:
 		_last_move_dir = Vector3.ZERO
 
+	# PC: Shiftキーでもスプリント可能
+	var is_sprint_input := _is_sprinting or Input.is_key_pressed(KEY_SHIFT)
+
+	if _character.anim_ctrl:
+		var aim_dir: Vector3
+		if is_sprint_input and has_input:
+			# スプリント中は移動方向を向く
+			_character.set_facing_direction_vec(move_dir)
+			aim_dir = move_dir
+		else:
+			aim_dir = _character.get_facing_direction()
+		_character.anim_ctrl.update_animation(move_dir, aim_dir, is_sprint_input, delta)
+
 	var base_speed := _character.anim_ctrl.get_current_speed() if _character.anim_ctrl else 2.0
 	_character.velocity = move_dir * base_speed
 	_character.move_and_slide()
-
-	if _character.anim_ctrl:
-		var aim_dir := _character.get_facing_direction()
-		_character.anim_ctrl.update_animation(move_dir, aim_dir, false, delta)
 
 
 # ============================================
