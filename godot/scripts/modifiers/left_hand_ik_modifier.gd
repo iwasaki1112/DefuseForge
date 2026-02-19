@@ -7,7 +7,7 @@ class_name LeftHandIKModifier
 # ============================================
 # Constants
 # ============================================
-const IK_BLEND_SPEED := 15.0  ## influence遷移速度（高い=素早い追従）
+const DEFAULT_BLEND_SPEED := 15.0  ## デフォルトinfluence遷移速度（高い=素早い追従）
 const POLE_OFFSET := 0.3  ## ポールターゲットのオフセット（肘方向制御）
 
 # ============================================
@@ -19,6 +19,7 @@ var _ik_pole: Marker3D  ## 肘方向制御用ポールターゲット
 var _grip_source: Node3D  ## 武器モデル内のLeftHandGripノード
 var _skeleton: Skeleton3D
 var _target_influence := 0.0  ## 目標influence（0.0 or 1.0）
+var _blend_speed := DEFAULT_BLEND_SPEED  ## 現在のブレンド速度
 var _is_setup := false
 
 # ============================================
@@ -72,6 +73,14 @@ func setup(skeleton: Skeleton3D) -> void:
 func set_enabled(enabled: bool) -> void:
 	_target_influence = 1.0 if enabled else 0.0
 
+## ブレンド速度を変更（アニメーション復帰時のゆっくりブレンド等）
+func set_blend_speed(speed: float) -> void:
+	_blend_speed = speed
+
+## ブレンド速度をデフォルトに戻す
+func reset_blend_speed() -> void:
+	_blend_speed = DEFAULT_BLEND_SPEED
+
 ## IKを即座に無効化（死亡時など）
 func disable_immediate() -> void:
 	_target_influence = 0.0
@@ -113,7 +122,7 @@ func _process(delta: float) -> void:
 	# influence遷移
 	var current := _ik_node.influence
 	if absf(current - _target_influence) > 0.001:
-		_ik_node.influence = lerpf(current, _target_influence, 1.0 - exp(-IK_BLEND_SPEED * delta))
+		_ik_node.influence = lerpf(current, _target_influence, 1.0 - exp(-_blend_speed * delta))
 	elif current != _target_influence:
 		_ik_node.influence = _target_influence
 
