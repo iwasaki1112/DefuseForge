@@ -19,6 +19,7 @@ var _prop_occluders: Dictionary[Node3D, LightOccluder2D] = {}  # prop_body -> Li
 ## ドアオクルーダーアニメーション用
 var _door_occluder_world_corners: Dictionary[Node3D, PackedVector3Array] = {}  # door -> 初期ワールド3Dコーナー
 var _animating_doors: Dictionary[Node3D, Array] = {}  # door -> Array[Vector3] (ドアローカル座標のコーナー)
+var _door_local_corners: Dictionary[Node3D, Array] = {}  # door -> Array[Vector3] (事前計算されたドアローカルコーナー)
 
 ## 座標変換パラメータ
 var _map_size: Vector2 = Vector2(40, 40)
@@ -165,27 +166,23 @@ func clear_all_occluders() -> void:
 ## ドアオクルーダーアニメーション開始（ドアTween中に毎フレームポリゴンを更新）
 ## @param door: アニメーション対象のドアノード
 func start_door_occluder_animation(door: Node3D) -> void:
-	if door not in _door_occluder_world_corners:
+	if door not in _door_local_corners:
 		return
 	if door not in _door_occluders:
 		return
-	# ワールドコーナーをドアローカル座標に変換して追跡開始
-	var world_corners: PackedVector3Array = _door_occluder_world_corners[door]
-	var inv_transform := door.global_transform.affine_inverse()
-	var local_corners: Array[Vector3] = []
-	for corner in world_corners:
-		local_corners.append(inv_transform * corner)
-	_animating_doors[door] = local_corners
+	# 事前計算したローカルコーナーを使って追跡開始
+	_animating_doors[door] = _door_local_corners[door]
 	set_process(true)
 
 
-## ドアオクルーダーアニメーション停止（オクルーダーを非表示にして追跡終了）
+## ドアオクルーダーアニメーション停止（ドアの最終位置でポリゴンを更新して追跡終了）
 ## @param door: アニメーション対象のドアノード
 func stop_door_occluder_animation(door: Node3D) -> void:
 	_animating_doors.erase(door)
-	# オクルーダーを非表示にする（ドアが完全に開いた状態）
-	if door in _door_occluders:
-		_door_occluders[door].visible = false
+	# ドアの最終位置でポリゴンを更新（開いたドアパネルがFoWを遮蔽し続ける）
+	if door in _door_occluders and door in _door_local_corners:
+		_update_door_occluder_polygon_from_local(door, _door_local_corners[door])
+		_door_occluders[door].visible = true
 	if _animating_doors.is_empty():
 		set_process(false)
 
@@ -199,6 +196,11 @@ func _process(_delta: float) -> void:
 ## ドアのglobal_transformからオクルーダーポリゴンをリアルタイム更新
 func _update_door_occluder_polygon(door: Node3D) -> void:
 	var local_corners: Array = _animating_doors[door]
+	_update_door_occluder_polygon_from_local(door, local_corners)
+
+
+## ローカルコーナーからドアオクルーダーポリゴンを更新
+func _update_door_occluder_polygon_from_local(door: Node3D, local_corners: Array) -> void:
 	var occluder: LightOccluder2D = _door_occluders.get(door)
 	if not occluder or not occluder.occluder:
 		return
@@ -441,6 +443,12 @@ func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AAB
 				  Vector3(half.x, 0, half.z), Vector3(-half.x, 0, half.z)]:
 			world_corners.append(opening_global * c)
 		_door_occluder_world_corners[closest_door] = world_corners
+		# ドアローカル座標のコーナーを事前計算（アニメーション・即時開放の両方で使用）
+		var inv_transform := closest_door.global_transform.affine_inverse()
+		var local_corners: Array[Vector3] = []
+		for corner in world_corners:
+			local_corners.append(inv_transform * corner)
+		_door_local_corners[closest_door] = local_corners
 		if Debug.enabled: print("[FOW] Door opening occluder mapped to: ", closest_door.name)
 	else:
 		# ドアノードが見つからない場合は固定壁オクルーダーとして追加
@@ -656,6 +664,7 @@ func _clear_door_occluders() -> void:
 	_door_occluders.clear()
 	_door_occluder_world_corners.clear()
 	_animating_doors.clear()
+	_door_local_corners.clear()
 
 
 func _clear_smoke_occluders() -> void:
