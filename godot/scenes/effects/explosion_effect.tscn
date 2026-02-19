@@ -1,0 +1,40 @@
+[gd_scene load_steps=4 format=3 uid="uid://dexplosion_effect"]
+
+[ext_resource type="Script" path="res://scripts/effects/explosion_effect.gd" id="1_explosion_effect"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_spark"]
+lifetime_randomness = 0.3
+emission_shape = 1
+emission_sphere_radius = 0.3
+direction = Vector3(0, 1, 0)
+spread = 180.0
+initial_velocity_min = 2.0
+initial_velocity_max = 6.0
+gravity = Vector3(0, -6, 0)
+scale_min = 0.3
+scale_max = 0.8
+color = Color(1, 0.7, 0.2, 1)
+color_ramp = null
+
+[sub_resource type="SphereMesh" id="SphereMesh_particle"]
+radius = 0.04
+height = 0.08
+radial_segments = 4
+rings = 2
+
+[node name="ExplosionEffect" type="Node3D"]
+script = ExtResource("1_explosion_effect")
+
+[node name="Particles" type="GPUParticles3D" parent="."]
+amount = 24
+one_shot = true
+explosiveness = 0.9
+lifetime = 0.6
+process_material = SubResource("ParticleProcessMaterial_spark")
+draw_pass_1 = SubResource("SphereMesh_particle")
+
+[node name="FlashLight" type="OmniLight3D" parent="."]
+light_color = Color(1, 0.8, 0.4, 1)
+light_energy = 4.0
+omni_range = 6.0
+omni_attenuation = 2.0

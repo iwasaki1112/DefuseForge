@@ -13,7 +13,7 @@
 
 ## 概要
 
-GameManagerから抽出されたグレネード管理コンポーネント。通常グレネードとスモークグレネードの生成・投擲、ネットワーク同期（リモートスポーン・爆発位置同期）を担当する。
+GameManagerから抽出されたグレネード管理コンポーネント。通常グレネード、スモークグレネード、ハンドグレネードの生成・投擲、ネットワーク同期（リモートスポーン・爆発位置同期）を担当する。
 
 ## シグナル
 
@@ -21,6 +21,7 @@ GameManagerから抽出されたグレネード管理コンポーネント。通
 |---------|------|------|
 | `grenade_thrown` | `grenade: Node3D, character: Node` | グレネード投擲時 |
 | `smoke_grenade_thrown` | `smoke_grenade: Node3D, character: Node` | スモークグレネード投擲時 |
+| `hand_grenade_thrown` | `hand_grenade: Node3D, character: Node` | ハンドグレネード投擲時 |
 | `grenade_network_event` | `start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int` | グレネード投擲ネットワークイベント |
 | `grenade_explode_network_event` | `grenade_id: int, position: Vector3, is_smoke: bool` | グレネード爆発ネットワークイベント |
 
@@ -41,8 +42,14 @@ FogOfWarSystemを設定する（リモートグレネードのFoW可視性チェ
 ### spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D) -> Array
 スモークグレネードを生成して投擲する。戻り値: `[smoke_grenade, velocity, grenade_id]`
 
+### spawn_and_throw_hand_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D) -> Array
+ハンドグレネードを生成して投擲する。爆発VFXシーンを自動注入。戻り値: `[hand_grenade, velocity, grenade_id]`
+
 ### spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void
-ネットワークからグレネードをスポーンする（リモート用）。
+ネットワークからハンドグレネードをスポーンする（リモート用）。`GRENADE_THROW`イベント経由。
+
+### spawn_hand_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void
+ネットワークからハンドグレネードをスポーンする（リモート用）。
 
 ### spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void
 ネットワークからスモークグレネードをスポーンする（リモート用）。
@@ -97,7 +104,9 @@ grenade_service.grenade_network_event.connect(_on_grenade_network_event)
 - `set_fow_system(fow) -> void`
 - `spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D) -> Array`
 - `spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D) -> Array`
+- `spawn_and_throw_hand_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D) -> Array`
 - `spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void`
+- `spawn_hand_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void`
 - `spawn_smoke_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int) -> void`
 - `handle_grenade_explode_from_network(grenade_id: int, position: Vector3, is_smoke: bool) -> void`
 - `emit_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int) -> void`

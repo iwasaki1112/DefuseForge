@@ -39,10 +39,12 @@ var _round_hud: RoundHUD = null
 
 ## グレネードエイミングモード
 var _is_grenade_aiming: bool = false
+var _is_hand_grenade_aiming: bool = false  ## true=ハンドグレネード, false=スモーク
 var _grenade_target_pos: Vector3 = Vector3.ZERO
 var _grenade_start_override: Vector3 = Vector3.ZERO
 var _is_near_opening: bool = false
 var _smoke_grenade_count: int = GameConstants.SMOKE_GRENADE_PER_ROUND
+var _hand_grenade_count: int = GameConstants.HAND_GRENADE_PER_ROUND
 
 ## グレネードエイミング中の左側タッチ判定
 const GRENADE_TAP_DRAG_THRESHOLD := 5.0  # ドラッグ判定の閾値（px）
@@ -51,9 +53,13 @@ var _grenade_pending_touch_idx: int = -1
 var _grenade_pending_touch_pos: Vector2 = Vector2.ZERO
 var _grenade_pending_touch_time: int = 0  # タッチ開始時刻（msec）
 
-## グレネードUI
+## グレネードUI（スモーク）
 var _grenade_btn: TextureButton = null
 var _grenade_count_label: Label = null
+
+## ハンドグレネードUI
+var _hand_grenade_btn: TextureButton = null
+var _hand_grenade_count_label: Label = null
 
 ## Door Open（ドア開けインタラクション）
 var _door_open_btn: TextureButton = null
@@ -572,6 +578,12 @@ func _create_action_buttons() -> void:
 	_door_open_btn = vbox.get_node("DoorOpenBtn")
 	ButtonAnimator.setup(_door_open_btn)
 
+	_hand_grenade_btn = vbox.get_node("HandGrenadeContainer/HandGrenadeBtn")
+	ButtonAnimator.setup(_hand_grenade_btn)
+
+	_hand_grenade_count_label = vbox.get_node("HandGrenadeContainer/HandGrenadeCountLabel")
+	_hand_grenade_count_label.text = str(_hand_grenade_count)
+
 	_grenade_btn = vbox.get_node("GrenadeContainer/GrenadeBtn")
 	ButtonAnimator.setup(_grenade_btn)
 
@@ -585,7 +597,7 @@ func _create_action_buttons() -> void:
 
 	# Godot GUIはマルチタッチ非対応（1本目のタッチのみマウスイベントとしてエミュレート）
 	# 2本目以降の指でボタンを押せるよう、GUIイベントを無効化して手動処理する
-	for btn in [_door_open_btn, _grenade_btn, _talking_btn, _sprint_btn]:
+	for btn in [_door_open_btn, _hand_grenade_btn, _grenade_btn, _talking_btn, _sprint_btn]:
 		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if Debug.enabled:
@@ -767,6 +779,18 @@ func _on_weapon_changed(weapon: WeaponPreset) -> void:
 		_tps_controller.update_camera_for_weapon(weapon.vision_range)
 
 
+func _on_hand_grenade_btn_pressed() -> void:
+	if _is_grenade_aiming:
+		_exit_grenade_aiming()
+		return
+	if _hand_grenade_count <= 0:
+		return
+	if not _player_character or not _player_character.is_alive:
+		return
+	_is_hand_grenade_aiming = true
+	_enter_grenade_aiming()
+
+
 func _on_grenade_btn_pressed() -> void:
 	if _is_grenade_aiming:
 		_exit_grenade_aiming()
@@ -775,22 +799,31 @@ func _on_grenade_btn_pressed() -> void:
 		return
 	if not _player_character or not _player_character.is_alive:
 		return
+	_is_hand_grenade_aiming = false
 	_enter_grenade_aiming()
 
 
 func _enter_grenade_aiming() -> void:
 	_is_grenade_aiming = true
 	_show_range_indicator()
-	if _grenade_btn:
-		_grenade_btn.modulate = Color(1.0, 0.6, 0.3)
+	# エイミング中のボタンをオレンジにハイライト
+	if _is_hand_grenade_aiming:
+		if _hand_grenade_btn:
+			_hand_grenade_btn.modulate = Color(1.0, 0.6, 0.3)
+	else:
+		if _grenade_btn:
+			_grenade_btn.modulate = Color(1.0, 0.6, 0.3)
 
 
 func _exit_grenade_aiming() -> void:
 	_is_grenade_aiming = false
 	_grenade_pending_touch_idx = -1
 	_hide_range_indicator()
+	# 両方のボタンの色をリセット
 	if _grenade_btn:
 		_grenade_btn.modulate = Color.WHITE
+	if _hand_grenade_btn:
+		_hand_grenade_btn.modulate = Color.WHITE
 
 
 func _setup_grenade_indicator() -> void:
@@ -1255,20 +1288,33 @@ func _on_throw_release() -> void:
 	var target_pos := _grenade_target_pos
 	target_pos.y = 0.0
 
-	# スモークグレネードをスポーン
-	var result: Array = game_manager._spawn_and_throw_smoke_grenade(
-		start_pos, target_pos, Vector3.ZERO, _player_character
-	)
-
-	# ネットワーク同期
-	if result[0] != null:
-		game_manager._emit_grenade_network_event(
-			start_pos, result[1], true, result[2]
+	if _is_hand_grenade_aiming:
+		# ハンドグレネードをスポーン
+		var result: Array = game_manager._spawn_and_throw_hand_grenade(
+			start_pos, target_pos, Vector3.ZERO, _player_character
 		)
+		# ネットワーク同期（is_smoke=false）
+		if result[0] != null:
+			game_manager._emit_grenade_network_event(
+				start_pos, result[1], false, result[2]
+			)
+		# インベントリ消費 + UI更新
+		_hand_grenade_count -= 1
+		_update_hand_grenade_count_ui()
+	else:
+		# スモークグレネードをスポーン
+		var result: Array = game_manager._spawn_and_throw_smoke_grenade(
+			start_pos, target_pos, Vector3.ZERO, _player_character
+		)
+		# ネットワーク同期（is_smoke=true）
+		if result[0] != null:
+			game_manager._emit_grenade_network_event(
+				start_pos, result[1], true, result[2]
+			)
+		# インベントリ消費 + UI更新
+		_smoke_grenade_count -= 1
+		_update_grenade_count_ui()
 
-	# インベントリ消費 + UI更新
-	_smoke_grenade_count -= 1
-	_update_grenade_count_ui()
 	_grenade_target_pos = Vector3.ZERO
 
 
@@ -1284,6 +1330,13 @@ func _update_grenade_count_ui() -> void:
 		_grenade_count_label.text = str(_smoke_grenade_count)
 	if _grenade_btn:
 		_grenade_btn.modulate.a = 1.0 if _smoke_grenade_count > 0 else 0.4
+
+
+func _update_hand_grenade_count_ui() -> void:
+	if _hand_grenade_count_label:
+		_hand_grenade_count_label.text = str(_hand_grenade_count)
+	if _hand_grenade_btn:
+		_hand_grenade_btn.modulate.a = 1.0 if _hand_grenade_count > 0 else 0.4
 
 
 func _on_door_open_pressed() -> void:
@@ -1496,6 +1549,11 @@ func _handle_action_button_input(event: InputEvent) -> bool:
 	if _door_open_btn and _door_open_btn.visible:
 		if _door_open_btn.get_global_rect().has_point(pos):
 			_on_door_open_pressed()
+			return true
+
+	if _hand_grenade_btn and _hand_grenade_btn.visible:
+		if _hand_grenade_btn.get_global_rect().has_point(pos):
+			_on_hand_grenade_btn_pressed()
 			return true
 
 	if _grenade_btn and _grenade_btn.visible:
@@ -1745,7 +1803,9 @@ func _on_round_timer_updated(time: float) -> void:
 
 func _on_round_started() -> void:
 	_smoke_grenade_count = GameConstants.SMOKE_GRENADE_PER_ROUND
+	_hand_grenade_count = GameConstants.HAND_GRENADE_PER_ROUND
 	_update_grenade_count_ui()
+	_update_hand_grenade_count_ui()
 	_exit_grenade_aiming()
 	# Talking状態リセット
 	if _is_talking:

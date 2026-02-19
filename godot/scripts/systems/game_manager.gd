@@ -482,6 +482,13 @@ func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, _bo
 	return [null, Vector3.ZERO, 0]
 
 
+## ハンドグレネードを生成して投擲（内部ヘルパー）
+func _spawn_and_throw_hand_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
+	if grenade_service:
+		return grenade_service.spawn_and_throw_hand_grenade(start_pos, target_pos, thrower)
+	return [null, Vector3.ZERO, 0]
+
+
 func _emit_grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int = 0) -> void:
 	if grenade_service:
 		grenade_service.emit_grenade_network_event(start_pos, velocity, is_smoke, grenade_id)

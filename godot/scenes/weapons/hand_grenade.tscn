@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://dhand_grenade"]
+
+[ext_resource type="Script" path="res://scripts/weapons/hand_grenade.gd" id="1_hand_grenade"]
+[ext_resource type="PackedScene" uid="uid://gjhu0hjnilsv" path="res://assets/weapons/hand_granade/hand_granade.glb" id="2_model"]
+
+[node name="HandGrenade" type="Node3D"]
+script = ExtResource("1_hand_grenade")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
