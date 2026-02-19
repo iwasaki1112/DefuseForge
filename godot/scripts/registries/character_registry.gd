@@ -206,8 +206,8 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 	collision.position.y = 0.9
 	character.add_child(collision)
 
-	# コリジョンマスク設定（Layer 1:床 + Layer 2:壁 に衝突する）
-	character.collision_mask = 3
+	# コリジョンマスク設定（Layer 1:床 + Layer 2:壁 + Layer 3:窓ガラス に衝突する）
+	character.collision_mask = 7
 
 	# Setup tap area (タップ検出用 - 大きめ)
 	var tap_area := Area3D.new()

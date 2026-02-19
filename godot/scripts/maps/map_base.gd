@@ -8,6 +8,7 @@ extends Node3D
 
 const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
+const WINDOW_GLASS_COLLISION_LAYER: int = 4
 
 ## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
 const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_straight_panel.glb"
@@ -242,18 +243,25 @@ func _setup_gridmap_collisions(grid_map: GridMap) -> void:
 		body.transform = Transform3D(cell_basis, local_pos)
 		grid_map.add_child(body)
 
-		# 窓タイル: MeshLibraryには柱シェイプ（FoWオクルーダー用）が入っているが、
-		# コリジョンはガラスを含む全幅ボックスで塞ぐ
+		# 窓タイル: 柱シェイプ→レイヤー2（壁構造、グレネード・射撃はここで判定）
+		# ガラスブロッカー→レイヤー4（キャラ移動ブロック専用、グレネード・視線は透過）
 		if "window" in item_name.to_lower():
+			_add_collision_shapes(body, shapes)
 			var mesh := lib.get_item_mesh(item_id)
 			if mesh:
 				var aabb := mesh.get_aabb()
+				var glass_body := StaticBody3D.new()
+				glass_body.name = "WindowGlass_%s_%d_%d_%d" % [item_name, cell.x, cell.y, cell.z]
+				glass_body.collision_layer = WINDOW_GLASS_COLLISION_LAYER
+				glass_body.collision_mask = 0
+				glass_body.transform = Transform3D(cell_basis, local_pos)
+				grid_map.add_child(glass_body)
 				var col := CollisionShape3D.new()
 				var box := BoxShape3D.new()
 				box.size = aabb.size
 				col.shape = box
 				col.position = aabb.get_center()
-				body.add_child(col)
+				glass_body.add_child(col)
 		else:
 			_add_collision_shapes(body, shapes)
 

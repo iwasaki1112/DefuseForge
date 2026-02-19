@@ -302,7 +302,7 @@ func _spawn_hostage_character(preset_id: String, spawn_pos: Vector3, y_rotation:
 	collision.shape = capsule
 	collision.position.y = 0.9
 	character.add_child(collision)
-	character.collision_mask = 3
+	character.collision_mask = 7
 
 	# シーンに追加
 	game_manager.get_character_parent().add_child(character)

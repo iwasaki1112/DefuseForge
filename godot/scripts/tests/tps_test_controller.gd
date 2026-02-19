@@ -373,8 +373,8 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 	collision.position.y = 0.9
 	character.add_child(collision)
 
-	# コリジョンマスク設定（Layer 1:床 + Layer 2:壁 に衝突する）
-	character.collision_mask = 3
+	# コリジョンマスク設定（Layer 1:床 + Layer 2:壁 + Layer 3:窓ガラス に衝突する）
+	character.collision_mask = 7
 
 	var anim_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	if not anim_player:
