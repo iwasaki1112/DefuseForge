@@ -38,8 +38,8 @@ func _process(delta: float) -> void:
 	if not _character or not is_instance_valid(_character):
 		return
 
-	# 死亡時は非表示
-	if not _character.is_alive:
+	# 死亡時・敵チームは非表示
+	if not _character.is_alive or not PlayerState.is_friendly(_character):
 		if visible:
 			visible = false
 		return

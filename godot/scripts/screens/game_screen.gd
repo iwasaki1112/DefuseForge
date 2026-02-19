@@ -86,6 +86,9 @@ var _map_id: String = ""
 ## キャラクター管理
 var _network_id_counter: int = 1
 
+## カメライントロ
+var _is_intro_playing: bool = false
+
 ## デバッグ
 var _vision_debug_enabled: bool = false
 
@@ -124,6 +127,12 @@ func setup_coop(net_manager: NetworkManager, map_id: String) -> void:
 
 ## ゲームの初期化（共通処理）
 func _initialize_game() -> void:
+	# 黒画面+マップ名を即座に表示（ロード中のちらつき防止）
+	var overlay_result := _create_loading_overlay()
+	var loading_overlay: CanvasLayer = overlay_result[0]
+	var loading_container: Control = overlay_result[1]
+	var load_start_time := Time.get_ticks_msec()
+
 	_setup_environment()
 	_setup_game_manager()
 
@@ -139,8 +148,25 @@ func _initialize_game() -> void:
 	_setup_round_hud()
 	_setup_tps_controller()
 
-	# 視界システムを初期化（FoW ON）
+	# カメラを俯瞰位置に即座配置（フェードアウト前に確定させる）
+	_position_camera_overview()
+
+	# 視界システムを初期化（黒画面の裏でFoW ON → フェードアウト時に表示済み）
 	game_manager.set_vision_enabled(true)
+
+	# 黒画面を最低1秒表示（ロードが速い場合でもマップ名を読む時間を確保）
+	var elapsed := Time.get_ticks_msec() - load_start_time
+	if elapsed < 1000:
+		await get_tree().create_timer((1000.0 - float(elapsed)) / 1000.0).timeout
+
+	# 黒画面をフェードアウトしてカメライントロ開始
+	var fade_tween := create_tween()
+	fade_tween.set_ease(Tween.EASE_IN)
+	fade_tween.set_trans(Tween.TRANS_CUBIC)
+	fade_tween.tween_property(loading_container, "modulate:a", 0.0, 0.5)
+	await fade_tween.finished
+	loading_overlay.queue_free()
+	await _play_intro_sequence()
 
 	# ラウンド開始
 	if _mode_provider.can_start_round() and game_manager.round_manager:
@@ -377,6 +403,100 @@ func _setup_tps_controller() -> void:
 		_player_character.anim_ctrl.door_open_finished.connect(_on_door_open_anim_finished)
 
 
+## 黒画面+マップ名オーバーレイを作成（戻り値のControlでmodulateフェード可能）
+func _create_loading_overlay() -> Array:
+	var overlay := CanvasLayer.new()
+	overlay.name = "LoadingOverlay"
+	overlay.layer = 100  # 最前面
+
+	# 全体をまとめるコンテナ（modulate一括制御用）
+	var container := Control.new()
+	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(container)
+
+	# 黒背景
+	var bg := ColorRect.new()
+	bg.color = Color.BLACK
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	container.add_child(bg)
+
+	# マップ名ラベル
+	var map_name := _map_id
+	var preset = MapRegistry.get_preset(_map_id)
+	if preset and not preset.display_name.is_empty():
+		map_name = preset.display_name
+
+	var label := Label.new()
+	label.text = map_name
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	label.add_theme_font_size_override("font_size", 48)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	container.add_child(label)
+
+	add_child(overlay)
+	return [overlay, container]
+
+
+## カメラを俯瞰位置に即座配置（黒画面の裏で呼ぶ）
+func _position_camera_overview() -> void:
+	if not camera or not _player_character:
+		return
+
+	_is_intro_playing = true
+	ui_layer.visible = false
+
+	# マップ中心の計算: 全スポーン地点の平均位置
+	var preset = game_manager.get_current_map_preset()
+	var center := Vector3.ZERO
+	var count := 0
+	if preset:
+		for p in preset.spawn_points_ct:
+			center += p
+			count += 1
+		for p in preset.spawn_points_t:
+			center += p
+			count += 1
+	if count > 0:
+		center /= float(count)
+	else:
+		center = _player_character.global_position
+
+	# オーバービュー高さの計算
+	var map_size := game_manager.get_map_size()
+	var overview_height := maxf(map_size.x, map_size.y) * 1.5
+	overview_height = clampf(overview_height, 25.0, 60.0)
+
+	# カメラをオーバービュー位置に即座に配置（pitch=-90°なのでZ offsetはほぼ0）
+	var pitch_rad := deg_to_rad(camera.rotation_degrees.x)
+	var offset_z := overview_height / tan(-pitch_rad) if absf(tan(-pitch_rad)) > 0.001 else 0.0
+	camera.global_position = Vector3(center.x, overview_height, center.z + offset_z)
+
+
+## カメライントロシーケンス: 俯瞰 → プレイヤー上空へズームイン（カメラは配置済み前提）
+func _play_intro_sequence() -> void:
+	if not camera or not _player_character:
+		return
+
+	# ターゲット: プレイヤー上空（通常の14m高さ）
+	var pitch_rad := deg_to_rad(camera.rotation_degrees.x)
+	var target_height := _tps_controller.camera_height if _tps_controller else 14.0
+	var target_offset_z := target_height / tan(-pitch_rad) if absf(tan(-pitch_rad)) > 0.001 else 0.0
+	var target_pos := _player_character.global_position + Vector3(0, target_height, target_offset_z)
+
+	# Tweenでカメラを移動
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(camera, "global_position", target_pos, 2.5)
+	await tween.finished
+
+	# イントロ完了
+	_is_intro_playing = false
+	ui_layer.visible = true
+
+
 func _setup_tps_hud() -> void:
 	# 武器セレクター（左上）— 一旦非表示
 	var hbox := HBoxContainer.new()
@@ -510,7 +630,7 @@ func _setup_label_manager() -> void:
 func _physics_process(delta: float) -> void:
 	if game_manager:
 		game_manager.process_frame(delta)
-	if _tps_controller and not _is_grenade_aiming and not _is_talking and not _is_door_action:
+	if _tps_controller and not _is_grenade_aiming and not _is_talking and not _is_door_action and not _is_intro_playing:
 		_tps_controller.process(delta)
 	_update_tps_hud()
 	if _is_grenade_aiming:
@@ -526,6 +646,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# イントロ中は入力を無視
+	if _is_intro_playing:
+		return
+
 	# グレネードエイミング中: 左側は素早いタップのみターゲット選択、それ以外はキャンセル
 	if _is_grenade_aiming:
 		var screen_half_x := get_viewport().get_visible_rect().size.x * 0.5

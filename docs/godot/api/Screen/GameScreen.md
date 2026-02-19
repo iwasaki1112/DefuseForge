@@ -87,6 +87,7 @@ _ready()  ※setup_multiplayer()はadd_child前に呼ばれ、Providerを設定�
     ├── _setup_tps_hud()             # TPS HUD設定（HP、クロスヘア）
     ├── _setup_round_hud()           # ラウンドHUD設定
     ├── _setup_tps_controller()      # TPSPlayerController初期化
+    ├── await _play_intro_sequence() # カメライントロ演出（マップ俯瞰→プレイヤー上空）
     └── game_manager.set_vision_enabled(true) # 視界有効化
 ```
 
@@ -105,6 +106,15 @@ func _setup_label_manager() -> void:
     game_manager.add_child(lm)
     game_manager.set_label_manager(lm)
 ```
+
+## カメライントロシーケンス
+
+ゲーム開始時にマップ全体の俯瞰ショットからプレイヤーキャラクター上空へカメラが移動する演出。
+
+- `_play_intro_sequence()`: 初期化完了後（`_setup_tps_controller()`の後）にawaitで呼び出し
+- **オーバービュー位置**: 全スポーン地点の平均位置上空（高さ = `max(map_size.x, map_size.y) * 1.5`、25〜60mにクランプ）
+- **Tween**: `EASE_IN_OUT` + `TRANS_CUBIC` で2.5秒かけてプレイヤー上空（通常の14m高さ）へ移動
+- **ガード**: イントロ中は `_is_intro_playing = true` → `_physics_process`でTPS操作停止、`_input`で入力無視、HUD非表示
 
 ## HP表示
 

@@ -241,6 +241,9 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 	character.add_child(anim_ctrl)
 	character.set_anim_controller(anim_ctrl)
 
+	# Tポーズ防止: アニメーションセットアップ完了まで非表示
+	model.visible = false
+
 	# Defer setup until character is in scene tree
 	# 初期向きはGameCharacter.set_facing_direction()で設定される
 	character.ready.connect(func():
@@ -253,6 +256,8 @@ func create_character_from_preset(preset: CharacterPreset, spawn_position: Vecto
 		var skel := _find_skeleton(model)
 		if skel:
 			model.position.y = -skel.position.y
+		# アニメーション＋Y補正完了後に表示
+		model.visible = true
 	, CONNECT_ONE_SHOT)
 
 	return character
