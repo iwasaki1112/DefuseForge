@@ -35,6 +35,8 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 		blackboard.set_value("wander_timer", timer)
 		if timer <= 0.0:
 			var target: Vector3 = _pick_random_target(body)
+			var target_dist: float = Vector3(target.x - body.global_position.x, 0.0, target.z - body.global_position.z).length()
+			print("[BTWander] %s IDLE→WALKING target_dist=%.2f pos=%s target=%s" % [actor.name, target_dist, body.global_position, target])
 			blackboard.set_value("wander_target", target)
 			blackboard.set_value("wander_state", WanderState.WALKING)
 			blackboard.set_value("wander_stuck_pos", body.global_position)
@@ -125,7 +127,8 @@ func _pick_random_target(body: CharacterBody3D) -> Vector3:
 	var char_pos: Vector3 = body.global_position
 	var space_state: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
 
-	for _attempt in range(3):
+	# 通常距離(2-6m)で5回試行
+	for _attempt in range(5):
 		var angle := randf() * TAU
 		var radius := randf_range(2.0, WANDER_RADIUS)
 		var target := Vector3(
@@ -144,4 +147,31 @@ func _pick_random_target(body: CharacterBody3D) -> Vector3:
 
 		return target
 
-	return char_pos
+	# 短距離フォールバック(1-2m)で3回試行
+	for _attempt in range(3):
+		var angle := randf() * TAU
+		var radius := randf_range(1.0, 2.0)
+		var target := Vector3(
+			char_pos.x + cos(angle) * radius,
+			char_pos.y,
+			char_pos.z + sin(angle) * radius
+		)
+
+		if space_state:
+			var origin: Vector3 = char_pos + Vector3.UP * 0.5
+			var target_h: Vector3 = target + Vector3.UP * 0.5
+			var query := PhysicsRayQueryParameters3D.create(origin, target_h)
+			query.collision_mask = MapBase.WALL_COLLISION_LAYER
+			if not space_state.intersect_ray(query).is_empty():
+				continue
+
+		return target
+
+	# 全試行失敗: 壁チェックなしでランダム方向1mを返す
+	# move_and_slideが壁で停止させ、スタック検知がIDLEに戻す
+	var fallback_angle := randf() * TAU
+	return Vector3(
+		char_pos.x + cos(fallback_angle) * 1.0,
+		char_pos.y,
+		char_pos.z + sin(fallback_angle) * 1.0
+	)

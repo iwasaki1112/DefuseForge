@@ -1,7 +1,8 @@
 @tool
 class_name BTOpenDoor extends ActionLeaf
 ## ドア開けアクション（ドアに接近 → 開ける）
-## 遠い場合は RUNNING で歩み寄り、近ければ fire-and-forget で開ける
+## 常に SUCCESS を返し UpdateAnimation/ApplyMovement を毎tick通す
+## (RUNNING は AlwaysSucceedDecorator を貫通し後段をスキップするため不可)
 
 const APPROACH_ARRIVAL := 0.3  ## 接近完了の余裕マージン
 
@@ -21,21 +22,21 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 	if not anim_ctrl:
 		return FAILURE
 
-	# ドア開けアニメ再生中は待機
+	# ドア開けアニメ再生中は待機（is_action_locked()がApplyMovementを止める）
 	if anim_ctrl.is_opening_door():
-		return RUNNING
+		return SUCCESS
 
 	# パネル中心位置
 	var door_pos: Vector3 = door.global_position + door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
 	var dist: float = actor.global_position.distance_to(door_pos)
 
-	# まだ遠い → ドアに向かって歩く
+	# まだ遠い → ドアに向かって歩く（SUCCESSでApplyMovementを通す）
 	if dist > GameConstants.DOOR_OPEN_DISTANCE + APPROACH_ARRIVAL:
 		var move_dir: Vector3 = (door_pos - actor.global_position).normalized()
 		move_dir.y = 0.0
 		blackboard.set_value("move_direction", move_dir)
 		actor.set_facing_direction_vec(move_dir)
-		return RUNNING
+		return SUCCESS
 
 	# 十分近い → ドア開けアニメ開始
 	var dir: Vector3 = (door_pos - actor.global_position).normalized()

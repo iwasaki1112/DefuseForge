@@ -3,9 +3,14 @@ class_name BTUpdateAnimation extends ActionLeaf
 ## アニメーション更新
 
 
+var _debug_logged: bool = false
+
 func tick(actor: Node, blackboard: Blackboard) -> int:
 	var anim_ctrl = actor.get_anim_controller()
 	if not anim_ctrl:
+		if not _debug_logged:
+			_debug_logged = true
+			print("[BTUpdateAnimation] %s FAILURE: no anim_ctrl" % actor.name)
 		return FAILURE
 
 	var delta := get_physics_process_delta_time()

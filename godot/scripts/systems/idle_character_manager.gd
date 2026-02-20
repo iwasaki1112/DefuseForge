@@ -20,6 +20,9 @@ var _bt_instances: Dictionary = {}
 ## BT シーンリソース
 var _bt_scene: PackedScene = null
 
+## デバッグ: 初回ログフラグ
+var _debug_logged: bool = false
+
 
 ## セットアップ
 func setup(
@@ -53,6 +56,29 @@ func set_characters(char_list: Array[Node]) -> void:
 ## アイドル中のキャラクターを更新（毎フレーム呼ぶ）
 func process_idle_characters(_delta: float) -> void:
 	var primary = get_primary_callback.call() if get_primary_callback.is_valid() else null
+
+	# デバッグ: 初回のみログ出力
+	if not _debug_logged:
+		_debug_logged = true
+		var total := characters.size()
+		var skipped_null := 0
+		var skipped_remote := 0
+		var skipped_primary := 0
+		var skipped_dead := 0
+		var processed := 0
+		for c in characters:
+			var gc := c as GameCharacter
+			if not gc:
+				skipped_null += 1
+			elif not gc.is_local():
+				skipped_remote += 1
+			elif c == primary:
+				skipped_primary += 1
+			elif not gc.is_alive:
+				skipped_dead += 1
+			else:
+				processed += 1
+		print("[IdleManager] characters=%d, processed=%d, primary=%d, remote=%d, dead=%d, null=%d, wandering=%s" % [total, processed, skipped_primary, skipped_remote, skipped_dead, skipped_null, wandering_enabled])
 
 	for character in characters:
 		var game_char := character as GameCharacter

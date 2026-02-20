@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://addons/beehave/nodes/decorators/succeeder.gd" id="4_succ"]
 [ext_resource type="Script" path="res://scripts/ai/bt_process_detection.gd" id="5_detect"]
 [ext_resource type="Script" path="res://scripts/ai/bt_is_tracking_enemy.gd" id="6_tracking"]
-[ext_resource type="Script" path="res://scripts/ai/bt_face_target.gd" id="7_face"]
+[ext_resource type="Script" path="res://scripts/ai/bt_combat_move.gd" id="7_combat_move"]
 [ext_resource type="Script" path="res://scripts/ai/bt_is_wandering_enabled.gd" id="8_wander_cond"]
 [ext_resource type="Script" path="res://scripts/ai/bt_wander.gd" id="9_wander"]
 [ext_resource type="Script" path="res://scripts/ai/bt_update_animation.gd" id="10_anim"]
@@ -40,8 +40,8 @@ script = ExtResource("2_seq")
 [node name="IsTrackingEnemy" type="Node" parent="MainLoop/MovementSucceeder/MovementDecision/CombatBranch"]
 script = ExtResource("6_tracking")
 
-[node name="FaceTarget" type="Node" parent="MainLoop/MovementSucceeder/MovementDecision/CombatBranch"]
-script = ExtResource("7_face")
+[node name="CombatMove" type="Node" parent="MainLoop/MovementSucceeder/MovementDecision/CombatBranch"]
+script = ExtResource("7_combat_move")
 
 [node name="DoorBranch" type="Node" parent="MainLoop/MovementSucceeder/MovementDecision"]
 script = ExtResource("2_seq")

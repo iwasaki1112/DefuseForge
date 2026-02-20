@@ -280,6 +280,11 @@ func is_dead() -> bool:
 	return _is_dead
 
 
+## Check if character is locked in an action (dead/throw/door/talk/melee)
+func is_action_locked() -> bool:
+	return _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing
+
+
 ## Set AnimationTree active state
 func set_animation_tree_active(active: bool) -> void:
 	if _anim_tree:
