@@ -1065,23 +1065,18 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 				var px := int(uv_x * float(img.get_width() - 1))
 				var py := int(uv_y * float(img.get_height() - 1))
 				var vis := img.get_pixel(px, py).r
-				print("[GRENADE] vis=%.2f near_opening=%s" % [vis, _is_near_opening])
 				if vis < 0.5:
 					# 影の領域 → 開口部付近でのみコーナースロー可能
 					if not _is_near_opening:
-						print("[GRENADE] BLOCKED: not near opening")
 						return
 					if not _has_ground_at(ground_point):
-						print("[GRENADE] BLOCKED: no ground at target")
 						return
 					var corner_info := _find_corner_throw(char_pos, ground_point)
 					if corner_info.is_empty():
-						print("[GRENADE] BLOCKED: no corner throw route")
 						return
 					_grenade_start_override = corner_info.start
 					# キャラは開口部方向に向けてアニメーション（タップ方向ではない）
 					to_target = corner_info.opening_dir
-					print("[GRENADE] CORNER THROW: facing=%s target=%s start=%s opening=%s" % [to_target, ground_point, corner_info.start, corner_info.opening_dir])
 					# 距離はスタート→ターゲットの実飛行距離
 					var start_xz := Vector3(corner_info.start.x, 0.0, corner_info.start.z)
 					var target_xz := Vector3(ground_point.x, 0.0, ground_point.z)
@@ -1097,7 +1092,6 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 						if not corner_info.is_empty():
 							_grenade_start_override = corner_info.start
 							to_target = corner_info.opening_dir
-							print("[GRENADE] CORNER THROW (aux-lit): start=%s opening=%s" % [corner_info.start, corner_info.opening_dir])
 							var start_xz := Vector3(corner_info.start.x, 0.0, corner_info.start.z)
 							var target_xz := Vector3(ground_point.x, 0.0, ground_point.z)
 							distance = start_xz.distance_to(target_xz)
@@ -1109,7 +1103,6 @@ func _handle_grenade_target_tap(screen_pos: Vector2) -> void:
 
 	# キャラクターをターゲット方向に向ける（TPSコントローラの向き更新をロック）
 	var facing_dir := to_target.normalized()
-	print("[GRENADE] lock_facing dir=%s has_controller=%s" % [facing_dir, _tps_controller != null])
 	if _tps_controller:
 		_tps_controller.lock_facing(facing_dir)
 	else:
@@ -1267,7 +1260,6 @@ func _find_corner_throw(char_pos: Vector3, target_pos: Vector3) -> Dictionary:
 	var start_dir: Vector3 = (best_point - char_h).normalized()
 	var opening_dir: Vector3 = face_a if face_a.dot(start_dir) > face_b.dot(start_dir) else face_b
 
-	print("[GRENADE] char=%s wall_hit=%s start=%s opening_dir=%s" % [char_h, wall_r.position, best_point, opening_dir])
 	return {start = best_point, opening_dir = opening_dir}
 
 

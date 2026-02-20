@@ -142,7 +142,6 @@ func process(delta: float) -> void:
 func lock_facing(dir: Vector3) -> void:
 	_facing_locked = true
 	_locked_facing = dir
-	print("[TPS] lock_facing dir=%s" % dir)
 	if _character:
 		_character.set_facing_direction_vec(dir)
 
@@ -150,7 +149,6 @@ func lock_facing(dir: Vector3) -> void:
 ## 向き固定を解除する
 func unlock_facing() -> void:
 	_facing_locked = false
-	print("[TPS] unlock_facing")
 
 
 ## 入力処理（_inputから呼ぶ）
@@ -180,7 +178,6 @@ func has_move_input() -> bool:
 ## 武器の視界距離に合わせてカメラ高さを更新する
 func update_camera_for_weapon(vision_range: float) -> void:
 	_target_camera_height = _base_camera_height * pow(vision_range / DEFAULT_VISION_RANGE, 1.2)
-	print("[TPS] update_camera_for_weapon: vision=%.1f base=%.1f target=%.1f current=%.1f" % [vision_range, _base_camera_height, _target_camera_height, camera_height])
 
 
 ## スプリント状態を設定（スプリントボタンから呼ばれる）
