@@ -144,7 +144,7 @@ func is_firing_enabled() -> bool:
 	return _firing_enabled
 
 
-## 近接攻撃可能な敵を探す（円形360°、距離のみ判定）
+## 近接攻撃可能な敵を探す（円形360°、距離+壁遮蔽判定）
 ## @return 最も近い敵ノード（範囲内にいなければnull）
 func get_melee_target() -> Node:
 	if not _character:
@@ -160,11 +160,27 @@ func get_melee_target() -> Node:
 	var closest_enemy: Node = null
 	var closest_distance: float = MELEE_RANGE
 
+	# 壁チェック用のPhysicsSpaceState
+	var space_state: PhysicsDirectSpaceState3D = null
+	if _character is Node3D:
+		var world: World3D = _character.get_world_3d()
+		if world:
+			space_state = world.direct_space_state
+
 	for enemy in enemies:
 		if "is_alive" in enemy and not enemy.is_alive:
 			continue
 		var dist: float = char_pos.distance_to(enemy.global_position)
 		if dist < closest_distance:
+			# 壁遮蔽チェック（体の高さ1.0mでレイキャスト）
+			if space_state and enemy is Node3D:
+				var ray_from: Vector3 = char_pos + Vector3(0, 1.0, 0)
+				var ray_to: Vector3 = enemy.global_position + Vector3(0, 1.0, 0)
+				var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, MapBase.WALL_COLLISION_LAYER)
+				if _character is CollisionObject3D:
+					query.exclude = [_character.get_rid()]
+				if not space_state.intersect_ray(query).is_empty():
+					continue  # 壁があるのでスキップ
 			closest_distance = dist
 			closest_enemy = enemy
 
