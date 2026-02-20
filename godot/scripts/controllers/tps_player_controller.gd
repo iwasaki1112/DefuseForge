@@ -80,8 +80,6 @@ var _locked_facing: Vector3 = Vector3.FORWARD
 var _base_camera_height: float = 14.0
 var _target_camera_height: float = 14.0
 
-# マウス操作検知（PCのみ有効、モバイルではfalseのまま）
-var _mouse_active: bool = false
 
 # Gun Down検出タイマー（毎フレームではなく100ms間隔）
 var _gun_down_check_timer: float = 0.0
@@ -177,10 +175,6 @@ func unlock_facing() -> void:
 
 ## 入力処理（_inputから呼ぶ）
 func handle_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch or event is InputEventScreenDrag:
-		_mouse_active = false
-	elif event is InputEventMouseMotion:
-		_mouse_active = true
 	_handle_touch_input(event)
 
 
@@ -295,25 +289,7 @@ func _handle_aim(_delta: float) -> void:
 		_character.set_facing_direction_vec(combat_dir)
 		return
 
-	# 3. PC: マウスエイム（地面レイキャスト）— PC実マウス操作時のみ
-	if _mouse_active and _camera and not OS.has_feature("mobile"):
-		var viewport := _character.get_viewport()
-		if viewport:
-			var mouse_pos := viewport.get_mouse_position()
-			var ray_origin := _camera.project_ray_origin(mouse_pos)
-			var ray_normal := _camera.project_ray_normal(mouse_pos)
-
-			if absf(ray_normal.y) > 0.001:
-				var t := (GROUND_Y - ray_origin.y) / ray_normal.y
-				if t > 0:
-					var ground_point := ray_origin + ray_normal * t
-					var aim_dir := ground_point - _character.global_position
-					aim_dir.y = 0
-					if aim_dir.length_squared() > 0.01:
-						_character.set_facing_direction_vec(aim_dir.normalized())
-						return
-
-	# 4. 移動方向 — フォールバック
+	# 3. 移動方向 — フォールバック
 	if _last_move_dir.length_squared() > 0.01:
 		_character.set_facing_direction_vec(_last_move_dir)
 
@@ -525,6 +501,24 @@ func _handle_touch_input(event: InputEvent) -> void:
 			_update_move_stick_position(drag.position)
 		if drag.index == _aim_stick_touch_idx:
 			_update_aim_stick_position(drag.position)
+
+	# PC: 左クリック長押し → エイムスティック
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.device >= 0:
+			if mb.pressed:
+				if _aim_stick_touch_idx < 0 and _aim_stick_base:
+					_aim_stick_touch_idx = 100
+					_aim_stick_center = mb.position
+					_aim_stick_base.position = mb.position - Vector2(AIM_STICK_RADIUS, AIM_STICK_RADIUS)
+					_aim_stick_base.visible = true
+			else:
+				if _aim_stick_touch_idx == 100:
+					_release_aim_stick()
+
+	elif event is InputEventMouseMotion:
+		if _aim_stick_touch_idx == 100:
+			_update_aim_stick_position((event as InputEventMouseMotion).position)
 
 
 # ============================================

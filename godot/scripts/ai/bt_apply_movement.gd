@@ -6,7 +6,6 @@ class_name BTApplyMovement extends ActionLeaf
 const FLOOR_CHECK_INTERVAL := 0.15
 const FLOOR_CHECK_DISTANCE := 1.0
 
-var _debug_count: int = 0
 var _floor_timer: float = 0.0
 var _floor_blocked: bool = false
 
@@ -35,9 +34,6 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 			else:
 				var is_sprinting: bool = blackboard.get_value("is_sprinting", false)
 				var speed: float = CharacterAnimationController.SPRINT_SPEED if is_sprinting else CharacterAnimationController.WALK_SPEED
-				if _debug_count < 3:
-					_debug_count += 1
-					print("[BTApplyMovement] %s move_dir=%s speed=%.1f sprint=%s locked=%s" % [actor.name, move_dir, speed, is_sprinting, anim_ctrl.is_action_locked() if anim_ctrl else "no_ctrl"])
 				body.velocity = move_dir * speed
 	else:
 		body.velocity.x = 0

@@ -36,7 +36,6 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 		if timer <= 0.0:
 			var target: Vector3 = _pick_random_target(body)
 			var target_dist: float = Vector3(target.x - body.global_position.x, 0.0, target.z - body.global_position.z).length()
-			print("[BTWander] %s IDLE→WALKING target_dist=%.2f pos=%s target=%s" % [actor.name, target_dist, body.global_position, target])
 			blackboard.set_value("wander_target", target)
 			blackboard.set_value("wander_state", WanderState.WALKING)
 			blackboard.set_value("wander_stuck_pos", body.global_position)

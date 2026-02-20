@@ -54,15 +54,13 @@ var _grenade_pending_touch_pos: Vector2 = Vector2.ZERO
 var _grenade_pending_touch_time: int = 0  # タッチ開始時刻（msec）
 
 ## グレネードUI（スモーク）
-var _grenade_btn: TextureButton = null
-var _grenade_count_label: Label = null
+var _grenade_btn: Button = null
 
 ## ハンドグレネードUI
-var _hand_grenade_btn: TextureButton = null
-var _hand_grenade_count_label: Label = null
+var _hand_grenade_btn: Button = null
 
 ## Door Open（ドア開けインタラクション）
-var _door_open_btn: TextureButton = null
+var _door_open_btn: Button = null
 var _kick_door_btn: Button = null
 var _nearby_door: Node3D = null
 var _target_door: Node3D = null  # アニメーション中のターゲットドア
@@ -585,17 +583,13 @@ func _create_action_buttons() -> void:
 
 	_kick_door_btn = vbox.get_node("KickDoorBtn")
 
-	_hand_grenade_btn = vbox.get_node("HandGrenadeContainer/HandGrenadeBtn")
+	_hand_grenade_btn = vbox.get_node("HandGrenadeBtn")
 	ButtonAnimator.setup(_hand_grenade_btn)
+	_update_hand_grenade_count_ui()
 
-	_hand_grenade_count_label = vbox.get_node("HandGrenadeContainer/HandGrenadeCountLabel")
-	_hand_grenade_count_label.text = str(_hand_grenade_count)
-
-	_grenade_btn = vbox.get_node("GrenadeContainer/GrenadeBtn")
+	_grenade_btn = vbox.get_node("GrenadeBtn")
 	ButtonAnimator.setup(_grenade_btn)
-
-	_grenade_count_label = vbox.get_node("GrenadeContainer/GrenadeCountLabel")
-	_grenade_count_label.text = str(_smoke_grenade_count)
+	_update_grenade_count_ui()
 
 	_talking_btn = vbox.get_node("TalkingBtn")
 	ButtonAnimator.setup(_talking_btn)
@@ -1325,16 +1319,14 @@ func _on_throw_finished() -> void:
 
 
 func _update_grenade_count_ui() -> void:
-	if _grenade_count_label:
-		_grenade_count_label.text = str(_smoke_grenade_count)
 	if _grenade_btn:
+		_grenade_btn.text = "Smoke x%d" % _smoke_grenade_count
 		_grenade_btn.modulate.a = 1.0 if _smoke_grenade_count > 0 else 0.4
 
 
 func _update_hand_grenade_count_ui() -> void:
-	if _hand_grenade_count_label:
-		_hand_grenade_count_label.text = str(_hand_grenade_count)
 	if _hand_grenade_btn:
+		_hand_grenade_btn.text = "Grenade x%d" % _hand_grenade_count
 		_hand_grenade_btn.modulate.a = 1.0 if _hand_grenade_count > 0 else 0.4
 
 
