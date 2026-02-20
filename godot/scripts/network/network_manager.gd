@@ -138,7 +138,8 @@ func find_match(player_name: String = "Player") -> bool:
 
 	_pending_action = {
 		"type": "FIND_MATCH",
-		"player_name": player_name
+		"player_name": player_name,
+		"game_mode": SettingsManager.get_game_mode()
 	}
 
 	if Debug.enabled: print("NetworkManager: Finding match as %s" % player_name)

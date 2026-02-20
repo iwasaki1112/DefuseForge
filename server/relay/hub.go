@@ -106,7 +106,7 @@ func (h *Hub) generateRoomID() string {
 // ========================================
 
 // AddToMatchQueue マッチ待機キューにクライアントを追加
-// マッチ成立した場合はtrueを返す
+// 同じゲームモードのプレイヤーとのみマッチする
 func (h *Hub) AddToMatchQueue(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -119,16 +119,33 @@ func (h *Hub) AddToMatchQueue(client *Client) {
 	}
 
 	h.matchQueue = append(h.matchQueue, client)
-	log.Printf("Matchmaking: Player %s added to queue (queue size: %d)", client.GetName(), len(h.matchQueue))
+	gameMode := client.GetGameMode()
+	log.Printf("Matchmaking: Player %s (mode: %s) added to queue (queue size: %d)", client.GetName(), gameMode, len(h.matchQueue))
 
-	// 2人揃ったらマッチ成立
-	if len(h.matchQueue) >= 2 {
-		player1 := h.matchQueue[0]
-		player2 := h.matchQueue[1]
-		h.matchQueue = h.matchQueue[2:]
-
-		h.createMatchLocked(player1, player2)
+	// 同じゲームモードの相手をキューから探す
+	for i, candidate := range h.matchQueue {
+		if candidate == client {
+			continue
+		}
+		if candidate.GetGameMode() == gameMode {
+			// キューから両者を削除
+			h.matchQueue = h.removeFromSlice(h.matchQueue, client, candidate)
+			h.createMatchLocked(candidate, client)
+			return
+		}
+		_ = i
 	}
+}
+
+// removeFromSlice スライスから2つの要素を削除
+func (h *Hub) removeFromSlice(queue []*Client, a, b *Client) []*Client {
+	result := make([]*Client, 0, len(queue)-2)
+	for _, c := range queue {
+		if c != a && c != b {
+			result = append(result, c)
+		}
+	}
+	return result
 }
 
 // RemoveFromMatchQueue マッチ待機キューからクライアントを削除

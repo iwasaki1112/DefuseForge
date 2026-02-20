@@ -2,6 +2,7 @@
 
 [ext_resource type="Texture2D" uid="uid://tume5xbjh5ts" path="res://assets/ui/game/controller-door-button.png" id="1"]
 [ext_resource type="Texture2D" uid="uid://br2r71qfd6ycd" path="res://assets/ui/game/controller-hand-granade-button.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/game/controller-somoke-granade-button.png" id="3"]
 
 [node name="ActionButtons" type="VBoxContainer" unique_id=1552857211]
 anchors_preset = 6
@@ -23,6 +24,23 @@ texture_normal = ExtResource("1")
 ignore_texture_size = true
 stretch_mode = 3
 
+[node name="HandGrenadeContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="HandGrenadeBtn" type="TextureButton" parent="HandGrenadeContainer"]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+texture_normal = ExtResource("2")
+ignore_texture_size = true
+stretch_mode = 3
+
+[node name="HandGrenadeCountLabel" type="Label" parent="HandGrenadeContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "99"
+horizontal_alignment = 1
+
 [node name="GrenadeContainer" type="VBoxContainer" parent="." unique_id=1540108574]
 layout_mode = 2
 theme_override_constants/separation = 2
@@ -30,7 +48,7 @@ theme_override_constants/separation = 2
 [node name="GrenadeBtn" type="TextureButton" parent="GrenadeContainer" unique_id=1238020196]
 custom_minimum_size = Vector2(80, 80)
 layout_mode = 2
-texture_normal = ExtResource("2")
+texture_normal = ExtResource("3")
 ignore_texture_size = true
 stretch_mode = 3
 

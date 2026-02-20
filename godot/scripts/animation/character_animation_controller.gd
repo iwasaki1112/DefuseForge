@@ -14,6 +14,8 @@ signal throw_release()      # グレネードをリリースするタイミン�
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
 signal door_open_impact()   # ドアを実際に開くインパクトタイミング
+signal melee_impact()       # 近接攻撃のインパクトタイミング
+signal melee_finished()     # 近接攻撃アニメーション完了
 
 # Export settings
 @export_group("Movement Speed")
@@ -59,12 +61,14 @@ var _is_dead := false
 var _is_throwing := false
 var _is_opening_door := false
 var _is_talking := false
+var _is_meleeing := false  ## 近接攻撃アニメーション再生中
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
 var _smoothed_angular_vel := 0.0  # スムージング済み角速度(rad/s)
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 var _is_sprinting := false
+var _is_gun_down := false  ## 前方に壁/味方がいて武器を下げている状態
 
 # Speed constants
 const WALK_SPEED := 2.0
@@ -116,6 +120,11 @@ const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミン
 const DOOR_OPEN_IK_RESUME_TIME := 29.0 / 30.0  # IKブレンドイン開始（29フレーム目 @30fps）
 const ACTION_IK_BLEND_SPEED := 5.0  # アクション復帰時のゆっくりIKブレンド速度
 
+# Melee animation
+const MELEE_ANIM := GameConstants.ANIM_RIFLE_MELEE
+const MELEE_IMPACT_TIME := 0.4  # インパクトタイミング（秒）
+const MELEE_IK_RESUME_TIME := 0.8  # IKブレンドイン開始
+
 # Blend values
 var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0  # 0=idle, 1=walking
@@ -124,6 +133,7 @@ var _fire_cooldown := 0.0
 
 # Blend smoothing
 const BLEND_SMOOTH := 10.0
+const GUN_DOWN_BLEND_SPEED := 8.0  ## gun_downブレンドの補間速度
 
 
 #region Public API
@@ -163,7 +173,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	# is_running パラメータをスプリントとして使用
@@ -209,9 +219,27 @@ func set_left_hand_grip(grip_node: Node3D) -> void:
 	else:
 		_left_hand_ik.clear_grip_source()
 
+## Set gun down state (weapon lowered due to nearby wall/friendly)
+func set_gun_down(value: bool) -> void:
+	if _is_gun_down == value:
+		return
+	_is_gun_down = value
+	# 左手IKをgun_down状態に合わせて制御
+	if _left_hand_ik:
+		if value:
+			_left_hand_ik.set_enabled(false)
+		elif _weapon != Weapon.PISTOL and _left_hand_ik.has_grip_source():
+			_left_hand_ik.set_enabled(true)
+
+
+## Check if gun is currently lowered
+func is_gun_down() -> bool:
+	return _is_gun_down
+
+
 ## Trigger fire action (recoil)
 func fire() -> void:
-	if _fire_cooldown > 0:
+	if _fire_cooldown > 0 or _is_gun_down or _is_meleeing:
 		return
 
 	var strength: float
@@ -239,7 +267,7 @@ func fire() -> void:
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return 0.0
 	if _is_sprinting:
 		return SPRINT_SPEED
@@ -250,6 +278,11 @@ func get_current_speed() -> float:
 ## Check if character is dead
 func is_dead() -> bool:
 	return _is_dead
+
+
+## Check if character is locked in an action (dead/throw/door/talk/melee)
+func is_action_locked() -> bool:
+	return _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing
 
 
 ## Set AnimationTree active state
@@ -412,7 +445,7 @@ func _resume_animation_tree() -> void:
 	# アクション完了フラグを解除
 	_is_opening_door = false
 
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking and not _is_meleeing:
 		# ブレンドパラメータをアイドル状態にリセット（古い移動状態でのピクつき防止）
 		_movement_blend = 0.0
 		_speed_blend = 0.0
@@ -427,7 +460,7 @@ func _resume_animation_tree() -> void:
 
 ## Play throw animation (legacy: underhand grenade throw with pistol)
 func play_throw() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 	_start_throw(PISTOL_LOW_THROWING_ANIM, THROW_RELEASE_TIME)
 
@@ -463,7 +496,7 @@ func _on_throw_finished(_anim_name: String) -> void:
 
 ## Play far throw animation (weapon-appropriate overhand throw)
 func play_throw_far() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	var anim_name: String
@@ -478,7 +511,7 @@ func play_throw_far() -> void:
 
 ## Play close throw animation (weapon-appropriate underhand throw)
 func play_throw_close() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	var anim_name: String
@@ -527,7 +560,7 @@ func is_throwing() -> bool:
 
 ## Play door open animation (quietly open door)
 func play_door_open() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	_is_opening_door = true
@@ -597,7 +630,7 @@ func is_opening_door() -> bool:
 
 ## Play talking animation (looping, used during hostage negotiation)
 func play_talking() -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	_is_talking = true
@@ -648,6 +681,66 @@ func is_talking() -> bool:
 	return _is_talking
 
 
+## Play melee attack animation (rifle butt strike)
+func play_melee() -> void:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing or _is_talking:
+		return
+
+	_is_meleeing = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
+
+	# Stop AnimationTree during melee
+	if _anim_tree:
+		_anim_tree.active = false
+
+	if _anim_player.has_animation(MELEE_ANIM):
+		_anim_player.play(MELEE_ANIM, 0.15)
+		_anim_player.animation_finished.connect(_on_melee_anim_finished, CONNECT_ONE_SHOT)
+		# インパクトタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(MELEE_IMPACT_TIME).timeout.connect(
+			func(): melee_impact.emit(), CONNECT_ONE_SHOT)
+		# アニメーション後半からIKを徐々にブレンドイン
+		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+			get_tree().create_timer(MELEE_IK_RESUME_TIME).timeout.connect(
+				_start_melee_ik_blend, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Melee animation not found: %s" % MELEE_ANIM)
+		_is_meleeing = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+## メレーアニメーション後半からIKをゆっくりブレンドイン
+func _start_melee_ik_blend() -> void:
+	if not _is_meleeing or _is_dead:
+		return
+	if _left_hand_ik:
+		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
+		_left_hand_ik.set_enabled(true)
+
+
+func _on_melee_anim_finished(_anim_name: String) -> void:
+	_is_meleeing = false
+
+	if _anim_player and not _is_dead:
+		var idle_anim_name := _get_idle_anim_name()
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
+	melee_finished.emit()
+
+
+## Check if melee attack animation is playing
+func is_meleeing() -> bool:
+	return _is_meleeing
+
+
 ## Get current animation state for network synchronization
 ## Returns encoded state: "move_state,is_firing,blend_x,blend_y"
 ## move_state: 0=idle, 1=walking, 2=sprinting
@@ -660,13 +753,14 @@ func get_animation_state() -> String:
 	var is_firing := 1 if _fire_cooldown > 0 else 0
 	var blend_x := int(_input_dir.x * 100)
 	var blend_y := int(_input_dir.y * 100)
-	return "%d,%d,%d,%d" % [move_state, is_firing, blend_x, blend_y]
+	var gun_down := 1 if _is_gun_down else 0
+	return "%d,%d,%d,%d,%d" % [move_state, is_firing, blend_x, blend_y, gun_down]
 
 
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	var parts := state.split(",")
@@ -677,6 +771,9 @@ func apply_animation_state(state: String, delta: float) -> void:
 	var is_firing := parts[1].to_int() == 1
 	var blend_x := parts[2].to_int() / 100.0
 	var blend_y := parts[3].to_int() / 100.0
+	# 後方互換: 5番目のフィールドがない場合はfalse（set_gun_down()経由でIKも制御）
+	var remote_gun_down := parts[4].to_int() == 1 if parts.size() >= 5 else false
+	set_gun_down(remote_gun_down)
 
 	# 後方互換: 旧フォーマットの0/1をidle/walkingとして扱う
 	var is_moving := move_state > 0
@@ -804,6 +901,8 @@ func _setup_animation_loops() -> void:
 		"game_pistol_strafe_left_135", "game_pistol_strafe_right_135",
 		# Sprint
 		"game_rifle_sprint", "game_pistol_sprint",
+		# Gun Down
+		"game_rifle_gun_down",
 	]
 
 	var anim_lib = _anim_player.get_animation_library("")
@@ -863,6 +962,13 @@ func _setup_animation_tree() -> void:
 	shoot_oneshot.fadeout_time = 0.15
 	_apply_upper_body_filter(shoot_oneshot)
 
+	# --- GunDown Blend (上半身フィルター: 壁/味方接近時に武器を下げる) ---
+	var gun_down_anim := AnimationNodeAnimation.new()
+	var gun_down_name := GameConstants.ANIM_RIFLE_GUN_DOWN
+	gun_down_anim.animation = gun_down_name if _anim_player.has_animation(gun_down_name) else ""
+	var gun_down_blend := AnimationNodeBlend2.new()
+	_apply_upper_body_filter(gun_down_blend)
+
 	# --- Add nodes to blend tree ---
 	blend_tree.add_node("Idle", idle_anim, Vector2(-400, 100))
 	blend_tree.add_node("WalkBlend", walk_blend_space, Vector2(-400, 300))
@@ -872,6 +978,8 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node("TimeScale", time_scale, Vector2(400, 200))
 	blend_tree.add_node("ShootAnim", shoot_anim, Vector2(500, 400))
 	blend_tree.add_node("ShootOneShot", shoot_oneshot, Vector2(600, 200))
+	blend_tree.add_node("GunDownAnim", gun_down_anim, Vector2(700, 400))
+	blend_tree.add_node("GunDownBlend", gun_down_blend, Vector2(800, 200))
 
 	# --- Connect: IdleBlend(0=Idle, 1=WalkBlend) ---
 	blend_tree.connect_node("IdleBlend", 0, "Idle")
@@ -888,8 +996,12 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node("ShootOneShot", 0, "TimeScale")
 	blend_tree.connect_node("ShootOneShot", 1, "ShootAnim")
 
-	# --- Connect: output → ShootOneShot ---
-	blend_tree.connect_node("output", 0, "ShootOneShot")
+	# --- Connect: GunDownBlend(0=ShootOneShot, 1=GunDownAnim) ---
+	blend_tree.connect_node("GunDownBlend", 0, "ShootOneShot")
+	blend_tree.connect_node("GunDownBlend", 1, "GunDownAnim")
+
+	# --- Connect: output → GunDownBlend ---
+	blend_tree.connect_node("output", 0, "GunDownBlend")
 
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
@@ -960,6 +1072,14 @@ func _switch_weapon_animations() -> void:
 	if shoot_node:
 		var shoot_name := prefix + "_shoot_once"
 		shoot_node.animation = shoot_name if _anim_player.has_animation(shoot_name) else ""
+
+	# GunDown（ライフル系のみ、ピストルは空で無効化）
+	var gun_down_node := bt.get_node("GunDownAnim") as AnimationNodeAnimation
+	if gun_down_node:
+		if _weapon != Weapon.PISTOL and _anim_player.has_animation(GameConstants.ANIM_RIFLE_GUN_DOWN):
+			gun_down_node.animation = GameConstants.ANIM_RIFLE_GUN_DOWN
+		else:
+			gun_down_node.animation = ""
 
 	# WalkBlend (BlendSpace2D) - 8方向のアニメーション名を更新
 	var walk_blend := bt.get_node("WalkBlend") as AnimationNodeBlendSpace2D
@@ -1137,6 +1257,11 @@ func _update_animation_tree(delta: float = 0.016) -> void:
 	var target_speed := 1.0 if _is_sprinting else 0.0
 	_speed_blend = lerpf(_speed_blend, target_speed, 1.0 - exp(-8.0 * delta))
 	_anim_tree.set("parameters/SpeedBlend/blend_amount", _speed_blend)
+
+	# GunDownBlend: 壁/味方接近時に上半身を武器下げポーズにブレンド（スプリント中は無効）
+	var target_gun_down := 1.0 if _is_gun_down and not _is_sprinting else 0.0
+	var current_gun_down: float = _anim_tree.get("parameters/GunDownBlend/blend_amount")
+	_anim_tree.set("parameters/GunDownBlend/blend_amount", lerpf(current_gun_down, target_gun_down, GUN_DOWN_BLEND_SPEED * delta))
 
 	# TimeScale: 速度同期
 	_update_time_scale()

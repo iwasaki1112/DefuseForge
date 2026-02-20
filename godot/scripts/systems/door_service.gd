@@ -150,7 +150,14 @@ func on_door_open_done(door: Node3D, character: CharacterBody3D) -> void:
 		if door_id > 0:
 			door_open_network_event.emit(door_id, game_char.network_id)
 
-	# ドアを静かに開く処理を実行
+	# 敵チームのCPUキャラクターがドアを開けた場合、FoWで可視になるまで保留
+	if _fow_system and game_char and game_char.team != PlayerState.get_player_team():
+		var params := _calculate_door_open_params(door, character, false)
+		if not params.is_empty():
+			_defer_enemy_door_open(door, params)
+		return
+
+	# 味方チーム or FoWなし → 即座に開く
 	open_door_quietly(door, character)
 
 

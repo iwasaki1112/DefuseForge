@@ -9,6 +9,8 @@ class_name GrenadeService
 signal grenade_thrown(grenade: Node3D, character: Node)
 ## スモークグレネード投擲シグナル
 signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
+## ハンドグレネード投擲シグナル
+signal hand_grenade_thrown(hand_grenade: Node3D, character: Node)
 ## ネットワークイベント（グレネード投擲）
 signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
 ## ネットワークイベント（グレネード爆発/スモーク展開）
@@ -17,7 +19,9 @@ signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smok
 ## シーン参照（iOSビルドでのpreload問題を回避）
 var GrenadeScene: PackedScene = null
 var SmokeGrenadeScene: PackedScene = null
+var HandGrenadeScene: PackedScene = null
 var SmokeAreaScene: PackedScene = null
+var ExplosionEffectScene: PackedScene = null
 
 ## プリロード済みシェーダー・テクスチャ（初回投擲ラグ回避）
 var smoke_clip_shader: Shader = null
@@ -37,7 +41,9 @@ var _fow_system = null  ## FogOfWarSystem参照（リモートグレネードの
 func _init() -> void:
 	GrenadeScene = load("res://scenes/weapons/grenade.tscn")
 	SmokeGrenadeScene = load("res://scenes/weapons/smoke_grenade.tscn")
+	HandGrenadeScene = load(GameConstants.SCENE_HAND_GRENADE)
 	SmokeAreaScene = load(GameConstants.SCENE_SMOKE_AREA)
+	ExplosionEffectScene = load(GameConstants.SCENE_EXPLOSION_EFFECT)
 	smoke_clip_shader = load("res://shaders/smoke_particle_clip.gdshader") as Shader
 	smoke_puff_texture = load("res://assets/effects/smoke_puff.png") as Texture2D
 
@@ -125,33 +131,104 @@ func spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, thro
 	return [smoke_grenade, smoke_grenade.initial_velocity, grenade_id]
 
 
+## ハンドグレネードを生成して投擲
+## 戻り値: [hand_grenade, velocity, grenade_id] のトリプル
+func spawn_and_throw_hand_grenade(start_pos: Vector3, target_pos: Vector3, thrower: Node3D = null) -> Array:
+	if not _mesh_parent:
+		push_error("[GrenadeService] mesh_parent not set")
+		return [null, Vector3.ZERO, 0]
+
+	var hand_grenade = HandGrenadeScene.instantiate() as HandGrenade
+	if not hand_grenade:
+		return [null, Vector3.ZERO, 0]
+
+	# 爆発VFXシーンを注入
+	if ExplosionEffectScene:
+		hand_grenade.set_explosion_effect_scene(ExplosionEffectScene)
+	# FoWシステムを設定
+	if _fow_system:
+		hand_grenade.set_fow_system(_fow_system)
+	_mesh_parent.add_child(hand_grenade)
+
+	# グレネードIDを割り当てて追跡
+	var grenade_id: int = _next_grenade_id
+	_next_grenade_id += 1
+	hand_grenade.network_grenade_id = grenade_id
+	_active_grenades[grenade_id] = hand_grenade
+
+	# 爆発シグナルを接続（ハンドグレネードはis_smoke=false）
+	hand_grenade.exploded.connect(_on_grenade_exploded.bind(grenade_id, false))
+
+	# ターゲット位置に直接投擲
+	hand_grenade.throw(start_pos, target_pos, thrower)
+
+	hand_grenade_thrown.emit(hand_grenade, thrower)
+
+	return [hand_grenade, hand_grenade.initial_velocity, grenade_id]
+
+
+## ネットワークからハンドグレネードをスポーン（リモート用）
+func spawn_hand_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
+	if not _mesh_parent:
+		push_error("[GrenadeService] mesh_parent not set")
+		return
+
+	if Debug.enabled: print("[HAND GRENADE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	var hand_grenade = HandGrenadeScene.instantiate() as HandGrenade
+	if not hand_grenade:
+		return
+
+	# 爆発VFXシーンを注入
+	if ExplosionEffectScene:
+		hand_grenade.set_explosion_effect_scene(ExplosionEffectScene)
+	_mesh_parent.add_child(hand_grenade)
+
+	# リモートグレネードとしてマーク
+	hand_grenade.is_remote = true
+	hand_grenade.network_grenade_id = grenade_id
+	hand_grenade.thrower_team = thrower_team as GameCharacter.Team
+	if _fow_system:
+		hand_grenade.set_fow_system(_fow_system)
+
+	# 追跡（爆発イベント受信用）
+	if grenade_id > 0:
+		_active_grenades[grenade_id] = hand_grenade
+
+	hand_grenade.throw_with_velocity(start_pos, velocity)
+	hand_grenade_thrown.emit(hand_grenade, null)
+
+
 ## ネットワークからグレネードをスポーン（リモート用）
+## ハンドグレネードとして生成（is_smoke=falseのGRENADE_THROWイベント経由）
 func spawn_grenade_from_network(start_pos: Vector3, velocity: Vector3, grenade_id: int = 0, thrower_team: int = 0) -> void:
 	if not _mesh_parent:
 		push_error("[GrenadeService] mesh_parent not set")
 		return
 
-	if Debug.enabled: print("[GRENADE SPAWN] start=", start_pos, " vel=", velocity, " id=", grenade_id)
-	var grenade = GrenadeScene.instantiate() as Grenade
-	if not grenade:
+	if Debug.enabled: print("[HAND GRENADE SPAWN FROM NET] start=", start_pos, " vel=", velocity, " id=", grenade_id)
+	var hand_grenade = HandGrenadeScene.instantiate() as HandGrenade
+	if not hand_grenade:
 		return
 
-	_mesh_parent.add_child(grenade)
+	# 爆発VFXシーンを注入
+	if ExplosionEffectScene:
+		hand_grenade.set_explosion_effect_scene(ExplosionEffectScene)
+	_mesh_parent.add_child(hand_grenade)
 
 	# リモートグレネードとしてマーク
-	grenade.is_remote = true
-	grenade.network_grenade_id = grenade_id
-	grenade.thrower_team = thrower_team as GameCharacter.Team
+	hand_grenade.is_remote = true
+	hand_grenade.network_grenade_id = grenade_id
+	hand_grenade.thrower_team = thrower_team as GameCharacter.Team
 	if _fow_system:
-		grenade.set_fow_system(_fow_system)
+		hand_grenade.set_fow_system(_fow_system)
 
 	# 追跡（爆発イベント受信用）
 	if grenade_id > 0:
-		_active_grenades[grenade_id] = grenade
+		_active_grenades[grenade_id] = hand_grenade
 
-	grenade.throw_with_velocity(start_pos, velocity)
-	if Debug.enabled: print("[GRENADE SPAWNED] vel=", velocity)
-	grenade_thrown.emit(grenade, null)
+	hand_grenade.throw_with_velocity(start_pos, velocity)
+	if Debug.enabled: print("[HAND GRENADE SPAWNED] vel=", velocity)
+	hand_grenade_thrown.emit(hand_grenade, null)
 
 
 ## ネットワークからスモークグレネードをスポーン（リモート用）

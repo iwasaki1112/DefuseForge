@@ -23,6 +23,7 @@ const (
 type ClientMessage struct {
 	Type       string                 `json:"type"`
 	PlayerName string                 `json:"player_name,omitempty"`
+	GameMode   string                 `json:"game_mode,omitempty"`   // ゲームモード（"coop" / "multiplayer"）
 	To         int                    `json:"to,omitempty"`          // 0=ブロードキャスト, >0=特定ピアへ
 	MsgType    int                    `json:"msg_type,omitempty"`    // ゲーム内メッセージタイプ
 	Data       map[string]interface{} `json:"data,omitempty"`        // ゲームデータ

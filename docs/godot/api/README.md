@@ -3,6 +3,7 @@
 プロジェクト内のGDScriptクラスドキュメント。
 詳細は各カテゴリを参照してください。
 
+- [AI](AI/README.md)
 - [Animation](Animation/README.md)
 - [Character](Character/README.md)
 - [Controllers](Controllers/README.md)

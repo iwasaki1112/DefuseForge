@@ -81,6 +81,16 @@ var _target_camera_height: float = 14.0
 # マウス操作検知（PCのみ有効、モバイルではfalseのまま）
 var _mouse_active: bool = false
 
+# Gun Down検出タイマー（毎フレームではなく100ms間隔）
+var _gun_down_check_timer: float = 0.0
+const GUN_DOWN_CHECK_INTERVAL := 0.1
+
+# 近接攻撃（メレー）
+var _melee_target: Node = null  ## 近接攻撃ターゲット
+var _melee_cooldown: float = 0.0  ## メレー後クールダウン
+var _melee_signals_connected: bool = false  ## シグナル接続済みフラグ
+const MELEE_COOLDOWN_TIME := 0.5  ## メレー後のクールダウン（秒）
+
 
 
 # ============================================
@@ -122,6 +132,12 @@ func process(delta: float) -> void:
 	if not _character or not _character.is_alive:
 		return
 
+	# 近接攻撃チェック（最優先 — 射撃より先に判定）
+	if _process_melee(delta):
+		_handle_movement(delta)
+		_update_camera(delta)
+		return
+
 	# 3フェーズ実行: 検知 → エイム → 射撃
 	# フェーズ1: 敵検知（ターゲット特定のみ、射撃しない）
 	if _character.combat_awareness:
@@ -131,9 +147,15 @@ func process(delta: float) -> void:
 	if not is_sprint_active:
 		# フェーズ2: エイム更新（検知結果で向きを即座に設定）
 		_handle_aim(delta)
+		# フェーズ2.5: Gun Down検出（壁/味方接近時に武器を下げる）
+		_update_gun_down(delta)
 		# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
 		if _character.combat_awareness:
 			_character.combat_awareness.process_firing(delta)
+	else:
+		# スプリント中はgun_downを解除
+		if _character.anim_ctrl:
+			_character.anim_ctrl.set_gun_down(false)
 	_handle_movement(delta)
 	_update_camera(delta)
 
@@ -142,7 +164,6 @@ func process(delta: float) -> void:
 func lock_facing(dir: Vector3) -> void:
 	_facing_locked = true
 	_locked_facing = dir
-	print("[TPS] lock_facing dir=%s" % dir)
 	if _character:
 		_character.set_facing_direction_vec(dir)
 
@@ -150,7 +171,6 @@ func lock_facing(dir: Vector3) -> void:
 ## 向き固定を解除する
 func unlock_facing() -> void:
 	_facing_locked = false
-	print("[TPS] unlock_facing")
 
 
 ## 入力処理（_inputから呼ぶ）
@@ -180,7 +200,6 @@ func has_move_input() -> bool:
 ## 武器の視界距離に合わせてカメラ高さを更新する
 func update_camera_for_weapon(vision_range: float) -> void:
 	_target_camera_height = _base_camera_height * pow(vision_range / DEFAULT_VISION_RANGE, 1.2)
-	print("[TPS] update_camera_for_weapon: vision=%.1f base=%.1f target=%.1f current=%.1f" % [vision_range, _base_camera_height, _target_camera_height, camera_height])
 
 
 ## スプリント状態を設定（スプリントボタンから呼ばれる）
@@ -284,6 +303,97 @@ func _handle_aim(_delta: float) -> void:
 	# 4. 移動方向 — フォールバック
 	if _last_move_dir.length_squared() > 0.01:
 		_character.set_facing_direction_vec(_last_move_dir)
+
+
+# ============================================
+# Gun Down Detection
+# ============================================
+
+func _update_gun_down(delta: float) -> void:
+	_gun_down_check_timer += delta
+	if _gun_down_check_timer < GUN_DOWN_CHECK_INTERVAL:
+		return
+	_gun_down_check_timer = 0.0
+	if _character.anim_ctrl:
+		_character.anim_ctrl.set_gun_down(_character.check_gun_down())
+
+
+# ============================================
+# Melee Attack (自動近接攻撃)
+# ============================================
+
+## 近接攻撃処理（メレー中ならtrue、通常フローをスキップさせる）
+func _process_melee(delta: float) -> bool:
+	# クールダウン減算
+	if _melee_cooldown > 0.0:
+		_melee_cooldown -= delta
+
+	# メレーアニメーション再生中はブロック
+	if _character.anim_ctrl and _character.anim_ctrl.is_meleeing():
+		return true
+
+	# クールダウン中は新規メレー不可（通常フローに戻す）
+	if _melee_cooldown > 0.0:
+		return false
+
+	# 他のアクション中はスキップ
+	if _character.anim_ctrl and (_character.anim_ctrl.is_throwing() or _character.anim_ctrl.is_opening_door() or _character.anim_ctrl.is_talking()):
+		return false
+
+	# スプリント中はメレー不可
+	if _is_sprinting or Input.is_key_pressed(KEY_SHIFT):
+		return false
+
+	# 近接攻撃可能な敵を探す（円形360°）
+	if not _character.combat_awareness:
+		return false
+
+	var target := _character.combat_awareness.get_melee_target()
+	if not target:
+		return false
+
+	_melee_target = target
+
+	# シグナル接続（初回のみ）
+	_ensure_melee_signals()
+
+	# 敵の方向を向く
+	var dir: Vector3 = target.global_position - _character.global_position
+	dir.y = 0
+	if dir.length_squared() > 0.001:
+		_character.set_facing_direction_vec(dir.normalized())
+
+	# 近接攻撃アニメーション再生
+	if _character.anim_ctrl:
+		_character.anim_ctrl.play_melee()
+
+	return true
+
+
+## メレーシグナルを接続（一度だけ）
+func _ensure_melee_signals() -> void:
+	if _melee_signals_connected or not _character.anim_ctrl:
+		return
+	_character.anim_ctrl.melee_impact.connect(_on_melee_impact)
+	_character.anim_ctrl.melee_finished.connect(_on_melee_finished_ctrl)
+	_melee_signals_connected = true
+
+
+## メレーインパクト：致死ダメージを与える（100%一撃キル）
+## 攻撃者が死亡済みならキャンセル（先に殴った方が勝ち）
+func _on_melee_impact() -> void:
+	if not _character or not _character.is_alive:
+		return
+	if _melee_target and is_instance_valid(_melee_target):
+		if _melee_target.has_method("take_damage") and "is_alive" in _melee_target and _melee_target.is_alive:
+			var lethal_damage: float = _melee_target.max_health if "max_health" in _melee_target else 9999.0
+			_melee_target.take_damage(lethal_damage, _character, false)
+
+
+## メレー完了：ターゲットクリア＋クールダウン開始
+func _on_melee_finished_ctrl() -> void:
+	_melee_target = null
+	_melee_cooldown = MELEE_COOLDOWN_TIME
 
 
 # ============================================

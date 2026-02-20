@@ -109,16 +109,135 @@ rm -f ${TILES_DIR}/${ORPHAN}_*.png ${TILES_DIR}/${ORPHAN}_*.png.import
 孤立タイルが0件の場合は「不要ファイルなし」と報告してStep 4へ進む。
 削除した場合はファイル数を報告する。
 
-### Step 4: Godot MeshLibrary再生成
+### Step 4: プレビュー画像の確認・生成
+
+`godot/data/tiles/previews/` に各タイルのプレビューPNG（256x256 RGBA透明背景）が必要。
+MeshLibrary生成スクリプトがこのディレクトリからプレビューを読み込む。
+
+1. Step 2のエクスポートリストと `godot/data/tiles/previews/*.png` を比較
+2. PNGが存在しないタイルがあれば、**全タイルを一括レンダリング**する（統一性のため）
+
+#### プレビューカメラ仕様（必ずこの設定を使うこと）
+
+| パラメータ | 値 | 説明 |
+|-----------|-----|------|
+| カメラタイプ | Orthographic | 正投影（パースなし） |
+| 方位角 (Azimuth) | **35°** | 右前方から撮影 |
+| 仰角 (Elevation) | **25°** | やや上から見下ろし |
+| カメラ距離 | 10.0 | 正投影なので画角に影響しない |
+| ortho_scale | **bbox対角線 × 1.5** | オブジェクトサイズに応じて自動計算 |
+| ライト | Sun, energy=3.0 | rotation=(50°, 10°, 25°) |
+| 解像度 | 256×256 | RGBA透明背景 |
+| エンジン | EEVEE Next | |
+
+カメラ位置の計算式:
+```
+cam.x = center_x + 10 * sin(35°) * cos(25°)
+cam.y = center_y - 10 * cos(35°) * cos(25°)
+cam.z = center_z + 10 * sin(25°)
+```
+
+#### 一括レンダリングスクリプト
+
+```python
+import bpy, math, mathutils, os
+
+PREVIEW_DIR = "/Users/iwasakishungo/Git/github.com/iwasaki1112/RescueForge/godot/data/tiles/previews/"
+AZIMUTH   = math.radians(35)
+ELEVATION = math.radians(25)
+CAM_DIST  = 10.0
+FILL_RATIO = 1.5  # ortho_scale = bbox_diagonal * FILL_RATIO
+
+# Collect tiles
+tiles = []
+for col in bpy.context.scene.collection.children:
+    for obj in col.objects:
+        if obj.type == 'MESH':
+            tiles.append((obj.name, obj.name.replace("-col", "")))
+
+scene = bpy.context.scene
+orig_cam = scene.camera
+# (save/restore other render settings as needed)
+
+light_data = bpy.data.lights.new("_prev_light", 'SUN')
+light_data.energy = 3.0
+light_obj = bpy.data.objects.new("_prev_light", light_data)
+scene.collection.objects.link(light_obj)
+light_obj.rotation_euler = (math.radians(50), math.radians(10), math.radians(25))
+
+scene.render.engine = 'BLENDER_EEVEE_NEXT'
+scene.render.resolution_x = 256
+scene.render.resolution_y = 256
+scene.render.film_transparent = True
+scene.render.image_settings.file_format = 'PNG'
+scene.render.image_settings.color_mode = 'RGBA'
+
+for obj_name, tile_name in sorted(tiles, key=lambda x: x[1]):
+    obj = bpy.data.objects[obj_name]
+    bb = obj.bound_box
+    cx = obj.location.x + sum(v[0] for v in bb) / 8
+    cy = obj.location.y + sum(v[1] for v in bb) / 8
+    cz = obj.location.z + sum(v[2] for v in bb) / 8
+    sx = max(v[0] for v in bb) - min(v[0] for v in bb)
+    sy = max(v[1] for v in bb) - min(v[1] for v in bb)
+    sz = max(v[2] for v in bb) - min(v[2] for v in bb)
+    ortho_scale = math.sqrt(sx*sx + sy*sy + sz*sz) * FILL_RATIO
+
+    cam_data = bpy.data.cameras.new("_prev_cam")
+    cam_data.type = 'ORTHO'
+    cam_data.ortho_scale = ortho_scale
+    cam_obj = bpy.data.objects.new("_prev_cam", cam_data)
+    scene.collection.objects.link(cam_obj)
+    cam_obj.location = (
+        cx + CAM_DIST * math.sin(AZIMUTH) * math.cos(ELEVATION),
+        cy - CAM_DIST * math.cos(AZIMUTH) * math.cos(ELEVATION),
+        cz + CAM_DIST * math.sin(ELEVATION))
+    d = mathutils.Vector((cx - cam_obj.location.x, cy - cam_obj.location.y, cz - cam_obj.location.z))
+    cam_obj.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
+
+    scene.camera = cam_obj
+    scene.render.filepath = os.path.join(PREVIEW_DIR, f"{tile_name}.png")
+    hidden = {}
+    for o in scene.objects:
+        if o not in (obj, cam_obj, light_obj):
+            hidden[o.name] = o.hide_render; o.hide_render = True
+    bpy.ops.render.render(write_still=True)
+    for n, s in hidden.items():
+        o = bpy.data.objects.get(n)
+        if o: o.hide_render = s
+    bpy.data.objects.remove(cam_obj, do_unlink=True)
+    bpy.data.cameras.remove(cam_data)
+
+bpy.data.objects.remove(light_obj, do_unlink=True)
+bpy.data.lights.remove(light_data)
+scene.camera = orig_cam
+# (restore other render settings)
+```
+
+**重要**: 新規タイルが追加された場合でも、常に全タイルを一括レンダリングして統一性を保つこと。
+プレビュー不足がない場合でも、新規タイルがある場合は全件再レンダリングを推奨。
+
+### Step 5: Godot MeshLibrary再生成
+
+**新規GLBがある場合（Step 3でクリーンアップ対象が変わった or 新しいタイルがある場合）、先にインポートを実行する:**
 
 ```bash
 cd /Users/iwasakishungo/Git/github.com/iwasaki1112/RescueForge/godot
+/Applications/Godot.app/Contents/MacOS/Godot --headless --import
+```
+
+> **注意**: 新規GLBファイルは `--import` なしでは「No loader found for resource」エラーになる。
+> 既存タイルのみの再エクスポートであれば `--import` はスキップ可。
+
+その後、MeshLibrary生成:
+
+```bash
 /Applications/Godot.app/Contents/MacOS/Godot --headless --script res://scripts/editor/generate_tile_library_cli.gd
 ```
 
-出力からFloor/Wallタイル数を確認する。
+出力で各タイルの `Preview: loaded` を確認する。`Preview: not found` があれば Step 4 に戻る。
 
-### Step 5: 結果報告
+### Step 6: 結果報告
 
 以下の情報を表形式でユーザーに報告:
 
@@ -139,6 +258,8 @@ cd /Users/iwasakishungo/Git/github.com/iwasaki1112/RescueForge/godot
 | エクスポート0件 | Blenderシーンにコレクションがあるか確認 |
 | Godot CLIエラー | Godotパスが正しいか確認。`which godot` や `/Applications/Godot.app` |
 | UID warningが出る | MeshLibrary再生成で正常。次回エディタリロード時に解消 |
+| No loader found for resource | 新規GLBファイル。`--import` を先に実行する |
+| Preview: not found | `godot/data/tiles/previews/<tile_name>.png` が未生成。Step 4でレンダリング |
 
 ## 関連ファイル
 
@@ -149,4 +270,5 @@ cd /Users/iwasakishungo/Git/github.com/iwasaki1112/RescueForge/godot
 | `godot/scenes/tiles/*.glb` | エクスポートされたGLBタイル |
 | `godot/data/tiles/tile_library_floor.tres` | 床タイルMeshLibrary |
 | `godot/data/tiles/tile_library_wall.tres` | 壁タイルMeshLibrary |
+| `godot/data/tiles/previews/*.png` | タイルプレビュー画像（256x256 RGBA透明背景） |
 | `godot/scripts/editor/generate_tile_library_cli.gd` | MeshLibrary生成CLI |

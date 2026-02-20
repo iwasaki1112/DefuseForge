@@ -265,8 +265,8 @@ func process_frame(delta: float) -> void:
 	if round_manager:
 		round_manager.process(delta)
 
-	# アイドルキャラクターを処理
-	if idle_manager:
+	# アイドルキャラクターを処理（ラウンド進行中のみ）
+	if idle_manager and round_manager and round_manager.current_phase == RoundManager.RoundPhase.ACTIVE:
 		idle_manager.process_idle_characters(delta)
 
 	# リモートキャラクターの補間更新
@@ -479,6 +479,13 @@ func _spawn_and_throw_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_p
 func _spawn_and_throw_smoke_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
 	if grenade_service:
 		return grenade_service.spawn_and_throw_smoke_grenade(start_pos, target_pos, thrower)
+	return [null, Vector3.ZERO, 0]
+
+
+## ハンドグレネードを生成して投擲（内部ヘルパー）
+func _spawn_and_throw_hand_grenade(start_pos: Vector3, target_pos: Vector3, _bounce_point: Vector3, thrower: Node3D = null) -> Array:
+	if grenade_service:
+		return grenade_service.spawn_and_throw_hand_grenade(start_pos, target_pos, thrower)
 	return [null, Vector3.ZERO, 0]
 
 

@@ -5,7 +5,8 @@
 ## 概要
 
 TPS操作対象以外のキャラクターのアイドル状態を毎フレーム更新する。
-CombatAwareness処理と向き更新を担当し、テストシーンからゲームロジックを分離する。
+Beehave（Behavior Tree）でCPUキャラクターの行動を制御し、
+CombatAwareness処理・徘徊・射撃・アニメーション・移動をBTノードで管理する。
 
 `wandering_enabled = true` の場合、CPUキャラクターが自動的にマップ内を歩き回り、
 敵を検知すると停止して射撃する。トレーニングモードで有効化される。
@@ -28,19 +29,6 @@ class_name IdleCharacterManager
 | characters | Array[Node] | 管理対象キャラクターリスト |
 | get_primary_callback | Callable | プライマリキャラクター取得用コールバック |
 | wandering_enabled | bool | 徘徊モード有効化（トレーニングモードでON） |
-
-## 定数（徘徊関連）
-
-| 名前 | 値 | 説明 |
-|------|-----|------|
-| WANDER_RADIUS | 6.0 | ランダム目標地点の最大距離 |
-| IDLE_TIME_MIN | 1.5 | 停止時間の最小値（秒） |
-| IDLE_TIME_MAX | 4.0 | 停止時間の最大値（秒） |
-| ARRIVAL_THRESHOLD | 0.5 | 目標到着判定距離 |
-| STUCK_TIME | 2.0 | スタック判定時間（秒） |
-| WALL_CHECK_DISTANCE | 1.5 | 前方壁検知レイキャスト距離 |
-| RAY_CHECK_INTERVAL | 0.15 | レイキャスト間引き間隔（約7Hz） |
-| FAN_RAY_ANGLE | 30° | ファンレイキャストの角度 |
 
 ## メソッド
 
@@ -69,7 +57,7 @@ func add_character(character: Node) -> void
 
 ### remove_character()
 
-キャラクターを管理リストから削除。徘徊データもクリーンアップ。
+キャラクターを管理リストから削除。BTインスタンスもクリーンアップ。
 
 ```gdscript
 func remove_character(character: Node) -> void
@@ -77,7 +65,7 @@ func remove_character(character: Node) -> void
 
 ### set_characters()
 
-キャラクターリストを一括更新。徘徊データもクリア。
+キャラクターリストを一括更新。全BTインスタンスをクリア。
 
 ```gdscript
 func set_characters(char_list: Array[Node]) -> void
@@ -104,37 +92,98 @@ func process_idle_characters(delta: float) -> void
 func process_primary_idle(character: Node, delta: float) -> void
 ```
 
-CombatAwareness処理、視線方向更新、重力適用を行う。
+CombatAwareness処理、視線方向更新、重力適用を行う。BT不使用（単純処理のため）。
 
-## 徘徊システム
+## Behavior Tree アーキテクチャ
 
-### ステートマシン
+### BT構造
+
+キャラクターごとに `cpu_character_bt.tscn`（MANUALモード）をインスタンス化し、
+`_update_idle_character()` で毎フレーム `tick()` を呼ぶ。
 
 ```
-IDLE(1.5〜4秒停止) → WALKING(ランダム方向へ歩行) → IDLE → ...
-        ↕                    ↕
-     COMBAT(敵検知時: 停止+射撃, CombatAwarenessに連動)
+BeehaveTree (process_thread: MANUAL)
+└── Sequence [MainLoop]
+    ├── BTProcessDetection           … 敵検知 + スプリントリセット + クールダウン管理
+    ├── AlwaysSucceed [MovementSucceeder]
+    │   └── Selector [MovementDecision]
+    │       ├── Sequence [CombatBranch]
+    │       │   ├── BTIsTrackingEnemy   … 敵追跡中？
+    │       │   └── BTFaceTarget        … 敵方向を向く
+    │       ├── Sequence [DoorBranch]
+    │       │   ├── BTHasNearbyDoor     … 近くにドアあり？
+    │       │   └── BTOpenDoor          … ドアを開ける
+    │       └── Sequence [WanderBranch]
+    │           ├── BTIsWanderingEnabled … 徘徊有効？
+    │           └── BTWander             … 徘徊処理（スプリント判定含む）
+    ├── BTUpdateAnimation             … アニメーション更新（スプリント対応）
+    ├── BTApplyMovement               … 物理移動（get_current_speed()使用）
+    └── Selector [CombatAction]
+        ├── Sequence [GrenadeBranch]
+        │   ├── BTShouldThrowGrenade   … グレネード条件チェック
+        │   └── BTThrowGrenade         … グレネード投擲
+        └── BTProcessFiring            … 射撃判定
 ```
 
-### 動作詳細
+**AlwaysSucceed**: MovementDecisionのSelectorが失敗しても（敵未追跡 & 徘徊無効の場合）、
+後続のアニメーション・移動・射撃ノードが常に実行されるように保証する。
+
+**CombatAction**: グレネード条件が満たされた場合はグレネードを優先投擲し、
+それ以外は通常の射撃判定にフォールバックする。
+
+### カスタムBTノード
+
+| ファイル | 型 | 役割 |
+|---------|-----|------|
+| `bt_process_detection.gd` | ActionLeaf | CombatAwareness処理 + Blackboard書き込み + スプリントリセット + クールダウン管理 |
+| `bt_is_tracking_enemy.gd` | ConditionLeaf | 敵追跡中チェック |
+| `bt_face_target.gd` | ActionLeaf | 追跡中の敵方向を向く |
+| `bt_is_wandering_enabled.gd` | ConditionLeaf | Blackboardのwandering_enabledチェック |
+| `bt_wander.gd` | ActionLeaf | 徘徊処理（壁回避・スタック検知・スプリント判定） |
+| `bt_has_nearby_door.gd` | ConditionLeaf | 近くの未開ドア検出（壁越しレイキャスト判定） |
+| `bt_open_door.gd` | ActionLeaf | ドア開けアクション（fire-and-forget） |
+| `bt_update_animation.gd` | ActionLeaf | アニメーション更新（スプリント対応） |
+| `bt_apply_movement.gd` | ActionLeaf | 物理移動適用（get_current_speed()使用） |
+| `bt_should_throw_grenade.gd` | ConditionLeaf | グレネード投擲条件チェック |
+| `bt_throw_grenade.gd` | ActionLeaf | グレネード投擲アクション（fire-and-forget） |
+| `bt_process_firing.gd` | ActionLeaf | 射撃判定実行 |
+
+### Blackboard 共有値
+
+| キー | 型 | 説明 |
+|------|-----|------|
+| wandering_enabled | bool | 徘徊有効フラグ（IdleCharacterManagerから設定） |
+| is_tracking | bool | 敵追跡中フラグ（ProcessDetectionが設定） |
+| is_sprinting | bool | スプリント中フラグ（ProcessDetectionがリセット、Wanderがセット） |
+| look_direction | Vector3 | 視線方向（ProcessDetectionが設定） |
+| move_direction | Vector3 | 移動方向（Wanderが設定） |
+| wander_state | int | 徘徊ステート（Wander内部管理） |
+| nearby_door | Node3D | 検出された近くのドア（HasNearbyDoorがセット、OpenDoorがクリア） |
+| hand_grenade_count | int | グレネード残数（BT作成時にHAND_GRENADE_PER_ROUNDで初期化） |
+| grenade_cooldown | float | グレネードクールダウン秒数（ProcessDetectionがデクリメント） |
+
+### BT初期化
+
+`_get_or_create_bt()` でBTインスタンス作成時に以下を初期化:
+- `hand_grenade_count`: `GameConstants.HAND_GRENADE_PER_ROUND` で設定
+
+### 徘徊動作
 
 - **IDLE**: ランダムな時間（1.5〜4秒）停止後、新しい目標地点を選択してWALKINGに遷移
-- **WALKING**: 目標地点に向かって歩行（`CharacterAnimationController.WALK_SPEED`で移動）
+- **WALKING**: 目標地点に向かって歩行/スプリント
+  - 距離 > 3.5m → スプリント（6.0 m/s）
+  - 距離 <= 3.5m → 歩行（2.0 m/s）
   - 到着（0.5m以内）→ IDLEに遷移
   - スタック検知（2秒間0.3m未満の移動）→ IDLEに遷移
   - 壁検知（3方向ファンレイキャスト）→ 新しい目標を選択
-- **戦闘**: CombatAwarenessが敵を検知すると移動停止、射撃。敵を見失うと徘徊再開
-
-### 壁チェック（ファンレイキャスト）
-
-前方・左30°・右30°の3方向でレイキャストを実行。
-角や狭路での往復振動を防止する。レイキャストは`RAY_CHECK_INTERVAL`（約7Hz）で間引き、
-キャラごとにタイマー位相をずらしてモバイル負荷を軽減。
+- **戦闘**: CombatAwarenessが敵を検知すると移動停止、射撃
+- **ドア開け**: 近くに未開のドアがあると、ドア方向を向いて開けるアニメーション再生
+- **グレネード投擲**: 敵追跡中にグレネード残数 > 0 かつクールダウン完了時、ターゲットに向けて投擲
 
 ### facing_directionの更新
 
-- 徘徊中: `character.set_facing_direction_vec(move_dir)` で移動方向に向く
 - 戦闘中: `character.set_facing_direction_vec(look_dir)` で敵方向に向く
+- 徘徊中: `character.set_facing_direction_vec(move_dir)` で移動方向に向く
 - これにより `vision_component` の視界判定とネットワーク同期回転が正しく動作
 
 ## 使用例
@@ -165,26 +214,13 @@ func _physics_process(delta: float) -> void:
         idle_manager.process_primary_idle(primary, delta)
 ```
 
-## 内部処理
-
-### _update_idle_character()
-
-単一キャラクターのアイドル状態を更新:
-
-1. CombatAwareness処理（敵追跡）
-2. 視線方向の決定
-   - 敵追跡中: CombatAwarenessの視線方向
-   - それ以外: 現在の向きを維持
-3. 徘徊処理（`wandering_enabled`時のみ）
-4. facing_direction明示更新
-5. アニメーション更新
-6. 物理移動（重力 + move_and_slide）
-7. 射撃判定
-
 ## 関連クラス
 
 - [CharacterSelectionManager](CharacterSelectionManager.md) - 選択状態管理
 - [CombatAwarenessComponent](../Character/CombatAwarenessComponent.md) - 敵検出・自動照準
+- [AI BTノード](../AI/README.md) - Beehave カスタムBTノード
+- [DoorService](DoorService.md) - ドア開閉管理
+- [GrenadeService](GrenadeService.md) - グレネード生成・投擲
 
 ## APIリファレンス
 

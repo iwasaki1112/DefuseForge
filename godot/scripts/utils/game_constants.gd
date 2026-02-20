@@ -71,6 +71,8 @@ const ANIM_RIFLE_GRENADE_THROW_CLOSE := "game_rifle_grenade_throw_close"
 const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
 const ANIM_PISTOL_OPEN_DOOR := "game_pistol_open_door"
 const ANIM_TALKING := "game_rifle_talking"
+const ANIM_RIFLE_GUN_DOWN := "game_rifle_gun_down"
+const ANIM_RIFLE_MELEE := "game_rifle_hard"
 
 # ========================================================
 # Door Open Settings
@@ -111,6 +113,9 @@ const GRENADE_THROW_MAX_DISTANCE := 6.5    # 最大投擲距離（メートル�
 const GRENADE_THROW_CLOSE_THRESHOLD := 4.0 # 近投/遠投の閾値（メートル）
 const GRENADE_START_HEIGHT := 1.5          # 発射高さ（手の位置近似）
 const SMOKE_GRENADE_PER_ROUND := 1          # ラウンドあたりのスモーク数
+const HAND_GRENADE_PER_ROUND := 1           # ラウンドあたりのハンドグレネード数
+const HAND_GRENADE_EXPLOSION_RADIUS := 3.5  # ハンドグレネード爆発範囲（メートル）
+const HAND_GRENADE_EXPLOSION_DAMAGE := 80.0 # ハンドグレネード最大ダメージ
 
 # ========================================================
 # Scene Paths (Use with load/preload if class_name not available)
@@ -119,6 +124,8 @@ const PRESET_ENVIRONMENT_DEFAULT := "res://data/environment/default.tres"
 const SCENE_GRENADE := "res://scenes/weapons/grenade.tscn"
 const SCENE_SMOKE_GRENADE := "res://scenes/weapons/smoke_grenade.tscn"
 const SCENE_SMOKE_AREA := "res://scenes/effects/smoke_area.tscn"
+const SCENE_HAND_GRENADE := "res://scenes/weapons/hand_grenade.tscn"
+const SCENE_EXPLOSION_EFFECT := "res://scenes/effects/explosion_effect.tscn"
 
 # ========================================================
 # Round Settings
