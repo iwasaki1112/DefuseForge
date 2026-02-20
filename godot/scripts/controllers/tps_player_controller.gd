@@ -39,6 +39,8 @@ const STICK_DEADZONE := 0.15
 # Aim stick (right)
 const AIM_STICK_RADIUS := 80.0
 const AIM_STICK_KNOB_RADIUS := 30.0
+## 右スティックが敵方向からこの角度以上ずれた場合のみ手動エイムに切り替え
+const AIM_OVERRIDE_ANGLE := deg_to_rad(60.0)
 
 # ============================================
 # References
@@ -268,19 +270,30 @@ func _handle_aim(_delta: float) -> void:
 		_character.set_facing_direction_vec(_locked_facing)
 		return
 
-	# 1. 右スティック — 操作中は自動エイム・自動射撃を一時停止
+	# 敵方向を取得
+	var combat_dir := Vector3.ZERO
+	if _character.combat_awareness:
+		combat_dir = _character.combat_awareness.get_override_look_direction()
+
+	# 1. 右スティック — 敵検知中はスティックが敵方向から大きくずれた時のみ手動エイム
 	_is_aim_stick_active = _aim_stick_input.length() > STICK_DEADZONE
 	if _is_aim_stick_active:
 		var aim_dir := Vector3(_aim_stick_input.x, 0, _aim_stick_input.y).normalized()
-		_character.set_facing_direction_vec(aim_dir)
+		if combat_dir != Vector3.ZERO:
+			# 敵検知中: スティックが敵方向から閾値以上ずれている場合のみ手動エイム
+			if aim_dir.angle_to(combat_dir) > AIM_OVERRIDE_ANGLE:
+				_character.set_facing_direction_vec(aim_dir)
+			else:
+				_character.set_facing_direction_vec(combat_dir)
+		else:
+			# 敵なし: 通常の手動エイム
+			_character.set_facing_direction_vec(aim_dir)
 		return
 
 	# 2. CombatAwareness override — 敵検知時は自動で敵方向を向く
-	if _character.combat_awareness:
-		var override_dir := _character.combat_awareness.get_override_look_direction()
-		if override_dir != Vector3.ZERO:
-			_character.set_facing_direction_vec(override_dir)
-			return
+	if combat_dir != Vector3.ZERO:
+		_character.set_facing_direction_vec(combat_dir)
+		return
 
 	# 3. PC: マウスエイム（地面レイキャスト）— PC実マウス操作時のみ
 	if _mouse_active and _camera and not OS.has_feature("mobile"):
