@@ -400,7 +400,7 @@ func get_visibility_texture() -> ViewportTexture:
 
 
 ## 可視性閾値（この明るさ以上で「見える」と判定）
-const VISIBILITY_THRESHOLD: float = 0.15
+const VISIBILITY_THRESHOLD: float = 0.08
 
 ## キャッシュされたテクスチャデータ（毎フレームGPU→CPU転送を避ける）
 var _visibility_image: Image = null
