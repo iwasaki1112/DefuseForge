@@ -30,6 +30,8 @@ PlayerState="*res://scripts/systems/player_state.gd"
 CharacterColorManager="*res://scripts/systems/character_color_manager.gd"
 SettingsManager="*res://scripts/systems/settings_manager.gd"
 SignalBus="*res://scripts/systems/signal_bus.gd"
+BeehaveGlobalMetrics="*uid://c3ktl6ontsdt7"
+BeehaveGlobalDebugger="*uid://bl3ma400hpvsh"
 
 [display]
 
@@ -41,7 +43,7 @@ window/handheld/orientation=4
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/map_decorator/plugin.cfg")
+enabled=PackedStringArray("res://addons/map_decorator/plugin.cfg", "res://addons/beehave/plugin.cfg")
 
 [input]
 
