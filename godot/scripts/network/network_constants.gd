@@ -148,6 +148,8 @@ enum GameEventType {
 	ANIMATION_EVENT = 9,
 	## ドア開け（静かに開く）
 	DOOR_OPEN = 10,
+	## ドアキック（蹴り破る）
+	DOOR_KICK = 11,
 }
 
 
@@ -215,5 +217,7 @@ static func event_type_to_string(event_type: GameEventType) -> String:
 			return "ANIMATION_EVENT"
 		GameEventType.DOOR_OPEN:
 			return "DOOR_OPEN"
+		GameEventType.DOOR_KICK:
+			return "DOOR_KICK"
 		_:
 			return "UNKNOWN"

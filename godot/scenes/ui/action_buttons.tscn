@@ -24,6 +24,12 @@ texture_normal = ExtResource("1")
 ignore_texture_size = true
 stretch_mode = 3
 
+[node name="KickDoorBtn" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(80, 40)
+layout_mode = 2
+text = "Kick"
+
 [node name="HandGrenadeContainer" type="VBoxContainer" parent="."]
 layout_mode = 2
 theme_override_constants/separation = 2

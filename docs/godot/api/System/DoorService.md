@@ -63,13 +63,13 @@ FogOfWarSystemの参照を設定する。GameManagerのsetup()から呼ばれる
 マップ内の全ドアを"doors"グループから取得して登録する。
 
 ### on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void
-ドアキックインパクト時の処理。ローカルキャラクターのキックならネットワークイベントを送信し、ドアを開く。
+ドアキックインパクト時の処理。ローカルキャラクターのキックならネットワークイベントを送信し、ドアを蹴り倒す（Y軸回転ではなくX軸回転で倒壊）。meleeアニメーション（`game_rifle_hard`）と連動。
 
 ### open_door(door: Node3D, character: CharacterBody3D) -> void
 ドアを開く処理（ローカル・リモート共通）。`_calculate_door_open_params()` でパラメータ計算後、`_execute_door_open()` でTweenアニメーションを実行する。保留中の敵ドアがあればクリアする。
 
 ### apply_door_kick_from_network(door_id: int, character_network_id: int) -> void
-ネットワークからのドアキックイベントを適用する（リモート側用）。敵チーム＋FoW有効時はバッファに保留し、味方チームまたはFoWなしの場合は即座に実行する。
+ネットワークからのドアキックイベントを適用する（リモート側用）。敵チーム＋FoW有効時はバッファに保留し、味方チームまたはFoWなしの場合は即座にドア倒壊を実行する。
 
 ### on_door_open_done(door: Node3D, character: CharacterBody3D) -> void
 ドア開けインパクト時の処理。ローカルキャラクターの開けならネットワークイベントを送信し、ドアを静かに開く。
@@ -149,6 +149,10 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 - `_can_character_see_door(character, door, panel_center) -> bool` — 距離 + 視野角 + LOS raycast判定
 - `_calculate_max_opening_angle(door, target_angle) -> float` — スイープテストで壁衝突しない最大角度を算出
 - `_collect_door_exclude_rids(door) -> Array[RID]` — スイープテスト除外RID収集
+- `_calculate_door_fall_params(door, character) -> Dictionary` — ドア倒壊パラメータ（fall_angle, fall_dir）を計算
+- `_execute_door_fall(door, params, instant) -> void` — ドア倒壊Tween実行（ローカルX軸90°回転、EASE_IN+QUAD）
+- `_apply_kick_damage(door, kicker) -> void` — キッカーの反対側にBoxShape3Dでダメージ判定、敵キャラに即死ダメージ
+- `_find_game_character(node) -> GameCharacter` — コライダーから親を辿りGameCharacterを取得
 
 ### 内部メソッド詳細
 
@@ -166,3 +170,20 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 1. **近距離チェック**: `_DOOR_VIS_NEAR_DISTANCE`（1.5m）以内なら方向不問で可視
 2. **視野角チェック**: キャラクターの`fov_degrees / 2` + `_DOOR_VIS_FOV_MARGIN_DEG`（10°）以内か
 3. **LOS raycast**: 眼の高さから壁レイヤーのみチェック。ヒットがドア自身なら可視扱い
+
+#### `_execute_door_fall()`
+ドアキック時のドア倒壊アニメーションを実行する。
+
+- ドアのローカルX軸を支点に90°回転（`Basis.slerp`で補間）
+- キッカーの**反対側**に倒れる（`side_dot`で判定）
+- 倒れる方向に0.3m位置シフト
+- `EASE_IN + TRANS_QUAD`で重力加速感を表現（0.4秒）
+- `instant=true`の場合は即座に倒れた状態にする
+
+#### `_apply_kick_damage()`
+ドアキック時にキッカーの反対側にいる敵キャラにダメージを与える。
+
+- キッカーの**反対側**にBoxShape3D（1.5m×2.0m×1.5m）で検知エリアを配置
+- `collision_mask = 1`（キャラクターレイヤー）で `intersect_shape` 検出
+- キッカー自身はスキップ、`is_enemy_of()` で敵のみダメージ（味方は安全）
+- `DOOR_KICK_DAMAGE`（999）の即死ダメージを適用

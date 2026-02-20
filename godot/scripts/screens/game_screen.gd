@@ -63,9 +63,11 @@ var _hand_grenade_count_label: Label = null
 
 ## Door Open（ドア開けインタラクション）
 var _door_open_btn: TextureButton = null
+var _kick_door_btn: Button = null
 var _nearby_door: Node3D = null
 var _target_door: Node3D = null  # アニメーション中のターゲットドア
 var _is_door_action: bool = false  # ドア開けアクション中フラグ
+var _is_kick_door: bool = false  # ドアキックフラグ（true=キック, false=通常開け）
 var _door_contact_detected: bool = false  # ハンドボーン接触検知済みフラグ
 
 ## Sprint（スプリント）
@@ -411,6 +413,9 @@ func _setup_tps_controller() -> void:
 		# ドア開けシグナル接続
 		_player_character.anim_ctrl.door_open_impact.connect(_on_door_open_impact)
 		_player_character.anim_ctrl.door_open_finished.connect(_on_door_open_anim_finished)
+		# ドアキック用（meleeアニメーションのシグナルを利用）
+		_player_character.anim_ctrl.melee_impact.connect(_on_kick_door_melee_impact)
+		_player_character.anim_ctrl.melee_finished.connect(_on_kick_door_melee_finished)
 
 
 ## 黒画面+マップ名オーバーレイを作成（戻り値のControlでmodulateフェード可能）
@@ -578,6 +583,8 @@ func _create_action_buttons() -> void:
 	_door_open_btn = vbox.get_node("DoorOpenBtn")
 	ButtonAnimator.setup(_door_open_btn)
 
+	_kick_door_btn = vbox.get_node("KickDoorBtn")
+
 	_hand_grenade_btn = vbox.get_node("HandGrenadeContainer/HandGrenadeBtn")
 	ButtonAnimator.setup(_hand_grenade_btn)
 
@@ -597,7 +604,7 @@ func _create_action_buttons() -> void:
 
 	# Godot GUIはマルチタッチ非対応（1本目のタッチのみマウスイベントとしてエミュレート）
 	# 2本目以降の指でボタンを押せるよう、GUIイベントを無効化して手動処理する
-	for btn in [_door_open_btn, _hand_grenade_btn, _grenade_btn, _talking_btn, _sprint_btn]:
+	for btn in [_door_open_btn, _kick_door_btn, _hand_grenade_btn, _grenade_btn, _talking_btn, _sprint_btn]:
 		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if Debug.enabled:
@@ -1331,7 +1338,7 @@ func _update_hand_grenade_count_ui() -> void:
 		_hand_grenade_btn.modulate.a = 1.0 if _hand_grenade_count > 0 else 0.4
 
 
-func _on_door_open_pressed() -> void:
+func _on_door_open_pressed(is_kick: bool = false) -> void:
 	if not _player_character or not _player_character.is_alive:
 		return
 	if not _nearby_door:
@@ -1341,6 +1348,7 @@ func _on_door_open_pressed() -> void:
 
 	_target_door = _nearby_door
 	_is_door_action = true
+	_is_kick_door = is_kick
 	_door_contact_detected = false
 
 	# ドアパネル中心の方向を計算（ヒンジではなくパネル中央に向く）
@@ -1355,6 +1363,8 @@ func _on_door_open_pressed() -> void:
 	# ボタン非表示
 	if _door_open_btn:
 		_door_open_btn.visible = false
+	if _kick_door_btn:
+		_kick_door_btn.visible = false
 
 	# 滑らかに回転 → 完了後にドア開けアニメーション再生
 	var finished := _player_character.anim_ctrl.smooth_rotate_to(dir, 0.2)
@@ -1365,7 +1375,10 @@ func _on_door_open_pressed() -> void:
 			_cancel_door_open()
 			return
 		_player_character.set_facing_direction_vec(dir)
-		_player_character.anim_ctrl.play_door_open()
+		if _is_kick_door:
+			_player_character.anim_ctrl.play_melee()
+		else:
+			_player_character.anim_ctrl.play_door_open()
 
 
 ## ドア開けアニメーションのインパクトタイミング（実際にドアを開く）
@@ -1380,11 +1393,17 @@ func _on_door_open_impact() -> void:
 	if not _is_door_in_range(_target_door, _player_character):
 		return
 	if game_manager:
-		game_manager._on_door_open_done(_target_door, _player_character)
+		if _is_kick_door:
+			game_manager._on_door_kick_done(_target_door, _player_character)
+		else:
+			game_manager._on_door_open_done(_target_door, _player_character)
 
 
 ## ハンドボーンとドアパネルの接触チェック（ドア開けアクション中に毎フレーム実行）
 func _check_hand_door_contact() -> void:
+	# キック時はmelee_impactシグナルで処理するためスキップ
+	if _is_kick_door:
+		return
 	if not _player_character.anim_ctrl or not _player_character.anim_ctrl.is_opening_door():
 		return
 
@@ -1404,16 +1423,34 @@ func _check_hand_door_contact() -> void:
 		_door_contact_detected = true
 		# 接触時に直接フルオープン開始（crack不要、1つの滑らかな動きに）
 		if game_manager:
-			game_manager._on_door_open_done(_target_door, _player_character)
+			if _is_kick_door:
+				game_manager._on_door_kick_done(_target_door, _player_character)
+			else:
+				game_manager._on_door_open_done(_target_door, _player_character)
 
 
 ## ドア開けアニメーション完了
 func _on_door_open_anim_finished() -> void:
 	_target_door = null
 	_is_door_action = false
+	_is_kick_door = false
 	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
+
+
+## ドアキック: meleeインパクトタイミング（ドア倒壊を実行）
+func _on_kick_door_melee_impact() -> void:
+	if not _is_kick_door:
+		return
+	_on_door_open_impact()
+
+
+## ドアキック: meleeアニメーション完了
+func _on_kick_door_melee_finished() -> void:
+	if not _is_kick_door:
+		return
+	_on_door_open_anim_finished()
 
 
 ## ドアがインタラクション距離内か判定
@@ -1429,6 +1466,7 @@ func _is_door_in_range(door: Node3D, character: CharacterBody3D) -> bool:
 func _cancel_door_open() -> void:
 	_target_door = null
 	_is_door_action = false
+	_is_kick_door = false
 	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
@@ -1439,12 +1477,16 @@ func _update_door_proximity() -> void:
 	if not _player_character or not _player_character.is_alive:
 		if _door_open_btn and _door_open_btn.visible:
 			_door_open_btn.visible = false
+		if _kick_door_btn and _kick_door_btn.visible:
+			_kick_door_btn.visible = false
 		return
 
 	# アニメーション中は非表示維持
 	if _player_character.anim_ctrl and _player_character.anim_ctrl.is_opening_door():
 		if _door_open_btn and _door_open_btn.visible:
 			_door_open_btn.visible = false
+		if _kick_door_btn and _kick_door_btn.visible:
+			_kick_door_btn.visible = false
 		return
 
 	var player_pos := _player_character.global_position
@@ -1484,8 +1526,11 @@ func _update_door_proximity() -> void:
 		_nearby_door = door
 		break
 
+	var show_door := _nearby_door != null
 	if _door_open_btn:
-		_door_open_btn.visible = _nearby_door != null
+		_door_open_btn.visible = show_door
+	if _kick_door_btn:
+		_kick_door_btn.visible = show_door
 
 
 func _on_debug_vision_toggled(enabled: bool) -> void:
@@ -1540,7 +1585,12 @@ func _handle_action_button_input(event: InputEvent) -> bool:
 
 	if _door_open_btn and _door_open_btn.visible:
 		if _door_open_btn.get_global_rect().has_point(pos):
-			_on_door_open_pressed()
+			_on_door_open_pressed(false)
+			return true
+
+	if _kick_door_btn and _kick_door_btn.visible:
+		if _kick_door_btn.get_global_rect().has_point(pos):
+			_on_door_open_pressed(true)
 			return true
 
 	if _hand_grenade_btn and _hand_grenade_btn.visible:
@@ -1899,6 +1949,11 @@ func _cleanup_before_transition() -> void:
 			_player_character.anim_ctrl.door_open_impact.disconnect(_on_door_open_impact)
 		if _player_character.anim_ctrl.door_open_finished.is_connected(_on_door_open_anim_finished):
 			_player_character.anim_ctrl.door_open_finished.disconnect(_on_door_open_anim_finished)
+		# ドアキック用meleeシグナル切断
+		if _player_character.anim_ctrl.melee_impact.is_connected(_on_kick_door_melee_impact):
+			_player_character.anim_ctrl.melee_impact.disconnect(_on_kick_door_melee_impact)
+		if _player_character.anim_ctrl.melee_finished.is_connected(_on_kick_door_melee_finished):
+			_player_character.anim_ctrl.melee_finished.disconnect(_on_kick_door_melee_finished)
 
 	# グレネードドアシグナル切断
 	if game_manager and game_manager.door_service:

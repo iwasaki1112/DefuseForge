@@ -14,6 +14,7 @@ signal smoke_grenade_thrown(smoke_grenade: Node3D, character: Node)
 signal grenade_network_event(start_pos: Vector3, velocity: Vector3, is_smoke: bool, grenade_id: int)
 signal grenade_explode_network_event(grenade_id: int, position: Vector3, is_smoke: bool)
 signal door_open_network_event(door_id: int, character_network_id: int)
+signal door_kick_network_event(door_id: int, character_network_id: int)
 signal damage_network_event(attacker_id: int, target_id: int, damage: float, is_headshot: bool)
 
 ## コアシステム
@@ -408,6 +409,9 @@ func _setup_door_service() -> void:
 		add_child(door_service)
 		# シグナル転送
 		door_service.door_open_network_event.connect(func(d, c): door_open_network_event.emit(d, c))
+		door_service.door_kick_network_event.connect(func(d, c): door_kick_network_event.emit(d, c))
+		# キックダメージ → 既存のダメージ同期パイプラインに乗せる
+		door_service.kick_damage_dealt.connect(func(a, t, d): damage_network_event.emit(a, t, d, false))
 		# ドア開放アニメーション中のFoWオクルーダーリアルタイム更新
 		door_service.door_opening_started.connect(func(door):
 			if vision_service:
@@ -462,6 +466,12 @@ func _on_character_died(character: GameCharacter) -> void:
 func _on_door_open_done(door: Node3D, character: CharacterBody3D) -> void:
 	if door_service:
 		door_service.on_door_open_done(door, character)
+
+
+## ドアキックインパクト時（DoorServiceに委譲）
+func _on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
+	if door_service:
+		door_service.on_door_kick_done(door, character)
 
 
 ## ========================================
@@ -569,6 +579,12 @@ func _on_map_will_unload(_map_id: String) -> void:
 func apply_door_open_from_network(door_id: int, character_network_id: int) -> void:
 	if door_service:
 		door_service.apply_door_open_from_network(door_id, character_network_id)
+
+
+## ネットワークからのドアキックイベントを適用（リモート側用）（DoorServiceに委譲）
+func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void:
+	if door_service:
+		door_service.apply_door_kick_from_network(door_id, character_network_id)
 
 
 # ============================================

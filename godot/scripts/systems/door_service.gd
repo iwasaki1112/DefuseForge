@@ -7,6 +7,10 @@ class_name DoorService
 
 ## ドア開けネットワークイベント（マルチプレイヤー同期用）
 signal door_open_network_event(door_id: int, character_network_id: int)
+## ドアキックネットワークイベント（マルチプレイヤー同期用）
+signal door_kick_network_event(door_id: int, character_network_id: int)
+## キックダメージ発生（マルチプレイヤーダメージ同期用）
+signal kick_damage_dealt(attacker_network_id: int, target_network_id: int, damage: float)
 ## ドア開閉完了シグナル
 signal door_opened(door: Node3D, character: Node)
 ## ドア開放アニメーション開始シグナル（FoWリアルタイム更新用）
@@ -340,7 +344,10 @@ func _reveal_deferred_door(door: Node3D) -> void:
 	# 長時間経過なら即座に開いた状態にする（既に開いていたドアを後から見た場合）
 	var deferred_frame: int = params.get("deferred_frame", 0)
 	var is_recent := (Engine.get_physics_frames() - deferred_frame) < _ANIMATION_GRACE_FRAMES
-	_execute_door_open(door, params, not is_recent)
+	if params.get("is_fall", false):
+		_execute_door_fall(door, params, not is_recent)
+	else:
+		_execute_door_open(door, params, not is_recent)
 	door_opened.emit(door, null)
 
 	if _pending_enemy_doors.is_empty():
@@ -515,3 +522,202 @@ func _collect_door_exclude_rids(door: Node3D) -> Array[RID]:
 					rids.append(sibling.get_rid())
 
 	return rids
+
+
+## ========================================
+## ドアキック処理
+## ========================================
+
+## ドアキックインパクト時（DoorServiceに委譲される）
+## ネットワークイベント発火 → ドア倒壊 → キックダメージ適用
+func on_door_kick_done(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# 保留中の敵ドアをクリア
+	_pending_enemy_doors.erase(door)
+
+	# ローカルキャラクターのキックのみネットワークイベントを送信
+	var game_char := character as GameCharacter
+	if game_char and game_char.is_local() and _is_multiplayer_mode:
+		var door_id := get_door_id(door)
+		if door_id > 0:
+			door_kick_network_event.emit(door_id, game_char.network_id)
+
+	# ドアを倒す（開くのではなく蹴り倒す）
+	var params := _calculate_door_fall_params(door, character)
+	_execute_door_fall(door, params)
+	door_opened.emit(door, character)
+
+	# キックダメージを適用（キッカーの反対側の敵にダメージ）
+	_apply_kick_damage(door, character)
+
+
+## ドア倒壊パラメータを計算（キッカーの反対側に倒れる）
+func _calculate_door_fall_params(door: Node3D, character: CharacterBody3D) -> Dictionary:
+	var door_to_char := (character.global_position - door.global_position)
+	door_to_char.y = 0.0
+	door_to_char = door_to_char.normalized()
+
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
+
+	var side_dot := door_normal.dot(door_to_char)
+	# キッカーの反対側に倒れる（+Z側にいる→-Z方向に倒れる）
+	# ローカルX軸正回転=上端が+Z方向へ倒れるので、+Z側キッカーなら負回転
+	var fall_angle := -90.0 if side_dot > 0 else 90.0
+	var fall_dir := -door_normal if side_dot > 0 else door_normal
+
+	return {
+		"fall_angle": fall_angle,
+		"fall_dir": fall_dir,
+		"is_fall": true,
+	}
+
+
+## ドア倒壊Tweenを実行（キックで蹴り倒す）
+## ドアのローカルX軸を支点に90°回転させて倒す
+func _execute_door_fall(door: Node3D, params: Dictionary, instant: bool = false) -> void:
+	if not door.is_in_group("open_doors"):
+		door.add_to_group("open_doors")
+
+	var fall_angle: float = params["fall_angle"]
+	var fall_dir: Vector3 = params["fall_dir"]
+
+	if instant:
+		# 即座に倒れた状態にする（保留ドアがFoW可視になった場合）
+		door.global_transform.basis = door.global_transform.basis * Basis(Vector3.RIGHT, deg_to_rad(fall_angle))
+		door.global_position += fall_dir * 0.3
+		door_opening_finished.emit(door)
+		if _on_vision_update_callback.is_valid():
+			_on_vision_update_callback.call()
+		return
+
+	var initial_basis := door.global_transform.basis
+	var target_basis := initial_basis * Basis(Vector3.RIGHT, deg_to_rad(fall_angle))
+	var target_pos := door.global_position + fall_dir * 0.3
+
+	door_opening_started.emit(door)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+
+	# Basis補間で倒壊アニメーション（重力加速 = EASE_IN + QUAD）
+	tween.tween_method(
+		func(t: float):
+			if is_instance_valid(door):
+				door.global_transform.basis = initial_basis.slerp(target_basis, t),
+		0.0, 1.0, 0.4
+	).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+	# 倒れる方向に少し移動
+	tween.tween_property(door, "global_position", target_pos, 0.4) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+	tween.chain().tween_callback(func():
+		door_opening_finished.emit(door)
+		if _on_vision_update_callback.is_valid():
+			_on_vision_update_callback.call()
+	)
+
+
+## キックダメージ適用: ドアのキッカー反対側にいる敵キャラにダメージ
+func _apply_kick_damage(door: Node3D, kicker: CharacterBody3D) -> void:
+	var space_state := door.get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	# ドアの壁面法線（Z軸）でキッカーの側面を判定
+	var door_normal := door.global_transform.basis.z.normalized()
+	door_normal.y = 0.0
+	door_normal = door_normal.normalized()
+
+	var door_to_kicker := (kicker.global_position - door.global_position)
+	door_to_kicker.y = 0.0
+	var side_dot := door_normal.dot(door_to_kicker.normalized())
+
+	# キッカーの反対側の方向（ドア法線ベース）
+	var opposite_dir := -door_normal if side_dot > 0 else door_normal
+
+	# パネル中心を基準に検知ボックスを配置（ヒンジではなくドア面の中央）
+	var panel_center := door.global_position + door.global_transform.basis * _DOOR_PANEL_CENTER
+	var detect_center := panel_center + opposite_dir * 0.75
+	detect_center.y = door.global_position.y + 1.0
+
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(GameConstants.DOOR_KICK_DAMAGE_RADIUS * 2.0, 2.0, GameConstants.DOOR_KICK_DAMAGE_RADIUS * 2.0)
+
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis(), detect_center)
+	query.collision_mask = 1  # キャラクターレイヤー
+
+	var results: Array[Dictionary] = space_state.intersect_shape(query)
+	var kicker_char := kicker as GameCharacter
+
+	for result: Dictionary in results:
+		var collider: Object = result.collider
+		var character: GameCharacter = _find_game_character(collider)
+		if not character or not character.is_alive:
+			continue
+		# キッカー自身はスキップ
+		if character == kicker_char:
+			continue
+		# 敵のみダメージ（味方は安全）
+		if kicker_char and not character.is_enemy_of(kicker_char):
+			continue
+		character.take_damage(GameConstants.DOOR_KICK_DAMAGE)
+		# マルチプレイヤー: ダメージをネットワーク同期（被害者の所有クライアントに伝達）
+		if _is_multiplayer_mode and kicker_char:
+			kick_damage_dealt.emit(kicker_char.network_id, character.network_id, GameConstants.DOOR_KICK_DAMAGE)
+
+
+## コライダーからGameCharacterを探す（grenade.gdと同パターン）
+func _find_game_character(node: Object) -> GameCharacter:
+	var current: Node = node as Node
+	while current:
+		if current is GameCharacter:
+			return current
+		current = current.get_parent()
+	return null
+
+
+## ネットワークからのドアキックイベントを適用（リモート側用）
+func apply_door_kick_from_network(door_id: int, character_network_id: int) -> void:
+	var door := get_door_by_id(door_id)
+	if not door:
+		push_warning("[DoorService] Door not found for network kick: ", door_id)
+		return
+
+	# 既に開いているドアは無視
+	if door.is_in_group("open_doors"):
+		return
+
+	# 既に保留中のドアは無視
+	if _pending_enemy_doors.has(door):
+		return
+
+	if not _character_manager:
+		push_warning("[DoorService] CharacterManager not set")
+		return
+
+	var character := _character_manager.find_character_by_network_id(character_network_id)
+	if not character:
+		push_warning("[DoorService] Character not found for door kick: ", character_network_id)
+		return
+
+	# ローカルキャラクターのイベントは無視（二重処理防止）
+	if character.is_local():
+		return
+
+	# チーム判定：敵チームのドアキックはバッファに保留（次フレームでFoWチェック）
+	if _fow_system and character.team != PlayerState.get_player_team():
+		var params := _calculate_door_fall_params(door, character)
+		_defer_enemy_door_open(door, params)
+		return
+
+	# 味方チーム or FoWなし → 即座にキック倒壊実行（ダメージはDAMAGEイベント経由）
+	var params := _calculate_door_fall_params(door, character)
+	_execute_door_fall(door, params)
+	door_opened.emit(door, character)

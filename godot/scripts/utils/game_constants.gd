@@ -79,6 +79,8 @@ const ANIM_RIFLE_MELEE := "game_rifle_hard"
 # ========================================================
 const DOOR_OPEN_DISTANCE := 1.0  ## ドア開けインタラクション距離（メートル）
 const HAND_DOOR_CONTACT_THRESHOLD := 0.2  ## ハンドボーンとドアパネルの接触判定閾値（メートル）
+const DOOR_KICK_DAMAGE := 999.0           ## ドアキックダメージ（即死）
+const DOOR_KICK_DAMAGE_RADIUS := 1.5      ## ドアキックダメージ範囲（メートル）
 
 # ========================================================
 # Hostage Talking Settings
