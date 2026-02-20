@@ -72,6 +72,7 @@ const ANIM_RIFLE_OPEN_DOOR := "game_rifle_open_door"
 const ANIM_PISTOL_OPEN_DOOR := "game_pistol_open_door"
 const ANIM_TALKING := "game_rifle_talking"
 const ANIM_RIFLE_GUN_DOWN := "game_rifle_gun_down"
+const ANIM_RIFLE_MELEE := "game_rifle_hard"
 
 # ========================================================
 # Door Open Settings

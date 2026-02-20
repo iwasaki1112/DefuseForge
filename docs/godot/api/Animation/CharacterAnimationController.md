@@ -60,6 +60,8 @@
 | `throw_finished` | なし | 投擲アニメーション完了 |
 | `door_open_finished` | なし | ドア開けアニメーション完了 |
 | `door_open_impact` | なし | ドアを実際に開くインパクトタイミング（0.7秒後） |
+| `melee_impact` | なし | 近接攻撃のインパクトタイミング（0.4秒後） |
+| `melee_finished` | なし | 近接攻撃アニメーション完了 |
 
 ## Export Properties
 
@@ -199,6 +201,18 @@ Gun down状態か確認する。
 ### is_talking() -> bool
 会話アニメーション再生中か確認する。
 
+### play_melee() -> void
+近接攻撃アニメーション（ライフルバットストライク: `game_rifle_hard`）を再生する。0.4秒後に`melee_impact`シグナルが発火し、アニメーション完了時に`melee_finished`シグナルが発火する。
+
+**動作:**
+- AnimationTreeを停止し、AnimationPlayerで直接再生
+- 投擲/ドア開け/会話/死亡中はブロック
+- 再生中は`fire()`、`update_animation()`もブロック
+- 左手IKは一時無効化、アニメーション後半で復帰
+
+### is_meleeing() -> bool
+近接攻撃アニメーション再生中か確認する。
+
 ## 使用例
 
 ```gdscript
@@ -258,6 +272,8 @@ anim_ctrl.fire()
 | `throw_finished` | なし |
 | `door_open_finished` | なし |
 | `door_open_impact` | なし |
+| `melee_impact` | なし |
+| `melee_finished` | なし |
 
 ### メソッド
 - `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
@@ -283,3 +299,5 @@ anim_ctrl.fire()
 - `play_talking() -> void`
 - `stop_talking() -> void`
 - `is_talking() -> bool`
+- `play_melee() -> void`
+- `is_meleeing() -> bool`

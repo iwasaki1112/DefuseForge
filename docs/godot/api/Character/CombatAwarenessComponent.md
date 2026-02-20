@@ -27,6 +27,7 @@
 | `FIRE_INTERVAL` | `0.5` | 発砲間隔（500ms） |
 | `MOVEMENT_THRESHOLD` | `0.5` | 移動判定の速度閾値（m/s） |
 | `SPRINT_THRESHOLD` | `4.0` | スプリント判定の速度閾値（m/s） |
+| `MELEE_RANGE` | `1.5` | 近接攻撃検出範囲（m、円形360°） |
 
 ## Public API
 
@@ -77,6 +78,16 @@
 自動発砲が有効か確認する。
 
 **戻り値:** 自動発砲が有効なら`true`
+
+### get_melee_target() -> Node
+近接攻撃可能な敵を探す。キャラクター周囲の円形360°範囲（MELEE_RANGE = 1.5m）内で最も近い生存敵を返す。
+
+**戻り値:** 最も近い敵ノード（範囲内にいなければ`null`）
+
+**判定条件:**
+- 角度制限なし（全方位360°）
+- 距離のみ判定（1.5m以内）
+- 死亡敵は除外
 
 ### get_last_shot_result() -> Dictionary
 最後の射撃結果を取得する。
@@ -399,3 +410,4 @@ long_critical_rate = 0.5  # 高クリ率
 - `get_last_shot_result() -> Dictionary`
 - `process(delta: float) -> void`
 - `process_firing(delta: float) -> void`
+- `get_melee_target() -> Node`

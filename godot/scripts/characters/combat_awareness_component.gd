@@ -22,6 +22,7 @@ const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
 const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
 const SPRINT_THRESHOLD: float = 4.0  ## Velocity threshold to consider "sprinting"
 const FACING_ANGLE_THRESHOLD: float = 0.866  ## cos(30°) — 射撃許可の角度閾値
+const MELEE_RANGE: float = 1.5  ## 近接攻撃検出範囲（1グリッド=1.5m、円形360°）
 
 # ============================================
 # State
@@ -141,6 +142,33 @@ func disable_firing() -> void:
 ## Check if automatic firing is enabled
 func is_firing_enabled() -> bool:
 	return _firing_enabled
+
+
+## 近接攻撃可能な敵を探す（円形360°、距離のみ判定）
+## @return 最も近い敵ノード（範囲内にいなければnull）
+func get_melee_target() -> Node:
+	if not _character:
+		return null
+	if "is_alive" in _character and not _character.is_alive:
+		return null
+
+	var enemies := _get_enemy_characters()
+	if enemies.is_empty():
+		return null
+
+	var char_pos: Vector3 = _character.global_position
+	var closest_enemy: Node = null
+	var closest_distance: float = MELEE_RANGE
+
+	for enemy in enemies:
+		if "is_alive" in enemy and not enemy.is_alive:
+			continue
+		var dist: float = char_pos.distance_to(enemy.global_position)
+		if dist < closest_distance:
+			closest_distance = dist
+			closest_enemy = enemy
+
+	return closest_enemy
 
 
 ## Get last shot result (hit status, miss offset, and critical hit)
@@ -427,7 +455,7 @@ func _try_fire() -> bool:
 	# 投擲・ドア開放・gun_down中は射撃しない
 	var anim_ctrl = _character.get_anim_controller() if _character.has_method("get_anim_controller") else null
 	if anim_ctrl:
-		if anim_ctrl.is_throwing() or anim_ctrl.is_opening_door() or anim_ctrl.is_gun_down():
+		if anim_ctrl.is_throwing() or anim_ctrl.is_opening_door() or anim_ctrl.is_gun_down() or anim_ctrl.is_meleeing():
 			return false
 	if not _is_facing_target():
 		return false

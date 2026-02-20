@@ -14,6 +14,8 @@ signal throw_release()      # グレネードをリリースするタイミン�
 signal throw_finished()     # 投擲アニメーション完了
 signal door_open_finished() # ドアそっと開けアニメーション完了
 signal door_open_impact()   # ドアを実際に開くインパクトタイミング
+signal melee_impact()       # 近接攻撃のインパクトタイミング
+signal melee_finished()     # 近接攻撃アニメーション完了
 
 # Export settings
 @export_group("Movement Speed")
@@ -59,6 +61,7 @@ var _is_dead := false
 var _is_throwing := false
 var _is_opening_door := false
 var _is_talking := false
+var _is_meleeing := false  ## 近接攻撃アニメーション再生中
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _lean_amount := 0.0  # ロール角（ラジアン）
 var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
@@ -117,6 +120,11 @@ const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミン
 const DOOR_OPEN_IK_RESUME_TIME := 29.0 / 30.0  # IKブレンドイン開始（29フレーム目 @30fps）
 const ACTION_IK_BLEND_SPEED := 5.0  # アクション復帰時のゆっくりIKブレンド速度
 
+# Melee animation
+const MELEE_ANIM := GameConstants.ANIM_RIFLE_MELEE
+const MELEE_IMPACT_TIME := 0.4  # インパクトタイミング（秒）
+const MELEE_IK_RESUME_TIME := 0.8  # IKブレンドイン開始
+
 # Blend values
 var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0  # 0=idle, 1=walking
@@ -165,7 +173,7 @@ func update_animation(
 	is_running: bool,
 	delta: float
 ) -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	# is_running パラメータをスプリントとして使用
@@ -231,7 +239,7 @@ func is_gun_down() -> bool:
 
 ## Trigger fire action (recoil)
 func fire() -> void:
-	if _fire_cooldown > 0 or _is_gun_down:
+	if _fire_cooldown > 0 or _is_gun_down or _is_meleeing:
 		return
 
 	var strength: float
@@ -259,7 +267,7 @@ func fire() -> void:
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return 0.0
 	if _is_sprinting:
 		return SPRINT_SPEED
@@ -432,7 +440,7 @@ func _resume_animation_tree() -> void:
 	# アクション完了フラグを解除
 	_is_opening_door = false
 
-	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking:
+	if is_instance_valid(_anim_tree) and not _is_dead and not _is_throwing and not _is_talking and not _is_meleeing:
 		# ブレンドパラメータをアイドル状態にリセット（古い移動状態でのピクつき防止）
 		_movement_blend = 0.0
 		_speed_blend = 0.0
@@ -447,7 +455,7 @@ func _resume_animation_tree() -> void:
 
 ## Play throw animation (legacy: underhand grenade throw with pistol)
 func play_throw() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 	_start_throw(PISTOL_LOW_THROWING_ANIM, THROW_RELEASE_TIME)
 
@@ -483,7 +491,7 @@ func _on_throw_finished(_anim_name: String) -> void:
 
 ## Play far throw animation (weapon-appropriate overhand throw)
 func play_throw_far() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	var anim_name: String
@@ -498,7 +506,7 @@ func play_throw_far() -> void:
 
 ## Play close throw animation (weapon-appropriate underhand throw)
 func play_throw_close() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	var anim_name: String
@@ -547,7 +555,7 @@ func is_throwing() -> bool:
 
 ## Play door open animation (quietly open door)
 func play_door_open() -> void:
-	if _is_dead or _is_throwing or _is_opening_door:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing:
 		return
 
 	_is_opening_door = true
@@ -617,7 +625,7 @@ func is_opening_door() -> bool:
 
 ## Play talking animation (looping, used during hostage negotiation)
 func play_talking() -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	_is_talking = true
@@ -668,6 +676,66 @@ func is_talking() -> bool:
 	return _is_talking
 
 
+## Play melee attack animation (rifle butt strike)
+func play_melee() -> void:
+	if _is_dead or _is_throwing or _is_opening_door or _is_meleeing or _is_talking:
+		return
+
+	_is_meleeing = true
+
+	# 左手IKを無効化
+	if _left_hand_ik:
+		_left_hand_ik.set_enabled(false)
+
+	# Stop AnimationTree during melee
+	if _anim_tree:
+		_anim_tree.active = false
+
+	if _anim_player.has_animation(MELEE_ANIM):
+		_anim_player.play(MELEE_ANIM, 0.15)
+		_anim_player.animation_finished.connect(_on_melee_anim_finished, CONNECT_ONE_SHOT)
+		# インパクトタイミングでシグナルを発火するタイマー
+		get_tree().create_timer(MELEE_IMPACT_TIME).timeout.connect(
+			func(): melee_impact.emit(), CONNECT_ONE_SHOT)
+		# アニメーション後半からIKを徐々にブレンドイン
+		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+			get_tree().create_timer(MELEE_IK_RESUME_TIME).timeout.connect(
+				_start_melee_ik_blend, CONNECT_ONE_SHOT)
+	else:
+		push_warning("CharacterAnimationController: Melee animation not found: %s" % MELEE_ANIM)
+		_is_meleeing = false
+		if _anim_tree:
+			_anim_tree.active = true
+
+
+## メレーアニメーション後半からIKをゆっくりブレンドイン
+func _start_melee_ik_blend() -> void:
+	if not _is_meleeing or _is_dead:
+		return
+	if _left_hand_ik:
+		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
+		_left_hand_ik.set_enabled(true)
+
+
+func _on_melee_anim_finished(_anim_name: String) -> void:
+	_is_meleeing = false
+
+	if _anim_player and not _is_dead:
+		var idle_anim_name := _get_idle_anim_name()
+		var crossfade_time := 0.3
+		if _anim_player.has_animation(idle_anim_name):
+			_anim_player.play(idle_anim_name, crossfade_time)
+		if _anim_tree:
+			get_tree().create_timer(crossfade_time).timeout.connect(_resume_animation_tree, CONNECT_ONE_SHOT)
+
+	melee_finished.emit()
+
+
+## Check if melee attack animation is playing
+func is_meleeing() -> bool:
+	return _is_meleeing
+
+
 ## Get current animation state for network synchronization
 ## Returns encoded state: "move_state,is_firing,blend_x,blend_y"
 ## move_state: 0=idle, 1=walking, 2=sprinting
@@ -687,7 +755,7 @@ func get_animation_state() -> String:
 ## Apply animation state from network (for remote characters)
 ## state: encoded state string from get_animation_state()
 func apply_animation_state(state: String, delta: float) -> void:
-	if _is_dead or _is_throwing or _is_opening_door or _is_talking:
+	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
 		return
 
 	var parts := state.split(",")

@@ -85,6 +85,12 @@ var _mouse_active: bool = false
 var _gun_down_check_timer: float = 0.0
 const GUN_DOWN_CHECK_INTERVAL := 0.1
 
+# 近接攻撃（メレー）
+var _melee_target: Node = null  ## 近接攻撃ターゲット
+var _melee_cooldown: float = 0.0  ## メレー後クールダウン
+var _melee_signals_connected: bool = false  ## シグナル接続済みフラグ
+const MELEE_COOLDOWN_TIME := 0.5  ## メレー後のクールダウン（秒）
+
 
 
 # ============================================
@@ -124,6 +130,12 @@ func setup(character: GameCharacter, cam: Camera3D, canvas: CanvasLayer, config:
 ## 毎フレーム処理（_physics_processから呼ぶ）
 func process(delta: float) -> void:
 	if not _character or not _character.is_alive:
+		return
+
+	# 近接攻撃チェック（最優先 — 射撃より先に判定）
+	if _process_melee(delta):
+		_handle_movement(delta)
+		_update_camera(delta)
 		return
 
 	# 3フェーズ実行: 検知 → エイム → 射撃
@@ -304,6 +316,84 @@ func _update_gun_down(delta: float) -> void:
 	_gun_down_check_timer = 0.0
 	if _character.anim_ctrl:
 		_character.anim_ctrl.set_gun_down(_character.check_gun_down())
+
+
+# ============================================
+# Melee Attack (自動近接攻撃)
+# ============================================
+
+## 近接攻撃処理（メレー中ならtrue、通常フローをスキップさせる）
+func _process_melee(delta: float) -> bool:
+	# クールダウン減算
+	if _melee_cooldown > 0.0:
+		_melee_cooldown -= delta
+
+	# メレーアニメーション再生中はブロック
+	if _character.anim_ctrl and _character.anim_ctrl.is_meleeing():
+		return true
+
+	# クールダウン中は新規メレー不可（通常フローに戻す）
+	if _melee_cooldown > 0.0:
+		return false
+
+	# 他のアクション中はスキップ
+	if _character.anim_ctrl and (_character.anim_ctrl.is_throwing() or _character.anim_ctrl.is_opening_door() or _character.anim_ctrl.is_talking()):
+		return false
+
+	# スプリント中はメレー不可
+	if _is_sprinting or Input.is_key_pressed(KEY_SHIFT):
+		return false
+
+	# 近接攻撃可能な敵を探す（円形360°）
+	if not _character.combat_awareness:
+		return false
+
+	var target := _character.combat_awareness.get_melee_target()
+	if not target:
+		return false
+
+	_melee_target = target
+
+	# シグナル接続（初回のみ）
+	_ensure_melee_signals()
+
+	# 敵の方向を向く
+	var dir: Vector3 = target.global_position - _character.global_position
+	dir.y = 0
+	if dir.length_squared() > 0.001:
+		_character.set_facing_direction_vec(dir.normalized())
+
+	# 近接攻撃アニメーション再生
+	if _character.anim_ctrl:
+		_character.anim_ctrl.play_melee()
+
+	return true
+
+
+## メレーシグナルを接続（一度だけ）
+func _ensure_melee_signals() -> void:
+	if _melee_signals_connected or not _character.anim_ctrl:
+		return
+	_character.anim_ctrl.melee_impact.connect(_on_melee_impact)
+	_character.anim_ctrl.melee_finished.connect(_on_melee_finished_ctrl)
+	_melee_signals_connected = true
+
+
+## メレーインパクト：致死ダメージを与える（100%一撃キル）
+## 攻撃者が死亡済みならキャンセル（先に殴った方が勝ち）
+func _on_melee_impact() -> void:
+	if not _character or not _character.is_alive:
+		return
+	if _melee_target and is_instance_valid(_melee_target):
+		if _melee_target.has_method("take_damage") and "is_alive" in _melee_target and _melee_target.is_alive:
+			var lethal_damage: float = _melee_target.max_health if "max_health" in _melee_target else 9999.0
+			_melee_target.take_damage(lethal_damage, _character, false)
+
+
+## メレー完了：ターゲットクリア＋クールダウン開始
+func _on_melee_finished_ctrl() -> void:
+	_melee_target = null
+	_melee_cooldown = MELEE_COOLDOWN_TIME
 
 
 # ============================================
