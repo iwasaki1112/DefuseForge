@@ -133,7 +133,7 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 		blackboard.set_value("combat_ray_timer", ray_timer)
 		if ray_timer <= 0.0:
 			blackboard.set_value("combat_ray_timer", RAY_CHECK_INTERVAL)
-			if _check_wall_ahead(body, move_dir):
+			if _is_movement_blocked(body, move_dir):
 				move_dir = _resolve_wall_avoidance(body, move_dir, current_state, blackboard, dir_to_enemy)
 
 	blackboard.set_value("move_direction", move_dir)
@@ -193,6 +193,24 @@ func _check_wall_ahead(body: CharacterBody3D, move_dir: Vector3) -> bool:
 	return false
 
 
+## 進行方向の先に床がないかチェック
+func _check_no_floor_ahead(body: CharacterBody3D, move_dir: Vector3) -> bool:
+	var space_state := body.get_world_3d().direct_space_state
+	if not space_state:
+		return false
+	var check_pos := body.global_position + move_dir * WALL_CHECK_DISTANCE
+	var from := Vector3(check_pos.x, check_pos.y + 2.0, check_pos.z)
+	var to := Vector3(check_pos.x, check_pos.y - 0.5, check_pos.z)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = MapBase.GROUND_COLLISION_LAYER
+	return space_state.intersect_ray(query).is_empty()
+
+
+## 壁または床なしで進行不可かチェック
+func _is_movement_blocked(body: CharacterBody3D, move_dir: Vector3) -> bool:
+	return _check_wall_ahead(body, move_dir) or _check_no_floor_ahead(body, move_dir)
+
+
 ## 壁回避: ストレイフ反転 or 状態切替
 func _resolve_wall_avoidance(body: CharacterBody3D, move_dir: Vector3, state: int, blackboard: Blackboard, dir_to_enemy: Vector3) -> Vector3:
 	match state:
@@ -203,18 +221,18 @@ func _resolve_wall_avoidance(body: CharacterBody3D, move_dir: Vector3, state: in
 			blackboard.set_value("strafe_direction", strafe_dir)
 			blackboard.set_value("strafe_switch_timer", randf_range(STRAFE_SWITCH_MIN, STRAFE_SWITCH_MAX))
 			var new_dir: Vector3 = dir_to_enemy.rotated(Vector3.UP, PI * 0.5 * strafe_dir)
-			# 反転方向も壁なら停止
-			if _check_wall_ahead(body, new_dir):
+			# 反転方向も壁or床なしなら停止
+			if _is_movement_blocked(body, new_dir):
 				return Vector3.ZERO
 			return new_dir
 
 		CombatState.RETREAT:
-			# 真後ろが壁 → 横に逃げる
+			# 真後ろが壁or床なし → 横に逃げる
 			var side := dir_to_enemy.rotated(Vector3.UP, PI * 0.5)
-			if not _check_wall_ahead(body, side):
+			if not _is_movement_blocked(body, side):
 				return side
 			side = dir_to_enemy.rotated(Vector3.UP, -PI * 0.5)
-			if not _check_wall_ahead(body, side):
+			if not _is_movement_blocked(body, side):
 				return side
 			return Vector3.ZERO
 

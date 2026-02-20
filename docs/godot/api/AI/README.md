@@ -32,9 +32,9 @@ Beehave（Behavior Tree）ベースのCPUキャラクターAIシステム。
 | BTProcessDetection | `bt_process_detection.gd` | 敵検知フェーズ実行 + Blackboard書き込み + スプリントリセット + グレネードクールダウン管理 |
 | BTCombatMove | `bt_combat_move.gd` | 戦闘移動（接近・ストレイフ・後退・待機）+ 敵方向を向く |
 | BTFaceTarget | `bt_face_target.gd` | 追跡中の敵方向を向く（BTCombatMoveに統合済み、単体使用も可能） |
-| BTWander | `bt_wander.gd` | 徘徊処理（壁回避・スタック検知・スプリント判定） |
+| BTWander | `bt_wander.gd` | 徘徊処理（壁回避・床境界チェック・スタック検知・スプリント判定） |
 | BTUpdateAnimation | `bt_update_animation.gd` | アニメーション更新（スプリント対応） |
-| BTApplyMovement | `bt_apply_movement.gd` | 物理移動適用（get_current_speed()使用） |
+| BTApplyMovement | `bt_apply_movement.gd` | 物理移動適用（床境界安全ネット付き） |
 | BTProcessFiring | `bt_process_firing.gd` | 射撃判定実行 |
 | BTOpenDoor | `bt_open_door.gd` | ドア開けアクション（fire-and-forget） |
 | BTThrowGrenade | `bt_throw_grenade.gd` | グレネード投擲アクション（fire-and-forget） |
@@ -95,7 +95,21 @@ BeehaveTree (process_thread: MANUAL)
 | HOLD | ストレイフ間の小休止 | 停止（0.5-1.5秒） |
 
 - **壁回避**: BTWanderと同じファン型レイキャスト（3方向、0.15秒間隔）。壁検知でストレイフ反転 or 状態切替
+- **床境界チェック**: 進行方向1.5m先に`GROUND_COLLISION_LAYER`の床がない場合、壁と同様にリダイレクト
 - **ジッター防止**: 距離ヒステリシス（APPROACH開始5.0m/解除4.5m等）+ 最小状態持続時間0.4秒
+
+### 床境界チェック（マップ外移動防止）
+
+3層の防御でAI CPUがマップ外（床タイルのない方向）に歩き出すのを防止:
+
+| 層 | 場所 | 仕組み |
+|----|------|--------|
+| 1. ターゲット選択 | BTWander._pick_random_target() | 床タイルのない位置をターゲット候補から除外 |
+| 2. 移動方向チェック | BTWander/BTCombatMove（0.15秒間引き） | 進行方向1.0-1.5m先に床がなければ方向転換 |
+| 3. 安全ネット | BTApplyMovement（0.15秒間引き） | 進行方向1.0m先に床がなければ速度ゼロ |
+
+- **チェック方法**: `GROUND_COLLISION_LAYER`への下向きレイキャスト（Y+2.0→Y-0.5）
+- **フォールバック**: 全試行で床が見つからない場合、BTWanderは現在地に留まる（マップ外移動を防止）
 
 ### スプリント
 - BTWander で目標地点までの距離が 3.5m を超える場合、`is_sprinting = true` にセット

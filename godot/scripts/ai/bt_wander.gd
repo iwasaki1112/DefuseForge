@@ -80,7 +80,7 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 	blackboard.set_value("wander_ray_timer", ray_timer)
 	if ray_timer <= 0.0:
 		blackboard.set_value("wander_ray_timer", RAY_CHECK_INTERVAL)
-		if _check_wall_ahead(body, move_dir):
+		if _check_wall_ahead(body, move_dir) or _check_no_floor_ahead(body, move_dir):
 			var new_target: Vector3 = _pick_random_target(body)
 			blackboard.set_value("wander_target", new_target)
 			blackboard.set_value("wander_stuck_pos", char_pos)
@@ -122,6 +122,24 @@ func _check_wall_ahead(body: CharacterBody3D, move_dir: Vector3) -> bool:
 	return false
 
 
+## 指定位置に床タイルがあるかレイキャストで確認
+func _has_floor_at(body: CharacterBody3D, pos: Vector3) -> bool:
+	var space_state := body.get_world_3d().direct_space_state
+	if not space_state:
+		return true  # チェックできない場合は許可
+	var from := Vector3(pos.x, pos.y + 2.0, pos.z)
+	var to := Vector3(pos.x, pos.y - 0.5, pos.z)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = MapBase.GROUND_COLLISION_LAYER
+	return not space_state.intersect_ray(query).is_empty()
+
+
+## 進行方向の先に床がないかチェック
+func _check_no_floor_ahead(body: CharacterBody3D, move_dir: Vector3) -> bool:
+	var check_pos := body.global_position + move_dir * WALL_CHECK_DISTANCE
+	return not _has_floor_at(body, check_pos)
+
+
 ## ランダムな徘徊目標地点を選択
 func _pick_random_target(body: CharacterBody3D) -> Vector3:
 	var char_pos: Vector3 = body.global_position
@@ -145,6 +163,10 @@ func _pick_random_target(body: CharacterBody3D) -> Vector3:
 			if not space_state.intersect_ray(query).is_empty():
 				continue
 
+		# 床タイルがない場所は除外
+		if not _has_floor_at(body, target):
+			continue
+
 		return target
 
 	# 短距離フォールバック(1-2m)で3回試行
@@ -165,13 +187,11 @@ func _pick_random_target(body: CharacterBody3D) -> Vector3:
 			if not space_state.intersect_ray(query).is_empty():
 				continue
 
+		# 床タイルがない場所は除外
+		if not _has_floor_at(body, target):
+			continue
+
 		return target
 
-	# 全試行失敗: 壁チェックなしでランダム方向1mを返す
-	# move_and_slideが壁で停止させ、スタック検知がIDLEに戻す
-	var fallback_angle := randf() * TAU
-	return Vector3(
-		char_pos.x + cos(fallback_angle) * 1.0,
-		char_pos.y,
-		char_pos.z + sin(fallback_angle) * 1.0
-	)
+	# 全試行失敗: 現在地に留まる（マップ外への移動を防止）
+	return char_pos
