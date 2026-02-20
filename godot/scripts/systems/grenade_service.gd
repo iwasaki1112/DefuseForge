@@ -306,6 +306,12 @@ func _apply_preloaded_resources(smoke_grenade: SmokeGrenade) -> void:
 
 ## シェーダーウォームアップ（ゲーム開始時に呼び出し、初回GPUコンパイルを事前完了）
 func warmup_smoke_shader() -> void:
+	_warmup_smoke_clip_shader()
+	_warmup_explosion_particle_shader()
+
+
+## スモーククリップシェーダーのウォームアップ
+func _warmup_smoke_clip_shader() -> void:
 	if not smoke_clip_shader:
 		return
 	# 不可視メッシュでシェーダーを1フレーム描画してGPUコンパイルを強制
@@ -321,6 +327,23 @@ func warmup_smoke_shader() -> void:
 	# 次フレームで削除（1フレーム描画すればGPUコンパイル完了）
 	mesh_inst.tree_entered.connect(func():
 		get_tree().create_timer(0.1).timeout.connect(mesh_inst.queue_free)
+	)
+
+
+## 爆発パーティクルシェーダーのウォームアップ
+func _warmup_explosion_particle_shader() -> void:
+	if not ExplosionEffectScene:
+		return
+	# 爆発エフェクトを画面外でインスタンス化し、パーティクルシェーダーのGPUコンパイルを強制
+	var effect: Node3D = ExplosionEffectScene.instantiate() as Node3D
+	if not effect:
+		return
+	effect.position = Vector3(0, -1000, 0)
+	effect.scale = Vector3(0.01, 0.01, 0.01)
+	add_child(effect)
+	# 0.1秒後に削除（1フレーム描画すればGPUコンパイル完了）
+	effect.tree_entered.connect(func():
+		get_tree().create_timer(0.1).timeout.connect(effect.queue_free)
 	)
 
 
