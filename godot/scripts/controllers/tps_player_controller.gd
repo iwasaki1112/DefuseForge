@@ -197,9 +197,9 @@ func has_move_input() -> bool:
 	return false
 
 
-## 武器の視界距離に合わせてカメラ高さを更新する
-func update_camera_for_weapon(vision_range: float) -> void:
-	_target_camera_height = _base_camera_height * pow(vision_range / DEFAULT_VISION_RANGE, 1.2)
+## 武器の視界距離に合わせてカメラ高さを更新する（現在は固定）
+func update_camera_for_weapon(_vision_range: float) -> void:
+	_target_camera_height = _base_camera_height
 
 
 ## スプリント状態を設定（スプリントボタンから呼ばれる）
