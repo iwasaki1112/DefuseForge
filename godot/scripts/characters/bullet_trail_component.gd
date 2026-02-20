@@ -169,12 +169,13 @@ func _ensure_trail_nodes() -> void:
 	# シェーダーマテリアル作成
 	_bullet_trail_mat = ShaderMaterial.new()
 	_bullet_trail_mat.shader = BULLET_TRAIL_SHADER
-	_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.95, 0.85, 1.0))
-	_bullet_trail_mat.set_shader_parameter("edge_softness", 0.3)
-	_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.12)
+	_bullet_trail_mat.set_shader_parameter("trail_color", Color(1.0, 0.85, 0.55, 0.18))
+	_bullet_trail_mat.set_shader_parameter("edge_softness", 0.5)
+	_bullet_trail_mat.set_shader_parameter("tip_roundness", 0.18)
 	_bullet_trail_mat.set_shader_parameter("fade_start", 0.0)
-	_bullet_trail_mat.set_shader_parameter("fade_end", 0.7)
-	_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.8)
+	_bullet_trail_mat.set_shader_parameter("fade_end", 0.5)
+	_bullet_trail_mat.set_shader_parameter("glow_intensity", 1.0)
+	_bullet_trail_mat.set_shader_parameter("core_brightness", 1.8)
 	_bullet_trail_mat.set_shader_parameter("overall_alpha", 0.0)
 
 	# Quad 1（水平面）

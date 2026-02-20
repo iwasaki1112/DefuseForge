@@ -1,12 +1,13 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, blend_add, depth_draw_opaque;
 
-uniform vec4 trail_color : source_color = vec4(1.0, 0.95, 0.8, 1.0);
-uniform float edge_softness : hint_range(0.0, 2.0) = 0.3;
-uniform float tip_roundness : hint_range(0.0, 0.5) = 0.15;
+uniform vec4 trail_color : source_color = vec4(1.0, 0.9, 0.65, 0.35);
+uniform float edge_softness : hint_range(0.0, 2.0) = 0.5;
+uniform float tip_roundness : hint_range(0.0, 0.5) = 0.18;
 uniform float fade_start : hint_range(0.0, 1.0) = 0.0;
-uniform float fade_end : hint_range(0.0, 1.0) = 0.8;
-uniform float glow_intensity : hint_range(0.0, 3.0) = 1.5;
+uniform float fade_end : hint_range(0.0, 1.0) = 0.5;
+uniform float glow_intensity : hint_range(0.0, 3.0) = 0.8;
+uniform float core_brightness : hint_range(0.0, 3.0) = 1.5;
 uniform float overall_alpha : hint_range(0.0, 1.0) = 1.0;
 
 void fragment() {
@@ -33,9 +34,10 @@ void fragment() {
 	// 最終アルファ
 	float final_alpha = edge_alpha * tip_factor * fade_alpha * overall_alpha;
 
-	// グロー効果（中央ほど明るく）
-	float glow = (1.0 - center_dist * 0.5) * glow_intensity;
-	vec3 final_color = trail_color.rgb * glow;
+	// コア/グロー効果（中央ほど明るく、端に向かって自然に減衰）
+	float core = exp(-center_dist * center_dist * 3.0) * core_brightness;
+	float glow = (1.0 - center_dist * 0.7) * glow_intensity;
+	vec3 final_color = trail_color.rgb * (core + glow);
 
 	ALBEDO = final_color;
 	ALPHA = final_alpha * trail_color.a;
