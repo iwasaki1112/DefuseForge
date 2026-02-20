@@ -132,8 +132,21 @@
 ### set_weapon(weapon: Weapon) -> void
 武器タイプを設定する。
 
+### set_gun_down(value: bool) -> void
+Gun down状態を設定する。前方に壁や味方がいる場合に武器を下げるポーズに遷移する。
+
+**動作:**
+- 上半身のみGunDownアニメーション（`game_rifle_gun_down`）をオーバーレイ
+- 下半身は通常のアイドル/歩行アニメーションを継続
+- スプリント中は自動的に無効化
+- ピストルには非対応（ライフル系武器のみ）
+- `fire()`をブロック（射撃不可）
+
+### is_gun_down() -> bool
+Gun down状態か確認する。
+
 ### fire() -> void
-発射アクションをトリガーする。リコイルアニメーションを再生。
+発射アクションをトリガーする。リコイルアニメーションを再生。gun_down状態の場合はブロックされる。
 
 ### get_current_speed() -> float
 現在の状態に基づく移動速度を返す。
@@ -208,7 +221,7 @@ anim_ctrl.fire()
 
 ## 内部動作
 
-- AnimationTree構成: output → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend
+- AnimationTree構成: output → GunDownBlend → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend
 - アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
 - TimeScaleによる移動速度同期でアニメーション速度を調整
 - `RecoilModifier`でプロシージャルリコイルを適用
@@ -252,6 +265,8 @@ anim_ctrl.fire()
 - `set_stance(stance: Stance) -> void`
 - `get_stance() -> Stance`
 - `set_weapon(weapon: Weapon) -> void`
+- `set_gun_down(value: bool) -> void`
+- `is_gun_down() -> bool`
 - `fire() -> void`
 - `get_current_speed() -> float`
 - `is_dead() -> bool`

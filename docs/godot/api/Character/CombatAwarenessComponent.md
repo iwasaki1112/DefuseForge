@@ -175,7 +175,7 @@ func _physics_process(delta: float) -> void:
 ### 自動発砲ロジック
 - `enable_firing()`で有効化
 - 毎`process_firing()`呼び出し時に発砲判定
-- 条件: 発砲有効 AND ターゲット存在 AND ターゲット有効
+- 条件: 発砲有効 AND ターゲット存在 AND ターゲット有効 AND !gun_down
 - 発砲時の動作:
   1. `CharacterAnimationController.fire()`でリコイルアニメーション再生
   2. 武器のダメージ値を取得（デフォルト: 10.0）

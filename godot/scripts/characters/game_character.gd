@@ -544,6 +544,63 @@ func get_muzzle_flash_quad1_z() -> float:
 const WALL_DETECT_DISTANCE := 1.2  # 壁検出レイキャスト距離
 const WALL_COLLISION_MASK := 2  # 壁コリジョンマスク
 
+## Gun Down検出用定数
+const GUN_DOWN_DETECT_DISTANCE := 1.5  # 検出距離（1グリッド分）
+const GUN_DOWN_ANGLE_THRESHOLD := 0.5  # cos(60°) — 前方±60°の円錐内
+
+## 前方に壁または敵以外のキャラクターがいるかチェック（gun_down判定用）
+## 壁: 前方1.5mのレイキャスト（コリジョンレイヤー2）
+## キャラクター: 前方±60°の円錐内、1.5m以内の敵以外
+func check_gun_down() -> bool:
+	if not is_alive:
+		return false
+
+	var space_state := get_world_3d().direct_space_state
+	if not space_state:
+		return false
+
+	var forward := _facing_direction
+	forward.y = 0
+	if forward.length_squared() < 0.001:
+		return false
+	forward = forward.normalized()
+
+	var origin := global_position + Vector3(0, 0.8, 0)  # 胴体高さ
+
+	# 1. 壁チェック（前方レイキャスト）
+	var wall_query := PhysicsRayQueryParameters3D.create(
+		origin, origin + forward * GUN_DOWN_DETECT_DISTANCE, WALL_COLLISION_MASK
+	)
+	wall_query.exclude = [get_rid()]
+	if space_state.intersect_ray(wall_query):
+		return true
+
+	# 2. 敵以外のキャラクターチェック（前方±60°の円錐内、1.5m以内）
+	var characters := get_tree().get_nodes_in_group(GameConstants.GROUP_CHARACTERS)
+	for node in characters:
+		if node == self:
+			continue
+		var character := node as GameCharacter
+		if not character:
+			continue
+		if is_enemy_of(character):
+			continue
+		if not character.is_alive:
+			continue
+
+		var to_char: Vector3 = character.global_position - global_position
+		to_char.y = 0
+		var dist: float = to_char.length()
+		if dist > GUN_DOWN_DETECT_DISTANCE or dist < 0.01:
+			continue
+
+		# 前方角度チェック
+		if forward.dot(to_char.normalized()) >= GUN_DOWN_ANGLE_THRESHOLD:
+			return true
+
+	return false
+
+
 ## 4方向の壁を検出（死亡アニメーション選択用）
 ## @return Dictionary { HitDirection(int) -> bool } 壁があればtrue
 func _detect_nearby_walls() -> Dictionary:

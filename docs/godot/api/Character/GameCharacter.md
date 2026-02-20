@@ -237,6 +237,19 @@ var weapon = WeaponRegistry.get_preset("m4a1")
 character.equip_weapon(weapon)
 ```
 
+### Gun Down検出
+
+#### check_gun_down() -> bool
+前方に壁または敵以外のキャラクターがいるかチェックする。
+
+**検出条件:**
+- **壁**: 前方1.5mのレイキャスト（コリジョンレイヤー2）
+- **キャラクター**: 前方±60°の円錐内、1.5m以内の敵以外（味方・人質・中立NPC）
+
+**戻り値:** 障害物が検出された場合`true`
+
+**使用場所:** `TPSPlayerController._update_gun_down()`から100ms間隔で呼び出し
+
 ## 内部動作
 
 ### 死亡処理と壁検出
@@ -314,6 +327,7 @@ CharacterSnapshotから状態を復元する（リモートキャラクター用
 - `setup_vision(fov: float = 75.0, view_dist: float = 7.0) -> VisionComponent`
 - `setup_combat_awareness() -> CombatAwarenessComponent`
 - `get_combat_awareness() -> CombatAwarenessComponent`
+- `check_gun_down() -> bool`
 - `equip_weapon(weapon: WeaponPreset) -> void`
 - `get_current_weapon() -> WeaponPreset`
 - `get_weapon_socket() -> Node3D`

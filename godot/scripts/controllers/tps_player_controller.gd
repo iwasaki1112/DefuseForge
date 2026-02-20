@@ -81,6 +81,10 @@ var _target_camera_height: float = 14.0
 # マウス操作検知（PCのみ有効、モバイルではfalseのまま）
 var _mouse_active: bool = false
 
+# Gun Down検出タイマー（毎フレームではなく100ms間隔）
+var _gun_down_check_timer: float = 0.0
+const GUN_DOWN_CHECK_INTERVAL := 0.1
+
 
 
 # ============================================
@@ -131,9 +135,15 @@ func process(delta: float) -> void:
 	if not is_sprint_active:
 		# フェーズ2: エイム更新（検知結果で向きを即座に設定）
 		_handle_aim(delta)
+		# フェーズ2.5: Gun Down検出（壁/味方接近時に武器を下げる）
+		_update_gun_down(delta)
 		# フェーズ3: 射撃判定（右スティック操作中も敵が射程内なら射撃する）
 		if _character.combat_awareness:
 			_character.combat_awareness.process_firing(delta)
+	else:
+		# スプリント中はgun_downを解除
+		if _character.anim_ctrl:
+			_character.anim_ctrl.set_gun_down(false)
 	_handle_movement(delta)
 	_update_camera(delta)
 
@@ -281,6 +291,19 @@ func _handle_aim(_delta: float) -> void:
 	# 4. 移動方向 — フォールバック
 	if _last_move_dir.length_squared() > 0.01:
 		_character.set_facing_direction_vec(_last_move_dir)
+
+
+# ============================================
+# Gun Down Detection
+# ============================================
+
+func _update_gun_down(delta: float) -> void:
+	_gun_down_check_timer += delta
+	if _gun_down_check_timer < GUN_DOWN_CHECK_INTERVAL:
+		return
+	_gun_down_check_timer = 0.0
+	if _character.anim_ctrl:
+		_character.anim_ctrl.set_gun_down(_character.check_gun_down())
 
 
 # ============================================
