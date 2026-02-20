@@ -22,14 +22,15 @@ const (
 
 // Client WebSocket接続を管理
 type Client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	room   *Room
-	peerID int
-	name   string
-	closed bool // チャネルがcloseされたかどうか
-	mu     sync.RWMutex
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	room     *Room
+	peerID   int
+	name     string
+	gameMode string // ゲームモード（"coop" / "multiplayer"）
+	closed   bool   // チャネルがcloseされたかどうか
+	mu       sync.RWMutex
 }
 
 // NewClient 新しいクライアントを作成
@@ -244,6 +245,20 @@ func (c *Client) handleLeaveRoom() {
 	log.Printf("Player %s left room %s", c.GetName(), roomName)
 }
 
+// GetGameMode ゲームモードを取得
+func (c *Client) GetGameMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.gameMode
+}
+
+// SetGameMode ゲームモードを設定
+func (c *Client) SetGameMode(mode string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gameMode = mode
+}
+
 // handleFindMatch マッチ待機キューに追加
 func (c *Client) handleFindMatch(msg ClientMessage) {
 	if c.GetRoom() != nil {
@@ -256,6 +271,7 @@ func (c *Client) handleFindMatch(msg ClientMessage) {
 		playerName = "Player"
 	}
 	c.SetName(playerName)
+	c.SetGameMode(msg.GameMode)
 
 	c.hub.AddToMatchQueue(c)
 }
