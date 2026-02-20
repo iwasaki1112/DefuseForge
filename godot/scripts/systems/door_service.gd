@@ -590,6 +590,9 @@ func _execute_door_fall(door: Node3D, params: Dictionary, instant: bool = false)
 		door.global_transform.basis = door.global_transform.basis * Basis(Vector3.RIGHT, deg_to_rad(fall_angle))
 		door.global_position += fall_dir * 0.3
 		door_opening_finished.emit(door)
+		# 倒れたドアは地面に横たわるためFoW遮蔽を無効化
+		if _fow_system:
+			_fow_system.set_door_occluder_enabled(door, false)
 		if _on_vision_update_callback.is_valid():
 			_on_vision_update_callback.call()
 		return
@@ -617,6 +620,9 @@ func _execute_door_fall(door: Node3D, params: Dictionary, instant: bool = false)
 
 	tween.chain().tween_callback(func():
 		door_opening_finished.emit(door)
+		# 倒れたドアは地面に横たわるためFoW遮蔽を無効化
+		if _fow_system:
+			_fow_system.set_door_occluder_enabled(door, false)
 		if _on_vision_update_callback.is_valid():
 			_on_vision_update_callback.call()
 	)

@@ -28,7 +28,7 @@ stretch_mode = 3
 visible = false
 custom_minimum_size = Vector2(80, 40)
 layout_mode = 2
-text = "Kick"
+text = "Attack"
 
 [node name="HandGrenadeContainer" type="VBoxContainer" parent="."]
 layout_mode = 2
