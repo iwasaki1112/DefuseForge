@@ -449,8 +449,10 @@ func _resume_animation_tree() -> void:
 		# ブレンドパラメータをアイドル状態にリセット（古い移動状態でのピクつき防止）
 		_movement_blend = 0.0
 		_speed_blend = 0.0
+		_is_gun_down = false
 		_anim_tree.set("parameters/IdleBlend/blend_amount", 0.0)
 		_anim_tree.set("parameters/SpeedBlend/blend_amount", 0.0)
+		_anim_tree.set("parameters/GunDownBlend/blend_amount", 0.0)
 		_anim_tree.active = true
 		# 左手IKを武器に応じて再有効化（ブレンド速度をデフォルトに戻す）
 		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
