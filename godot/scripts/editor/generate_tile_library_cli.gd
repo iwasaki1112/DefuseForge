@@ -13,6 +13,7 @@ const FLOOR_SAVE_PATH := "res://data/tiles/tile_library_floor.tres"
 const WALL_SAVE_PATH := "res://data/tiles/tile_library_wall.tres"
 const DOOR_SAVE_PATH := "res://data/tiles/tile_library_door.tres"
 const WINDOW_SAVE_PATH := "res://data/tiles/tile_library_window.tres"
+const ROOF_SAVE_PATH := "res://data/tiles/tile_library_roof.tres"
 
 
 func _init() -> void:
@@ -63,6 +64,7 @@ func _init() -> void:
 	_build_library(wall_files, WALL_SAVE_PATH, "Wall")
 	_build_library(door_files, DOOR_SAVE_PATH, "Door")
 	_build_library(window_files, WINDOW_SAVE_PATH, "Window")
+	_build_roof_library()
 
 	quit()
 
@@ -219,6 +221,36 @@ func _build_library(files: Array[String], save_path: String, label: String) -> v
 		print("=== [%s] MeshLibrary saved: %s (%d items) ===" % [label, save_path, files.size()])
 	else:
 		print("=== [%s] ERROR saving: %s ===" % [label, err])
+
+
+## ルーフタイルライブラリを手続き的に生成（GLB不要）
+func _build_roof_library() -> void:
+	var lib := MeshLibrary.new()
+
+	# 半透明マテリアル（エディタで配置位置を確認用）
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.2, 0.5, 1.0, 0.3)
+
+	# 2m×2mプレーンメッシュ
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(2, 2)
+	plane.material = mat
+
+	lib.create_item(0)
+	lib.set_item_name(0, "roof")
+	lib.set_item_mesh(0, plane)
+	# エディタでは床と同じ高さに表示（ランタイムでY=2.0のSHADOWS_ONLYメッシュを生成）
+	lib.set_item_mesh_transform(0, Transform3D.IDENTITY)
+
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_DIR))
+
+	var err := ResourceSaver.save(lib, ROOF_SAVE_PATH)
+	if err == OK:
+		print("=== [Roof] MeshLibrary saved: %s (1 procedural item) ===" % ROOF_SAVE_PATH)
+	else:
+		print("=== [Roof] ERROR saving: %s ===" % err)
 
 
 func _find_all_mesh_instances(node: Node, result: Array[MeshInstance3D]) -> void:

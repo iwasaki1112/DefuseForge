@@ -10,6 +10,9 @@ const GROUND_COLLISION_LAYER: int = 1
 const WALL_COLLISION_LAYER: int = 2
 const WINDOW_GLASS_COLLISION_LAYER: int = 4
 
+## ルーフオクルーダーのビジュアルレイヤー（メインライトのcull_maskから除外される）
+const ROOF_OCCLUDER_VISUAL_LAYER: int = 2
+
 ## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
 const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_panel.glb"
 ## ドア蝶番のオフセット（タイル原点からの相対位置、Godot座標系）
@@ -34,6 +37,7 @@ func _ready() -> void:
 	_remove_editor_lighting()
 	_setup_prop_collisions(self)
 	_setup_collisions(self)
+	_setup_roof_occluders()
 	_notify_fow_system()
 
 
@@ -42,6 +46,130 @@ func _remove_editor_lighting() -> void:
 	for child in get_children():
 		if child is WorldEnvironment or child is DirectionalLight3D:
 			child.queue_free()
+
+
+## GridMapRoofからルーフオクルーダー + 屋内ライトを生成
+func _setup_roof_occluders() -> void:
+	for child in get_children():
+		if child is GridMap and "roof" in child.name.to_lower():
+			_generate_roof_shadow_mesh(child as GridMap)
+			_generate_indoor_lights(child as GridMap)
+
+
+## GridMapRoofの全セルを結合した単一MeshInstance3D（SHADOWS_ONLY）を生成
+func _generate_roof_shadow_mesh(grid_map: GridMap) -> void:
+	var cells := grid_map.get_used_cells()
+	if cells.is_empty():
+		return
+
+	var cell_size := grid_map.cell_size
+
+	# ルーフの高さ（壁上端 = 2mグリッドの上端）
+	var roof_y := cell_size.y
+
+	# SurfaceToolで全セルのプレーンを単一メッシュに結合
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	for cell in cells:
+		var pos := grid_map.map_to_local(cell)
+		var hx := cell_size.x / 2.0
+		var hz := cell_size.z / 2.0
+		var y := pos.y + roof_y
+
+		var v0 := Vector3(pos.x - hx, y, pos.z - hz)
+		var v1 := Vector3(pos.x + hx, y, pos.z - hz)
+		var v2 := Vector3(pos.x + hx, y, pos.z + hz)
+		var v3 := Vector3(pos.x - hx, y, pos.z + hz)
+
+		st.set_normal(Vector3.UP)
+		st.add_vertex(v0)
+		st.add_vertex(v1)
+		st.add_vertex(v2)
+		st.add_vertex(v0)
+		st.add_vertex(v2)
+		st.add_vertex(v3)
+
+	var mesh := st.commit()
+	var mesh_inst := MeshInstance3D.new()
+	mesh_inst.name = "RoofOccluder"
+	mesh_inst.mesh = mesh
+	mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	mesh_inst.layers = ROOF_OCCLUDER_VISUAL_LAYER
+	add_child(mesh_inst)
+
+	# エディタ用GridMapを非表示（ランタイムではシャドウメッシュが代替）
+	grid_map.visible = false
+
+	print("[%s] RoofOccluder: %d cells, layers=%d, cast_shadow=%d, y=%.1f" % [
+		_map_name, cells.size(), mesh_inst.layers, mesh_inst.cast_shadow, roof_y])
+
+
+## GridMapRoofのセルから部屋（連結領域）を検出し、各部屋の中央にOmniLight3Dを配置
+func _generate_indoor_lights(grid_map: GridMap) -> void:
+	var cells := grid_map.get_used_cells()
+	if cells.is_empty():
+		return
+
+	var cell_size := grid_map.cell_size
+	var rooms := _find_connected_rooms(cells)
+
+	for i in rooms.size():
+		var room: Array = rooms[i]
+
+		# 部屋の重心を計算
+		var centroid := Vector3.ZERO
+		for cell in room:
+			centroid += grid_map.map_to_local(cell)
+		centroid /= room.size()
+		centroid.y = 1.8  # 天井付近
+
+		var light := OmniLight3D.new()
+		light.name = "IndoorLight_%d" % i
+		light.position = centroid
+		light.shadow_enabled = false  # モバイル性能
+		light.omni_attenuation = 0.5
+		light.add_to_group("indoor_lights")
+		add_child(light)
+
+	print("[%s] IndoorLights: %d rooms from %d cells" % [_map_name, rooms.size(), cells.size()])
+
+
+## セルのflood-fillで連結領域（部屋）を検出
+func _find_connected_rooms(cells: Array) -> Array:
+	var cell_set := {}
+	for cell in cells:
+		cell_set[Vector2i(cell.x, cell.z)] = true
+
+	var visited := {}
+	var rooms: Array = []
+
+	for cell in cells:
+		var key := Vector2i(cell.x, cell.z)
+		if key in visited:
+			continue
+
+		var room: Array = []
+		var queue: Array[Vector3i] = [cell]
+
+		while queue.size() > 0:
+			var current: Vector3i = queue.pop_front()
+			var current_key := Vector2i(current.x, current.z)
+			if current_key in visited or current_key not in cell_set:
+				continue
+			visited[current_key] = true
+			room.append(current)
+
+			for dir in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+				var neighbor: Vector3i = current + dir
+				var neighbor_key := Vector2i(neighbor.x, neighbor.z)
+				if neighbor_key in cell_set and neighbor_key not in visited:
+					queue.append(neighbor)
+
+		if room.size() > 0:
+			rooms.append(room)
+
+	return rooms
 
 
 ## コリジョンレイヤーを設定

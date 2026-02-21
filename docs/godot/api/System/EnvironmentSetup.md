@@ -18,7 +18,10 @@
 ## Public API
 
 ### get_directional_light() -> DirectionalLight3D
-DirectionalLight3Dノードを取得。
+メインDirectionalLight3Dノードを取得。
+
+### get_outdoor_light() -> DirectionalLight3D
+屋外DirectionalLight3Dノードを取得。斜め光で屋外エリアに影を生成する。
 
 ### get_environment() -> Environment
 Environmentリソースを取得。
@@ -64,13 +67,15 @@ env.ambient_light_energy = 0.2
 
 EnvironmentSetupは以下の子ノードを自動生成:
 
-- `DirectionalLight` - メインライト
+- `DirectionalLight` - メインライト（真上からの均一照明）
+- `OutdoorLight` - 屋外ライト（斜め光、影あり。建物上のルーフオクルーダーで屋内遮蔽）
 - `WorldEnvironment` - 環境設定
 
 ## 適用される設定
 
 ### Lighting
-- DirectionalLight3Dの位置・エネルギー・色・角度
+- DirectionalLight3D（メイン）の位置・エネルギー・色・角度
+- OutdoorLight（屋外）の有効化・エネルギー・色・角度
 
 ### Shadow
 - 影の有効化・ぼかし・バイアス・距離
@@ -98,6 +103,13 @@ EnvironmentSetupはGameScreenで自動的に追加される。
 
 マップシーンはジオメトリ（床、壁）とスポーンポイントのみを含める。
 
+**屋外ライトの遮蔽（ルーフオクルーダー）**
+
+建物内に屋外ライトの光が届かないようにするには、`GridMapRoof` レイヤーでルーフタイルを配置する：
+- `tile_library_roof.tres` のタイルを建物の屋内セルに配置（エディタで半透明の青タイルとして表示）
+- ランタイムでMapBaseが自動的にSHADOWS_ONLYメッシュに変換（GridMapは非表示）
+- これにより屋外ライトの影だけが屋内に落ち、屋内は均一照明のまま保たれる
+
 **カメラの投影方式**
 
 gl_compatibilityレンダラーでは、直交投影（Orthogonal）カメラで影が表示されない。
@@ -116,5 +128,6 @@ gl_compatibilityレンダラーでは、直交投影（Orthogonal）カメラで
 ### メソッド
 - `set_preset(new_preset: EnvironmentPreset) -> void`
 - `get_directional_light() -> DirectionalLight3D`
+- `get_outdoor_light() -> DirectionalLight3D`
 - `get_environment() -> Environment`
 - `get_world_environment() -> WorldEnvironment`

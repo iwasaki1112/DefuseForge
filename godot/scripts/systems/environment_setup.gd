@@ -10,6 +10,7 @@ class_name EnvironmentSetup
 			_apply_preset()
 
 var _directional_light: DirectionalLight3D
+var _outdoor_light: DirectionalLight3D
 var _world_environment: WorldEnvironment
 var _environment: Environment
 
@@ -24,6 +25,12 @@ func _create_nodes() -> void:
 	_directional_light = DirectionalLight3D.new()
 	_directional_light.name = "DirectionalLight"
 	add_child(_directional_light)
+
+	# Outdoor DirectionalLight3D
+	_outdoor_light = DirectionalLight3D.new()
+	_outdoor_light.name = "OutdoorLight"
+	_outdoor_light.visible = false
+	add_child(_outdoor_light)
 
 	# Environment
 	_environment = Environment.new()
@@ -41,7 +48,7 @@ func _create_nodes() -> void:
 func _apply_preset() -> void:
 	if not preset:
 		return
-	if not _directional_light or not _environment:
+	if not _directional_light or not _outdoor_light or not _environment:
 		return
 
 	_apply_lighting()
@@ -49,21 +56,38 @@ func _apply_preset() -> void:
 	_apply_ambient()
 	_apply_rendering()
 	_apply_post_processing()
+	# 屋内ライトはMapBaseが生成するため遅延適用
+	call_deferred("_apply_indoor_lights")
 
 
 func _apply_lighting() -> void:
+	# メインライト（真上）: 影なし → 屋内外を均一に照らす
 	_directional_light.position = Vector3(0, 10, 0)
 	_directional_light.light_energy = preset.light_energy
 	_directional_light.light_color = preset.light_color
 	_directional_light.rotation_degrees = Vector3(preset.light_pitch, preset.light_yaw, 0)
 
+	# 屋外ライト（斜め）: 影あり → ルーフオクルーダーで屋内をブロック
+	_outdoor_light.visible = preset.outdoor_light_enabled
+	_outdoor_light.position = Vector3(0, 10, 0)
+	_outdoor_light.light_energy = preset.outdoor_light_energy
+	_outdoor_light.light_color = preset.outdoor_light_color
+	_outdoor_light.rotation_degrees = Vector3(preset.outdoor_light_pitch, preset.outdoor_light_yaw, 0)
+
+	print("[ENV] main=%.2f outdoor=%.2f ambient=%.2f" % [
+		preset.light_energy, preset.outdoor_light_energy, preset.ambient_energy])
+
 
 func _apply_shadow() -> void:
-	_directional_light.shadow_enabled = preset.shadow_enabled
-	_directional_light.shadow_blur = preset.shadow_blur
-	_directional_light.shadow_bias = preset.shadow_bias
-	_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	_directional_light.directional_shadow_max_distance = preset.shadow_distance
+	# メインライト: 影なし（真上からの影は視覚的に無意味、ルーフオクルーダーに邪魔される）
+	_directional_light.shadow_enabled = false
+
+	# 屋外ライト: 影あり（壁の影 + ルーフオクルーダーで屋内遮蔽）
+	_outdoor_light.shadow_enabled = preset.shadow_enabled
+	_outdoor_light.shadow_blur = preset.shadow_blur
+	_outdoor_light.shadow_bias = preset.shadow_bias
+	_outdoor_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	_outdoor_light.directional_shadow_max_distance = preset.shadow_distance
 
 	# 影の解像度をプロジェクト設定に適用
 	var shadow_size_value := preset.get_shadow_size_value()
@@ -120,6 +144,17 @@ func _apply_post_processing() -> void:
 	_environment.adjustment_saturation = preset.adjustment_saturation
 
 
+## 屋内ライト（MapBaseが生成したOmniLight3Dグループ）の設定を適用
+func _apply_indoor_lights() -> void:
+	if not preset:
+		return
+	for light in get_tree().get_nodes_in_group("indoor_lights"):
+		if light is OmniLight3D:
+			light.visible = preset.indoor_light_enabled
+			light.light_energy = preset.indoor_light_energy
+			light.light_color = preset.indoor_light_color
+
+
 ## プリセットを動的に変更
 func set_preset(new_preset: EnvironmentPreset) -> void:
 	preset = new_preset
@@ -128,6 +163,11 @@ func set_preset(new_preset: EnvironmentPreset) -> void:
 ## DirectionalLight3Dを取得
 func get_directional_light() -> DirectionalLight3D:
 	return _directional_light
+
+
+## 屋外DirectionalLight3Dを取得
+func get_outdoor_light() -> DirectionalLight3D:
+	return _outdoor_light
 
 
 ## Environmentを取得

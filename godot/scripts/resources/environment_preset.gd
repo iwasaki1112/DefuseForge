@@ -20,6 +20,24 @@ class_name EnvironmentPreset
 @export var light_yaw: float = -33.0  ## 光の回転（度）
 
 # ============================================
+# Outdoor Light
+# ============================================
+@export_group("Outdoor Light")
+@export var outdoor_light_enabled: bool = false  ## 屋外ライトを有効化
+@export var outdoor_light_energy: float = 0.5  ## 屋外ライトの強さ
+@export var outdoor_light_color: Color = Color(1.0, 0.95, 0.85, 1.0)  ## 屋外ライトの色
+@export var outdoor_light_pitch: float = -50.0  ## 屋外ライトの傾き（度）
+@export var outdoor_light_yaw: float = -30.0  ## 屋外ライトの回転（度）
+
+# ============================================
+# Indoor Light
+# ============================================
+@export_group("Indoor Light")
+@export var indoor_light_enabled: bool = false  ## 屋内ライトを有効化
+@export var indoor_light_energy: float = 1.0  ## 屋内ライトの強さ
+@export var indoor_light_color: Color = Color(1.0, 0.9, 0.7, 1.0)  ## 屋内ライトの色（暖色）
+
+# ============================================
 # Shadow
 # ============================================
 @export_group("Shadow")
