@@ -111,8 +111,9 @@ func _setup_label_manager() -> void:
 
 ゲーム開始時にマップ全体の俯瞰ショットからプレイヤーキャラクター上空へカメラが移動する演出。
 
+- `_position_camera_overview()`: MapBase.get_map_bounds()でマップ全体の実バウンズを取得し、FOVとアスペクト比からマップ全体が画面に収まる高さを計算してカメラを配置
 - `_play_intro_sequence()`: 初期化完了後（`_setup_tps_controller()`の後）にawaitで呼び出し
-- **オーバービュー位置**: 全スポーン地点の平均位置上空（高さ = `max(map_size.x, map_size.y) * 1.5`、25〜60mにクランプ）
+- **オーバービュー位置**: マップの実際の中心上空（高さ = FOV・アスペクト比から全体が収まる高さ × 1.2マージン、最低20m）
 - **Tween**: `EASE_IN_OUT` + `TRANS_CUBIC` で2.5秒かけてプレイヤー上空（通常の14m高さ）へ移動
 - **ガード**: イントロ中は `_is_intro_playing = true` → `_physics_process`でTPS操作停止、`_input`で入力無視、HUD非表示
 

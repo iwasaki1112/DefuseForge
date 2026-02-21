@@ -11,6 +11,8 @@ const SAVE_DIR := "res://data/tiles/"
 const PREVIEW_DIR := "res://data/tiles/previews/"
 const FLOOR_SAVE_PATH := "res://data/tiles/tile_library_floor.tres"
 const WALL_SAVE_PATH := "res://data/tiles/tile_library_wall.tres"
+const DOOR_SAVE_PATH := "res://data/tiles/tile_library_door.tres"
+const WINDOW_SAVE_PATH := "res://data/tiles/tile_library_window.tres"
 
 
 func _init() -> void:
@@ -35,24 +37,32 @@ func _init() -> void:
 	glb_files.sort()
 	print("Found %d GLB files" % glb_files.size())
 
-	# floor/wall に分類
+	# floor/wall/door/window に分類
 	var floor_files: Array[String] = []
 	var wall_files: Array[String] = []
+	var door_files: Array[String] = []
+	var window_files: Array[String] = []
 	for f in glb_files:
 		var name_lower := f.get_basename().to_lower()
 		# _panel サフィックスはランタイムで個別ロード（MeshLibraryに入れない）
 		if "_panel" in name_lower:
 			continue
-		if name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("door") or name_lower.begins_with("straight") or name_lower.begins_with("corner") or name_lower.begins_with("window"):
+		if name_lower.begins_with("door"):
+			door_files.append(f)
+		elif name_lower.begins_with("window"):
+			window_files.append(f)
+		elif name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("straight") or name_lower.begins_with("corner"):
 			wall_files.append(f)
 		else:
 			floor_files.append(f)
 
-	print("  Floor tiles: %d, Wall tiles: %d" % [floor_files.size(), wall_files.size()])
+	print("  Floor: %d, Wall: %d, Door: %d, Window: %d" % [floor_files.size(), wall_files.size(), door_files.size(), window_files.size()])
 
 	# 各ライブラリを生成
 	_build_library(floor_files, FLOOR_SAVE_PATH, "Floor")
 	_build_library(wall_files, WALL_SAVE_PATH, "Wall")
+	_build_library(door_files, DOOR_SAVE_PATH, "Door")
+	_build_library(window_files, WINDOW_SAVE_PATH, "Window")
 
 	quit()
 

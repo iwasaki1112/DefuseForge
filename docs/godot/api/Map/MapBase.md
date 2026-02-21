@@ -61,8 +61,14 @@ func _ready() -> void:
 | グレネード | `3` (1+2) | 可（ガラス無視、柱にはバウンス） |
 | 視線/射撃 | `2` | 可（柱以外は通過） |
 
+## 公開メソッド
+
+- `get_map_bounds() -> Variant`: マップの床バウンズを取得（パディングなし）。戻り値: `{ "size": Vector2, "center": Vector2 }` or `null`。カメライントロ等でマップ全体の範囲を知りたい場合に使用。
+
 ## 内部メソッド
 
 - `_setup_collisions(node: Node)`: 再帰的にコリジョンを設定。
 - `_notify_fow_system()`: FoWシステムへの通知を試みる。
 - `_notify_fow_system_deferred()`: 遅延通知用。
+- `_calculate_ground_bounds()`: FoW用パディング付きバウンズ計算。
+- `_collect_raw_bounds()`: ground_ノードの生バウンズを収集。

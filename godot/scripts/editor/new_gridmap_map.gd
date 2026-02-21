@@ -16,6 +16,8 @@ extends SceneTree
 
 const FLOOR_LIBRARY_PATH := "res://data/tiles/tile_library_floor.tres"
 const WALL_LIBRARY_PATH := "res://data/tiles/tile_library_wall.tres"
+const DOOR_LIBRARY_PATH := "res://data/tiles/tile_library_door.tres"
+const WINDOW_LIBRARY_PATH := "res://data/tiles/tile_library_window.tres"
 const MAP_BASE_SCRIPT := "res://scripts/maps/map_base.gd"
 
 
@@ -39,11 +41,13 @@ func _init() -> void:
 		print("WARNING: Already exists: %s (will be overwritten)" % scene_path)
 
 	# .tscn生成（MapBase直接方式 — map_id/display_nameを@exportで埋め込み）
-	_write_file(scene_path, '[gd_scene load_steps=4 format=3]
+	_write_file(scene_path, '[gd_scene load_steps=6 format=3]
 
 [ext_resource type="MeshLibrary" path="%s" id="1"]
 [ext_resource type="Script" path="%s" id="2"]
 [ext_resource type="MeshLibrary" path="%s" id="3"]
+[ext_resource type="MeshLibrary" path="%s" id="4"]
+[ext_resource type="MeshLibrary" path="%s" id="5"]
 
 [node name="%s" type="Node3D"]
 script = ExtResource("2")
@@ -66,6 +70,22 @@ data = {
 "cells": PackedInt32Array()
 }
 
+[node name="GridMapDoor" type="GridMap" parent="."]
+mesh_library = ExtResource("4")
+cell_size = Vector3(2, 2, 2)
+cell_center_y = false
+data = {
+"cells": PackedInt32Array()
+}
+
+[node name="GridMapWindow" type="GridMap" parent="."]
+mesh_library = ExtResource("5")
+cell_size = Vector3(2, 2, 2)
+cell_center_y = false
+data = {
+"cells": PackedInt32Array()
+}
+
 [node name="spawn_ct_0" type="Marker3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 10, 0, -2)
 
@@ -77,7 +97,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -2)
 
 [node name="spawn_t_1" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 2)
-' % [FLOOR_LIBRARY_PATH, MAP_BASE_SCRIPT, WALL_LIBRARY_PATH, disp_name, map_id, disp_name])
+' % [FLOOR_LIBRARY_PATH, MAP_BASE_SCRIPT, WALL_LIBRARY_PATH, DOOR_LIBRARY_PATH, WINDOW_LIBRARY_PATH, disp_name, map_id, disp_name])
 
 	print("")
 	print("Created: %s" % scene_path)

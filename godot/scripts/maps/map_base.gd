@@ -171,16 +171,25 @@ func _setup_prop_collisions(node: Node) -> void:
 		_setup_prop_collisions(child)
 
 
-## ground_ノードからマップの床サイズと中心を計算
+## マップの床バウンズを取得（パディングなし）
+## カメライントロなどマップ全体を表示したい場合に使用
+## 戻り値: { "size": Vector2, "center": Vector2 } or null
+func get_map_bounds() -> Variant:
+	var bounds := _collect_raw_bounds()
+	if not bounds["found"]:
+		return null
+
+	var size_x: float = bounds["max"].x - bounds["min"].x
+	var size_z: float = bounds["max"].z - bounds["min"].z
+	var center_x: float = (bounds["min"].x + bounds["max"].x) / 2.0
+	var center_z: float = (bounds["min"].z + bounds["max"].z) / 2.0
+	return { "size": Vector2(size_x, size_z), "center": Vector2(center_x, center_z) }
+
+
+## ground_ノードからマップの床サイズと中心を計算（FoW用パディングあり）
 ## 戻り値: { "size": Vector2, "center": Vector2 } or null
 func _calculate_ground_bounds() -> Variant:
-	var bounds := {
-		"min": Vector3(INF, INF, INF),
-		"max": Vector3(-INF, -INF, -INF),
-		"found": false
-	}
-
-	_collect_ground_bounds(self, bounds)
+	var bounds := _collect_raw_bounds()
 
 	if not bounds["found"]:
 		if Debug.enabled: print("[%s] No ground_ nodes found for bounds calculation" % _map_name)
@@ -194,6 +203,17 @@ func _calculate_ground_bounds() -> Variant:
 	var center_z: float = (bounds["min"].z + bounds["max"].z) / 2.0
 	if Debug.enabled: print("[%s] Ground bounds: min=%s, max=%s, size=(%s, %s), center=(%s, %s)" % [_map_name, bounds["min"], bounds["max"], size_x, size_z, center_x, center_z])
 	return { "size": Vector2(size_x, size_z), "center": Vector2(center_x, center_z) }
+
+
+## ground_ノードの生バウンズを収集（パディングなし）
+func _collect_raw_bounds() -> Dictionary:
+	var bounds := {
+		"min": Vector3(INF, INF, INF),
+		"max": Vector3(-INF, -INF, -INF),
+		"found": false
+	}
+	_collect_ground_bounds(self, bounds)
+	return bounds
 
 
 ## GridMapのセルからコリジョンボディを生成

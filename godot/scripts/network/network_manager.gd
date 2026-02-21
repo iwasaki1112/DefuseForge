@@ -407,7 +407,7 @@ func _on_match_found(payload: Dictionary) -> void:
 	_clear_pending_action_sent()
 	_room_id = payload.get("room_id", "")
 	_local_peer_id = payload.get("peer_id", 0)
-	var map_id: String = payload.get("map_id", "office")
+	var map_id: String = payload.get("map_id", "house")
 
 	# peer_id=1ならホスト
 	if _local_peer_id == 1:

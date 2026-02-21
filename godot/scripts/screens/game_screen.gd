@@ -453,6 +453,7 @@ func _create_loading_overlay() -> Array:
 
 
 ## カメラを俯瞰位置に即座配置（黒画面の裏で呼ぶ）
+## マップ全体が画面に収まるよう、実際のマップバウンズとFOVから高さを計算
 func _position_camera_overview() -> void:
 	if not camera or not _player_character:
 		return
@@ -460,31 +461,50 @@ func _position_camera_overview() -> void:
 	_is_intro_playing = true
 	ui_layer.visible = false
 
-	# マップ中心の計算: 全スポーン地点の平均位置
-	var preset = game_manager.get_current_map_preset()
-	var center := Vector3.ZERO
-	var count := 0
-	if preset:
-		for p in preset.spawn_points_ct:
-			center += p
-			count += 1
-		for p in preset.spawn_points_t:
-			center += p
-			count += 1
-	if count > 0:
-		center /= float(count)
+	# マップの実際のバウンズから中心とサイズを取得
+	var map_center := Vector3.ZERO
+	var map_extent := Vector2(50, 50)  # フォールバック
+
+	var map_node = game_manager.map_manager.current_map if game_manager.map_manager else null
+	if map_node and map_node.has_method("get_map_bounds"):
+		var bounds = map_node.get_map_bounds()
+		if bounds:
+			map_center = Vector3(bounds["center"].x, 0, bounds["center"].y)
+			map_extent = bounds["size"]
 	else:
-		center = _player_character.global_position
+		# フォールバック: スポーン地点の平均位置 + プリセットサイズ
+		var preset = game_manager.get_current_map_preset()
+		var center := Vector3.ZERO
+		var count := 0
+		if preset:
+			for p in preset.spawn_points_ct:
+				center += p
+				count += 1
+			for p in preset.spawn_points_t:
+				center += p
+				count += 1
+		if count > 0:
+			center /= float(count)
+		else:
+			center = _player_character.global_position
+		map_center = center
+		map_extent = game_manager.get_map_size()
 
-	# オーバービュー高さの計算
-	var map_size := game_manager.get_map_size()
-	var overview_height := maxf(map_size.x, map_size.y) * 1.5
-	overview_height = clampf(overview_height, 25.0, 60.0)
+	# FOVからマップ全体が見える高さを計算
+	var half_fov := deg_to_rad(camera.fov / 2.0)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var aspect := viewport_size.x / viewport_size.y
 
-	# カメラをオーバービュー位置に即座に配置（pitch=-90°なのでZ offsetはほぼ0）
+	# 真俯瞰カメラ: 高さhでの可視範囲 = 2*h*tan(fov/2) (縦), x aspect (横)
+	var h_from_z := map_extent.y / (2.0 * tan(half_fov))  # Z方向(画面縦)
+	var h_from_x := map_extent.x / (2.0 * tan(half_fov) * aspect)  # X方向(画面横)
+	var overview_height := maxf(h_from_z, h_from_x) * 1.2  # 20%マージン
+	overview_height = maxf(overview_height, 20.0)
+
+	# カメラをオーバービュー位置に即座に配置
 	var pitch_rad := deg_to_rad(camera.rotation_degrees.x)
 	var offset_z := overview_height / tan(-pitch_rad) if absf(tan(-pitch_rad)) > 0.001 else 0.0
-	camera.global_position = Vector3(center.x, overview_height, center.z + offset_z)
+	camera.global_position = Vector3(map_center.x, overview_height, map_center.z + offset_z)
 
 
 ## カメライントロシーケンス: 俯瞰 → プレイヤー上空へズームイン（カメラは配置済み前提）
