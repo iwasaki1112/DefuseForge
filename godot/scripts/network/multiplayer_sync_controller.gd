@@ -415,6 +415,8 @@ func _handle_game_event(from_peer: int, data: Dictionary) -> void:
 			_apply_door_open_event(event)
 		NetworkConstants.GameEventType.DOOR_KICK:
 			_apply_door_kick_event(event)
+		NetworkConstants.GameEventType.DOOR_CLOSE:
+			_apply_door_close_event(event)
 
 
 func _handle_selection_update(from_peer: int, data: Dictionary) -> void:
@@ -599,6 +601,26 @@ func _apply_door_kick_event(event: NetworkMessages.GameEventMessage) -> void:
 			character.face_towards(door.global_position)
 		if character.anim_ctrl:
 			character.anim_ctrl.play_melee()
+
+
+func _apply_door_close_event(event: NetworkMessages.GameEventMessage) -> void:
+	var door_id: int = event.data.get("door_id", 0)
+	var character_id: int = event.data.get("character_id", 0)
+
+	if door_id == 0:
+		push_warning("[SyncController] DOOR_CLOSE event missing door_id")
+		return
+
+	game_manager.apply_door_close_from_network(door_id, character_id)
+
+	# リモートキャラクターのドア閉めアニメーションを再生
+	var character := game_manager.find_character_by_network_id(character_id)
+	if character and not character.is_local():
+		var door: Node3D = game_manager.get_door_by_id(door_id)
+		if door:
+			character.face_towards(door.global_position)
+		if character.anim_ctrl:
+			character.anim_ctrl.play_door_open()
 
 
 ## アニメーションを指定秒数分進める（レイテンシ補正用）

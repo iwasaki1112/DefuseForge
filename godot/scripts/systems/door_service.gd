@@ -13,6 +13,10 @@ signal door_kick_network_event(door_id: int, character_network_id: int)
 signal kick_damage_dealt(attacker_network_id: int, target_network_id: int, damage: float)
 ## ドア開閉完了シグナル
 signal door_opened(door: Node3D, character: Node)
+## ドア閉めネットワークイベント（マルチプレイヤー同期用）
+signal door_close_network_event(door_id: int, character_network_id: int)
+## ドア閉め完了シグナル（FoW更新用）
+signal door_closed(door: Node3D)
 ## ドア開放アニメーション開始シグナル（FoWリアルタイム更新用）
 signal door_opening_started(door: Node3D)
 ## ドア開放アニメーション完了シグナル（FoWリアルタイム更新用）
@@ -23,6 +27,9 @@ const _SWEEP_STEP_DEG := 10.0  ## スイープの角度ステップ（度）
 const _SWEEP_MARGIN_DEG := 3.0  ## 衝突マージン（度）
 const _DOOR_PANEL_SIZE := Vector3(1.2, 2.0, 0.154)  ## ドアパネルのコリジョンサイズ（実寸1.0m + マージン0.1m×2）
 const _DOOR_PANEL_CENTER := Vector3(-0.6, 1.0, 0.0)  ## パネル中心（ヒンジからのオフセット）
+
+## ドアの元のTransform保存（ドア閉め用）
+var _door_original_transforms: Dictionary = {}  ## door_node -> Transform3D
 
 ## ドアID管理（マルチプレイヤー同期用）
 var _next_door_id: int = 1
@@ -111,6 +118,7 @@ func clear_door_registry() -> void:
 	_id_to_door.clear()
 	_next_door_id = 1
 	_pending_enemy_doors.clear()
+	_door_original_transforms.clear()
 	set_process(false)
 
 
@@ -273,6 +281,10 @@ func _calculate_door_open_params(door: Node3D, character: CharacterBody3D, is_ki
 ## ドアを開くTweenを実行（パラメータに基づいてアニメーション再生）
 ## instant: trueの場合アニメーションなしで即座に開いた状態にする
 func _execute_door_open(door: Node3D, params: Dictionary, instant: bool = false) -> void:
+	# 開く前のTransformを保存（閉める際に使用、まだ保存されていない場合のみ）
+	if not _door_original_transforms.has(door):
+		_door_original_transforms[door] = door.global_transform
+
 	# ドアを「open_doors」グループに追加（他のキャラクターが通過可能になる）
 	if not door.is_in_group("open_doors"):
 		door.add_to_group("open_doors")
@@ -581,6 +593,8 @@ func _calculate_door_fall_params(door: Node3D, character: CharacterBody3D) -> Di
 func _execute_door_fall(door: Node3D, params: Dictionary, instant: bool = false) -> void:
 	if not door.is_in_group("open_doors"):
 		door.add_to_group("open_doors")
+	if not door.is_in_group("fallen_doors"):
+		door.add_to_group("fallen_doors")
 
 	var fall_angle: float = params["fall_angle"]
 	var fall_dir: Vector3 = params["fall_dir"]
@@ -727,3 +741,101 @@ func apply_door_kick_from_network(door_id: int, character_network_id: int) -> vo
 	var params := _calculate_door_fall_params(door, character)
 	_execute_door_fall(door, params)
 	door_opened.emit(door, character)
+
+
+## ========================================
+## ドア閉め処理
+## ========================================
+
+## ドアがキックで壊れているか判定
+func is_door_fallen(door: Node3D) -> bool:
+	return door.is_in_group("fallen_doors")
+
+
+## ドア閉めインパクト時（GameScreenから呼ばれる）
+## ネットワークイベント発火 → ドア閉め実行
+func on_door_close_done(door: Node3D, character: CharacterBody3D) -> void:
+	if not is_instance_valid(door) or not is_instance_valid(character):
+		return
+
+	# ローカルキャラクターの閉めのみネットワークイベントを送信
+	var game_char := character as GameCharacter
+	if game_char and game_char.is_local() and _is_multiplayer_mode:
+		var door_id := get_door_id(door)
+		if door_id > 0:
+			door_close_network_event.emit(door_id, game_char.network_id)
+
+	close_door(door)
+
+
+## ドアを閉める（保存済みTransformにTweenで戻す）
+func close_door(door: Node3D) -> void:
+	if not is_instance_valid(door):
+		return
+
+	if not _door_original_transforms.has(door):
+		push_warning("[DoorService] No original transform saved for door")
+		return
+
+	var original_transform: Transform3D = _door_original_transforms[door]
+
+	# FoWオクルーダーアニメーション開始
+	door_opening_started.emit(door)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+
+	# 元の位置に戻す
+	tween.tween_property(door, "global_position", original_transform.origin, 0.8) \
+		.set_ease(Tween.EASE_IN_OUT) \
+		.set_trans(Tween.TRANS_CUBIC)
+
+	# 元の回転に戻す
+	tween.tween_property(door, "rotation_degrees:y", rad_to_deg(original_transform.basis.get_euler().y), 0.8) \
+		.set_ease(Tween.EASE_IN_OUT) \
+		.set_trans(Tween.TRANS_CUBIC)
+
+	tween.chain().tween_callback(func():
+		# open_doorsグループから除去
+		if door.is_in_group("open_doors"):
+			door.remove_from_group("open_doors")
+
+		# 保存済みTransformを削除
+		_door_original_transforms.erase(door)
+
+		# FoWオクルーダーを再有効化
+		door_opening_finished.emit(door)
+		if _fow_system:
+			_fow_system.set_door_occluder_enabled(door, true)
+		if _on_vision_update_callback.is_valid():
+			_on_vision_update_callback.call()
+
+		door_closed.emit(door)
+	)
+
+
+## ネットワークからのドア閉めイベントを適用（リモート側用）
+func apply_door_close_from_network(door_id: int, character_network_id: int) -> void:
+	var door := get_door_by_id(door_id)
+	if not door:
+		push_warning("[DoorService] Door not found for network close: ", door_id)
+		return
+
+	# 閉じているドアは無視
+	if not door.is_in_group("open_doors"):
+		return
+
+	if not _character_manager:
+		push_warning("[DoorService] CharacterManager not set")
+		return
+
+	var character := _character_manager.find_character_by_network_id(character_network_id)
+	if not character:
+		push_warning("[DoorService] Character not found for door close: ", character_network_id)
+		return
+
+	# ローカルキャラクターのイベントは無視（二重処理防止）
+	if character.is_local():
+		return
+
+	close_door(door)

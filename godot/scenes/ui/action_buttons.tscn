@@ -24,6 +24,12 @@ custom_minimum_size = Vector2(80, 40)
 layout_mode = 2
 text = "Attack"
 
+[node name="DoorCloseBtn" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(80, 40)
+layout_mode = 2
+text = "Close"
+
 [node name="HandGrenadeBtn" type="Button" parent="."]
 custom_minimum_size = Vector2(80, 40)
 layout_mode = 2

@@ -150,6 +150,8 @@ enum GameEventType {
 	DOOR_OPEN = 10,
 	## ドアキック（蹴り破る）
 	DOOR_KICK = 11,
+	## ドア閉め（開いたドアを閉じる）
+	DOOR_CLOSE = 12,
 }
 
 
@@ -219,5 +221,7 @@ static func event_type_to_string(event_type: GameEventType) -> String:
 			return "DOOR_OPEN"
 		GameEventType.DOOR_KICK:
 			return "DOOR_KICK"
+		GameEventType.DOOR_CLOSE:
+			return "DOOR_CLOSE"
 		_:
 			return "UNKNOWN"

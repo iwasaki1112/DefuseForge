@@ -66,7 +66,10 @@ var _nearby_door: Node3D = null
 var _target_door: Node3D = null  # アニメーション中のターゲットドア
 var _is_door_action: bool = false  # ドア開けアクション中フラグ
 var _is_kick_door: bool = false  # ドアキックフラグ（true=キック, false=通常開け）
+var _is_door_close: bool = false  # ドア閉めフラグ
 var _door_contact_detected: bool = false  # ハンドボーン接触検知済みフラグ
+var _door_close_btn: Button = null
+var _nearby_open_door: Node3D = null
 
 ## Sprint（スプリント）
 var _sprint_btn: Button = null
@@ -603,6 +606,9 @@ func _create_action_buttons() -> void:
 
 	_kick_door_btn = vbox.get_node("KickDoorBtn")
 
+	_door_close_btn = vbox.get_node("DoorCloseBtn")
+	ButtonAnimator.setup(_door_close_btn)
+
 	_hand_grenade_btn = vbox.get_node("HandGrenadeBtn")
 	ButtonAnimator.setup(_hand_grenade_btn)
 	_update_hand_grenade_count_ui()
@@ -618,7 +624,7 @@ func _create_action_buttons() -> void:
 
 	# Godot GUIはマルチタッチ非対応（1本目のタッチのみマウスイベントとしてエミュレート）
 	# 2本目以降の指でボタンを押せるよう、GUIイベントを無効化して手動処理する
-	for btn in [_door_open_btn, _kick_door_btn, _hand_grenade_btn, _grenade_btn, _talking_btn, _sprint_btn]:
+	for btn in [_door_open_btn, _kick_door_btn, _door_close_btn, _hand_grenade_btn, _grenade_btn, _talking_btn, _sprint_btn]:
 		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if Debug.enabled:
@@ -1361,6 +1367,7 @@ func _on_door_open_pressed(is_kick: bool = false) -> void:
 	_target_door = _nearby_door
 	_is_door_action = true
 	_is_kick_door = is_kick
+	_is_door_close = false
 	_door_contact_detected = false
 
 	# ドアパネル中心の方向を計算（ヒンジではなくパネル中央に向く）
@@ -1393,6 +1400,45 @@ func _on_door_open_pressed(is_kick: bool = false) -> void:
 			_player_character.anim_ctrl.play_door_open()
 
 
+## ドア閉めアクション
+func _on_door_close_pressed() -> void:
+	if not _player_character or not _player_character.is_alive:
+		return
+	if not _nearby_open_door:
+		return
+	if _player_character.anim_ctrl and _player_character.anim_ctrl.is_opening_door():
+		return
+
+	_target_door = _nearby_open_door
+	_is_door_action = true
+	_is_kick_door = false
+	_is_door_close = true
+	_door_contact_detected = false
+
+	# ドアパネル中心の方向を計算
+	var door_center := _target_door.global_position + _target_door.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
+	var dir := (door_center - _player_character.global_position).normalized()
+	dir.y = 0.0
+
+	# 向きをロック
+	if _tps_controller:
+		_tps_controller.lock_facing(dir)
+
+	# ボタン非表示
+	if _door_close_btn:
+		_door_close_btn.visible = false
+
+	# 滑らかに回転 → 完了後にドア開けアニメーション再生（閉めもdoor_openアニメ使用）
+	var finished := _player_character.anim_ctrl.smooth_rotate_to(dir, 0.2)
+	await finished
+	if is_instance_valid(_player_character) and _player_character.anim_ctrl:
+		if not _is_door_in_range(_target_door, _player_character):
+			_cancel_door_open()
+			return
+		_player_character.set_facing_direction_vec(dir)
+		_player_character.anim_ctrl.play_door_open()
+
+
 ## ドア開けアニメーションのインパクトタイミング（実際にドアを開く）
 ## ハンド接触で既に開き始めている場合はスキップ（フォールバック用）
 func _on_door_open_impact() -> void:
@@ -1405,7 +1451,9 @@ func _on_door_open_impact() -> void:
 	if not _is_door_in_range(_target_door, _player_character):
 		return
 	if game_manager:
-		if _is_kick_door:
+		if _is_door_close:
+			game_manager._on_door_close_done(_target_door, _player_character)
+		elif _is_kick_door:
 			game_manager._on_door_kick_done(_target_door, _player_character)
 		else:
 			game_manager._on_door_open_done(_target_door, _player_character)
@@ -1433,9 +1481,11 @@ func _check_hand_door_contact() -> void:
 
 	if dist < GameConstants.HAND_DOOR_CONTACT_THRESHOLD:
 		_door_contact_detected = true
-		# 接触時に直接フルオープン開始（crack不要、1つの滑らかな動きに）
+		# 接触時に直接フルオープン/クローズ開始（crack不要、1つの滑らかな動きに）
 		if game_manager:
-			if _is_kick_door:
+			if _is_door_close:
+				game_manager._on_door_close_done(_target_door, _player_character)
+			elif _is_kick_door:
 				game_manager._on_door_kick_done(_target_door, _player_character)
 			else:
 				game_manager._on_door_open_done(_target_door, _player_character)
@@ -1446,6 +1496,7 @@ func _on_door_open_anim_finished() -> void:
 	_target_door = null
 	_is_door_action = false
 	_is_kick_door = false
+	_is_door_close = false
 	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
@@ -1479,6 +1530,7 @@ func _cancel_door_open() -> void:
 	_target_door = null
 	_is_door_action = false
 	_is_kick_door = false
+	_is_door_close = false
 	_door_contact_detected = false
 	if _tps_controller:
 		_tps_controller.unlock_facing()
@@ -1491,6 +1543,8 @@ func _update_door_proximity() -> void:
 			_door_open_btn.visible = false
 		if _kick_door_btn and _kick_door_btn.visible:
 			_kick_door_btn.visible = false
+		if _door_close_btn and _door_close_btn.visible:
+			_door_close_btn.visible = false
 		return
 
 	# アニメーション中は非表示維持
@@ -1499,10 +1553,13 @@ func _update_door_proximity() -> void:
 			_door_open_btn.visible = false
 		if _kick_door_btn and _kick_door_btn.visible:
 			_kick_door_btn.visible = false
+		if _door_close_btn and _door_close_btn.visible:
+			_door_close_btn.visible = false
 		return
 
 	var player_pos := _player_character.global_position
 	_nearby_door = null
+	_nearby_open_door = null
 
 	var doors := get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
 	var space_state := get_viewport().get_world_3d().direct_space_state
@@ -1511,15 +1568,14 @@ func _update_door_proximity() -> void:
 			continue
 		if not is_instance_valid(door):
 			continue
-		# 既に開いているドアは対象外
-		if door.is_in_group("open_doors"):
-			continue
+
 		# パネル中心位置を使用（ヒンジ位置ではなくドアの中央で距離判定）
 		var door_node := door as Node3D
 		var door_pos: Vector3 = door_node.global_position + door_node.global_transform.basis * Vector3(-0.5, 0.0, 0.0)
 		var dist := player_pos.distance_to(door_pos)
 		if dist > GameConstants.DOOR_OPEN_DISTANCE:
 			continue
+
 		# 壁越し防止: プレイヤーとドアの間に壁があれば対象外
 		var ray_from := player_pos + Vector3.UP * 0.5
 		var ray_to := door_pos + Vector3.UP * 0.5
@@ -1535,14 +1591,25 @@ func _update_door_proximity() -> void:
 		var result := space_state.intersect_ray(query)
 		if not result.is_empty():
 			continue
-		_nearby_door = door
-		break
+
+		if door.is_in_group("open_doors"):
+			# 開いたドア → Closeボタン候補（壊れたドアは除外）
+			if _nearby_open_door == null and not door.is_in_group("fallen_doors"):
+				_nearby_open_door = door
+		else:
+			# 閉じたドア → Open/Attackボタン候補
+			if _nearby_door == null:
+				_nearby_door = door
 
 	var show_door := _nearby_door != null
 	if _door_open_btn:
 		_door_open_btn.visible = show_door
 	if _kick_door_btn:
 		_kick_door_btn.visible = show_door
+
+	var show_close := _nearby_open_door != null
+	if _door_close_btn:
+		_door_close_btn.visible = show_close
 
 
 func _on_debug_vision_toggled(enabled: bool) -> void:
@@ -1603,6 +1670,11 @@ func _handle_action_button_input(event: InputEvent) -> bool:
 	if _kick_door_btn and _kick_door_btn.visible:
 		if _kick_door_btn.get_global_rect().has_point(pos):
 			_on_door_open_pressed(true)
+			return true
+
+	if _door_close_btn and _door_close_btn.visible:
+		if _door_close_btn.get_global_rect().has_point(pos):
+			_on_door_close_pressed()
 			return true
 
 	if _hand_grenade_btn and _hand_grenade_btn.visible:

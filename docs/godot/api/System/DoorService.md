@@ -29,7 +29,9 @@ GameManagerから抽出されたドア管理コンポーネント。ドアの登
 |---------|------|------|
 | `door_kick_network_event` | `door_id: int, character_network_id: int` | ドアキック時のネットワークイベント |
 | `door_open_network_event` | `door_id: int, character_network_id: int` | ドア開け（静か）時のネットワークイベント |
+| `door_close_network_event` | `door_id: int, character_network_id: int` | ドア閉め時のネットワークイベント |
 | `door_opened` | `door: Node3D, character: Node` | ドア開き処理開始時 |
+| `door_closed` | `door: Node3D` | ドア閉め完了時（FoW更新用） |
 | `door_opening_started` | `door: Node3D` | ドア開放アニメーション開始時（FoWリアルタイム更新用） |
 | `door_opening_finished` | `door: Node3D` | ドア開放アニメーション完了時（FoWリアルタイム更新用） |
 
@@ -86,6 +88,18 @@ FogOfWarSystemの参照を設定する。GameManagerのsetup()から呼ばれる
 ### is_door_open(door: Node3D) -> bool
 ドアが開いているか確認する。
 
+### is_door_fallen(door: Node3D) -> bool
+ドアがキックで壊れているか判定する。`fallen_doors` グループの所属で判定。
+
+### on_door_close_done(door: Node3D, character: CharacterBody3D) -> void
+ドア閉めインパクト時の処理。ローカルキャラクターの閉めならネットワークイベントを送信し、`close_door()` を実行する。
+
+### close_door(door: Node3D) -> void
+ドアを閉める。保存済みのオリジナルTransformにTween（0.8秒、EASE_IN_OUT + CUBIC）で戻す。完了後に `open_doors` グループから除去し、FoWオクルーダーを再有効化する。
+
+### apply_door_close_from_network(door_id: int, character_network_id: int) -> void
+ネットワークからのドア閉めイベントを適用する（リモート側用）。閉じているドアは無視、ローカルキャラクターのイベントも無視（二重処理防止）。
+
 ## 使用例
 
 ```gdscript
@@ -98,9 +112,13 @@ door_service.on_door_kick_done(door, character)
 # ドア開け処理（静かに）
 door_service.on_door_open_done(door, character)
 
+# ドア閉め処理
+door_service.on_door_close_done(door, character)
+
 # ネットワーク同期
 door_service.door_kick_network_event.connect(_on_door_kick_network_event)
 door_service.door_open_network_event.connect(_on_door_open_network_event)
+door_service.door_close_network_event.connect(_on_door_close_network_event)
 ```
 
 ## 関連クラス
@@ -116,7 +134,9 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 |---------|------|
 | `door_kick_network_event` | `door_id: int, character_network_id: int` |
 | `door_open_network_event` | `door_id: int, character_network_id: int` |
+| `door_close_network_event` | `door_id: int, character_network_id: int` |
 | `door_opened` | `door: Node3D, character: Node` |
+| `door_closed` | `door: Node3D` |
 | `door_opening_started` | `door: Node3D` |
 | `door_opening_finished` | `door: Node3D` |
 
@@ -138,6 +158,10 @@ door_service.door_open_network_event.connect(_on_door_open_network_event)
 - `apply_door_open_from_network(door_id: int, character_network_id: int) -> void`
 - `get_registered_door_count() -> int`
 - `is_door_open(door: Node3D) -> bool`
+- `is_door_fallen(door: Node3D) -> bool`
+- `on_door_close_done(door: Node3D, character: CharacterBody3D) -> void`
+- `close_door(door: Node3D) -> void`
+- `apply_door_close_from_network(door_id: int, character_network_id: int) -> void`
 
 ### 内部メソッド（チーム別可視性システム）
 - `_calculate_door_open_params(door, character, is_kick) -> Dictionary` — 回転量・ヒンジシフトを計算
