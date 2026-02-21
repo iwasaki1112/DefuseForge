@@ -421,6 +421,6 @@ func _get_selected_gridmap() -> GridMap:
 
 func _is_floor_tile(item_name: String) -> bool:
 	var name_lower := item_name.to_lower()
-	if "door" in name_lower or "wall" in name_lower or "glass" in name_lower:
+	if "door" in name_lower or "wall" in name_lower or "glass" in name_lower or "straight" in name_lower or "corner" in name_lower or "window" in name_lower:
 		return false
 	return true

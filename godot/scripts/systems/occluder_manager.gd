@@ -331,7 +331,7 @@ func _extract_gridmap_occluders(grid_map: GridMap) -> void:
 			continue
 
 		var item_name := lib.get_item_name(item_id).to_lower()
-		var is_wall := "wall" in item_name
+		var is_wall := "wall" in item_name or "straight" in item_name or "corner" in item_name or "window" in item_name
 		var is_door := "door" in item_name
 		var has_opening := is_door or "window" in item_name
 

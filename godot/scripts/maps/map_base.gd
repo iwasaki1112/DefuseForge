@@ -276,7 +276,7 @@ static func _classify_gridmap_item(item_name: String) -> int:
 	var name_lower := item_name.to_lower()
 	if "door" in name_lower:
 		return 2
-	elif "wall" in name_lower or "glass" in name_lower:
+	elif "wall" in name_lower or "glass" in name_lower or "straight" in name_lower or "corner" in name_lower or "window" in name_lower:
 		return 1
 	return 0
 

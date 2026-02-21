@@ -43,7 +43,7 @@ func _init() -> void:
 		# _panel サフィックスはランタイムで個別ロード（MeshLibraryに入れない）
 		if "_panel" in name_lower:
 			continue
-		if name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("door"):
+		if name_lower.begins_with("wall") or name_lower.begins_with("glass") or name_lower.begins_with("door") or name_lower.begins_with("straight") or name_lower.begins_with("corner") or name_lower.begins_with("window"):
 			wall_files.append(f)
 		else:
 			floor_files.append(f)
