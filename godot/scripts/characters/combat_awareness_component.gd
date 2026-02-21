@@ -22,7 +22,7 @@ const FIRE_INTERVAL: float = 0.5  ## 発砲間隔（500ms）
 const MOVEMENT_THRESHOLD: float = 0.5  ## Velocity threshold to consider "moving"
 const SPRINT_THRESHOLD: float = 4.0  ## Velocity threshold to consider "sprinting"
 const FACING_ANGLE_THRESHOLD: float = 0.866  ## cos(30°) — 射撃許可の角度閾値
-const MELEE_RANGE: float = 1.5  ## 近接攻撃検出範囲（1グリッド=1.5m、円形360°）
+const MELEE_RANGE: float = 2.0  ## 近接攻撃検出範囲（1グリッド=2m、円形360°）
 
 # ============================================
 # State
@@ -318,7 +318,7 @@ func _scan_for_enemies() -> void:
 	var char_pos: Vector3 = _character.global_position
 	# プレイヤーチーム用: 仲間の遠方視界への反応を防ぐための距離制限
 	# FoWのLight2Dはソフトエッジでview_distanceより少し先まで照らすためマージンを追加
-	var max_detect_distance: float = (vision.view_distance if vision else 7.0) + 1.0
+	var _max_detect_distance: float = (vision.view_distance if vision else 7.0) + 1.0
 
 	for enemy in enemies:
 		# Skip ignored enemies (dismissed by user action)

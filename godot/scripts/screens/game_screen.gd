@@ -1162,7 +1162,7 @@ func _check_near_opening() -> void:
 		var angle := deg_to_rad(float(i) * 10.0)
 		var dir := Vector3(sin(angle), 0.0, cos(angle))
 		scan_dirs.append(dir)
-		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.5)
+		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 2.0)
 		q.collision_mask = 2
 		wall_hits.append(not space_state.intersect_ray(q).is_empty())
 
@@ -1210,8 +1210,8 @@ func _find_corner_throw(char_pos: Vector3, target_pos: Vector3) -> Dictionary:
 	if wall_r.is_empty():
 		return {}  # 壁なし
 
-	# 壁が近い（1.5m以内）か確認 — 角にいる条件
-	if char_h.distance_to(wall_r.position) > 1.5:
+	# 壁が近い（2m以内）か確認 — 角にいる条件
+	if char_h.distance_to(wall_r.position) > 2.0:
 		return {}  # 壁が遠い
 
 	# === Step 1: 36方向スキャンで壁の有無マップを作成 ===
@@ -1222,7 +1222,7 @@ func _find_corner_throw(char_pos: Vector3, target_pos: Vector3) -> Dictionary:
 		var angle := deg_to_rad(float(i) * 10.0)
 		var dir := Vector3(sin(angle), 0.0, cos(angle))
 		scan_dirs.append(dir)
-		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 1.5)
+		var q := PhysicsRayQueryParameters3D.create(char_h, char_h + dir * 2.0)
 		q.collision_mask = 2
 		wall_hits.append(not space_state.intersect_ray(q).is_empty())
 

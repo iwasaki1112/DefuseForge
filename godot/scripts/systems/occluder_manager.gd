@@ -425,7 +425,7 @@ func _create_door_opening_occluder(grid_map: GridMap, _cell: Vector3i, aabb: AAB
 	var cell_world_pos := cell_global.origin
 	var doors := grid_map.get_tree().get_nodes_in_group(GameConstants.GROUP_DOORS)
 	var closest_door: Node3D = null
-	var closest_dist := 2.5  # セルサイズ(1.5m)より少し大きい閾値
+	var closest_dist := 3.0  # セルサイズ(2m)より少し大きい閾値
 	for door in doors:
 		if not door is Node3D or not is_instance_valid(door):
 			continue

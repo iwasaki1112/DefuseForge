@@ -45,7 +45,7 @@ func _exit_tree() -> void:
 
 
 func _setup_decal_resources() -> void:
-	decal_shader = load("res://shaders/grass_overlay.gdshader") as Shader
+	decal_shader = load("res://shaders/decal_overlay.gdshader") as Shader
 	decal_mesh = PlaneMesh.new()
 	decal_mesh.size = Vector2(1, 1)
 	decal_mesh.orientation = PlaneMesh.FACE_Y
@@ -224,7 +224,7 @@ func _get_decal_material(texture: Texture2D) -> ShaderMaterial:
 
 	var mat := ShaderMaterial.new()
 	mat.shader = decal_shader
-	mat.set_shader_parameter("grass_texture", texture)
+	mat.set_shader_parameter("decal_texture", texture)
 	mat.render_priority = 1
 	_material_cache[key] = mat
 	return mat

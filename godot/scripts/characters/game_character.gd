@@ -545,12 +545,12 @@ const WALL_DETECT_DISTANCE := 1.2  # 壁検出レイキャスト距離
 const WALL_COLLISION_MASK := 2  # 壁コリジョンマスク
 
 ## Gun Down検出用定数
-const GUN_DOWN_DETECT_DISTANCE := 1.5  # 検出距離（1グリッド分）
+const GUN_DOWN_DETECT_DISTANCE := 2.0  # 検出距離（1グリッド分）
 const GUN_DOWN_ANGLE_THRESHOLD := 0.5  # cos(60°) — 前方±60°の円錐内
 
 ## 前方に壁または敵以外のキャラクターがいるかチェック（gun_down判定用）
-## 壁: 前方1.5mのレイキャスト（コリジョンレイヤー2）
-## キャラクター: 前方±60°の円錐内、1.5m以内の敵以外
+## 壁: 前方2mのレイキャスト（コリジョンレイヤー2）
+## キャラクター: 前方±60°の円錐内、2m以内の敵以外
 func check_gun_down() -> bool:
 	if not is_alive:
 		return false
@@ -575,7 +575,7 @@ func check_gun_down() -> bool:
 	if space_state.intersect_ray(wall_query):
 		return true
 
-	# 2. 敵以外のキャラクターチェック（前方±60°の円錐内、1.5m以内）
+	# 2. 敵以外のキャラクターチェック（前方±60°の円錐内、2m以内）
 	var characters := get_tree().get_nodes_in_group(GameConstants.GROUP_CHARACTERS)
 	for node in characters:
 		if node == self:

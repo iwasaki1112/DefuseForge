@@ -31,7 +31,7 @@ const HOLD_TIME_MAX := 1.5
 const MIN_STATE_DURATION := 0.4
 
 # 壁チェック（bt_wander.gdと同じ方式）
-const WALL_CHECK_DISTANCE := 1.5
+const WALL_CHECK_DISTANCE := 2.0
 const RAY_CHECK_INTERVAL := 0.15
 const FAN_RAY_ANGLE := deg_to_rad(30.0)
 
@@ -212,7 +212,7 @@ func _is_movement_blocked(body: CharacterBody3D, move_dir: Vector3) -> bool:
 
 
 ## 壁回避: ストレイフ反転 or 状態切替
-func _resolve_wall_avoidance(body: CharacterBody3D, move_dir: Vector3, state: int, blackboard: Blackboard, dir_to_enemy: Vector3) -> Vector3:
+func _resolve_wall_avoidance(body: CharacterBody3D, _move_dir: Vector3, state: int, blackboard: Blackboard, dir_to_enemy: Vector3) -> Vector3:
 	match state:
 		CombatState.STRAFE:
 			# ストレイフ方向を反転

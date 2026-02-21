@@ -99,8 +99,25 @@ func _apply_post_processing() -> void:
 	_environment.ssao_enabled = preset.ssao_enabled
 	_environment.ssil_enabled = preset.ssil_enabled
 	_environment.sdfgi_enabled = preset.sdfgi_enabled
+
+	# Glow
 	_environment.glow_enabled = preset.glow_enabled
+	_environment.glow_intensity = preset.glow_intensity
+	_environment.glow_bloom = preset.glow_bloom
+	_environment.glow_blend_mode = preset.glow_blend_mode
+	_environment.glow_hdr_threshold = preset.glow_hdr_threshold
+
+	# Fog
 	_environment.fog_enabled = preset.fog_enabled
+	_environment.fog_light_color = preset.fog_light_color
+	_environment.fog_density = preset.fog_density
+	_environment.fog_aerial_perspective = preset.fog_aerial_perspective
+
+	# Color Adjustment
+	_environment.adjustment_enabled = preset.adjustment_enabled
+	_environment.adjustment_brightness = preset.adjustment_brightness
+	_environment.adjustment_contrast = preset.adjustment_contrast
+	_environment.adjustment_saturation = preset.adjustment_saturation
 
 
 ## プリセットを動的に変更

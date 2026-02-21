@@ -43,7 +43,7 @@ var _fow_check_counter: int = 0
 const _FOW_CHECK_INTERVAL: int = 15  ## ~4Hz at 60fps
 const _FOW_CHECK_OFFSET := 1.0  ## FoWチェック位置のオフセット（ヒンジ周辺4方向をチェック）
 const _ANIMATION_GRACE_FRAMES: int = 30  ## 保留後この frame 数以内に可視→アニメーション再生（~500ms at 60fps）
-const _DOOR_VIS_NEAR_DISTANCE := 1.5  ## この距離以内なら方向不問で可視
+const _DOOR_VIS_NEAR_DISTANCE := 2.0  ## この距離以内なら方向不問で可視
 const _DOOR_VIS_MAX_RANGE := 8.0  ## LOS チェックの最大距離
 const _DOOR_VIS_FOV_MARGIN_DEG := 10.0  ## 視野角マージン（度）
 
@@ -719,8 +719,8 @@ func apply_door_kick_from_network(door_id: int, character_network_id: int) -> vo
 
 	# チーム判定：敵チームのドアキックはバッファに保留（次フレームでFoWチェック）
 	if _fow_system and character.team != PlayerState.get_player_team():
-		var params := _calculate_door_fall_params(door, character)
-		_defer_enemy_door_open(door, params)
+		var enemy_params := _calculate_door_fall_params(door, character)
+		_defer_enemy_door_open(door, enemy_params)
 		return
 
 	# 味方チーム or FoWなし → 即座にキック倒壊実行（ダメージはDAMAGEイベント経由）

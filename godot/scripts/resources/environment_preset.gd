@@ -52,7 +52,20 @@ class_name EnvironmentPreset
 @export var ssil_enabled: bool = false  ## SSIL
 @export var sdfgi_enabled: bool = false  ## SDFGI
 @export var glow_enabled: bool = false  ## Glow
+@export var glow_intensity: float = 0.4  ## Glowの強さ
+@export var glow_bloom: float = 0.1  ## Bloom量
+@export var glow_blend_mode: int = 2  ## ブレンドモード (0=Additive, 1=Screen, 2=Softlight, 3=Replace)
+@export var glow_hdr_threshold: float = 1.2  ## HDR閾値
+
 @export var fog_enabled: bool = false  ## Fog
+@export var fog_light_color: Color = Color(0.75, 0.78, 0.82, 1.0)  ## フォグの色
+@export var fog_density: float = 0.002  ## フォグの密度
+@export var fog_aerial_perspective: float = 0.0  ## 空気遠近法
+
+@export var adjustment_enabled: bool = false  ## カラー調整
+@export var adjustment_brightness: float = 1.0  ## 明るさ
+@export var adjustment_contrast: float = 1.05  ## コントラスト
+@export var adjustment_saturation: float = 0.95  ## 彩度
 
 
 ## 影の解像度を数値で取得

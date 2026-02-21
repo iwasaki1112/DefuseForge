@@ -27,7 +27,7 @@ const SCENE_DIR := "res://scenes/maps/"
 ## 静的リスト（exported builds用フォールバック）
 ## scripts/editor/sync_map_presets.gd で自動更新可能
 const PRESET_FILES := [
-	"res://scenes/maps/home.tscn",
+	"res://scenes/maps/office.tscn",
 ]
 
 # ============================================

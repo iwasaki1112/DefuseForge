@@ -52,7 +52,7 @@ display_name = "%s"
 
 [node name="GridMapGround" type="GridMap" parent="."]
 mesh_library = ExtResource("1")
-cell_size = Vector3(1.5, 2, 1.5)
+cell_size = Vector3(2, 2, 2)
 cell_center_y = false
 data = {
 "cells": PackedInt32Array()
@@ -60,7 +60,7 @@ data = {
 
 [node name="GridMapWall" type="GridMap" parent="."]
 mesh_library = ExtResource("3")
-cell_size = Vector3(1.5, 2, 1.5)
+cell_size = Vector3(2, 2, 2)
 cell_center_y = false
 data = {
 "cells": PackedInt32Array()

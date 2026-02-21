@@ -168,7 +168,7 @@ func _on_network_message(_from_peer: int, msg_type: int, data: Dictionary) -> vo
 	if msg_type == NetworkConstants.MessageType.ROUND_STATE:
 		var action: String = data.get("action", "")
 		if action == "start_game":
-			var map_id: String = data.get("map_id", "home")
+			var map_id: String = data.get("map_id", "office")
 			_start_game(map_id)
 
 

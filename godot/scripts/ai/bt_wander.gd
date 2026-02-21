@@ -10,7 +10,7 @@ const IDLE_TIME_MAX := 4.0
 const ARRIVAL_THRESHOLD := 0.5
 const STUCK_TIME := 2.0
 const SPRINT_DISTANCE_THRESHOLD := 3.5
-const WALL_CHECK_DISTANCE := 1.5
+const WALL_CHECK_DISTANCE := 2.0
 const RAY_CHECK_INTERVAL := 0.15
 const FAN_RAY_ANGLE := deg_to_rad(30.0)
 
@@ -35,7 +35,7 @@ func tick(actor: Node, blackboard: Blackboard) -> int:
 		blackboard.set_value("wander_timer", timer)
 		if timer <= 0.0:
 			var target: Vector3 = _pick_random_target(body)
-			var target_dist: float = Vector3(target.x - body.global_position.x, 0.0, target.z - body.global_position.z).length()
+			var _target_dist: float = Vector3(target.x - body.global_position.x, 0.0, target.z - body.global_position.z).length()
 			blackboard.set_value("wander_target", target)
 			blackboard.set_value("wander_state", WanderState.WALKING)
 			blackboard.set_value("wander_stuck_pos", body.global_position)

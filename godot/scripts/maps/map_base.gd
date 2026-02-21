@@ -11,10 +11,10 @@ const WALL_COLLISION_LAYER: int = 2
 const WINDOW_GLASS_COLLISION_LAYER: int = 4
 
 ## ドアパネルGLBパス（フレームとは別にエクスポートされた回転可能なパネル）
-const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_straight_panel.glb"
+const DOOR_PANEL_SCENE_PATH := "res://scenes/tiles/door_panel.glb"
 ## ドア蝶番のオフセット（タイル原点からの相対位置、Godot座標系）
-## 開口部の+X端にヒンジを配置（1.5mタイル、1.0m開口）
-const DOOR_HINGE_OFFSET := Vector3(0.5, 0.0, -0.65)
+## 開口部の+X端にヒンジを配置（2mタイル、1.0m開口）
+const DOOR_HINGE_OFFSET := Vector3(0.5, 0.0, -0.9)
 
 ## マップメタデータ（.tscnのインスペクタで設定）
 @export_group("Map Info")

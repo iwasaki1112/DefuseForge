@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_dust"]
+emission_shape = 6
+emission_box_extents = Vector3(10, 2, 10)
+gravity = Vector3(0, 0, 0)
+direction = Vector3(1, 0.2, 0.5)
+spread = 180.0
+initial_velocity_min = 0.02
+initial_velocity_max = 0.08
+scale_min = 0.8
+scale_max = 1.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dust"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.95, 0.92, 0.85, 0.25)
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_dust"]
+material = SubResource("StandardMaterial3D_dust")
+size = Vector2(0.03, 0.03)
+
+[node name="AmbientDust" type="GPUParticles3D"]
+amount = 30
+lifetime = 8.0
+visibility_aabb = AABB(-12, -1, -12, 24, 4, 24)
+process_material = SubResource("ParticleProcessMaterial_dust")
+draw_pass_1 = SubResource("QuadMesh_dust")
