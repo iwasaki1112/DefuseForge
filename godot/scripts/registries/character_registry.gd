@@ -54,12 +54,13 @@ func _load_animation_library() -> void:
 	if not _animation_library:
 		return
 
-	# Merge additional MIXAMO animations into the same library
+	# Merge MIXAMO animations (override kubold for movement/locomotion anims)
 	var mixamo_lib := _extract_animation_library(ANIMATION_SOURCE_MIXAMO)
 	if mixamo_lib:
 		for anim_name in mixamo_lib.get_animation_list():
-			if not _animation_library.has_animation(anim_name):
-				_animation_library.add_animation(anim_name, mixamo_lib.get_animation(anim_name))
+			if _animation_library.has_animation(anim_name):
+				_animation_library.remove_animation(anim_name)
+			_animation_library.add_animation(anim_name, mixamo_lib.get_animation(anim_name))
 
 ## Extract AnimationLibrary from a GLB PackedScene
 func _extract_animation_library(source_path: String) -> AnimationLibrary:

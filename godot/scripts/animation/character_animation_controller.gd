@@ -29,15 +29,8 @@ signal melee_finished()     # 近接攻撃アニメーション完了
 @export var pistol_fire_rate := 0.2
 @export var recoil_recovery := 10.0
 
-@export_group("Lean")
-@export var max_lean_degrees := 10.0
-@export var lean_speed := 10.0
-@export var lean_deadzone := 0.15
-
-@export_group("Turn Lean")
-@export var turn_lean_degrees := 15.0    ## 方向転換時の最大リーン角度（度）
-@export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
-@export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
+@export_group("Upper Body IK")
+@export var enable_upper_body_ik := true  ## 上半身IKを有効化
 
 @export_group("Model Offset")
 @export var model_y_offset := 0.40  ## Hips高さ補正（新アニメーション vs 旧アニメーションの差 + 微調整）
@@ -52,8 +45,7 @@ var _anim_player: AnimationPlayer
 var _anim_tree: AnimationTree
 var _skeleton: Skeleton3D
 var _recoil_modifier: SkeletonModifier3D
-var _lean_modifier: SkeletonModifier3D
-var _left_hand_ik: LeftHandIKModifier = null
+var _upper_body_ik: UpperBodyIKController = null
 
 # State
 var _weapon := Weapon.RIFLE
@@ -63,9 +55,6 @@ var _is_opening_door := false
 var _is_talking := false
 var _is_meleeing := false  ## 近接攻撃アニメーション再生中
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
-var _lean_amount := 0.0  # ロール角（ラジアン）
-var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
-var _smoothed_angular_vel := 0.0  # スムージング済み角速度(rad/s)
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 var _is_sprinting := false
 var _is_gun_down := false  ## 前方に壁/味方がいて武器を下げている状態
@@ -118,7 +107,6 @@ const RIFLE_OPEN_DOOR_ANIM := GameConstants.ANIM_RIFLE_OPEN_DOOR
 const PISTOL_OPEN_DOOR_ANIM := GameConstants.ANIM_PISTOL_OPEN_DOOR
 const DOOR_OPEN_IMPACT_TIME := 0.5  # ドアを開くインパクトタイミング（15フレーム目 @30fps）
 const DOOR_OPEN_IK_RESUME_TIME := 29.0 / 30.0  # IKブレンドイン開始（29フレーム目 @30fps）
-const ACTION_IK_BLEND_SPEED := 5.0  # アクション復帰時のゆっくりIKブレンド速度
 
 # Melee animation
 const MELEE_ANIM := GameConstants.ANIM_RIFLE_MELEE
@@ -133,7 +121,6 @@ var _fire_cooldown := 0.0
 
 # Blend smoothing
 const BLEND_SMOOTH := 10.0
-const GUN_DOWN_BLEND_SPEED := 8.0  ## gun_downブレンドの補間速度
 
 
 #region Public API
@@ -149,9 +136,10 @@ func setup(model: Node3D, anim_player: AnimationPlayer) -> void:
 		if model_y_offset != 0.0:
 			_skeleton.position.y += model_y_offset
 
+		# 順序重要: UpperBodyIK（SpineAim→RightArmIK→LeftHandIK）→ RecoilModifier
+		if enable_upper_body_ik:
+			_setup_upper_body_ik()
 		_setup_recoil_modifier()
-		_setup_lean_modifier()
-		_setup_left_hand_ik()
 		# AnimationPlayer root_node: トラックパス root/Skeleton3D:Bone の解決基点
 		if _anim_player:
 			_anim_player.root_node = NodePath("..")
@@ -183,8 +171,6 @@ func update_animation(
 	if aim_direction.length_squared() > 0.001:
 		_aim_direction = aim_direction.normalized()
 
-	_update_lean(movement_direction, aim_direction, delta)
-
 	# Update model rotation
 	_update_model_rotation(aim_direction, delta)
 
@@ -203,38 +189,33 @@ func set_weapon(weapon: Weapon) -> void:
 		return
 	_weapon = weapon
 	_switch_weapon_animations()
-	# PISTOLは片手持ちなのでIK無効
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(weapon != Weapon.PISTOL and _left_hand_ik.has_grip_source())
+	if _upper_body_ik:
+		_upper_body_ik.set_is_pistol(weapon == Weapon.PISTOL)
 
 ## Set left hand grip source node for IK
 ## grip_node: 武器モデル内のLeftHandGripノード（nullで無効化）
 func set_left_hand_grip(grip_node: Node3D) -> void:
-	if not _left_hand_ik:
-		return
-	if grip_node:
-		_left_hand_ik.set_grip_source(grip_node)
-		if _weapon != Weapon.PISTOL:
-			_left_hand_ik.set_enabled(true)
-	else:
-		_left_hand_ik.clear_grip_source()
+	if _upper_body_ik:
+		_upper_body_ik.set_left_grip(grip_node)
 
 ## Set gun down state (weapon lowered due to nearby wall/friendly)
 func set_gun_down(value: bool) -> void:
 	if _is_gun_down == value:
 		return
 	_is_gun_down = value
-	# 左手IKをgun_down状態に合わせて制御
-	if _left_hand_ik:
-		if value:
-			_left_hand_ik.set_enabled(false)
-		elif _weapon != Weapon.PISTOL and _left_hand_ik.has_grip_source():
-			_left_hand_ik.set_enabled(true)
+	if _upper_body_ik:
+		_upper_body_ik.set_gun_down(value)
 
 
 ## Check if gun is currently lowered
 func is_gun_down() -> bool:
 	return _is_gun_down
+
+
+## Set weapon-specific right hand IK offset
+func set_weapon_ik_offset(offset: Vector3) -> void:
+	if _upper_body_ik:
+		_upper_body_ik.set_weapon_ik_offset(offset)
 
 
 ## Trigger fire action (recoil)
@@ -258,10 +239,6 @@ func fire() -> void:
 	if _recoil_modifier:
 		_recoil_modifier.recovery_speed = recoil_recovery
 		_recoil_modifier.trigger_recoil(strength)
-
-	# Trigger shoot animation OneShot
-	if _anim_tree:
-		_anim_tree.set("parameters/ShootOneShot/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 	fired.emit()
 
@@ -398,9 +375,9 @@ func play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: boo
 
 	_is_dead = true
 
-	# 左手IKを即座に無効化
-	if _left_hand_ik:
-		_left_hand_ik.disable_immediate()
+	# 上半身IKを即座に無効化
+	if _upper_body_ik:
+		_upper_body_ik.disable_immediate()
 
 	# Stop AnimationTree
 	if _anim_tree:
@@ -452,12 +429,11 @@ func _resume_animation_tree() -> void:
 		_is_gun_down = false
 		_anim_tree.set("parameters/IdleBlend/blend_amount", 0.0)
 		_anim_tree.set("parameters/SpeedBlend/blend_amount", 0.0)
-		_anim_tree.set("parameters/GunDownBlend/blend_amount", 0.0)
 		_anim_tree.active = true
-		# 左手IKを武器に応じて再有効化（ブレンド速度をデフォルトに戻す）
-		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
-			_left_hand_ik.reset_blend_speed()
-			_left_hand_ik.set_enabled(true)
+		# IKブレンド速度をデフォルトに戻し、gun_downを解除
+		if _upper_body_ik:
+			_upper_body_ik.reset_blend_speed()
+			_upper_body_ik.set_gun_down(false)
 
 
 ## Play throw animation (legacy: underhand grenade throw with pistol)
@@ -476,9 +452,8 @@ func _on_throw_release() -> void:
 func _start_throw_ik_blend() -> void:
 	if not _is_throwing or _is_dead:
 		return
-	if _left_hand_ik:
-		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
-		_left_hand_ik.set_enabled(true)
+	if _upper_body_ik:
+		_upper_body_ik.resume_after_action()
 
 
 func _on_throw_finished(_anim_name: String) -> void:
@@ -530,9 +505,9 @@ func play_throw_close() -> void:
 func _start_throw(anim_name: String, release_time: float, ik_resume_time: float = 0.0) -> void:
 	_is_throwing = true
 
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
+	# 上半身IKを無効化
+	if _upper_body_ik:
+		_upper_body_ik.disable_for_action()
 
 	# Stop AnimationTree during throw
 	if _anim_tree:
@@ -544,8 +519,8 @@ func _start_throw(anim_name: String, release_time: float, ik_resume_time: float 
 		_anim_player.animation_finished.connect(_on_throw_finished, CONNECT_ONE_SHOT)
 		# リリースタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(release_time).timeout.connect(_on_throw_release, CONNECT_ONE_SHOT)
-		# アニメーション後半からIKを徐々にブレンドイン（左手のスナップ防止）
-		if ik_resume_time > 0.0 and _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+		# アニメーション後半からIKを徐々にブレンドイン
+		if ik_resume_time > 0.0 and _upper_body_ik:
 			get_tree().create_timer(ik_resume_time).timeout.connect(
 				_start_throw_ik_blend, CONNECT_ONE_SHOT)
 	else:
@@ -567,9 +542,9 @@ func play_door_open() -> void:
 
 	_is_opening_door = true
 
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
+	# 上半身IKを無効化
+	if _upper_body_ik:
+		_upper_body_ik.disable_for_action()
 
 	if _anim_tree:
 		_anim_tree.active = false
@@ -587,8 +562,8 @@ func play_door_open() -> void:
 		# インパクトタイミングでシグナルを発火するタイマー
 		get_tree().create_timer(DOOR_OPEN_IMPACT_TIME).timeout.connect(
 			func(): door_open_impact.emit(), CONNECT_ONE_SHOT)
-		# アニメーション後半からIKを徐々にブレンドイン（左手のスナップ防止）
-		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+		# アニメーション後半からIKを徐々にブレンドイン
+		if _upper_body_ik:
 			get_tree().create_timer(DOOR_OPEN_IK_RESUME_TIME).timeout.connect(
 				_start_door_ik_blend, CONNECT_ONE_SHOT)
 	else:
@@ -602,9 +577,8 @@ func play_door_open() -> void:
 func _start_door_ik_blend() -> void:
 	if not _is_opening_door or _is_dead:
 		return
-	if _left_hand_ik:
-		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
-		_left_hand_ik.set_enabled(true)
+	if _upper_body_ik:
+		_upper_body_ik.resume_after_action()
 
 
 func _on_door_open_finished(_anim_name: String) -> void:
@@ -637,9 +611,9 @@ func play_talking() -> void:
 
 	_is_talking = true
 
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
+	# 上半身IKを無効化
+	if _upper_body_ik:
+		_upper_body_ik.disable_for_action()
 
 	# AnimationTreeを無効化
 	if _anim_tree:
@@ -690,9 +664,9 @@ func play_melee() -> void:
 
 	_is_meleeing = true
 
-	# 左手IKを無効化
-	if _left_hand_ik:
-		_left_hand_ik.set_enabled(false)
+	# 上半身IKを無効化
+	if _upper_body_ik:
+		_upper_body_ik.disable_for_action()
 
 	# Stop AnimationTree during melee
 	if _anim_tree:
@@ -705,7 +679,7 @@ func play_melee() -> void:
 		get_tree().create_timer(MELEE_IMPACT_TIME).timeout.connect(
 			func(): melee_impact.emit(), CONNECT_ONE_SHOT)
 		# アニメーション後半からIKを徐々にブレンドイン
-		if _left_hand_ik and _left_hand_ik.has_grip_source() and _weapon != Weapon.PISTOL:
+		if _upper_body_ik:
 			get_tree().create_timer(MELEE_IK_RESUME_TIME).timeout.connect(
 				_start_melee_ik_blend, CONNECT_ONE_SHOT)
 	else:
@@ -719,9 +693,8 @@ func play_melee() -> void:
 func _start_melee_ik_blend() -> void:
 	if not _is_meleeing or _is_dead:
 		return
-	if _left_hand_ik:
-		_left_hand_ik.set_blend_speed(ACTION_IK_BLEND_SPEED)
-		_left_hand_ik.set_enabled(true)
+	if _upper_body_ik:
+		_upper_body_ik.resume_after_action()
 
 
 func _on_melee_anim_finished(_anim_name: String) -> void:
@@ -812,9 +785,9 @@ func apply_animation_state(state: String, delta: float) -> void:
 
 #region Internal Implementation
 
-## 武器プレフィックスを取得
+## 武器プレフィックスを取得（pistolもrifleアニメーションを使用）
 func _get_weapon_prefix() -> String:
-	return "game_rifle" if _weapon != Weapon.PISTOL else "game_pistol"
+	return "game_rifle"
 
 ## 現在の武器のアイドルアニメーション名
 func _get_idle_anim_name() -> String:
@@ -822,7 +795,7 @@ func _get_idle_anim_name() -> String:
 
 ## 現在の武器のアニメーション速度テーブル
 func _get_anim_speeds() -> Dictionary:
-	return RIFLE_ANIM_SPEEDS if _weapon != Weapon.PISTOL else PISTOL_ANIM_SPEEDS
+	return RIFLE_ANIM_SPEEDS
 
 ## ブレンド位置から方向別アニメーション速度を計算（重み付き補間）
 func _get_blended_anim_speed(blend_pos: Vector2) -> float:
@@ -866,26 +839,17 @@ func _find_skeleton(node: Node) -> Skeleton3D:
 			return result
 	return null
 
+func _setup_upper_body_ik() -> void:
+	_upper_body_ik = UpperBodyIKController.new()
+	_upper_body_ik.name = "UpperBodyIKController"
+	_model.add_child(_upper_body_ik)  # Nodeとして追加（_process用）
+	_upper_body_ik.setup(_skeleton)
+
 func _setup_recoil_modifier() -> void:
 	_recoil_modifier = RecoilModifier.new()
 	_recoil_modifier.spine_bone_name = spine_bone
 	_recoil_modifier.active = true
 	_skeleton.add_child(_recoil_modifier)
-
-func _setup_lean_modifier() -> void:
-	_lean_modifier = LeanModifier.new()
-	_lean_modifier.recovery_speed = lean_speed
-	_skeleton.add_child(_lean_modifier)
-
-func _setup_left_hand_ik() -> void:
-	var script = load("res://scripts/modifiers/left_hand_ik_modifier.gd")
-	if not script:
-		push_warning("CharacterAnimationController: left_hand_ik_modifier.gd not found")
-		return
-	_left_hand_ik = script.new()
-	_left_hand_ik.name = "LeftHandIKModifier"
-	_model.add_child(_left_hand_ik)  # Nodeとして追加（_process用）
-	_left_hand_ik.setup(_skeleton)
 
 func _setup_animation_loops() -> void:
 	var loop_anims := [
@@ -915,11 +879,10 @@ func _setup_animation_loops() -> void:
 				anim.loop_mode = Animation.LOOP_LINEAR
 
 
-## AnimationTree構造:
-## output → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
-##                                       └→ Sprint(単一アニメーション)
-##            └→ ShootAnim（上半身フィルター付き）
-## ShootOneShotはTimeScaleの上流 = 射撃アニメーション速度がTimeScaleに影響されない
+## AnimationTree構造（上半身IK化後の簡略版）:
+## output → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
+##                                     └→ Sprint(単一アニメーション)
+## 上半身はIKが制御するため、ShootOneShot/GunDownBlendは不要
 func _setup_animation_tree() -> void:
 	# Create or get AnimationTree
 	_anim_tree = _model.get_node_or_null(GameConstants.NODE_ANIMATION_TREE) as AnimationTree
@@ -944,7 +907,6 @@ func _setup_animation_tree() -> void:
 	if _anim_player.has_animation(sprint_name):
 		sprint_anim.animation = sprint_name
 	else:
-		# SprintLoopがない場合はWalkFwdLoopで代替（TimeScaleで速度調整）
 		sprint_anim.animation = prefix + "_walk_forward"
 
 	# --- IdleBlend: 0=Idle, 1=Walk ---
@@ -956,21 +918,6 @@ func _setup_animation_tree() -> void:
 	# --- TimeScale: 移動アニメーション速度同期 ---
 	var time_scale := AnimationNodeTimeScale.new()
 
-	# --- Shoot OneShot (上半身フィルター) ---
-	var shoot_anim := AnimationNodeAnimation.new()
-	shoot_anim.animation = prefix + "_shoot_once" if _anim_player.has_animation(prefix + "_shoot_once") else ""
-	var shoot_oneshot := AnimationNodeOneShot.new()
-	shoot_oneshot.fadein_time = 0.05
-	shoot_oneshot.fadeout_time = 0.15
-	_apply_upper_body_filter(shoot_oneshot)
-
-	# --- GunDown Blend (上半身フィルター: 壁/味方接近時に武器を下げる) ---
-	var gun_down_anim := AnimationNodeAnimation.new()
-	var gun_down_name := GameConstants.ANIM_RIFLE_GUN_DOWN
-	gun_down_anim.animation = gun_down_name if _anim_player.has_animation(gun_down_name) else ""
-	var gun_down_blend := AnimationNodeBlend2.new()
-	_apply_upper_body_filter(gun_down_blend)
-
 	# --- Add nodes to blend tree ---
 	blend_tree.add_node("Idle", idle_anim, Vector2(-400, 100))
 	blend_tree.add_node("WalkBlend", walk_blend_space, Vector2(-400, 300))
@@ -978,10 +925,6 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node("Sprint", sprint_anim, Vector2(-50, 500))
 	blend_tree.add_node("SpeedBlend", speed_blend, Vector2(200, 300))
 	blend_tree.add_node("TimeScale", time_scale, Vector2(400, 200))
-	blend_tree.add_node("ShootAnim", shoot_anim, Vector2(500, 400))
-	blend_tree.add_node("ShootOneShot", shoot_oneshot, Vector2(600, 200))
-	blend_tree.add_node("GunDownAnim", gun_down_anim, Vector2(700, 400))
-	blend_tree.add_node("GunDownBlend", gun_down_blend, Vector2(800, 200))
 
 	# --- Connect: IdleBlend(0=Idle, 1=WalkBlend) ---
 	blend_tree.connect_node("IdleBlend", 0, "Idle")
@@ -994,16 +937,8 @@ func _setup_animation_tree() -> void:
 	# --- Connect: TimeScale → SpeedBlend ---
 	blend_tree.connect_node("TimeScale", 0, "SpeedBlend")
 
-	# --- Connect: ShootOneShot(base=TimeScale, oneshot=ShootAnim) ---
-	blend_tree.connect_node("ShootOneShot", 0, "TimeScale")
-	blend_tree.connect_node("ShootOneShot", 1, "ShootAnim")
-
-	# --- Connect: GunDownBlend(0=ShootOneShot, 1=GunDownAnim) ---
-	blend_tree.connect_node("GunDownBlend", 0, "ShootOneShot")
-	blend_tree.connect_node("GunDownBlend", 1, "GunDownAnim")
-
-	# --- Connect: output → GunDownBlend ---
-	blend_tree.connect_node("output", 0, "GunDownBlend")
+	# --- Connect: output → TimeScale ---
+	blend_tree.connect_node("output", 0, "TimeScale")
 
 	_anim_tree.tree_root = blend_tree
 	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
@@ -1069,20 +1004,6 @@ func _switch_weapon_animations() -> void:
 			sprint_name = prefix + "_walk_forward"
 		sprint_node.animation = sprint_name
 
-	# Shoot
-	var shoot_node := bt.get_node("ShootAnim") as AnimationNodeAnimation
-	if shoot_node:
-		var shoot_name := prefix + "_shoot_once"
-		shoot_node.animation = shoot_name if _anim_player.has_animation(shoot_name) else ""
-
-	# GunDown（ライフル系のみ、ピストルは空で無効化）
-	var gun_down_node := bt.get_node("GunDownAnim") as AnimationNodeAnimation
-	if gun_down_node:
-		if _weapon != Weapon.PISTOL and _anim_player.has_animation(GameConstants.ANIM_RIFLE_GUN_DOWN):
-			gun_down_node.animation = GameConstants.ANIM_RIFLE_GUN_DOWN
-		else:
-			gun_down_node.animation = ""
-
 	# WalkBlend (BlendSpace2D) - 8方向のアニメーション名を更新
 	var walk_blend := bt.get_node("WalkBlend") as AnimationNodeBlendSpace2D
 	if walk_blend:
@@ -1102,59 +1023,6 @@ func _switch_weapon_animations() -> void:
 				anim_node.animation = walk_anims[i]
 
 
-## Apply upper body bone filter to an AnimationNode (e.g. OneShot)
-func _apply_upper_body_filter(node: AnimationNode) -> void:
-	if not _skeleton:
-		return
-
-	# Find the bone track path prefix from actual animation data
-	var prefix := _detect_bone_track_prefix()
-	if prefix.is_empty():
-		return
-
-	# Get all upper body bones (Spine and its descendants)
-	var spine_idx := _skeleton.find_bone("Spine")
-	if spine_idx < 0:
-		# Fallback: try other bone names
-		for bone_name in ["UpperChest", "Chest", "Spine1"]:
-			spine_idx = _skeleton.find_bone(bone_name)
-			if spine_idx >= 0:
-				break
-	if spine_idx < 0:
-		return
-
-	var upper_bones: Array[String] = []
-	_collect_descendant_bones(spine_idx, upper_bones)
-
-	# Enable filter and set paths
-	node.filter_enabled = true
-	for bone_name in upper_bones:
-		node.set_filter_path(NodePath("%s:%s" % [prefix, bone_name]), true)
-
-
-## Detect the skeleton path prefix from animation track data
-func _detect_bone_track_prefix() -> String:
-	var anim_lib = _anim_player.get_animation_library("")
-	# ARP/Unity Humanoidボーン名で検索
-	var search_bones := [":Spine", ":Chest", ":RightHand", ":Hips", ":UpperChest"]
-	for anim_name in anim_lib.get_animation_list():
-		var anim := anim_lib.get_animation(anim_name)
-		for i in range(anim.get_track_count()):
-			var path_str := str(anim.track_get_path(i))
-			for search_bone in search_bones:
-				var colon_idx := path_str.find(search_bone)
-				if colon_idx >= 0:
-					return path_str.substr(0, colon_idx)
-	return ""
-
-
-## Recursively collect a bone and all its descendants
-func _collect_descendant_bones(bone_idx: int, result: Array[String]) -> void:
-	result.append(_skeleton.get_bone_name(bone_idx))
-	for child_idx in _skeleton.get_bone_children(bone_idx):
-		_collect_descendant_bones(child_idx, result)
-
-
 func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	if not _model:
 		return
@@ -1169,46 +1037,6 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 		var current_quat := Quaternion(_model.transform.basis)
 		var new_quat := current_quat.slerp(target_quat, rotation_speed * delta)
 		_model.transform.basis = Basis(new_quat)
-
-func _update_lean(movement_direction: Vector3, aim_direction: Vector3, delta: float) -> void:
-	var target_lean := 0.0
-
-	# --- 移動方向ベースのリーン（既存） ---
-	var move_dir := movement_direction
-	move_dir.y = 0
-	if move_dir.length() > 0.1:
-		var look_dir := aim_direction
-		look_dir.y = 0
-		if look_dir.length() > 0.1:
-			var forward := -look_dir.normalized()
-			var right := forward.cross(Vector3.UP).normalized()
-			var side_amount := move_dir.normalized().dot(right)
-			if absf(side_amount) > lean_deadzone:
-				var max_lean := deg_to_rad(max_lean_degrees)
-				target_lean = clampf(side_amount, -1.0, 1.0) * max_lean
-
-	# --- 方向転換ベースのリーン（ターンリーン） ---
-	var aim_dir := aim_direction
-	aim_dir.y = 0
-	if aim_dir.length_squared() > 0.001 and _prev_aim_for_turn.length_squared() > 0.001:
-		var cur := aim_dir.normalized()
-		var prev := _prev_aim_for_turn.normalized()
-		var angle_diff := prev.signed_angle_to(cur, Vector3.UP)
-		var angular_vel := angle_diff / maxf(delta, 0.001)
-		# 角速度のみスムージング（ノイズ除去）
-		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, angular_vel, 1.0 - exp(-turn_lean_smoothing * delta))
-	else:
-		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, 0.0, 1.0 - exp(-turn_lean_smoothing * delta))
-	# 回転方向にリーン、直接target_leanに加算
-	var max_turn := deg_to_rad(turn_lean_degrees)
-	target_lean += clampf(_smoothed_angular_vel / turn_lean_angular_ref, -1.0, 1.0) * max_turn
-
-	if aim_direction.length_squared() > 0.001:
-		_prev_aim_for_turn = aim_direction
-
-	_lean_amount = lerpf(_lean_amount, target_lean, 1.0 - exp(-lean_speed * delta))
-	if _lean_modifier and _lean_modifier.has_method("set_target_lean"):
-		_lean_modifier.set_target_lean(_lean_amount)
 
 func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	var move_dir := movement_direction
@@ -1259,11 +1087,6 @@ func _update_animation_tree(delta: float = 0.016) -> void:
 	var target_speed := 1.0 if _is_sprinting else 0.0
 	_speed_blend = lerpf(_speed_blend, target_speed, 1.0 - exp(-8.0 * delta))
 	_anim_tree.set("parameters/SpeedBlend/blend_amount", _speed_blend)
-
-	# GunDownBlend: 壁/味方接近時に上半身を武器下げポーズにブレンド（スプリント中は無効）
-	var target_gun_down := 1.0 if _is_gun_down and not _is_sprinting else 0.0
-	var current_gun_down: float = _anim_tree.get("parameters/GunDownBlend/blend_amount")
-	_anim_tree.set("parameters/GunDownBlend/blend_amount", lerpf(current_gun_down, target_gun_down, GUN_DOWN_BLEND_SPEED * delta))
 
 	# TimeScale: 速度同期
 	_update_time_scale()

@@ -407,8 +407,11 @@ func _attach_weapon_model(weapon: WeaponPreset) -> void:
 		# Default rotation for ARP right hand (要実機調整)
 		socket.rotation_degrees = Vector3(-79, -66, -28)
 
-	# 左手IKグリップ設定
+	# IKグリップ設定
 	_update_left_hand_ik(weapon)
+	# 右手IKオフセット設定
+	if anim_ctrl and weapon:
+		anim_ctrl.set_weapon_ik_offset(weapon.right_hand_ik_offset)
 
 
 

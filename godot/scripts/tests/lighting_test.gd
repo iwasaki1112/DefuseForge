@@ -221,6 +221,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 
 func _load_animation_library() -> AnimationLibrary:
 	const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
+	const ANIMATION_SOURCE_MIXAMO := "res://assets/animations/character_anims_mixamo.glb"
 	if not ResourceLoader.exists(ANIMATION_SOURCE):
 		return null
 
@@ -234,6 +235,22 @@ func _load_animation_library() -> AnimationLibrary:
 	if source_player:
 		lib = source_player.get_animation_library("")
 	anim_instance.queue_free()
+
+	# Merge mixamo animations (override kubold for movement anims)
+	if lib and ResourceLoader.exists(ANIMATION_SOURCE_MIXAMO):
+		var mixamo_scene = load(ANIMATION_SOURCE_MIXAMO) as PackedScene
+		if mixamo_scene:
+			var mixamo_instance = mixamo_scene.instantiate()
+			var mixamo_player = _find_animation_player(mixamo_instance)
+			if mixamo_player:
+				var mixamo_lib = mixamo_player.get_animation_library("")
+				if mixamo_lib:
+					for anim_name in mixamo_lib.get_animation_list():
+						if lib.has_animation(anim_name):
+							lib.remove_animation(anim_name)
+						lib.add_animation(anim_name, mixamo_lib.get_animation(anim_name))
+			mixamo_instance.queue_free()
+
 	return lib
 
 

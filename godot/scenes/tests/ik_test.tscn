@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://d38fcygpbkm0e"]
+
+[ext_resource type="Script" uid="uid://cria54lgny26w" path="res://scripts/tests/ik_test_controller.gd" id="1_script"]
+
+[node name="IKTest" type="Node3D" unique_id=306872708]
+script = ExtResource("1_script")

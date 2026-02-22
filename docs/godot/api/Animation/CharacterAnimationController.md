@@ -24,14 +24,6 @@
 
 ## Enums
 
-### Stance
-キャラクターの姿勢。
-
-| 値 | 説明 |
-|----|------|
-| `STAND` | 立ち状態 |
-| `CROUCH` | しゃがみ状態 |
-
 ### Weapon
 武器タイプ。
 
@@ -68,12 +60,10 @@
 ### Movement Speed
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `walk_speed` | `float` | `1.5` | 歩行速度 |
-| `run_speed` | `float` | `5.0` | 走行速度 |
-| `crouch_speed` | `float` | `1.5` | しゃがみ移動速度 |
+| `walk_speed` | `float` | `2.0` | 歩行速度 |
 | `rotation_speed` | `float` | `15.0` | 回転速度 |
 
-> **Note:** アニメーション基準速度（`ANIM_REF_WALK`, `ANIM_REF_RUN`, `ANIM_REF_CROUCH`）は内部定数として管理され、足滑り防止のためのスケーリングに使用される。
+> **Note:** 速度定数 `WALK_SPEED` (2.0), `SPRINT_SPEED` (6.0) は内部定数。各方向の自然歩行速度テーブル（`PISTOL_ANIM_SPEEDS`, `RIFLE_ANIM_SPEEDS`）でTimeScaleによる足滑り防止スケーリングを行う。
 
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |
@@ -93,7 +83,7 @@
 | `lean_speed` | `float` | `10.0` | リーンの補間速度 |
 | `lean_deadzone` | `float` | `0.15` | 小さな横移動を無視する閾値 |
 
-> **Note:** リーンは上半身（`spine_bone`）にロールとして適用される。
+> **Note:** リーン値は `UpperBodyIKController.set_lean()` 経由で `SpineAimModifier` に渡され、チェーンボーンに重み付き分配される。
 
 ### Turn Lean
 | プロパティ | 型 | デフォルト | 説明 |
@@ -128,17 +118,19 @@
 - `is_running` - 走行中か
 - `delta` - デルタタイム
 
-### set_stance(stance: Stance) -> void
-姿勢を設定する。
-
 ### set_weapon(weapon: Weapon) -> void
 武器タイプを設定する。
+
+### set_weapon_ik_offset(offset: Vector3) -> void
+武器固有の右手IKオフセットを設定する。`WeaponPreset.right_hand_ik_offset` から呼び出される。
 
 ### set_gun_down(value: bool) -> void
 Gun down状態を設定する。前方に壁や味方がいる場合に武器を下げるポーズに遷移する。
 
 **動作:**
-- 上半身のみGunDownアニメーション（`game_rifle_gun_down`）をオーバーレイ
+- UpperBodyIKController 経由で右手IKターゲット位置を変更（GunDown位置へ）
+- SpineAimModifier のポーズリーンで上半身をやや前傾
+- 左手IKは無効化
 - 下半身は通常のアイドル/歩行アニメーションを継続
 - スプリント中は自動的に無効化
 - ピストルには非対応（ライフル系武器のみ）
@@ -208,7 +200,7 @@ Gun down状態か確認する。
 - AnimationTreeを停止し、AnimationPlayerで直接再生
 - 投擲/ドア開け/会話/死亡中はブロック
 - 再生中は`fire()`、`update_animation()`もブロック
-- 左手IKは一時無効化、アニメーション後半で復帰
+- 上半身IKは一時無効化（`disable_for_action()`）、アニメーション後半で復帰（`resume_after_action()`）
 
 ### is_meleeing() -> bool
 近接攻撃アニメーション再生中か確認する。
@@ -233,14 +225,21 @@ anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
 anim_ctrl.fire()
 ```
 
+### Upper Body IK
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `enable_upper_body_ik` | `bool` | `true` | 上半身IKを有効化 |
+
+> **Note:** 上半身IKが有効な場合、`UpperBodyIKController` が右腕IK・左腕IK・SpineAimModifier を一元管理します。
+
 ## 内部動作
 
-- AnimationTree構成: output → GunDownBlend → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend
+- AnimationTree構成: output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
 - アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
 - TimeScaleによる移動速度同期でアニメーション速度を調整
-- `RecoilModifier`でプロシージャルリコイルを適用
-- `LeanModifier`で移動リーン＋ターンリーンを合成適用
-- `LeftHandIKModifier`で左手IKを制御
+- `UpperBodyIKController`で上半身IKを統合管理（右腕IK + 左腕IK + SpineAimModifier）
+- `RecoilModifier`でプロシージャルリコイルを適用（IK後に加算）
+- SkeletonModifier3D処理順序: SpineAimModifier → RightArmIK → LeftHandIK → RecoilModifier
 - ARPリグ専用設計
 
 ## 重要: モデル向き制御の注意点
@@ -278,9 +277,8 @@ anim_ctrl.fire()
 ### メソッド
 - `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
 - `update_animation(movement_direction: Vector3, look_direction: Vector3, is_running: bool, delta: float) -> void`
-- `set_stance(stance: Stance) -> void`
-- `get_stance() -> Stance`
 - `set_weapon(weapon: Weapon) -> void`
+- `set_weapon_ik_offset(offset: Vector3) -> void`
 - `set_gun_down(value: bool) -> void`
 - `is_gun_down() -> bool`
 - `fire() -> void`

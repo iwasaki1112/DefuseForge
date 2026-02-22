@@ -1,5 +1,8 @@
 # LeanModifier
 
+> **非推奨:** SpineAimModifier に統合されました。新規コードでは SpineAimModifier を使用してください。
+> SpineAimModifier は移動リーン（ロール）に加え、ポーズリーン（ピッチ: GunDown前傾等）と複数ボーンチェーンへの重み付き分配をサポートします。
+
 上半身ボーンにリーン（ロール）を適用する`SkeletonModifier3D`。
 
 ## 基本情報

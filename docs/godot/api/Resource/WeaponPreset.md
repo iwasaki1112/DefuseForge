@@ -144,6 +144,15 @@ multiplier = 1.0 - clamp(target_speed / target_speed_reference, 0, 1) * target_m
 | `recoil_strength` | `float` | `0.08` | リコイルアニメーション強度 |
 | `recoil_recovery` | `float` | `10.0` | リコイル回復速度 |
 
+### IK Settings
+| プロパティ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `left_hand_grip_enabled` | `bool` | `false` | 左手IKグリップを有効化（ライフル等の両手持ち武器用） |
+| `left_hand_grip_offset` | `Vector3` | `Vector3.ZERO` | フォールバック用: LeftHandGripノードがない場合のオフセット |
+| `right_hand_ik_offset` | `Vector3` | `Vector3.ZERO` | 右手IKオフセット（デフォルトREADYポーズからの相対） |
+
+> **Note:** `right_hand_ik_offset` は `UpperBodyIKController` の右手IKターゲット位置に加算されます。武器装備時に `GameCharacter._attach_weapon_model()` 経由で `CharacterAnimationController.set_weapon_ik_offset()` に渡されます。
+
 ### Visual
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
