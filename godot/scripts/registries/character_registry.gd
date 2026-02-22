@@ -5,6 +5,7 @@ extends Node
 ## Shared animation library sources (GLB files with animations)
 const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
 const ANIMATION_SOURCE_MIXAMO := "res://assets/animations/character_anims_mixamo.glb"
+const ANIMATION_SOURCE_UNIFIED := "res://assets/animations/animations.glb"  ## 武器非依存の統一ロコモーション
 var _animation_library: AnimationLibrary = null
 
 # ============================================
@@ -60,6 +61,15 @@ func _load_animation_library() -> void:
 		for anim_name in mixamo_lib.get_animation_list():
 			if not _animation_library.has_animation(anim_name):
 				_animation_library.add_animation(anim_name, mixamo_lib.get_animation(anim_name))
+
+	# Merge unified locomotion animations (game_idle, game_walk_*, game_sprint etc.)
+	# 同名アニメーションが既存ライブラリにあれば上書き（統一版を優先）
+	var unified_lib := _extract_animation_library(ANIMATION_SOURCE_UNIFIED)
+	if unified_lib:
+		for anim_name in unified_lib.get_animation_list():
+			if _animation_library.has_animation(anim_name):
+				_animation_library.remove_animation(anim_name)
+			_animation_library.add_animation(anim_name, unified_lib.get_animation(anim_name))
 
 ## Extract AnimationLibrary from a GLB PackedScene
 func _extract_animation_library(source_path: String) -> AnimationLibrary:

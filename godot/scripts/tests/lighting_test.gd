@@ -221,6 +221,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 
 func _load_animation_library() -> AnimationLibrary:
 	const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
+	const ANIMATION_SOURCE_UNIFIED := "res://assets/animations/animations.glb"
 	if not ResourceLoader.exists(ANIMATION_SOURCE):
 		return null
 
@@ -234,6 +235,22 @@ func _load_animation_library() -> AnimationLibrary:
 	if source_player:
 		lib = source_player.get_animation_library("")
 	anim_instance.queue_free()
+
+	# Merge unified locomotion animations
+	if lib and ResourceLoader.exists(ANIMATION_SOURCE_UNIFIED):
+		var unified_scene = load(ANIMATION_SOURCE_UNIFIED) as PackedScene
+		if unified_scene:
+			var unified_instance = unified_scene.instantiate()
+			var unified_player = _find_animation_player(unified_instance)
+			if unified_player:
+				var unified_lib = unified_player.get_animation_library("")
+				if unified_lib:
+					for anim_name in unified_lib.get_animation_list():
+						if lib.has_animation(anim_name):
+							lib.remove_animation(anim_name)
+						lib.add_animation(anim_name, unified_lib.get_animation(anim_name))
+			unified_instance.queue_free()
+
 	return lib
 
 

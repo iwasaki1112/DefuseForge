@@ -21,6 +21,7 @@ const ENEMY_PRESET_ID := "ares"
 const DEFAULT_WEAPON_ID := "glock"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
+const ANIMATION_SOURCE_UNIFIED := "res://assets/animations/animations.glb"
 
 # Vision
 const VISION_FOV := 75.0
@@ -418,6 +419,22 @@ func _load_animation_library() -> AnimationLibrary:
 	if source_player:
 		lib = source_player.get_animation_library("")
 	anim_instance.queue_free()
+
+	# Merge unified locomotion animations
+	if lib and ResourceLoader.exists(ANIMATION_SOURCE_UNIFIED):
+		var unified_scene = load(ANIMATION_SOURCE_UNIFIED) as PackedScene
+		if unified_scene:
+			var unified_instance = unified_scene.instantiate()
+			var unified_player = _find_animation_player(unified_instance)
+			if unified_player:
+				var unified_lib = unified_player.get_animation_library("")
+				if unified_lib:
+					for anim_name in unified_lib.get_animation_list():
+						if lib.has_animation(anim_name):
+							lib.remove_animation(anim_name)
+						lib.add_animation(anim_name, unified_lib.get_animation(anim_name))
+			unified_instance.queue_free()
+
 	return lib
 
 

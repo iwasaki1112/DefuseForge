@@ -1,6 +1,6 @@
 # CharacterAnimationController
 
-キャラクターアニメーションを管理するコントローラークラス。移動、戦闘、デスアニメーションを統合的に制御する。
+キャラクターアニメーションを管理するコントローラークラス。上半身を完全にIKで制御し、下半身は武器非依存の統一8方向BlendSpace2Dアニメーションを維持する。
 
 > **重要: ARPモデルの向きについて**
 >
@@ -22,15 +22,24 @@
 | 継承元 | `Node` |
 | ファイルパス | `scripts/animation/character_animation_controller.gd` |
 
+## アーキテクチャ
+
+```
+CharacterAnimationController
+  ├── AnimationTree (下半身のみ実質制御)
+  │     output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
+  │
+  └── UpperBodyIKController
+        ├── SpinePostureModifier (背骨姿勢)
+        ├── RightArmIK (TwoBoneIK3D)
+        ├── LeftHandIKModifier (左手追従)
+        ├── HeadLookAt (LookAtModifier3D)
+        └── IKRecoilController (射撃リコイル)
+```
+
+IKの`influence=1.0`がアニメーションポーズを上書きするため、AnimationTreeへの上半身フィルター設定は不要。
+
 ## Enums
-
-### Stance
-キャラクターの姿勢。
-
-| 値 | 説明 |
-|----|------|
-| `STAND` | 立ち状態 |
-| `CROUCH` | しゃがみ状態 |
 
 ### Weapon
 武器タイプ。
@@ -59,8 +68,8 @@
 | `throw_release` | なし | グレネードリリースタイミング |
 | `throw_finished` | なし | 投擲アニメーション完了 |
 | `door_open_finished` | なし | ドア開けアニメーション完了 |
-| `door_open_impact` | なし | ドアを実際に開くインパクトタイミング（0.7秒後） |
-| `melee_impact` | なし | 近接攻撃のインパクトタイミング（0.4秒後） |
+| `door_open_impact` | なし | ドアを実際に開くインパクトタイミング |
+| `melee_impact` | なし | 近接攻撃のインパクトタイミング |
 | `melee_finished` | なし | 近接攻撃アニメーション完了 |
 
 ## Export Properties
@@ -68,12 +77,8 @@
 ### Movement Speed
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `walk_speed` | `float` | `1.5` | 歩行速度 |
-| `run_speed` | `float` | `5.0` | 走行速度 |
-| `crouch_speed` | `float` | `1.5` | しゃがみ移動速度 |
+| `walk_speed` | `float` | `2.0` | 歩行速度 |
 | `rotation_speed` | `float` | `15.0` | 回転速度 |
-
-> **Note:** アニメーション基準速度（`ANIM_REF_WALK`, `ANIM_REF_RUN`, `ANIM_REF_CROUCH`）は内部定数として管理され、足滑り防止のためのスケーリングに使用される。
 
 ### Recoil
 | プロパティ | 型 | デフォルト | 説明 |
@@ -84,220 +89,70 @@
 | `pistol_fire_rate` | `float` | `0.2` | ピストルの発射間隔 |
 | `recoil_recovery` | `float` | `10.0` | リコイル回復速度 |
 
-> **重要:** 武器装備時、`WeaponPreset.recoil_strength`がこれらのデフォルト値を上書きします。リコイル強度を調整する場合は、各武器の`.tres`ファイル（`data/weapons/`配下）を編集してください。
-
 ### Lean
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
-| `max_lean_degrees` | `float` | `25.0` | 移動リーンの最大角度（度） |
+| `max_lean_degrees` | `float` | `10.0` | 移動リーンの最大角度（度） |
 | `lean_speed` | `float` | `10.0` | リーンの補間速度 |
 | `lean_deadzone` | `float` | `0.15` | 小さな横移動を無視する閾値 |
-
-> **Note:** リーンは上半身（`spine_bone`）にロールとして適用される。
 
 ### Turn Lean
 | プロパティ | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
 | `turn_lean_degrees` | `float` | `15.0` | 方向転換時の最大リーン角度（度） |
-| `turn_lean_smoothing` | `float` | `12.0` | 角速度スムージング速度 |
-| `turn_lean_angular_ref` | `float` | `3.0` | 最大リーンとなる角速度（rad/s） |
-
-> **Note:** 方向転換（右スティック操作）時に上半身が回転方向へ自然にリーンする視覚エフェクト。移動リーンと加算で合成される。
-
-### Bone Names
-| プロパティ | 型 | デフォルト | 説明 |
-|-----------|-----|----------|------|
-| `upper_body_root` | `String` | `"Spine"` | 上半身ルートボーン名 |
-| `spine_bone` | `String` | `"UpperChest"` | リコイル適用ボーン名 |
+| `turn_lean_smoothing` | `float` | `15.0` | 角速度スムージング速度 |
+| `turn_lean_angular_ref` | `float` | `1.5` | 最大リーンとなる角速度（rad/s） |
 
 ## Public API
 
 ### setup(model: Node3D, anim_player: AnimationPlayer) -> void
-アニメーションコントローラーをセットアップする。
+アニメーションコントローラーをセットアップする。UpperBodyIKControllerとAnimationTreeを初期化。
 
-**引数:**
-- `model` - キャラクターモデル（Skeleton3Dを含む）
-- `anim_player` - AnimationPlayerノード
-
-### update_animation(movement_direction: Vector3, look_direction: Vector3, is_running: bool, delta: float) -> void
-毎フレーム呼び出してアニメーションを更新する。
-
-**引数:**
-- `movement_direction` - 移動方向ベクトル（ワールド座標）
-- `look_direction` - 視線方向ベクトル
-- `is_running` - 走行中か
-- `delta` - デルタタイム
-
-### set_stance(stance: Stance) -> void
-姿勢を設定する。
+### update_animation(movement_direction: Vector3, aim_direction: Vector3, is_running: bool, delta: float) -> void
+毎フレーム呼び出してアニメーションを更新する。上半身IKと下半身AnimationTreeの両方を更新。
 
 ### set_weapon(weapon: Weapon) -> void
-武器タイプを設定する。
+武器タイプを設定する。ロコモーションアニメーションは武器非依存（変化しない）。IK状態のみUpperBodyIKControllerに伝播。
+
+### set_left_hand_grip(grip_node: Node3D) -> void
+左手IKのグリップソースを設定する。UpperBodyIKController経由。
 
 ### set_gun_down(value: bool) -> void
-Gun down状態を設定する。前方に壁や味方がいる場合に武器を下げるポーズに遷移する。
-
-**動作:**
-- 上半身のみGunDownアニメーション（`game_rifle_gun_down`）をオーバーレイ
-- 下半身は通常のアイドル/歩行アニメーションを継続
-- スプリント中は自動的に無効化
-- ピストルには非対応（ライフル系武器のみ）
-- `fire()`をブロック（射撃不可）
-
-### is_gun_down() -> bool
-Gun down状態か確認する。
+Gun up状態を設定する。UpperBodyIKControllerのIKState(GUN_UP/READY)を切り替え。
 
 ### fire() -> void
-発射アクションをトリガーする。リコイルアニメーションを再生。gun_down状態の場合はブロックされる。
+発射アクションをトリガーする。IKリコイルを発動（UpperBodyIKController経由）。
 
-### get_current_speed() -> float
-現在の状態に基づく移動速度を返す。
-
-### is_dead() -> bool
-キャラクターが死亡状態か確認する。
-
-### get_look_direction() -> Vector3
-現在の視線方向を取得する（視界計算用）。
-
-### set_look_direction(direction: Vector3) -> void
-視線方向を直接設定する（回転モード用）。モデルの向きも即座に更新。
-
-### play_death(hit_direction: HitDirection = HitDirection.FRONT, headshot: bool = false) -> void
-デスアニメーションを再生する。被弾方向に応じて適切なアニメーションを選択。
-
-**方向別アニメーション:**
-| 被弾方向 | 倒れる方向 | アニメーション |
-|---------|----------|--------------|
-| `FRONT` | 後ろ | `Death_Forward` |
-| `BACK` | 前 | `Death_Backward` |
-| `RIGHT` | 左 | `Death_Right` |
-| `LEFT` | 右 | `Death_Forward`（フォールバック）|
-
-> **Note:** `Death_Left`アニメーションは存在しないため、`LEFT`被弾時は`Death_Forward`にフォールバックする。
-
-### play_door_kick() -> void
-ドアキックアニメーションを再生する。武器タイプに応じて適切なアニメーションが選択される。
-
-- `Weapon.RIFLE` → `Rifle_DoorKick`
-- `Weapon.PISTOL` → `Pistol_DoorKick`
-
-アニメーション再生中は`update_animation()`の更新がスキップされ、`get_current_speed()`は0を返す。
-
-### is_door_kicking() -> bool
-ドアキックアニメーション再生中か確認する。
+### play_death(hit_direction: HitDirection, headshot: bool) -> void
+デスアニメーションを再生する。IKを全無効化→AnimationPlayer直接再生。
 
 ### play_door_open() -> void
-ドア開けアニメーションを再生する（静かにドアを開く）。0.7秒後に`door_open_impact`シグナルが発火し、アニメーション完了時に`door_open_finished`シグナルが発火する。
+ドア開けアニメーションを再生する。IK無効化→全身AnimationPlayer再生→復帰。
 
-### is_opening_door() -> bool
-ドア開けアニメーション再生中か確認する。
-
-### play_talking() -> void
-会話アニメーションをループ再生する（人質交渉用）。
-
-### stop_talking() -> void
-会話アニメーションを停止してアイドルに復帰する。
-
-### is_talking() -> bool
-会話アニメーション再生中か確認する。
+### play_throw_far() / play_throw_close() -> void
+投擲アニメーションを再生する。IK無効化→全身AnimationPlayer再生→復帰。
 
 ### play_melee() -> void
-近接攻撃アニメーション（ライフルバットストライク: `game_rifle_hard`）を再生する。0.4秒後に`melee_impact`シグナルが発火し、アニメーション完了時に`melee_finished`シグナルが発火する。
+近接攻撃アニメーションを再生する。IK無効化→全身AnimationPlayer再生→復帰。
 
-**動作:**
-- AnimationTreeを停止し、AnimationPlayerで直接再生
-- 投擲/ドア開け/会話/死亡中はブロック
-- 再生中は`fire()`、`update_animation()`もブロック
-- 左手IKは一時無効化、アニメーション後半で復帰
+### play_talking() / stop_talking() -> void
+会話アニメーションのループ再生/停止。IK無効化→全身AnimationPlayer再生→復帰。
 
-### is_meleeing() -> bool
-近接攻撃アニメーション再生中か確認する。
+## ネットワーク同期
 
-## 使用例
+プロトコル `"move_state,is_firing,blend_x,blend_y,gun_down"` は変更なし。
 
-```gdscript
-# セットアップ
-var anim_ctrl = CharacterAnimationController.new()
-character.add_child(anim_ctrl)
-anim_ctrl.setup(model, anim_player)
-
-# 毎フレーム更新
-func _physics_process(delta):
-    var move_dir = Vector3(input_x, 0, input_z)
-    var look_dir = target_position - global_position
-    anim_ctrl.update_animation(move_dir, look_dir, is_running, delta)
-
-# 状態変更
-anim_ctrl.set_stance(CharacterAnimationController.Stance.CROUCH)
-anim_ctrl.set_weapon(CharacterAnimationController.Weapon.RIFLE)
-anim_ctrl.fire()
-```
+- `get_animation_state()` → エンコード
+- `apply_animation_state(state, delta)` → デコード・適用（リモートキャラクター用）
 
 ## 内部動作
 
-- AnimationTree構成: output → GunDownBlend → ShootOneShot → TimeScale → SpeedBlend → IdleBlend → WalkBlend
-- アニメーションソース: `character_anims_inplace.glb`（in-placeアニメーション）
-- TimeScaleによる移動速度同期でアニメーション速度を調整
-- `RecoilModifier`でプロシージャルリコイルを適用
-- `LeanModifier`で移動リーン＋ターンリーンを合成適用
-- `LeftHandIKModifier`で左手IKを制御
-- ARPリグ専用設計
-
-## 重要: モデル向き制御の注意点
-
-> **警告: 絶対に変更しないこと**
->
-> モデルの向き制御で `Basis.looking_at(-direction)` を使用している箇所がある。
-> この **マイナス符号は必須** であり、削除してはならない。
->
-> **理由:**
-> - ARPモデルの前方向: **+Z**
-> - `Basis.looking_at()` がターゲットに向ける軸: **-Z**
->
-> この仕様の違いを吸収するために `-direction` を渡している。
-> マイナスを削除するとモデルが意図した方向と **逆を向く**。
->
-> 該当箇所:
-> - `set_model_direction()`
-> - `set_look_direction()`
-> - `_update_model_rotation()`
-
-## APIリファレンス
-
-### シグナル
-| シグナル | 引数 |
-|---------|------|
-| `fired` | なし |
-| `throw_release` | なし |
-| `throw_finished` | なし |
-| `door_open_finished` | なし |
-| `door_open_impact` | なし |
-| `melee_impact` | なし |
-| `melee_finished` | なし |
-
-### メソッド
-- `setup(model: Node3D, anim_player: AnimationPlayer) -> void`
-- `update_animation(movement_direction: Vector3, look_direction: Vector3, is_running: bool, delta: float) -> void`
-- `set_stance(stance: Stance) -> void`
-- `get_stance() -> Stance`
-- `set_weapon(weapon: Weapon) -> void`
-- `set_gun_down(value: bool) -> void`
-- `is_gun_down() -> bool`
-- `fire() -> void`
-- `get_current_speed() -> float`
-- `is_dead() -> bool`
-- `set_animation_tree_active(active: bool) -> void`
-- `get_look_direction() -> Vector3`
-- `get_model() -> Node3D`
-- `set_look_direction(direction: Vector3) -> void`
-- `set_model_direction(direction: Vector3) -> void`
-- `play_death(hit_direction: HitDirection = HitDirection.FRONT, _headshot: bool = false) -> void`
-- `play_door_kick() -> void`
-- `is_door_kicking() -> bool`
-- `play_door_open() -> void`
-- `is_opening_door() -> bool`
-- `play_talking() -> void`
-- `stop_talking() -> void`
-- `is_talking() -> bool`
-- `play_melee() -> void`
-- `is_meleeing() -> bool`
+- AnimationTree構成: output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
+- **武器非依存ロコモーション**: 統一`game_*`アニメーション10種（idle + 8方向walk + sprint）
+  - 武器切替時にロコモーションアニメーションは変化しない（`_switch_weapon_animations()`撤廃済み）
+  - 上半身差分はIKで完全制御されるため武器別アニメーション不要
+- **フォールバック**: 新`game_*`アニメーション未作成時は`game_rifle_*`にフォールバック（`_resolve_anim_name()`）
+- 上半身はUpperBodyIKController（TwoBoneIK3D + LookAtModifier3D + SpinePostureModifier）で制御
+- IKのinfluence=1.0がアニメーションポーズを上書き → 上半身フィルター不要
+- アクション（投擲/ドア/近接）時はIK無効化→AnimationPlayer全身再生→IK復帰（アクション用アニメーションは武器別のまま維持）
+- 死亡/会話はIK全無効化→AnimationPlayer直接再生

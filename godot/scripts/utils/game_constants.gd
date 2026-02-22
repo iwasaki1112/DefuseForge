@@ -39,9 +39,14 @@ const GROUP_DOORS := "doors"
 # ========================================================
 # Bone Names (ARP / Unity Humanoid)
 # ========================================================
-const BONE_RIGHT_HAND := "RightHand"
+const BONE_HIPS := "Hips"
 const BONE_SPINE := "Spine"
+const BONE_CHEST := "Chest"
 const BONE_UPPER_CHEST := "UpperChest"
+const BONE_HEAD := "Head"
+const BONE_RIGHT_ARM := "RightUpperArm"
+const BONE_RIGHT_FOREARM := "RightLowerArm"
+const BONE_RIGHT_HAND := "RightHand"
 const BONE_LEFT_ARM := "LeftUpperArm"
 const BONE_LEFT_FOREARM := "LeftLowerArm"
 const BONE_LEFT_HAND := "LeftHand"

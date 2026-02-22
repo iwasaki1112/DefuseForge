@@ -461,6 +461,10 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 	if "recoil_recovery" in anim_ctrl:
 		anim_ctrl.recoil_recovery = weapon.recoil_recovery
 
+	# 武器固有の右手IKオフセットを伝播
+	if weapon.right_hand_ik_offset != Vector3.ZERO:
+		anim_ctrl.set_weapon_ik_offset(weapon.right_hand_ik_offset)
+
 	# 武器の視界パラメータをVisionComponentに適用
 	if vision and weapon:
 		vision.set_view_distance(weapon.vision_range)
