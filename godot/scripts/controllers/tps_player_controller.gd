@@ -72,9 +72,9 @@ var _is_aim_stick_active: bool = false
 # スプリント状態（ボタン押下中）
 var _is_sprinting: bool = false
 
-# スプリント中の滑らかな方向転換
+# スプリント中の滑らかな方向転換（角速度キャップ方式）
 var _sprint_dir: Vector3 = Vector3.ZERO
-const SPRINT_TURN_SPEED := 8.0
+const SPRINT_MAX_TURN_RATE := 12.0  # rad/s（180°転換 ≈ 0.26秒）
 
 # 向き固定（投擲アニメーション中など）
 var _facing_locked: bool = false
@@ -246,15 +246,27 @@ func _handle_movement(delta: float) -> void:
 	if _character.anim_ctrl:
 		var aim_dir: Vector3
 		if is_sprint_input and has_input:
-			# スプリント中は移動方向を滑らかに補間
+			# スプリント中は角速度キャップで滑らかに方向転換
 			if _sprint_dir.length_squared() < 0.001:
 				_sprint_dir = move_dir
 			else:
-				var t := 1.0 - exp(-SPRINT_TURN_SPEED * delta)
-				_sprint_dir = _sprint_dir.slerp(move_dir, t).normalized()
+				var angle_diff := _sprint_dir.signed_angle_to(move_dir, Vector3.UP)
+				var max_rotation := SPRINT_MAX_TURN_RATE * delta
+				if absf(angle_diff) <= max_rotation:
+					_sprint_dir = move_dir
+				else:
+					_sprint_dir = _sprint_dir.rotated(Vector3.UP, signf(angle_diff) * max_rotation).normalized()
 			_character.set_facing_direction_vec(_sprint_dir)
 			aim_dir = _sprint_dir
 			move_dir = _sprint_dir
+		elif is_sprint_input and not has_input:
+			# スプリント中に入力なし: 方向を維持（キー切替の空きフレーム対策）
+			if _sprint_dir.length_squared() > 0.001:
+				_character.set_facing_direction_vec(_sprint_dir)
+				aim_dir = _sprint_dir
+				move_dir = Vector3.ZERO
+			else:
+				aim_dir = _character.get_facing_direction()
 		else:
 			_sprint_dir = Vector3.ZERO
 			aim_dir = _character.get_facing_direction()
