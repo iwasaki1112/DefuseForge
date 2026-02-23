@@ -51,6 +51,14 @@ var _sprint_check: CheckBox = null
 var _speed_label: Label = null
 var _mouse_aim_enabled: bool = true
 
+# Weapon tab references
+var _wp_offset_sliders: Array[HSlider] = []   # attach_offset [X, Y, Z]
+var _wp_offset_spins: Array[SpinBox] = []
+var _wp_rotation_sliders: Array[HSlider] = []  # attach_rotation [X, Y, Z]
+var _wp_rotation_spins: Array[SpinBox] = []
+var _wp_ik_offset_sliders: Array[HSlider] = []  # right_hand_ik_offset [X, Y, Z]
+var _wp_ik_offset_spins: Array[SpinBox] = []
+
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -509,6 +517,9 @@ func _setup_ik_panel() -> void:
 	copy_btn.pressed.connect(_on_copy_values_pressed)
 	vbox.add_child(copy_btn)
 
+	# "Weapon" tab
+	_setup_weapon_tab(tab_container)
+
 
 func _add_section_label(parent: VBoxContainer, text: String) -> void:
 	var label := Label.new()
@@ -604,6 +615,9 @@ func _on_weapon_selected(idx: int) -> void:
 		_character.equip_weapon(_weapon_list[idx])
 		# 武器変更後にスライダーを対応する定数値に更新
 		_sync_sliders_to_current_state()
+		# Weaponタブのスライダーも同期（1フレーム待ってソケット確定後）
+		await get_tree().process_frame
+		_sync_weapon_sliders()
 
 
 func _on_state_selected(idx: int) -> void:
@@ -706,6 +720,174 @@ func _get_ubik() -> UpperBodyIKController:
 
 
 # ============================================
+# Weapon Tab
+# ============================================
+
+func _setup_weapon_tab(tab_container: TabContainer) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = "Weapon"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	tab_container.add_child(scroll)
+
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	scroll.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	margin.add_child(vbox)
+
+	# --- Attach Offset ---
+	var off_result := _create_vector3_sliders(
+		vbox, "Attach Offset",
+		Vector3.ZERO,
+		Vector2(-0.2, 0.2),
+		Vector2(-0.2, 0.2),
+		Vector2(-0.2, 0.2),
+		_on_wp_offset_changed
+	)
+	_wp_offset_sliders = off_result[0]
+	_wp_offset_spins = off_result[1]
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Attach Rotation ---
+	var rot_result := _create_vector3_sliders(
+		vbox, "Attach Rotation",
+		Vector3.ZERO,
+		Vector2(-180.0, 180.0),
+		Vector2(-180.0, 180.0),
+		Vector2(-180.0, 180.0),
+		_on_wp_rotation_changed
+	)
+	_wp_rotation_sliders = rot_result[0]
+	_wp_rotation_spins = rot_result[1]
+	# Rotation は step=0.1 で十分
+	for i in range(3):
+		_wp_rotation_sliders[i].step = 0.1
+		_wp_rotation_spins[i].step = 0.1
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Right Hand IK Offset ---
+	var ik_result := _create_vector3_sliders(
+		vbox, "RH IK Offset",
+		Vector3.ZERO,
+		Vector2(-0.2, 0.2),
+		Vector2(-0.2, 0.2),
+		Vector2(-0.2, 0.2),
+		_on_wp_ik_offset_changed
+	)
+	_wp_ik_offset_sliders = ik_result[0]
+	_wp_ik_offset_spins = ik_result[1]
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Copy Values ---
+	var copy_btn := Button.new()
+	copy_btn.text = "Copy Weapon Values"
+	copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy_btn.pressed.connect(_on_copy_weapon_values_pressed)
+	vbox.add_child(copy_btn)
+
+
+# ============================================
+# Weapon Tab Callbacks
+# ============================================
+
+func _on_wp_offset_changed(_axis: int, _value: float) -> void:
+	if not _character:
+		return
+	var socket := _character.get_weapon_socket()
+	if not socket:
+		return
+	socket.position = Vector3(
+		_wp_offset_sliders[0].value,
+		_wp_offset_sliders[1].value,
+		_wp_offset_sliders[2].value
+	)
+
+
+func _on_wp_rotation_changed(_axis: int, _value: float) -> void:
+	if not _character:
+		return
+	var socket := _character.get_weapon_socket()
+	if not socket:
+		return
+	socket.rotation_degrees = Vector3(
+		_wp_rotation_sliders[0].value,
+		_wp_rotation_sliders[1].value,
+		_wp_rotation_sliders[2].value
+	)
+
+
+func _on_wp_ik_offset_changed(_axis: int, _value: float) -> void:
+	var ubik := _get_ubik()
+	if not ubik:
+		return
+	var offset := Vector3(
+		_wp_ik_offset_sliders[0].value,
+		_wp_ik_offset_sliders[1].value,
+		_wp_ik_offset_sliders[2].value
+	)
+	ubik.set_weapon_ik_offset(offset)
+
+
+func _sync_weapon_sliders() -> void:
+	if not _character:
+		return
+	var socket := _character.get_weapon_socket()
+	if socket:
+		_set_slider_values(_wp_offset_sliders, _wp_offset_spins, socket.position)
+		_set_slider_values(_wp_rotation_sliders, _wp_rotation_spins, socket.rotation_degrees)
+
+	var ubik := _get_ubik()
+	if ubik:
+		_set_slider_values(_wp_ik_offset_sliders, _wp_ik_offset_spins, ubik._weapon_ik_offset)
+	else:
+		_set_slider_values(_wp_ik_offset_sliders, _wp_ik_offset_spins, Vector3.ZERO)
+
+
+func _on_copy_weapon_values_pressed() -> void:
+	var weapon_name := "unknown"
+	if _character and _character.current_weapon:
+		weapon_name = _character.current_weapon.id
+
+	var offset := Vector3(
+		_wp_offset_sliders[0].value,
+		_wp_offset_sliders[1].value,
+		_wp_offset_sliders[2].value,
+	)
+	var rotation := Vector3(
+		_wp_rotation_sliders[0].value,
+		_wp_rotation_sliders[1].value,
+		_wp_rotation_sliders[2].value,
+	)
+	var ik_offset := Vector3(
+		_wp_ik_offset_sliders[0].value,
+		_wp_ik_offset_sliders[1].value,
+		_wp_ik_offset_sliders[2].value,
+	)
+
+	var text := "# %s\nattach_offset = Vector3(%.3f, %.3f, %.3f)\nattach_rotation = Vector3(%.1f, %.1f, %.1f)\nright_hand_ik_offset = Vector3(%.3f, %.3f, %.3f)" % [
+		weapon_name,
+		offset.x, offset.y, offset.z,
+		rotation.x, rotation.y, rotation.z,
+		ik_offset.x, ik_offset.y, ik_offset.z,
+	]
+	DisplayServer.clipboard_set(text)
+	print("Copied to clipboard:\n", text)
+
+
+# ============================================
 # Character Factory
 # ============================================
 
@@ -769,6 +951,7 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 		model.visible = true
 		# 全定数値をスライダーとIKに反映
 		_sync_sliders_to_current_state()
+		_sync_weapon_sliders()
 	, CONNECT_ONE_SHOT)
 
 	return character

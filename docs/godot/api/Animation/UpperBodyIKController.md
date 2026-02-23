@@ -57,7 +57,10 @@ world_pos = char_pos + model_basis * local_pos
 ## Public API
 
 ### setup(skeleton, model, left_hand_ik) -> void
-IKノードを構築して初期化。
+IKノードを構築して初期化。左手IKに右手位置取得用Callableを設定する。
+
+### get_current_hand_pos() -> Vector3
+現在の右手キャラ相対位置を返す。左手IKのデルタ計算に使用される。
 
 ### set_state(new_state: IKState) -> void
 IK状態を切り替え。

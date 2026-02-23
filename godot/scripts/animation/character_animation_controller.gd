@@ -106,9 +106,11 @@ var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0  # 0=idle, 1=walking
 var _speed_blend := 0.0     # 0=walk, 1=sprint
 var _fire_cooldown := 0.0
+var _quantized_angle := 0.0  # 現在の量子化済み角度（ヒステリシス用）
 
 # Blend smoothing
 const BLEND_SMOOTH := 10.0
+const QUANTIZE_HYSTERESIS := deg_to_rad(10.0)  # 量子化切替の不感帯（±10度）
 
 
 #region Public API
@@ -881,7 +883,7 @@ func _setup_upper_body_ik() -> void:
 	var left_hand_ik: LeftHandIKModifier = lh_script.new()
 	left_hand_ik.name = "LeftHandIKModifier"
 	_model.add_child(left_hand_ik)  # Nodeとして追加（_process用）
-	left_hand_ik.setup(_skeleton)
+	left_hand_ik.setup(_skeleton, _model)
 
 	# UpperBodyIKControllerを作成
 	_upper_body_ik = UpperBodyIKController.new()
@@ -1037,27 +1039,29 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		char_forward.y = 0
 		if char_forward.length_squared() < 0.001:
 			char_forward = _model.global_transform.basis.z
-		var angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
+		var raw_angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 
-		# 45度量子化（ジッターアニメーション切替防止）
-		angle = round(angle / (PI / 4.0)) * (PI / 4.0)
+		# 45度量子化 + ヒステリシス（境界付近でのチャタリング防止）
+		var nearest: float = round(raw_angle / (PI / 4.0)) * (PI / 4.0)
+		var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
+		if diff_from_current > (PI / 8.0) + QUANTIZE_HYSTERESIS:
+			# 現在の量子化角度から十分離れた場合のみ切替
+			_quantized_angle = nearest
+		var angle := _quantized_angle
 
 		# Forward=(0,1) 座標系（signed_angle_toはatan2と符号が逆のためX反転）
 		var target_blend := Vector2(-sin(angle), cos(angle))
 
-		# ブレンド補間速度を変化量に応じて適応的に調整
-		var blend_diff := target_blend.distance_to(_input_dir)
-		if blend_diff > 1.0:
-			_input_dir = target_blend
-		else:
-			var blend_speed := lerpf(12.0, 40.0, clampf(blend_diff * 2.0, 0.0, 1.0))
-			_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+		# 常にスムーズ補間で遷移（即時スナップなし）
+		var blend_speed := 12.0
+		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
 		# 停止時: アイドルへフェード
 		_movement_blend = lerpf(_movement_blend, 0.0, 1.0 - exp(-8.0 * delta))
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
+			_quantized_angle = 0.0
 
 func _update_animation_tree(delta: float = 0.016) -> void:
 	if not _anim_tree or not _anim_tree.active:

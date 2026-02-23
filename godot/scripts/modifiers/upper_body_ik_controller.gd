@@ -16,8 +16,8 @@ enum IKState { READY, GUN_UP, ACTION, DISABLED }
 # ============================================
 const RIFLE_READY_HAND := Vector3(-0.173, 1.614, 0.141)
 const RIFLE_READY_POLE := Vector3(-0.230, 1.600, -0.075)
-const RIFLE_READY_LH_OFFSET := Vector3(-0.011, -0.055, -0.062)
-const RIFLE_READY_LH_POLE := Vector3(0.37, -0.31, -0.18)
+const RIFLE_READY_LH_OFFSET := Vector3(-0.023, -0.017, -0.062)
+const RIFLE_READY_LH_POLE := Vector3(-0.03, -0.49, -0.36)
 const PISTOL_READY_HAND := Vector3(-0.15, 1.36, 0.23)
 const PISTOL_READY_POLE := Vector3(-0.22, 0.99, -0.06)
 const GUN_UP_HAND := Vector3(-0.15, 1.55, 0.03)
@@ -95,6 +95,10 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 	_current_hand_pos = RIFLE_READY_HAND
 	_current_pole_pos = RIFLE_READY_POLE
 	_update_ik_targets_immediate()
+
+	# 左手IKに右手位置取得用Callableを設定
+	if _left_hand_ik:
+		_left_hand_ik.set_rh_position_getter(get_current_hand_pos)
 
 	# LeftHandIK TwoBoneIK3D を RightArmIK の後に配置
 	_fix_modifier_order()
@@ -236,6 +240,11 @@ func get_left_hand_ik() -> LeftHandIKModifier:
 ## 手動オーバーライドモード（テスト用: update()内のlerp計算をスキップ）
 func set_manual_override(enabled: bool) -> void:
 	_manual_override = enabled
+
+
+## 現在の右手キャラ相対位置を取得（左手IKデルタ計算用）
+func get_current_hand_pos() -> Vector3:
+	return _current_hand_pos
 
 
 ## セットアップ済みかどうか

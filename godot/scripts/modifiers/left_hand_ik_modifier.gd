@@ -2,7 +2,7 @@ extends Node
 class_name LeftHandIKModifier
 ## Left Hand IK Controller
 ## TwoBoneIK3Dのセットアップと制御を管理
-## TwoBoneIK3Dのtarget_nodeを直接LeftHandGripに向けることで遅延ゼロの追従を実現
+## 右手IKからのデルタ方式: char_pos + model_basis * (rh_pos + delta + offset)
 
 # ============================================
 # Constants
@@ -14,15 +14,19 @@ const DEFAULT_POLE_OFFSET := 0.3  ## ポールターゲットのデフォルト�
 # State
 # ============================================
 var _ik_node: TwoBoneIK3D
-var _ik_target: Marker3D  ## フォールバック用（grip未設定時）
+var _ik_target: Marker3D  ## IKターゲット（常にMarker3D経由）
 var _ik_pole: Marker3D  ## 肘方向制御用ポールターゲット
 var _grip_source: Node3D  ## 武器モデル内のLeftHandGripノード
 var _skeleton: Skeleton3D
+var _model: Node3D  ## キャラクターモデル参照
 var _target_influence := 0.0  ## 目標influence（0.0 or 1.0）
 var _blend_speed := DEFAULT_BLEND_SPEED  ## 現在のブレンド速度
 var _pole_offset := Vector3(DEFAULT_POLE_OFFSET, 0.0, 0.0)  ## 肘方向オフセット（キャラクター空間XYZ）
-var _grip_offset := Vector3.ZERO  ## グリップ位置オフセット（ローカル空間）
-var _use_offset_target := false  ## オフセット使用時はMarker3D経由
+var _grip_offset := Vector3.ZERO  ## グリップ位置オフセット（キャラ相対空間）
+var _lh_rh_delta := Vector3.ZERO  ## 右手からの左手オフセット（キャラ相対）
+var _rh_position_getter: Callable  ## 右手キャラ相対位置を返すCallable
+var _capture_countdown := -1  ## キャプチャ待機フレーム数（-1=待機なし）
+var _delta_captured := false  ## デルタキャプチャ完了フラグ
 var _is_setup := false
 
 # ============================================
@@ -30,12 +34,13 @@ var _is_setup := false
 # ============================================
 
 ## IKノードとターゲットを作成してスケルトンに追加
-func setup(skeleton: Skeleton3D) -> void:
+func setup(skeleton: Skeleton3D, model: Node3D) -> void:
 	_skeleton = skeleton
+	_model = model
 	if not _skeleton:
 		return
 
-	# フォールバック用Marker3D（gripノード未設定時のデフォルトターゲット）
+	# IKターゲット用Marker3D（常にこれを使用）
 	_ik_target = Marker3D.new()
 	_ik_target.name = GameConstants.NODE_LEFT_HAND_IK_TARGET
 	_skeleton.add_child(_ik_target)
@@ -58,7 +63,7 @@ func setup(skeleton: Skeleton3D) -> void:
 	_ik_node.set_middle_bone_name(0, GameConstants.BONE_LEFT_FOREARM)
 	_ik_node.set_end_bone_name(0, GameConstants.BONE_LEFT_HAND)
 
-	# 初期ターゲットはフォールバック用Marker3D
+	# ターゲットは常にMarker3D
 	_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
 	_ik_node.set_pole_node(0, _ik_node.get_path_to(_ik_pole))
 
@@ -91,19 +96,24 @@ func disable_immediate() -> void:
 		_ik_node.influence = 0.0
 
 ## 武器モデル内のグリップソースノードを設定
-## TwoBoneIK3Dのtarget_nodeを直接gripノードに向けることで遅延なし追従
+## 常にMarker3D経由でキャラ相対座標追従（デルタ方式）
 func set_grip_source(grip_node: Node3D) -> void:
 	_grip_source = grip_node
-	_use_offset_target = false  # ターゲット切替によりoffsetモードをリセット
+	_delta_captured = false
+	_lh_rh_delta = Vector3.ZERO
 	if _ik_node and _is_setup and grip_node and is_instance_valid(grip_node):
-		# TwoBoneIK3Dのターゲットを直接gripノードに向ける（コピー不要、遅延ゼロ）
-		_ik_node.set_target_node(0, _ik_node.get_path_to(grip_node))
+		# 常にMarker3Dをターゲットに使用
+		_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
+		# キャプチャカウントダウン開始（2フレーム待機でIKパイプライン安定化）
+		_capture_countdown = 2
 
 ## グリップソースをクリア
 func clear_grip_source() -> void:
 	_grip_source = null
+	_delta_captured = false
+	_lh_rh_delta = Vector3.ZERO
+	_capture_countdown = -1
 	_target_influence = 0.0
-	# ターゲットをフォールバック用Marker3Dに戻す
 	if _ik_node and _is_setup and _ik_target:
 		_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
 
@@ -128,29 +138,17 @@ func set_pole_offset(offset: Vector3) -> void:
 func get_pole_offset() -> Vector3:
 	return _pole_offset
 
-## グリップ位置オフセットを設定（武器ローカル空間）
+## グリップ位置オフセットを設定（キャラ相対空間）
 func set_grip_offset(offset: Vector3) -> void:
 	_grip_offset = offset
-	_update_offset_target_mode()
 
 ## 現在のグリップオフセットを取得
 func get_grip_offset() -> Vector3:
 	return _grip_offset
 
-## オフセットモードの切替（オフセットあり→Marker3D経由、なし→直接）
-func _update_offset_target_mode() -> void:
-	if not _is_setup or not _ik_node:
-		return
-	var needs_offset := _grip_offset.length_squared() > 0.0001
-	if needs_offset and not _use_offset_target:
-		# オフセット使用開始 → ターゲットをMarker3Dに切替
-		_use_offset_target = true
-		_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
-	elif not needs_offset and _use_offset_target:
-		# オフセット不要 → 直接gripノードに戻す
-		_use_offset_target = false
-		if _grip_source and is_instance_valid(_grip_source):
-			_ik_node.set_target_node(0, _ik_node.get_path_to(_grip_source))
+## 右手位置取得用Callableを設定
+func set_rh_position_getter(getter: Callable) -> void:
+	_rh_position_getter = getter
 
 # ============================================
 # Process
@@ -167,20 +165,61 @@ func _process(delta: float) -> void:
 	elif current != _target_influence:
 		_ik_node.influence = _target_influence
 
-	# グリップオフセット適用（Marker3D経由モード時）
-	if _use_offset_target and _grip_source and is_instance_valid(_grip_source) and _ik_target:
-		_ik_target.global_transform = _grip_source.global_transform
-		_ik_target.global_position += _grip_source.global_transform.basis * _grip_offset
+	# キャプチャカウントダウン
+	if _capture_countdown > 0:
+		_capture_countdown -= 1
+	elif _capture_countdown == 0:
+		_capture_delta()
+		_capture_countdown = -1
 
-	# ポール位置を更新（肩と手の中点 + キャラクター空間オフセット）
-	if _grip_source and is_instance_valid(_grip_source) and _ik_pole and _ik_node.influence > 0.001:
-		var grip_pos := _grip_source.global_position
+	if not _grip_source or not is_instance_valid(_grip_source):
+		return
+
+	# IKターゲット位置更新
+	if _delta_captured and _rh_position_getter.is_valid() and _model:
+		# デルタ方式: 右手IK位置からの相対位置で計算
+		var char_pos := _model.global_position
+		var model_basis := _model.global_transform.basis
+		var rh_pos: Vector3 = _rh_position_getter.call()
+		_ik_target.global_position = char_pos + model_basis * (rh_pos + _lh_rh_delta + _grip_offset)
+	else:
+		# フォールバック: グリップノード直接追跡（キャプチャ待機中）
+		_ik_target.global_transform = _grip_source.global_transform
+		if _grip_offset.length_squared() > 0.0001:
+			_ik_target.global_position += _grip_source.global_transform.basis * _grip_offset
+
+	# ポール位置更新（肩と手の中点 + キャラクター空間オフセット）
+	if _ik_pole and _ik_node.influence > 0.001:
 		var root_bone_idx := _skeleton.find_bone(GameConstants.BONE_LEFT_ARM)
 		if root_bone_idx >= 0:
 			var root_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(root_bone_idx)
-			var mid := (root_global.origin + grip_pos) * 0.5
+			var mid := (root_global.origin + _ik_target.global_position) * 0.5
 			var char_basis := _skeleton.global_transform.basis
 			_ik_pole.global_position = mid + char_basis * _pole_offset
+
+# ============================================
+# Capture
+# ============================================
+
+## グリップ位置をキャラ相対デルタとしてキャプチャ
+func _capture_delta() -> void:
+	if not _grip_source or not is_instance_valid(_grip_source):
+		return
+	if not _rh_position_getter.is_valid() or not _model:
+		return
+
+	var char_pos := _model.global_position
+	var inv_basis := _model.global_transform.basis.inverse()
+
+	# グリップノードのキャラ相対位置
+	var grip_char_relative := inv_basis * (_grip_source.global_position - char_pos)
+
+	# 右手のキャラ相対位置
+	var rh_pos: Vector3 = _rh_position_getter.call()
+
+	# デルタ = グリップのキャラ相対位置 − 右手のキャラ相対位置
+	_lh_rh_delta = grip_char_relative - rh_pos
+	_delta_captured = true
 
 # ============================================
 # Cleanup
