@@ -94,6 +94,7 @@ func disable_immediate() -> void:
 ## TwoBoneIK3Dのtarget_nodeを直接gripノードに向けることで遅延なし追従
 func set_grip_source(grip_node: Node3D) -> void:
 	_grip_source = grip_node
+	_use_offset_target = false  # ターゲット切替によりoffsetモードをリセット
 	if _ik_node and _is_setup and grip_node and is_instance_valid(grip_node):
 		# TwoBoneIK3Dのターゲットを直接gripノードに向ける（コピー不要、遅延ゼロ）
 		_ik_node.set_target_node(0, _ik_node.get_path_to(grip_node))

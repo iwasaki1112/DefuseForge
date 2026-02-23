@@ -7,4 +7,4 @@
 [node name="Model" parent="." unique_id=1524728877 instance=ExtResource("1")]
 
 [node name="LeftHandGrip" type="Node3D" parent="." unique_id=1607135639]
-transform = Transform3D(0.97372216, 0.22773911, 0, -0.22773911, 0.97372216, 0, 0, 0, 1, -0.0014823154, 0.22841117, 0.21638651)
+transform = Transform3D(0.97372216, 0.22773911, 0, -0.22773911, 0.97372216, 0, 0, 0, 1, -0.0014823154, 0.07339266, 0.3175333)
