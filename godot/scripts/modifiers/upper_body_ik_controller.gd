@@ -9,7 +9,7 @@ class_name UpperBodyIKController
 # ============================================
 # Enums
 # ============================================
-enum IKState { READY, GUN_UP, ACTION, DISABLED }
+enum IKState { READY, GUN_DOWN, ACTION, DISABLED }
 
 # ============================================
 # IK Position Constants (character origin-relative, +Z forward)
@@ -20,8 +20,8 @@ const RIFLE_READY_LH_OFFSET := Vector3(0.017, 0.018, 0.062)
 const RIFLE_READY_LH_POLE := Vector3(0.41, -0.43, -0.35)
 const PISTOL_READY_HAND := Vector3(-0.15, 1.36, 0.23)
 const PISTOL_READY_POLE := Vector3(-0.22, 0.99, -0.06)
-const GUN_UP_HAND := Vector3(-0.15, 1.55, 0.03)
-const GUN_UP_POLE := Vector3(-0.22, 1.25, -0.10)
+const GUN_DOWN_HAND := Vector3(-0.15, 1.1, 0.15)
+const GUN_DOWN_POLE := Vector3(-0.22, 0.8, -0.05)
 
 ## 状態遷移速度
 const STATE_TRANSITION_SPEED := 8.0
@@ -288,8 +288,8 @@ func update(delta: float) -> void:
 ## 現在の状態に応じた手の目標位置を取得
 func _get_state_hand_position() -> Vector3:
 	match _state:
-		IKState.GUN_UP:
-			return GUN_UP_HAND
+		IKState.GUN_DOWN:
+			return GUN_DOWN_HAND
 		_:
 			# READY: 武器タイプに応じた位置
 			if _weapon_type == 2:  # PISTOL
@@ -300,8 +300,8 @@ func _get_state_hand_position() -> Vector3:
 ## 現在の状態に応じたポールの目標位置を取得
 func _get_state_pole_position() -> Vector3:
 	match _state:
-		IKState.GUN_UP:
-			return GUN_UP_POLE
+		IKState.GUN_DOWN:
+			return GUN_DOWN_POLE
 		_:
 			if _weapon_type == 2:  # PISTOL
 				return PISTOL_READY_POLE
@@ -351,7 +351,7 @@ func _fix_modifier_order() -> void:
 
 ## IKノードの有効/無効を設定
 func _set_ik_active(_active: bool) -> void:
-	pass  # 右腕IKは現在無効化中
+	pass  # 右腕IKは現在無効化中（アニメーション駆動）
 
 
 # ============================================

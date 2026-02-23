@@ -1,6 +1,6 @@
 # CharacterAnimationController
 
-キャラクターアニメーションを管理するコントローラークラス。上半身を完全にIKで制御し、下半身は武器非依存の統一8方向BlendSpace2Dアニメーションを維持する。
+キャラクターアニメーションを管理するコントローラークラス。上半身を完全にIKで制御し、下半身は武器非依存のBlendSpace2Dアニメーションを維持する。8方向モード（従来）と4方向+SpineYawモード（新規）を切替可能。
 
 > **重要: ARPモデルの向きについて**
 >
@@ -49,6 +49,14 @@ IKの`influence=1.0`がアニメーションポーズを上書きするため、
 | `NONE` | 武器なし |
 | `RIFLE` | ライフル |
 | `PISTOL` | ピストル |
+
+### BlendMode
+歩行ブレンドモード。
+
+| 値 | 説明 |
+|----|------|
+| `EIGHT_DIR` | 8方向BlendSpace2D（従来方式） |
+| `FOUR_DIR_SPINE` | 4方向BlendSpace2D + SpinePostureModifierのyaw回転で8方向表現 |
 
 ### HitDirection
 被弾方向（デスアニメーション用）。
@@ -118,7 +126,7 @@ IKの`influence=1.0`がアニメーションポーズを上書きするため、
 左手IKのグリップソースを設定する。UpperBodyIKController経由。
 
 ### set_gun_down(value: bool) -> void
-Gun up状態を設定する。UpperBodyIKControllerのIKState(GUN_UP/READY)を切り替え。
+Gun down状態を設定する。UpperBodyIKControllerのIKState(GUN_DOWN/READY)を切り替え。壁/味方接近時に武器を下げる。
 
 ### fire() -> void
 発射アクションをトリガーする。IKリコイルを発動（UpperBodyIKController経由）。
@@ -138,6 +146,14 @@ Gun up状態を設定する。UpperBodyIKControllerのIKState(GUN_UP/READY)を�
 ### play_talking() / stop_talking() -> void
 会話アニメーションのループ再生/停止。IK無効化→全身AnimationPlayer再生→復帰。
 
+### set_blend_mode(mode: BlendMode) -> void
+歩行ブレンドモードを切り替える。AnimationTree内のWalkBlendノードをランタイムで差し替え。
+- `EIGHT_DIR`: 8方向BlendSpace2D（45度量子化）
+- `FOUR_DIR_SPINE`: 4方向BlendSpace2D（90度量子化）+ SpinePostureModifierのyaw回転で残差角度を表現
+
+### set_spine_posture_modifier(modifier: SpinePostureModifier) -> void
+SpinePostureModifierを登録する。`FOUR_DIR_SPINE`モードでyaw回転を自動駆動するために必要。
+
 ## ネットワーク同期
 
 プロトコル `"move_state,is_firing,blend_x,blend_y,gun_down"` は変更なし。
@@ -152,7 +168,14 @@ Gun up状態を設定する。UpperBodyIKControllerのIKState(GUN_UP/READY)を�
   - 武器切替時にロコモーションアニメーションは変化しない（`_switch_weapon_animations()`撤廃済み）
   - 上半身差分はIKで完全制御されるため武器別アニメーション不要
 - **フォールバック**: 新`game_*`アニメーション未作成時は`game_rifle_*`にフォールバック（`_resolve_anim_name()`）
+- **ブレンドモード**: 8方向（デフォルト）と4方向+SpineYaw（新）を切替可能
+  - 8方向: 45度量子化、8点BlendSpace2D
+  - 4方向+SpineYaw: 90度量子化、4点BlendSpace2D、残差角度（±45°）をSpinePostureModifier.set_yaw()で駆動
+  - スプリント中はresidual=0（前方のみ）
+  - 停止時はset_yaw(0.0)でスパインを戻す
+  - `_rebuild_walk_blend_space()`でランタイムにWalkBlendノードを差し替え
 - 上半身はUpperBodyIKController（TwoBoneIK3D + LookAtModifier3D + SpinePostureModifier）で制御
 - IKのinfluence=1.0がアニメーションポーズを上書き → 上半身フィルター不要
+- **腕IKとの共存**: SpinePostureModifier(index 0)→腕IK(index 2+)の処理順。スパインyaw適用後にTwoBoneIK3Dがワールド空間ターゲットに解決
 - アクション（投擲/ドア/近接）時はIK無効化→AnimationPlayer全身再生→IK復帰（アクション用アニメーションは武器別のまま維持）
 - 死亡/会話はIK全無効化→AnimationPlayer直接再生

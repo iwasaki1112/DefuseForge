@@ -32,7 +32,7 @@ UpperBodyIKController (Node)
 | 状態 | 説明 |
 |------|------|
 | `READY` | 通常の構え位置 |
-| `GUN_UP` | 壁/味方接近時の武器上げ |
+| `GUN_DOWN` | 壁/味方接近時の武器下げ（ロウレディ） |
 | `ACTION` | IKActionPlayerが制御中 |
 | `DISABLED` | IK全無効（死亡/アクション時） |
 
@@ -44,8 +44,8 @@ UpperBodyIKController (Node)
 | `RIFLE_READY_POLE` | `(-0.22, 1.13, -0.06)` | ライフル構え時の右肘方向 |
 | `PISTOL_READY_HAND` | `(-0.15, 1.36, 0.23)` | ピストル構え時の右手位置 |
 | `PISTOL_READY_POLE` | `(-0.22, 0.99, -0.06)` | ピストル構え時の右肘方向 |
-| `GUN_UP_HAND` | `(-0.15, 1.55, 0.03)` | 武器上げ時の右手位置 |
-| `GUN_UP_POLE` | `(-0.22, 1.25, -0.10)` | 武器上げ時の右肘方向 |
+| `GUN_DOWN_HAND` | `(-0.15, 1.1, 0.15)` | 武器下げ時の右手位置 |
+| `GUN_DOWN_POLE` | `(-0.22, 0.8, -0.05)` | 武器下げ時の右肘方向 |
 
 ## 座標変換
 

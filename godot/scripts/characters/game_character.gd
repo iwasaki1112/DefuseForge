@@ -553,7 +553,7 @@ const WALL_DETECT_DISTANCE := 1.2  # 壁検出レイキャスト距離
 const WALL_COLLISION_MASK := 2  # 壁コリジョンマスク
 
 ## Gun Down検出用定数
-const GUN_DOWN_DETECT_DISTANCE := 2.0  # 検出距離（1グリッド分）
+const GUN_DOWN_DETECT_DISTANCE := 1.0  # 検出距離
 const GUN_DOWN_ANGLE_THRESHOLD := 0.5  # cos(60°) — 前方±60°の円錐内
 
 ## 前方に壁または敵以外のキャラクターがいるかチェック（gun_down判定用）

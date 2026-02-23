@@ -55,10 +55,18 @@ var _head_modifier: HeadRotationModifier = null
 # Posture slider references
 var _posture_pitch_slider: HSlider = null
 var _posture_pitch_spin: SpinBox = null
+var _spine_yaw_slider: HSlider = null
+var _spine_yaw_spin: SpinBox = null
+var _spine_yaw_config_option: OptionButton = null
+var _spine_yaw_label: Label = null  ## リアルタイム値表示
+var _spine_yaw_manual := true  ## true=スライダー手動, false=ブレンドモード自動
 var _head_pitch_slider: HSlider = null
 var _head_pitch_spin: SpinBox = null
 var _head_yaw_slider: HSlider = null
 var _head_yaw_spin: SpinBox = null
+
+# Blend mode references
+var _blend_mode_option: OptionButton = null
 
 # Weapon tab references
 var _wp_offset_sliders: Array[HSlider] = []   # attach_offset [X, Y, Z]
@@ -440,6 +448,15 @@ func _update_speed_label() -> void:
 	var state := "Sprint" if _character.anim_ctrl._is_sprinting else ("Walk" if speed > 0.1 else "Idle")
 	_speed_label.text = "%s: %.1f m/s" % [state, speed]
 
+	# Spine Yaw リアルタイム値表示
+	if _spine_yaw_label and _posture_modifier:
+		var yaw_deg := rad_to_deg(_posture_modifier._current_yaw)
+		_spine_yaw_label.text = "Yaw: %.1f°" % yaw_deg
+		# 自動モード時はスライダーも追従
+		if not _spine_yaw_manual:
+			_spine_yaw_slider.set_value_no_signal(_posture_modifier._current_yaw)
+			_spine_yaw_spin.set_value_no_signal(_posture_modifier._current_yaw)
+
 
 func _setup_ik_panel() -> void:
 	# Right side panel
@@ -506,6 +523,77 @@ func _setup_ik_panel() -> void:
 		if _posture_modifier:
 			_posture_modifier.set_pitch(v)
 	)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Spine Yaw (スパインヨー回転) ---
+	_add_section_label(vbox, "Spine Yaw")
+
+	var spine_yaw_hbox := HBoxContainer.new()
+	spine_yaw_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(spine_yaw_hbox)
+
+	_spine_yaw_slider = HSlider.new()
+	_spine_yaw_slider.min_value = -0.8
+	_spine_yaw_slider.max_value = 0.8
+	_spine_yaw_slider.step = 0.01
+	_spine_yaw_slider.value = 0.0
+	_spine_yaw_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spine_yaw_slider.custom_minimum_size.x = 80
+	spine_yaw_hbox.add_child(_spine_yaw_slider)
+
+	_spine_yaw_spin = SpinBox.new()
+	_spine_yaw_spin.min_value = -0.8
+	_spine_yaw_spin.max_value = 0.8
+	_spine_yaw_spin.step = 0.01
+	_spine_yaw_spin.value = 0.0
+	_spine_yaw_spin.custom_minimum_size.x = 70
+	_spine_yaw_spin.add_theme_font_size_override("font_size", 11)
+	spine_yaw_hbox.add_child(_spine_yaw_spin)
+
+	_connect_slider_spin(_spine_yaw_slider, _spine_yaw_spin, func(v: float) -> void:
+		if _spine_yaw_manual and _posture_modifier:
+			_posture_modifier.set_yaw(v)
+	)
+
+	# Yaw Chain Config
+	var yaw_config_hbox := HBoxContainer.new()
+	yaw_config_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(yaw_config_hbox)
+
+	var yaw_config_label := Label.new()
+	yaw_config_label.text = "Chain"
+	yaw_config_label.custom_minimum_size.x = 40
+	yaw_config_label.add_theme_font_size_override("font_size", 12)
+	yaw_config_hbox.add_child(yaw_config_label)
+
+	_spine_yaw_config_option = OptionButton.new()
+	_spine_yaw_config_option.add_item("A: Hips含む全4", 0)
+	_spine_yaw_config_option.add_item("B: Hips除外", 1)
+	_spine_yaw_config_option.add_item("C: 上部重め", 2)
+	_spine_yaw_config_option.selected = 1  # デフォルト: B (Hips除外)
+	_spine_yaw_config_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yaw_config_hbox.add_child(_spine_yaw_config_option)
+	_spine_yaw_config_option.item_selected.connect(_on_spine_yaw_config_selected)
+
+	# リアルタイム値表示ラベル
+	_spine_yaw_label = Label.new()
+	_spine_yaw_label.text = "Yaw: 0.0°"
+	_spine_yaw_label.add_theme_font_size_override("font_size", 11)
+	_spine_yaw_label.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
+	vbox.add_child(_spine_yaw_label)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Blend Mode (8方向 / 4方向+Spine Yaw) ---
+	_add_section_label(vbox, "Blend Mode")
+	_blend_mode_option = OptionButton.new()
+	_blend_mode_option.add_item("8方向", 0)
+	_blend_mode_option.add_item("4方向+Spine Yaw", 1)
+	_blend_mode_option.selected = 0
+	_blend_mode_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_blend_mode_option)
+	_blend_mode_option.item_selected.connect(_on_blend_mode_selected)
 
 	vbox.add_child(HSeparator.new())
 
@@ -586,7 +674,7 @@ func _setup_ik_panel() -> void:
 	_add_section_label(vbox, "State")
 	_state_option = OptionButton.new()
 	_state_option.add_item("READY", 0)
-	_state_option.add_item("GUN_UP", 1)
+	_state_option.add_item("GUN_DOWN", 1)
 	_state_option.selected = 0
 	_state_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_state_option)
@@ -744,8 +832,8 @@ func _on_state_selected(idx: int) -> void:
 	match idx:
 		0:  # READY
 			ubik.set_state(UpperBodyIKController.IKState.READY)
-		1:  # GUN_UP
-			ubik.set_state(UpperBodyIKController.IKState.GUN_UP)
+		1:  # GUN_DOWN
+			ubik.set_state(UpperBodyIKController.IKState.GUN_DOWN)
 
 	_sync_sliders_to_current_state()
 
@@ -802,9 +890,35 @@ func _set_slider_values(sliders: Array[HSlider], spins: Array[SpinBox], vec: Vec
 		spins[i].set_value_no_signal(vals[i])
 
 
+func _on_spine_yaw_config_selected(idx: int) -> void:
+	if not _posture_modifier:
+		return
+	match idx:
+		0:  # A: Hips含む全4ボーン
+			_posture_modifier.set_yaw_chain_weights(PackedFloat32Array([0.25, 0.25, 0.25, 0.25]))
+		1:  # B: Hips除外（Spine以上）
+			_posture_modifier.set_yaw_chain_weights(PackedFloat32Array([0.0, 0.33, 0.33, 0.34]))
+		2:  # C: 上部重め
+			_posture_modifier.set_yaw_chain_weights(PackedFloat32Array([0.0, 0.2, 0.3, 0.5]))
+
+
+func _on_blend_mode_selected(idx: int) -> void:
+	if not _character or not _character.anim_ctrl:
+		return
+	match idx:
+		0:  # 8方向
+			_character.anim_ctrl.set_blend_mode(CharacterAnimationController.BlendMode.EIGHT_DIR)
+			_spine_yaw_manual = true
+			_spine_yaw_slider.editable = true
+		1:  # 4方向+Spine Yaw
+			_character.anim_ctrl.set_blend_mode(CharacterAnimationController.BlendMode.FOUR_DIR_SPINE)
+			_spine_yaw_manual = false
+			_spine_yaw_slider.editable = false
+
+
 func _on_copy_values_pressed() -> void:
 	var ubik := _get_ubik()
-	var state_name := "GUN_UP" if (_state_option and _state_option.selected == 1) else "READY"
+	var state_name := "GUN_DOWN" if (_state_option and _state_option.selected == 1) else "READY"
 	var weapon_name := "Rifle"
 	if ubik and ubik._weapon_type == 2:
 		weapon_name = "Pistol"
@@ -1290,6 +1404,10 @@ func _setup_posture_modifier(skel: Skeleton3D) -> void:
 		_posture_pitch_slider.set_value_no_signal(default_pitch)
 	if _posture_pitch_spin:
 		_posture_pitch_spin.set_value_no_signal(default_pitch)
+
+	# CharacterAnimationControllerにSpinePostureModifierを登録
+	if _character and _character.anim_ctrl:
+		_character.anim_ctrl.set_spine_posture_modifier(_posture_modifier)
 
 	# HeadRotationModifier（首回転）— SpinePostureの直後に配置
 	_head_modifier = HeadRotationModifier.new()

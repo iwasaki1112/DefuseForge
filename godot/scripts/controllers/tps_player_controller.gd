@@ -321,7 +321,22 @@ func _handle_aim(_delta: float) -> void:
 # Gun Down Detection
 # ============================================
 
+var _debug_gun_down_forced := false  ## デバッグ用: iキーでGUN_DOWN強制中
+var _debug_i_was_pressed := false    ## iキー押下エッジ検出
+
 func _update_gun_down(delta: float) -> void:
+	# デバッグ: iキーでGUN_DOWNトグル（押下エッジ）
+	var i_pressed := Input.is_key_pressed(KEY_I)
+	if i_pressed and not _debug_i_was_pressed:
+		_debug_gun_down_forced = not _debug_gun_down_forced
+		if _character.anim_ctrl:
+			_character.anim_ctrl.set_gun_down(_debug_gun_down_forced)
+			print("DEBUG: gun_down forced = ", _debug_gun_down_forced)
+	_debug_i_was_pressed = i_pressed
+
+	if _debug_gun_down_forced:
+		return  # 強制中は通常検出をスキップ
+
 	_gun_down_check_timer += delta
 	if _gun_down_check_timer < GUN_DOWN_CHECK_INTERVAL:
 		return

@@ -8,6 +8,7 @@ class_name CharacterAnimationController
 # Enums
 enum Weapon { NONE, RIFLE, PISTOL }
 enum HitDirection { FRONT, BACK, LEFT, RIGHT }
+enum BlendMode { EIGHT_DIR, FOUR_DIR_SPINE }
 
 # Signals
 signal fired()
@@ -50,7 +51,7 @@ var _is_meleeing := false  ## 近接攻撃アニメーション再生中
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 var _is_sprinting := false
-var _is_gun_down := false  ## 前方に壁/味方がいて武器を上げている状態
+var _is_gun_down := false  ## 前方に壁/味方がいて武器を下げている状態
 
 # Speed constants
 const WALK_SPEED := 2.0
@@ -101,6 +102,10 @@ const MELEE_ANIM := GameConstants.ANIM_RIFLE_MELEE
 const MELEE_IMPACT_TIME := 0.4  # インパクトタイミング（秒）
 const MELEE_IK_RESUME_TIME := 0.8  # IKブレンドイン開始
 
+# Blend mode
+var _blend_mode := BlendMode.EIGHT_DIR
+var _spine_posture: SpinePostureModifier = null
+
 # Blend values
 var _input_dir := Vector2.ZERO
 var _movement_blend := 0.0  # 0=idle, 1=walking
@@ -108,9 +113,17 @@ var _speed_blend := 0.0     # 0=walk, 1=sprint
 var _fire_cooldown := 0.0
 var _quantized_angle := 0.0  # 現在の量子化済み角度（ヒステリシス用）
 
+# 4方向モード用速度テーブル
+const ANIM_SPEEDS_4DIR := {
+	"fwd": 2.016, "bwd": 1.845,
+	"left": 1.663, "right": 2.142,
+	"sprint": 4.299,
+}
+
 # Blend smoothing
 const BLEND_SMOOTH := 10.0
 const QUANTIZE_HYSTERESIS := deg_to_rad(10.0)  # 量子化切替の不感帯（±10度）
+const QUANTIZE_HYSTERESIS_4DIR := deg_to_rad(10.0)  # 4方向モードの90度量子化不感帯
 
 
 #region Public API
@@ -190,17 +203,12 @@ func set_left_hand_grip(grip_node: Node3D) -> void:
 		_upper_body_ik.set_left_hand_grip(grip_node)
 
 
-## Set gun down state (weapon raised due to nearby wall/friendly)
+## Set gun down state (weapon lowered due to nearby wall/friendly)
+## AnimationTreeのGunDownBlendで上半身をgun_downアニメーションにブレンド
 func set_gun_down(value: bool) -> void:
 	if _is_gun_down == value:
 		return
 	_is_gun_down = value
-	# IK状態をGUN_UP/READYに変更
-	if _upper_body_ik:
-		if value:
-			_upper_body_ik.set_state(UpperBodyIKController.IKState.GUN_UP)
-		else:
-			_upper_body_ik.set_state(UpperBodyIKController.IKState.READY)
 
 
 ## Check if gun is currently lowered
@@ -250,6 +258,23 @@ func set_left_hand_grip_offset(offset: Vector3) -> void:
 func set_left_hand_pole_offset(offset: Vector3) -> void:
 	if _upper_body_ik:
 		_upper_body_ik.set_left_hand_pole_offset(offset)
+
+## ブレンドモードを設定（8方向 / 4方向+SpineYaw）
+func set_blend_mode(mode: BlendMode) -> void:
+	if _blend_mode == mode:
+		return
+	_blend_mode = mode
+	_rebuild_walk_blend_space()
+	# モード切替時にスパインyawをリセット
+	if _spine_posture:
+		_spine_posture.set_yaw(0.0)
+	_quantized_angle = 0.0
+
+
+## SpinePostureModifierを登録（4方向+SpineYawモードで使用）
+func set_spine_posture_modifier(modifier: SpinePostureModifier) -> void:
+	_spine_posture = modifier
+
 
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
@@ -436,8 +461,10 @@ func _resume_animation_tree() -> void:
 		_movement_blend = 0.0
 		_speed_blend = 0.0
 		_is_gun_down = false
+		_gun_down_blend = 0.0
 		_anim_tree.set("parameters/IdleBlend/blend_amount", 0.0)
 		_anim_tree.set("parameters/SpeedBlend/blend_amount", 0.0)
+		_anim_tree.set("parameters/GunDownBlend/blend_amount", 0.0)
 		_anim_tree.active = true
 		# 上半身IKを再有効化
 		if _upper_body_ik:
@@ -843,6 +870,9 @@ func _resolve_anim_name(anim_name: String) -> String:
 ## ブレンド位置から方向別アニメーション速度を計算（重み付き補間）
 func _get_blended_anim_speed(blend_pos: Vector2) -> float:
 	var dir := blend_pos.normalized() if blend_pos.length() > 0.01 else Vector2.ZERO
+	if _blend_mode == BlendMode.FOUR_DIR_SPINE:
+		return _get_blended_anim_speed_4dir(dir)
+
 	var s := _get_anim_speeds()
 	if dir == Vector2.ZERO:
 		return s["fwd"]
@@ -864,6 +894,34 @@ func _get_blended_anim_speed(blend_pos: Vector2) -> float:
 	var blended_speed := 0.0
 	for i in range(directions.size()):
 		var w := maxf(0.0, dir.dot(directions[i].normalized()))
+		w = w * w
+		total_weight += w
+		blended_speed += w * speeds[i]
+
+	if total_weight > 0.001:
+		return blended_speed / total_weight
+	return s["fwd"]
+
+
+## 4方向モード用の速度補間
+func _get_blended_anim_speed_4dir(dir: Vector2) -> float:
+	var s := ANIM_SPEEDS_4DIR
+	if dir == Vector2.ZERO:
+		return s["fwd"]
+
+	var directions: Array[Vector2] = [
+		Vector2(0, 1), Vector2(0, -1),
+		Vector2(-1, 0), Vector2(1, 0),
+	]
+	var speeds: Array[float] = [
+		s["fwd"], s["bwd"],
+		s["left"], s["right"],
+	]
+
+	var total_weight := 0.0
+	var blended_speed := 0.0
+	for i in range(directions.size()):
+		var w := maxf(0.0, dir.dot(directions[i]))
 		w = w * w
 		total_weight += w
 		blended_speed += w * speeds[i]
@@ -921,6 +979,13 @@ func _setup_animation_loops() -> void:
 			if anim:
 				anim.loop_mode = Animation.LOOP_LINEAR
 
+	# gun_downアニメーションもループ設定
+	var gun_down_name := _resolve_anim_name(GameConstants.ANIM_GUN_DOWN)
+	if _anim_player.has_animation(gun_down_name):
+		var gd_anim = anim_lib.get_animation(gun_down_name)
+		if gd_anim:
+			gd_anim.loop_mode = Animation.LOOP_LINEAR
+
 	# スプリントアニメーションのループ境界修正
 	# ARP exportがフレーム0に重複キーを追加するため、ループ時に速度が不連続になる
 	# 最初の2キーフレーム（重複フラット区間）を削除し、ループ補間を自然にする
@@ -975,8 +1040,9 @@ func _fix_loop_boundary(anim: Animation) -> void:
 
 
 ## AnimationTree構造（武器非依存・統一ロコモーション）:
-## output → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
-##                                     └→ Sprint(単一アニメーション)
+## output → GunDownBlend → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
+##            └→ GunDown                                └→ Sprint(単一アニメーション)
+## GunDownBlend: 上半身フィルター付きBlend2（Spine以下のボーンのみブレンド）
 ## アニメーションが全身を駆動、TwoBoneIK3D(influence=1.0)が腕チェーンのみ上書き
 ## 武器切替でロコモーションアニメーションは変化しない（IKのみ変化）
 func _setup_animation_tree() -> void:
@@ -1033,11 +1099,34 @@ func _setup_animation_tree() -> void:
 	# --- Connect: TimeScale → SpeedBlend ---
 	blend_tree.connect_node("TimeScale", 0, "SpeedBlend")
 
-	# --- Connect: output → TimeScale ---
-	blend_tree.connect_node("output", 0, "TimeScale")
+	# --- GunDown上半身ブレンド ---
+	var gun_down_anim_name := _resolve_anim_name(GameConstants.ANIM_GUN_DOWN)
+	if _anim_player.has_animation(gun_down_anim_name):
+		var gun_down_anim := AnimationNodeAnimation.new()
+		gun_down_anim.animation = gun_down_anim_name
+		blend_tree.add_node("GunDown", gun_down_anim, Vector2(550, 400))
 
-	_anim_tree.tree_root = blend_tree
-	_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
+		var gun_down_blend := AnimationNodeBlend2.new()
+		gun_down_blend.filter_enabled = true
+		blend_tree.add_node("GunDownBlend", gun_down_blend, Vector2(600, 200))
+
+		# in0=TimeScale（通常ロコモーション）, in1=GunDown（上半身用）
+		blend_tree.connect_node("GunDownBlend", 0, "TimeScale")
+		blend_tree.connect_node("GunDownBlend", 1, "GunDown")
+
+		# output → GunDownBlend
+		blend_tree.connect_node("output", 0, "GunDownBlend")
+
+		# 上半身ボーンフィルターを設定（tree_root設定後に実行）
+		_anim_tree.tree_root = blend_tree
+		_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
+		_setup_gun_down_filter(blend_tree)
+	else:
+		# gun_downアニメーションがない場合: output → TimeScale
+		blend_tree.connect_node("output", 0, "TimeScale")
+		_anim_tree.tree_root = blend_tree
+		_anim_tree.anim_player = _anim_tree.get_path_to(_anim_player)
+
 	_anim_tree.clear_caches()
 	_anim_tree.active = true
 
@@ -1076,6 +1165,58 @@ func _create_walk_blend_space() -> AnimationNodeBlendSpace2D:
 	return blend_space
 
 
+## 4方向WalkBlend用BlendSpace2D作成
+## F=(0,1), R=(1,0), B=(0,-1), L=(-1,0) の4点のみ
+func _create_walk_blend_space_4dir() -> AnimationNodeBlendSpace2D:
+	var blend_space := AnimationNodeBlendSpace2D.new()
+	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
+	blend_space.auto_triangles = true
+	blend_space.min_space = Vector2(-1, -1)
+	blend_space.max_space = Vector2(1, 1)
+	blend_space.sync = true
+
+	var walk_points := {
+		Vector2(0, 1): _resolve_anim_name("game_walk_forward"),
+		Vector2(1, 0): _resolve_anim_name("game_strafe_right"),
+		Vector2(0, -1): _resolve_anim_name("game_walk_backward"),
+		Vector2(-1, 0): _resolve_anim_name("game_strafe_left"),
+	}
+
+	for pos in walk_points:
+		var anim_name: String = walk_points[pos]
+		if _anim_player.has_animation(anim_name):
+			var anim_node := AnimationNodeAnimation.new()
+			anim_node.animation = anim_name
+			blend_space.add_blend_point(anim_node, pos)
+
+	return blend_space
+
+
+## ランタイムでWalkBlendノードを差し替え（BlendMode切替時）
+func _rebuild_walk_blend_space() -> void:
+	if not _anim_tree or not _anim_tree.tree_root:
+		return
+	var blend_tree := _anim_tree.tree_root as AnimationNodeBlendTree
+	if not blend_tree:
+		return
+
+	# 既存WalkBlendを削除
+	if blend_tree.has_node("WalkBlend"):
+		blend_tree.disconnect_node("IdleBlend", 1)
+		blend_tree.remove_node("WalkBlend")
+
+	# 新しいBlendSpaceを作成して接続
+	var new_blend_space: AnimationNodeBlendSpace2D
+	if _blend_mode == BlendMode.FOUR_DIR_SPINE:
+		new_blend_space = _create_walk_blend_space_4dir()
+	else:
+		new_blend_space = _create_walk_blend_space()
+
+	blend_tree.add_node("WalkBlend", new_blend_space, Vector2(-400, 300))
+	blend_tree.connect_node("IdleBlend", 1, "WalkBlend")
+	_anim_tree.clear_caches()
+
+
 func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 	if not _model:
 		return
@@ -1103,20 +1244,11 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 			char_forward = _model.global_transform.basis.z
 		var raw_angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 
-		# 45度量子化 + ヒステリシス（境界付近でのチャタリング防止）
-		var nearest: float = round(raw_angle / (PI / 4.0)) * (PI / 4.0)
-		var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
-		if diff_from_current > (PI / 8.0) + QUANTIZE_HYSTERESIS:
-			# 現在の量子化角度から十分離れた場合のみ切替
-			_quantized_angle = nearest
-		var angle := _quantized_angle
+		if _blend_mode == BlendMode.FOUR_DIR_SPINE:
+			_update_strafe_blend_4dir(raw_angle, delta)
+		else:
+			_update_strafe_blend_8dir(raw_angle, delta)
 
-		# Forward=(0,1) 座標系（signed_angle_toはatan2と符号が逆のためX反転）
-		var target_blend := Vector2(-sin(angle), cos(angle))
-
-		# 常にスムーズ補間で遷移（即時スナップなし）
-		var blend_speed := 12.0
-		_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
 		# 停止時: アイドルへフェード
@@ -1124,6 +1256,54 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 		if _movement_blend < 0.01:
 			_input_dir = Vector2.ZERO
 			_quantized_angle = 0.0
+		# 停止時: スパインyawを戻す
+		if _blend_mode == BlendMode.FOUR_DIR_SPINE and _spine_posture:
+			_spine_posture.set_yaw(0.0)
+
+
+## 8方向ブレンド（従来方式）
+func _update_strafe_blend_8dir(raw_angle: float, delta: float) -> void:
+	# 45度量子化 + ヒステリシス（境界付近でのチャタリング防止）
+	var nearest: float = round(raw_angle / (PI / 4.0)) * (PI / 4.0)
+	var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
+	if diff_from_current > (PI / 8.0) + QUANTIZE_HYSTERESIS:
+		# 現在の量子化角度から十分離れた場合のみ切替
+		_quantized_angle = nearest
+	var angle := _quantized_angle
+
+	# Forward=(0,1) 座標系（signed_angle_toはatan2と符号が逆のためX反転）
+	var target_blend := Vector2(-sin(angle), cos(angle))
+
+	# 常にスムーズ補間で遷移（即時スナップなし）
+	var blend_speed := 12.0
+	_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+
+
+## 4方向ブレンド+スパインYaw回転
+func _update_strafe_blend_4dir(raw_angle: float, delta: float) -> void:
+	# 90度量子化 + ヒステリシス
+	var nearest: float = round(raw_angle / (PI / 2.0)) * (PI / 2.0)
+	var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
+	if diff_from_current > (PI / 4.0) + QUANTIZE_HYSTERESIS_4DIR:
+		_quantized_angle = nearest
+
+	# 残差角度（±45°以内）でスパインを駆動
+	var residual := angle_difference(_quantized_angle, raw_angle)
+	# スプリント中はresidualを0にする（前方のみ）
+	if _is_sprinting:
+		residual = 0.0
+	if _spine_posture:
+		_spine_posture.set_yaw(residual)
+
+	# Forward=(0,1) 座標系
+	var angle := _quantized_angle
+	var target_blend := Vector2(-sin(angle), cos(angle))
+
+	var blend_speed := 12.0
+	_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+
+var _gun_down_blend := 0.0  ## GunDownBlendの現在値（0=通常, 1=gun_down）
+const GUN_DOWN_BLEND_SPEED := 6.0  ## GunDownブレンド遷移速度
 
 func _update_animation_tree(delta: float = 0.016) -> void:
 	if not _anim_tree or not _anim_tree.active:
@@ -1142,6 +1322,11 @@ func _update_animation_tree(delta: float = 0.016) -> void:
 	var target_speed := 1.0 if _is_sprinting else 0.0
 	_speed_blend = lerpf(_speed_blend, target_speed, 1.0 - exp(-8.0 * delta))
 	_anim_tree.set("parameters/SpeedBlend/blend_amount", _speed_blend)
+
+	# GunDownBlend: 上半身のgun_downアニメーションブレンド
+	var target_gun_down := 1.0 if _is_gun_down else 0.0
+	_gun_down_blend = lerpf(_gun_down_blend, target_gun_down, 1.0 - exp(-GUN_DOWN_BLEND_SPEED * delta))
+	_anim_tree.set("parameters/GunDownBlend/blend_amount", _gun_down_blend)
 
 	# TimeScale: 速度同期
 	_update_time_scale()
@@ -1175,5 +1360,46 @@ func _update_time_scale() -> void:
 			time_scale = actual_speed / sprint_speed
 
 	_anim_tree.set("parameters/TimeScale/scale", time_scale)
+
+
+## GunDownBlendの上半身ボーンフィルターを設定
+## Spine以下の全ボーンをフィルターパスに追加（下半身はロコモーション維持）
+func _setup_gun_down_filter(blend_tree: AnimationNodeBlendTree) -> void:
+	if not _skeleton or not _anim_tree:
+		return
+
+	var gun_down_blend: AnimationNodeBlend2 = blend_tree.get_node("GunDownBlend")
+	if not gun_down_blend:
+		return
+
+	# AnimationPlayer root_node → Skeleton3D への相対パスを計算
+	var root := _anim_player.get_node(_anim_player.root_node)
+	var skel_path := str(root.get_path_to(_skeleton))
+
+	# Spine以下の上半身ボーンを収集
+	var spine_idx := _skeleton.find_bone(GameConstants.BONE_SPINE)
+	if spine_idx < 0:
+		push_warning("CharacterAnimationController: Spine bone not found for gun_down filter")
+		return
+
+	var upper_bones: Array[String] = [GameConstants.BONE_SPINE]
+	for i in _skeleton.get_bone_count():
+		if _is_bone_descendant_of(i, spine_idx):
+			upper_bones.append(_skeleton.get_bone_name(i))
+
+	# フィルターパスを設定（ポジション/回転/スケール各トラック）
+	for bone_name in upper_bones:
+		var path := NodePath(skel_path + ":" + bone_name)
+		gun_down_blend.set_filter_path(path, true)
+
+
+## ボーンがancestor_idxの子孫かどうかを判定
+func _is_bone_descendant_of(bone_idx: int, ancestor_idx: int) -> bool:
+	var parent := _skeleton.get_bone_parent(bone_idx)
+	while parent >= 0:
+		if parent == ancestor_idx:
+			return true
+		parent = _skeleton.get_bone_parent(parent)
+	return false
 
 #endregion
