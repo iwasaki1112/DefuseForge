@@ -68,6 +68,14 @@ var _wp_rotation_spins: Array[SpinBox] = []
 var _wp_ik_offset_sliders: Array[HSlider] = []  # right_hand_ik_offset [X, Y, Z]
 var _wp_ik_offset_spins: Array[SpinBox] = []
 
+# Camera tab references
+var _cam_height_slider: HSlider = null
+var _cam_height_spin: SpinBox = null
+var _cam_pitch_slider: HSlider = null
+var _cam_pitch_spin: SpinBox = null
+var _cam_fov_slider: HSlider = null
+var _cam_fov_spin: SpinBox = null
+
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -144,8 +152,8 @@ func _setup_tps_controller() -> void:
 	_tps_controller.name = "TPSPlayerController"
 	add_child(_tps_controller)
 	_tps_controller.setup(_character, _camera, _ui_layer, {
-		"camera_height": 8.0,
-		"camera_pitch_deg": -50.0,
+		"camera_height": 14.7,
+		"camera_pitch_deg": -66.5,
 		"enable_aim_stick": true,
 	})
 
@@ -365,8 +373,8 @@ func _setup_camera() -> void:
 	_camera.fov = 30.0
 	_camera.current = true
 	var char_pos := _character.global_position if _character else Vector3.ZERO
-	_camera.position = char_pos + Vector3(0, 8.0, -6.0)
-	_camera.rotation_degrees.x = -50.0
+	_camera.position = char_pos + Vector3(0, 14.7, -6.0)
+	_camera.rotation_degrees.x = -66.5
 	add_child(_camera)
 
 
@@ -624,6 +632,9 @@ func _setup_ik_panel() -> void:
 
 	# "Weapon" tab
 	_setup_weapon_tab(tab_container)
+
+	# "Camera" tab
+	_setup_camera_tab(tab_container)
 
 
 func _add_section_label(parent: VBoxContainer, text: String) -> void:
@@ -909,6 +920,159 @@ func _setup_weapon_tab(tab_container: TabContainer) -> void:
 	copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy_btn.pressed.connect(_on_copy_weapon_values_pressed)
 	vbox.add_child(copy_btn)
+
+
+# ============================================
+# Camera Tab
+# ============================================
+
+func _setup_camera_tab(tab_container: TabContainer) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = "Camera"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	tab_container.add_child(scroll)
+
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	scroll.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	margin.add_child(vbox)
+
+	# --- Height ---
+	_add_section_label(vbox, "Height")
+	var height_hbox := HBoxContainer.new()
+	height_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(height_hbox)
+
+	_cam_height_slider = HSlider.new()
+	_cam_height_slider.min_value = 2.0
+	_cam_height_slider.max_value = 30.0
+	_cam_height_slider.step = 0.1
+	_cam_height_slider.value = 14.7
+	_cam_height_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cam_height_slider.custom_minimum_size.x = 100
+	height_hbox.add_child(_cam_height_slider)
+
+	_cam_height_spin = SpinBox.new()
+	_cam_height_spin.min_value = 2.0
+	_cam_height_spin.max_value = 30.0
+	_cam_height_spin.step = 0.1
+	_cam_height_spin.value = 14.7
+	_cam_height_spin.custom_minimum_size.x = 70
+	_cam_height_spin.add_theme_font_size_override("font_size", 11)
+	height_hbox.add_child(_cam_height_spin)
+
+	_connect_slider_spin(_cam_height_slider, _cam_height_spin, _on_cam_height_changed)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Pitch ---
+	_add_section_label(vbox, "Pitch (deg)")
+	var pitch_hbox := HBoxContainer.new()
+	pitch_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(pitch_hbox)
+
+	_cam_pitch_slider = HSlider.new()
+	_cam_pitch_slider.min_value = -90.0
+	_cam_pitch_slider.max_value = -10.0
+	_cam_pitch_slider.step = 0.5
+	_cam_pitch_slider.value = -66.5
+	_cam_pitch_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cam_pitch_slider.custom_minimum_size.x = 100
+	pitch_hbox.add_child(_cam_pitch_slider)
+
+	_cam_pitch_spin = SpinBox.new()
+	_cam_pitch_spin.min_value = -90.0
+	_cam_pitch_spin.max_value = -10.0
+	_cam_pitch_spin.step = 0.5
+	_cam_pitch_spin.value = -66.5
+	_cam_pitch_spin.custom_minimum_size.x = 70
+	_cam_pitch_spin.add_theme_font_size_override("font_size", 11)
+	pitch_hbox.add_child(_cam_pitch_spin)
+
+	_connect_slider_spin(_cam_pitch_slider, _cam_pitch_spin, _on_cam_pitch_changed)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- FOV ---
+	_add_section_label(vbox, "FOV")
+	var fov_hbox := HBoxContainer.new()
+	fov_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(fov_hbox)
+
+	_cam_fov_slider = HSlider.new()
+	_cam_fov_slider.min_value = 10.0
+	_cam_fov_slider.max_value = 90.0
+	_cam_fov_slider.step = 0.5
+	_cam_fov_slider.value = 30.0
+	_cam_fov_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cam_fov_slider.custom_minimum_size.x = 100
+	fov_hbox.add_child(_cam_fov_slider)
+
+	_cam_fov_spin = SpinBox.new()
+	_cam_fov_spin.min_value = 10.0
+	_cam_fov_spin.max_value = 90.0
+	_cam_fov_spin.step = 0.5
+	_cam_fov_spin.value = 30.0
+	_cam_fov_spin.custom_minimum_size.x = 70
+	_cam_fov_spin.add_theme_font_size_override("font_size", 11)
+	fov_hbox.add_child(_cam_fov_spin)
+
+	_connect_slider_spin(_cam_fov_slider, _cam_fov_spin, _on_cam_fov_changed)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Copy Values ---
+	var copy_btn := Button.new()
+	copy_btn.text = "Copy Camera Values"
+	copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy_btn.pressed.connect(_on_copy_camera_values_pressed)
+	vbox.add_child(copy_btn)
+
+
+# ============================================
+# Camera Tab Callbacks
+# ============================================
+
+func _on_cam_height_changed(value: float) -> void:
+	if _tps_controller:
+		_tps_controller.camera_height = value
+		_tps_controller._base_camera_height = value
+		_tps_controller._target_camera_height = value
+
+
+func _on_cam_pitch_changed(value: float) -> void:
+	if _tps_controller:
+		_tps_controller.camera_pitch_deg = value
+	if _camera:
+		_camera.rotation_degrees.x = value
+
+
+func _on_cam_fov_changed(value: float) -> void:
+	if _camera:
+		_camera.fov = value
+
+
+func _on_copy_camera_values_pressed() -> void:
+	var height := _cam_height_slider.value if _cam_height_slider else 8.0
+	var pitch := _cam_pitch_slider.value if _cam_pitch_slider else -50.0
+	var fov := _cam_fov_slider.value if _cam_fov_slider else 30.0
+
+	var text := "# Camera\ncamera_height = %.1f\ncamera_pitch_deg = %.1f\nfov = %.1f" % [
+		height, pitch, fov,
+	]
+	DisplayServer.clipboard_set(text)
+	print("Copied to clipboard:\n", text)
 
 
 # ============================================
