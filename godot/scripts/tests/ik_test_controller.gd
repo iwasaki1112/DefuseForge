@@ -73,6 +73,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_setup_environment()
 	_create_ground()
+	_create_test_wall()
 	_animation_library = _load_animation_library()
 	PlayerState.set_player_team(GameCharacter.Team.COUNTER_TERRORIST)
 	_spawn_character()
@@ -80,6 +81,8 @@ func _ready() -> void:
 	_setup_camera()
 	_setup_ui()
 	_setup_tps_controller()
+	_setup_vision_systems()
+	_register_characters_to_vision()
 
 
 func _physics_process(delta: float) -> void:
@@ -248,35 +251,32 @@ func _create_axis_gizmo() -> void:
 		_axis_gizmo.add_child(mesh_inst)
 
 
-func _create_test_walls() -> void:
-	# 前方に近い壁（GunUp テスト用）
-	var wall_data := [
-		{ "name": "Wall_Front", "pos": Vector3(0, 1.5, 3), "size": Vector3(4.0, 3.0, 0.3) },
-		{ "name": "Wall_Left", "pos": Vector3(-5, 1.5, 0), "size": Vector3(0.3, 3.0, 6.0) },
-		{ "name": "Wall_Right", "pos": Vector3(5, 1.5, 0), "size": Vector3(0.3, 3.0, 6.0) },
-		{ "name": "Wall_Back", "pos": Vector3(0, 1.5, -5), "size": Vector3(6.0, 3.0, 0.3) },
-	]
-	for data in wall_data:
-		var wall := StaticBody3D.new()
-		wall.name = data["name"]
-		wall.position = data["pos"]
-		# コリジョンレイヤー2（壁）に設定
-		wall.collision_layer = 2
-		wall.collision_mask = 0
-		var mesh_inst := MeshInstance3D.new()
-		var box_mesh := BoxMesh.new()
-		box_mesh.size = data["size"]
-		mesh_inst.mesh = box_mesh
-		var mat := StandardMaterial3D.new()
+func _create_test_wall() -> void:
+	var wall_size := Vector3(8.0, 2.0, 0.3)
+	var wall := StaticBody3D.new()
+	wall.name = "Wall_Front"
+	wall.position = Vector3(0, wall_size.y / 2.0, 3)
+	wall.collision_layer = 2
+	wall.collision_mask = 0
+	var mesh_inst := MeshInstance3D.new()
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = wall_size
+	mesh_inst.mesh = box_mesh
+	var mat := StandardMaterial3D.new()
+	var tex = load("res://addons/kenney_prototype_tools/textures/orange/texture_09.png") as Texture2D
+	if tex:
+		mat.albedo_texture = tex
+		mat.uv1_scale = Vector3(wall_size.x / 2.0, wall_size.y / 2.0, 1.0)
+	else:
 		mat.albedo_color = Color(0.6, 0.55, 0.5)
-		mesh_inst.material_override = mat
-		wall.add_child(mesh_inst)
-		var col := CollisionShape3D.new()
-		var box_shape := BoxShape3D.new()
-		box_shape.size = data["size"]
-		col.shape = box_shape
-		wall.add_child(col)
-		add_child(wall)
+	mesh_inst.material_override = mat
+	wall.add_child(mesh_inst)
+	var col := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = wall_size
+	col.shape = box_shape
+	wall.add_child(col)
+	add_child(wall)
 
 
 # ============================================
@@ -297,6 +297,7 @@ func _register_characters_to_vision() -> void:
 
 func _deferred_register_characters() -> void:
 	if _vision_service and _character:
+		_character.setup_vision(VISION_FOV, VISION_RANGE)
 		_vision_service.register_character(_character)
 	for enemy in _enemies:
 		if _vision_service and is_instance_valid(enemy):
