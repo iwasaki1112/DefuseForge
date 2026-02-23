@@ -51,7 +51,7 @@ var _local_peer_id: int = 0
 ## 設定
 var fow_map_size: Vector2 = Vector2(50, 50)
 var default_vision_fov: float = 75.0
-var default_vision_range: float = 7.0
+var default_vision_range: float = 12.0
 var default_weapon_id_ct: String = "mark18"
 var default_weapon_id_t: String = "ak47"
 var is_vision_enabled: bool = false

@@ -12,22 +12,22 @@ enum Quality { LOW, MEDIUM, HIGH }
 ## shadow_filter: 0=NONE, 1=PCF5, 2=PCF13
 static var QUALITY_SETTINGS := {
 	Quality.LOW: {
-		"resolution": 256,
-		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
-		"shadow_smooth": 0.5,
-		"update_hz": 30
-	},
-	Quality.MEDIUM: {
 		"resolution": 512,
-		"shadow_filter": 1,  # SHADOW_FILTER_PCF5（軽量化）
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
 		"shadow_smooth": 1.0,
 		"update_hz": 30
 	},
-	Quality.HIGH: {
+	Quality.MEDIUM: {
 		"resolution": 1024,
-		"shadow_filter": 2,  # SHADOW_FILTER_PCF13
-		"shadow_smooth": 1.5,
-		"update_hz": 30  # 60から30に削減
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
+		"shadow_smooth": 0.8,
+		"update_hz": 30
+	},
+	Quality.HIGH: {
+		"resolution": 2048,
+		"shadow_filter": 1,  # SHADOW_FILTER_PCF5
+		"shadow_smooth": 0.8,
+		"update_hz": 30
 	},
 }
 
@@ -39,7 +39,7 @@ static var QUALITY_SETTINGS := {
 
 @export_group("Visual Settings")
 @export var fog_color: Color = Color(0.15, 0.15, 0.15, 0.5)
-@export var quality: Quality = Quality.MEDIUM  # パフォーマンス/品質バランス
+@export var quality: Quality = Quality.HIGH  # PC専用: 高品質
 
 ## Internal settings (auto-configured from quality)
 var texture_resolution: int = 128
@@ -74,6 +74,9 @@ func _ready() -> void:
 	_setup_visibility_viewport()
 	_setup_fog_mesh()
 	_setup_occluder_manager()
+	if Debug.enabled:
+		var settings: Dictionary = QUALITY_SETTINGS[quality]
+		print("[FOW] quality=", quality, " resolution=", texture_resolution, "px, map_size=", map_size)
 
 
 ## Apply quality preset settings
@@ -141,10 +144,10 @@ func _setup_fog_mesh() -> void:
 	_fog_material.set_shader_parameter("map_min", map_min)
 	_fog_material.set_shader_parameter("map_max", map_max)
 	_fog_material.set_shader_parameter("texture_size", float(texture_resolution))
-	# コーンエッジの滑らかさ: blur_radiusはテクセル単位のブラー半径
-	# 薄い壁オクルーダー（~2.5px）を貫通しない範囲に抑える
-	_fog_material.set_shader_parameter("blur_radius", 1.0)
-	_fog_material.set_shader_parameter("edge_softness", 0.4)
+	# Pseudo-SDF AA: 勾配からエッジ距離を推定し、直線的なエッジを再構築
+	_fog_material.set_shader_parameter("edge_threshold", 0.2)
+	_fog_material.set_shader_parameter("edge_sharpness", 1.5)
+	_fog_material.set_shader_parameter("edge_aa_pixels", 1.0)
 
 	# OpenGL (Compatibility) は depth [0,1] → NDC [-1,1] リマップが必要
 	# Vulkan (Forward+/Mobile) は depth [0,1] がそのまま NDC
@@ -270,7 +273,6 @@ func register_character(character: Node3D) -> void:
 	if vision_light._light:
 		vision_light._light.shadow_filter = settings["shadow_filter"]
 		vision_light._light.shadow_filter_smooth = settings["shadow_smooth"]
-
 	_vision_lights[character] = vision_light
 	_needs_update = true
 

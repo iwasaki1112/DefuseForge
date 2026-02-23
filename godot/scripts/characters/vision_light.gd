@@ -123,8 +123,8 @@ func setup(viewport: SubViewport, character: Node3D, map_size: Vector2, resoluti
 
 	var char_name := str(character.name) if character else "unknown"
 	if Debug.enabled: print("[FOW] VisionLight setup: ", char_name,
-		", fov: ", fov_degrees, ", scale: ", _light.texture_scale,
-		", peripheral: ", peripheral_distance)
+		", fov=", fov_degrees, ", view_dist=", view_distance,
+		", texture_scale=", _light.texture_scale if _light else 0)
 
 
 ## 毎フレームの位置・回転同期（_process または _physics_process から呼び出し）
@@ -244,7 +244,7 @@ func _get_facing_direction() -> Vector3:
 
 
 ## FOVテクスチャのエッジ鮮明度（0.0=ソフト, 1.0=シャープ）
-const FOV_EDGE_FALLOFF := 0.8
+const FOV_EDGE_FALLOFF := 0.95
 
 func _update_fov_texture() -> void:
 	if not _light:
@@ -284,19 +284,20 @@ func _update_light_scale() -> void:
 		aspect_scale.x = _map_size.y / _map_size.x
 
 	var max_dimension := maxf(_map_size.x, _map_size.y)
-	var scale_factor := float(_texture_resolution) / max_dimension
-	var texture_size := float(_texture_resolution)
+	# ビューポート内での1ワールドユニットあたりのピクセル数
+	var px_per_unit := float(_texture_resolution) / max_dimension
+	# FOVテクスチャの実サイズ（PointLight2D.texture_scaleはこれ基準）
+	var fov_tex_size := float(FovTextureGenerator.DEFAULT_SIZE)
 
 	# メインFOVライトのスケール
 	if _light:
-		var light_radius := view_distance * scale_factor * 2.0  # 直径
-		var scale_value := light_radius / texture_size
-		_light.texture_scale = scale_value
+		# view_distance*2 = 直径 → ビューポートピクセルに変換 → FOVテクスチャ基準でスケール
+		var diameter_px := view_distance * px_per_unit * 2.0
+		_light.texture_scale = diameter_px / fov_tex_size
 		_light.scale = aspect_scale
 
 	# 周辺視界ライトのスケール
 	if _peripheral_light:
-		var peripheral_radius := peripheral_distance * scale_factor * 2.0  # 直径
-		var peripheral_scale := peripheral_radius / texture_size
-		_peripheral_light.texture_scale = peripheral_scale
+		var peripheral_diameter_px := peripheral_distance * px_per_unit * 2.0
+		_peripheral_light.texture_scale = peripheral_diameter_px / fov_tex_size
 		_peripheral_light.scale = aspect_scale

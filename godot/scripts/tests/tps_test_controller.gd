@@ -25,7 +25,7 @@ const ANIMATION_SOURCE_UNIFIED := "res://assets/animations/animations.glb"
 
 # Vision
 const VISION_FOV := 75.0
-const VISION_RANGE := 7.0
+const VISION_RANGE := 12.0
 const MAP_SIZE := Vector2(50.0, 50.0)
 
 # Enemy spawn positions

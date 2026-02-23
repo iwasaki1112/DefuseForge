@@ -29,7 +29,7 @@ const CAMERA_FOV := 30.0
 const CAMERA_SMOOTH := 8.0
 const CAMERA_ZOOM_SMOOTH := 4.0
 const GROUND_Y := 0.0
-const DEFAULT_VISION_RANGE := 7.0
+const DEFAULT_VISION_RANGE := 12.0
 
 # Move stick (left)
 const STICK_RADIUS := 80.0

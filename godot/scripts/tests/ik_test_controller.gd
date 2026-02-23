@@ -20,7 +20,7 @@ const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
 const ANIMATION_SOURCE := "res://assets/animations/character_anims_kubold.glb"
 const ANIMATION_SOURCE_UNIFIED := "res://assets/animations/animations.glb"
 const VISION_FOV := 75.0
-const VISION_RANGE := 7.0
+const VISION_RANGE := 12.0
 const MAP_SIZE := Vector2(50.0, 50.0)
 
 const PANEL_WIDTH := 280

@@ -60,7 +60,7 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 # Vision
 # ============================================
 @export_group("Vision")
-@export var vision_range: float = 7.0  ## 武器装備時の視界距離（メートル）
+@export var vision_range: float = 12.0  ## 武器装備時の視界距離（メートル）
 @export var vision_fov: float = 60.0  ## 武器装備時の視界角度（度）
 
 # ============================================

@@ -27,6 +27,6 @@ attach_offset = Vector3(-0.01, 0.08, -0.04)
 attach_rotation = Vector3(-67.0, 78.0, 25.0)
 muzzle_flash_offset = Vector3(0.012, 0.07, 0.26)
 muzzle_flash_scale = 0.59
-vision_range = 5.0
+vision_range = 8.0
 vision_fov = 65.0
 muzzle_flash_rotation = Vector3(88.0, -162.0, 22.5)

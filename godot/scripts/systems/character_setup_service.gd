@@ -10,7 +10,7 @@ var default_weapon_id_ct: String = "mark18"
 var default_weapon_id_t: String = "ak47"
 var is_vision_enabled: bool = false
 var default_vision_fov: float = 75.0
-var default_vision_range: float = 7.0
+var default_vision_range: float = 12.0
 
 
 func setup(

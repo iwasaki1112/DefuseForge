@@ -43,8 +43,8 @@ static func generate_fov_texture(fov_degrees: float, size: int = DEFAULT_SIZE, f
 			# 扇形の範囲内かつ距離内
 			if falloff >= 0.7:
 				# シャープエッジモード: アンチエイリアス付き
-				# ピクセル単位のアンチエイリアス幅（大きいほど滑らかな縁）
-				var aa_width := 4.0 / max_dist
+				# ピクセル単位のアンチエイリアス幅（小さいほどシャープな縁）
+				var aa_width := 2.0 / max_dist
 
 				# 距離エッジのアンチエイリアス
 				var dist_aa := 1.0 - smoothstep(1.0 - aa_width, 1.0, dist)
