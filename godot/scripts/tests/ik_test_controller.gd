@@ -166,8 +166,8 @@ func _create_ground() -> void:
 	box_mesh.size = Vector3(GROUND_SIZE, 0.1, GROUND_SIZE)
 	mesh_instance.mesh = box_mesh
 	var material := StandardMaterial3D.new()
-	# Kenney Prototype Textures (CC0) のグリッドテクスチャ
-	var tex = load("res://assets/textures/kenney_dark_grid.png") as Texture2D
+	# Kenney Prototype Textures (CC0) のチェッカーテクスチャ
+	var tex = load("res://addons/kenney_prototype_tools/textures/dark/texture_08.png") as Texture2D
 	if tex:
 		material.albedo_texture = tex
 		material.uv1_scale = Vector3(GROUND_SIZE / 2.0, GROUND_SIZE / 2.0, 1.0)
