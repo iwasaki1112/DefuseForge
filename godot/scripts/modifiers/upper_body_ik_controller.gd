@@ -16,7 +16,7 @@ enum IKState { READY, GUN_UP, ACTION, DISABLED }
 # ============================================
 const RIFLE_READY_HAND := Vector3(-0.173, 1.614, 0.141)
 const RIFLE_READY_POLE := Vector3(-0.230, 1.600, -0.075)
-const RIFLE_READY_LH_OFFSET := Vector3(0.012, -0.015, -0.016)
+const RIFLE_READY_LH_OFFSET := Vector3(0.017, 0.018, 0.062)
 const RIFLE_READY_LH_POLE := Vector3(0.41, -0.43, -0.35)
 const PISTOL_READY_HAND := Vector3(-0.15, 1.36, 0.23)
 const PISTOL_READY_POLE := Vector3(-0.22, 0.99, -0.06)

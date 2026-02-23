@@ -99,6 +99,16 @@ enum FiringMode { SINGLE, BURST, FULL_AUTO }
 @export var left_hand_grip_enabled: bool = false  ## 左手IKグリップを有効化（ライフル等の両手持ち武器用）
 @export var left_hand_grip_offset: Vector3 = Vector3.ZERO  ## フォールバック用：LeftHandGripノードがない場合のオフセット
 @export var right_hand_ik_offset: Vector3 = Vector3.ZERO  ## 武器固有の右手IKターゲットオフセット
+@export var left_hand_ik_offset: Vector3 = Vector3.ZERO  ## 左手IKグリップ微調整オフセット（IKモディファイア空間）
+@export var left_hand_ik_pole: Vector3 = Vector3(0.3, 0.0, 0.0)  ## 左肘ポールオフセット（キャラクター空間）
+
+# ============================================
+# Posture / Head
+# ============================================
+@export_group("Posture / Head")
+@export var posture_pitch: float = 0.0  ## 背骨前傾ピッチ（ラジアン）
+@export var head_pitch: float = 0.0  ## 頭部ピッチ（ラジアン）
+@export var head_yaw: float = 0.0  ## 頭部ヨー（ラジアン）
 
 # ============================================
 # Auto Firing Mode (RIFLE/SMG only)

@@ -465,6 +465,10 @@ func equip_weapon(weapon: WeaponPreset) -> void:
 	if weapon.right_hand_ik_offset != Vector3.ZERO:
 		anim_ctrl.set_weapon_ik_offset(weapon.right_hand_ik_offset)
 
+	# 左手IKオフセット・ポールを適用
+	anim_ctrl.set_left_hand_grip_offset(weapon.left_hand_ik_offset)
+	anim_ctrl.set_left_hand_pole_offset(weapon.left_hand_ik_pole)
+
 	# 武器の視界パラメータをVisionComponentに適用
 	if vision and weapon:
 		vision.set_view_distance(weapon.vision_range)

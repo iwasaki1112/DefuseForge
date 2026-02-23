@@ -241,6 +241,16 @@ func set_weapon_ik_offset(offset: Vector3) -> void:
 	if _upper_body_ik:
 		_upper_body_ik.set_weapon_ik_offset(offset)
 
+## 左手IKグリップ微調整オフセットを設定
+func set_left_hand_grip_offset(offset: Vector3) -> void:
+	if _upper_body_ik:
+		_upper_body_ik.set_left_hand_grip_offset(offset)
+
+## 左肘ポールオフセットを設定
+func set_left_hand_pole_offset(offset: Vector3) -> void:
+	if _upper_body_ik:
+		_upper_body_ik.set_left_hand_pole_offset(offset)
+
 ## Get current movement speed based on state and direction
 func get_current_speed() -> float:
 	if _is_dead or _is_throwing or _is_opening_door or _is_talking or _is_meleeing:
