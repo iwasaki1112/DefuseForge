@@ -2,13 +2,14 @@ extends Node
 class_name CharacterAnimationController
 ## Character Animation Controller API
 ## Upper body: animation-driven + arm IK override (TwoBoneIK3D)
-## Lower body: 8-direction BlendSpace2D animation via AnimationTree
+## Lower body: BlendSpace2D animation via AnimationTree
+## Blend modes: 8-direction / 4-direction+SpineYaw / 4-direction+SpineIK(CCDIK3D)
 ## AnimationTree structure: output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
 
 # Enums
 enum Weapon { NONE, RIFLE, PISTOL }
 enum HitDirection { FRONT, BACK, LEFT, RIGHT }
-enum BlendMode { EIGHT_DIR, FOUR_DIR_SPINE }
+enum BlendMode { EIGHT_DIR, FOUR_DIR_SPINE, FOUR_DIR_IK }
 
 # Signals
 signal fired()
@@ -105,6 +106,7 @@ const MELEE_IK_RESUME_TIME := 0.8  # IKブレンドイン開始
 # Blend mode
 var _blend_mode := BlendMode.EIGHT_DIR
 var _spine_posture: SpinePostureModifier = null
+var _spine_ik: SpineIKController = null
 
 # Blend values
 var _input_dir := Vector2.ZERO
@@ -183,6 +185,10 @@ func update_animation(
 	# Update animation tree parameters
 	_update_animation_tree(delta)
 
+	# Update spine IK (FOUR_DIR_IK mode)
+	if _spine_ik:
+		_spine_ik.update(delta)
+
 	# Update upper body IK
 	if _upper_body_ik:
 		_upper_body_ik.update(delta)
@@ -259,7 +265,7 @@ func set_left_hand_pole_offset(offset: Vector3) -> void:
 	if _upper_body_ik:
 		_upper_body_ik.set_left_hand_pole_offset(offset)
 
-## ブレンドモードを設定（8方向 / 4方向+SpineYaw）
+## ブレンドモードを設定（8方向 / 4方向+SpineYaw / 4方向+SpineIK）
 func set_blend_mode(mode: BlendMode) -> void:
 	if _blend_mode == mode:
 		return
@@ -268,12 +274,20 @@ func set_blend_mode(mode: BlendMode) -> void:
 	# モード切替時にスパインyawをリセット
 	if _spine_posture:
 		_spine_posture.set_yaw(0.0)
+	if _spine_ik:
+		_spine_ik.set_yaw(0.0)
+		_spine_ik.set_enabled(mode == BlendMode.FOUR_DIR_IK)
 	_quantized_angle = 0.0
 
 
 ## SpinePostureModifierを登録（4方向+SpineYawモードで使用）
 func set_spine_posture_modifier(modifier: SpinePostureModifier) -> void:
 	_spine_posture = modifier
+
+
+## SpineIKControllerを登録（4方向+SpineIKモードで使用）
+func set_spine_ik_controller(controller: SpineIKController) -> void:
+	_spine_ik = controller
 
 
 ## Get current movement speed based on state and direction
@@ -836,6 +850,10 @@ func apply_animation_state(state: String, delta: float) -> void:
 	# Update animation tree
 	_update_animation_tree(delta)
 
+	# Update spine IK for remote characters
+	if _spine_ik:
+		_spine_ik.update(delta)
+
 	# Update upper body IK for remote characters
 	if _upper_body_ik:
 		_upper_body_ik.update(delta)
@@ -870,7 +888,7 @@ func _resolve_anim_name(anim_name: String) -> String:
 ## ブレンド位置から方向別アニメーション速度を計算（重み付き補間）
 func _get_blended_anim_speed(blend_pos: Vector2) -> float:
 	var dir := blend_pos.normalized() if blend_pos.length() > 0.01 else Vector2.ZERO
-	if _blend_mode == BlendMode.FOUR_DIR_SPINE:
+	if _blend_mode == BlendMode.FOUR_DIR_SPINE or _blend_mode == BlendMode.FOUR_DIR_IK:
 		return _get_blended_anim_speed_4dir(dir)
 
 	var s := _get_anim_speeds()
@@ -1207,7 +1225,7 @@ func _rebuild_walk_blend_space() -> void:
 
 	# 新しいBlendSpaceを作成して接続
 	var new_blend_space: AnimationNodeBlendSpace2D
-	if _blend_mode == BlendMode.FOUR_DIR_SPINE:
+	if _blend_mode == BlendMode.FOUR_DIR_SPINE or _blend_mode == BlendMode.FOUR_DIR_IK:
 		new_blend_space = _create_walk_blend_space_4dir()
 	else:
 		new_blend_space = _create_walk_blend_space()
@@ -1244,10 +1262,10 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 			char_forward = _model.global_transform.basis.z
 		var raw_angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 
-		if _blend_mode == BlendMode.FOUR_DIR_SPINE:
-			_update_strafe_blend_4dir(raw_angle, delta)
-		else:
+		if _blend_mode == BlendMode.EIGHT_DIR:
 			_update_strafe_blend_8dir(raw_angle, delta)
+		else:
+			_update_strafe_blend_4dir(raw_angle, delta)
 
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
@@ -1257,8 +1275,11 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 			_input_dir = Vector2.ZERO
 			_quantized_angle = 0.0
 		# 停止時: スパインyawを戻す
-		if _blend_mode == BlendMode.FOUR_DIR_SPINE and _spine_posture:
-			_spine_posture.set_yaw(0.0)
+		if _blend_mode != BlendMode.EIGHT_DIR:
+			if _spine_posture:
+				_spine_posture.set_yaw(0.0)
+			if _spine_ik:
+				_spine_ik.set_yaw(0.0)
 
 
 ## 8方向ブレンド（従来方式）
@@ -1279,7 +1300,7 @@ func _update_strafe_blend_8dir(raw_angle: float, delta: float) -> void:
 	_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
 
 
-## 4方向ブレンド+スパインYaw回転
+## 4方向ブレンド+スパイン回転（SpinePostureModifier or SpineIKController）
 func _update_strafe_blend_4dir(raw_angle: float, delta: float) -> void:
 	# 90度量子化 + ヒステリシス
 	var nearest: float = round(raw_angle / (PI / 2.0)) * (PI / 2.0)
@@ -1292,7 +1313,11 @@ func _update_strafe_blend_4dir(raw_angle: float, delta: float) -> void:
 	# スプリント中はresidualを0にする（前方のみ）
 	if _is_sprinting:
 		residual = 0.0
-	if _spine_posture:
+
+	# モードに応じたスパインドライバーに残差を送る
+	if _blend_mode == BlendMode.FOUR_DIR_IK and _spine_ik:
+		_spine_ik.set_yaw(residual)
+	elif _spine_posture:
 		_spine_posture.set_yaw(residual)
 
 	# Forward=(0,1) 座標系

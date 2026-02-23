@@ -51,6 +51,7 @@ var _speed_label: Label = null
 var _mouse_aim_enabled: bool = true
 var _posture_modifier: SpinePostureModifier = null
 var _head_modifier: HeadRotationModifier = null
+var _spine_ik_ctrl: SpineIKController = null
 
 # Posture slider references
 var _posture_pitch_slider: HSlider = null
@@ -449,13 +450,21 @@ func _update_speed_label() -> void:
 	_speed_label.text = "%s: %.1f m/s" % [state, speed]
 
 	# Spine Yaw リアルタイム値表示
-	if _spine_yaw_label and _posture_modifier:
-		var yaw_deg := rad_to_deg(_posture_modifier._current_yaw)
-		_spine_yaw_label.text = "Yaw: %.1f°" % yaw_deg
+	if _spine_yaw_label:
+		var yaw_rad := 0.0
+		var label_prefix := "Yaw"
+		# SpineIKモード時はSpineIKControllerの値を表示
+		if _spine_ik_ctrl and _spine_ik_ctrl.is_enabled():
+			yaw_rad = _spine_ik_ctrl.get_current_yaw()
+			label_prefix = "Yaw (IK)"
+		elif _posture_modifier:
+			yaw_rad = _posture_modifier._current_yaw
+		var yaw_deg := rad_to_deg(yaw_rad)
+		_spine_yaw_label.text = "%s: %.1f°" % [label_prefix, yaw_deg]
 		# 自動モード時はスライダーも追従
 		if not _spine_yaw_manual:
-			_spine_yaw_slider.set_value_no_signal(_posture_modifier._current_yaw)
-			_spine_yaw_spin.set_value_no_signal(_posture_modifier._current_yaw)
+			_spine_yaw_slider.set_value_no_signal(yaw_rad)
+			_spine_yaw_spin.set_value_no_signal(yaw_rad)
 
 
 func _setup_ik_panel() -> void:
@@ -585,12 +594,13 @@ func _setup_ik_panel() -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	# --- Blend Mode (8方向 / 4方向+Spine Yaw) ---
+	# --- Blend Mode (8方向 / 4方向+Spine Yaw / 4方向+Spine IK) ---
 	_add_section_label(vbox, "Blend Mode")
 	_blend_mode_option = OptionButton.new()
 	_blend_mode_option.add_item("8方向", 0)
 	_blend_mode_option.add_item("4方向+Spine Yaw", 1)
-	_blend_mode_option.selected = 0
+	_blend_mode_option.add_item("4方向+Spine IK", 2)
+	_blend_mode_option.selected = 2  # デフォルト: Spine IK
 	_blend_mode_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_blend_mode_option)
 	_blend_mode_option.item_selected.connect(_on_blend_mode_selected)
@@ -912,6 +922,10 @@ func _on_blend_mode_selected(idx: int) -> void:
 			_spine_yaw_slider.editable = true
 		1:  # 4方向+Spine Yaw
 			_character.anim_ctrl.set_blend_mode(CharacterAnimationController.BlendMode.FOUR_DIR_SPINE)
+			_spine_yaw_manual = false
+			_spine_yaw_slider.editable = false
+		2:  # 4方向+Spine IK (CCDIK3D)
+			_character.anim_ctrl.set_blend_mode(CharacterAnimationController.BlendMode.FOUR_DIR_IK)
 			_spine_yaw_manual = false
 			_spine_yaw_slider.editable = false
 
@@ -1414,6 +1428,21 @@ func _setup_posture_modifier(skel: Skeleton3D) -> void:
 	_head_modifier.name = "HeadRotationModifier"
 	skel.add_child(_head_modifier)
 	skel.move_child(_head_modifier, 1)
+
+	# SpineIKController（CCDIK3D + BoneTwistDisperser3D）
+	var model := skel.get_parent() as Node3D
+	_spine_ik_ctrl = SpineIKController.new()
+	_spine_ik_ctrl.name = "SpineIKController"
+	add_child(_spine_ik_ctrl)
+	_spine_ik_ctrl.setup(skel, model, _character)
+
+	# CharacterAnimationControllerにSpineIKControllerを登録
+	if _character and _character.anim_ctrl:
+		_character.anim_ctrl.set_spine_ik_controller(_spine_ik_ctrl)
+
+	# デフォルトブレンドモードを適用（UIドロップダウンの初期値に合わせる）
+	if _blend_mode_option and _blend_mode_option.selected == 2:
+		_character.anim_ctrl.set_blend_mode(CharacterAnimationController.BlendMode.FOUR_DIR_IK)
 
 
 func _find_skeleton_in(node: Node) -> Skeleton3D:

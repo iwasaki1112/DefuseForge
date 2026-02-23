@@ -4,14 +4,17 @@ class_name SpinePostureModifier
 
 ## Spine posture control via weighted rotation distribution
 ##
-## Hips -> Spine -> Chest -> UpperChest にピッチ（前傾/後傾）とロール（リーン）を
-## 重み付き分配で適用する。rest pose基準の軸変換を使用。
+## Hips -> Spine -> Chest -> UpperChest にピッチ（前傾/後傾）、ロール（リーン）、
+## ヨー（左右回転）を重み付き分配で適用する。rest pose基準の軸変換を使用。
+## ヨーは4方向ブレンド+スパイン回転で8方向表現する際に使用。
 
 # ============================================
 # Configuration
 # ============================================
 @export var chain_bones: PackedStringArray = ["Hips", "Spine", "Chest", "UpperChest"]
 @export var chain_weights: PackedFloat32Array = [0.0, 0.35, 0.35, 0.3]
+## ヨー回転の重み配列（デフォルト: Hips除外、Spine以上に分配）
+@export var yaw_chain_weights: PackedFloat32Array = [0.0, 0.33, 0.33, 0.34]
 @export var smoothing_speed := 10.0
 
 ## Hips の微小な横方向カウンターシフト（重心補正）
@@ -24,8 +27,10 @@ class_name SpinePostureModifier
 var _bone_indices := PackedInt32Array()
 var _target_pitch := 0.0  ## 前傾/後傾（ラジアン、正=前傾）
 var _target_roll := 0.0   ## リーン（ラジアン、正=右傾）
+var _target_yaw := 0.0    ## 左右回転（ラジアン、正=右回転）
 var _current_pitch := 0.0
 var _current_roll := 0.0
+var _current_yaw := 0.0
 
 # ============================================
 # Public API
@@ -45,6 +50,16 @@ func set_pitch(pitch: float) -> void:
 ## ロールのみ設定（リーン用）
 func set_roll(roll: float) -> void:
 	_target_roll = roll
+
+
+## ヨーのみ設定（4方向ブレンド+スパイン回転用）
+func set_yaw(yaw: float) -> void:
+	_target_yaw = yaw
+
+
+## ヨー重み配列を設定（Config A/B/C 切替用）
+func set_yaw_chain_weights(weights: PackedFloat32Array) -> void:
+	yaw_chain_weights = weights
 
 
 # ============================================
@@ -78,10 +93,12 @@ func _process_modification() -> void:
 	var dt := get_process_delta_time()
 
 	# Smooth towards target
-	_current_pitch = lerpf(_current_pitch, _target_pitch, 1.0 - exp(-smoothing_speed * dt))
-	_current_roll = lerpf(_current_roll, _target_roll, 1.0 - exp(-smoothing_speed * dt))
+	var alpha := 1.0 - exp(-smoothing_speed * dt)
+	_current_pitch = lerpf(_current_pitch, _target_pitch, alpha)
+	_current_roll = lerpf(_current_roll, _target_roll, alpha)
+	_current_yaw = lerpf(_current_yaw, _target_yaw, alpha)
 	# Skip if negligible
-	if absf(_current_pitch) < 0.001 and absf(_current_roll) < 0.001:
+	if absf(_current_pitch) < 0.001 and absf(_current_roll) < 0.001 and absf(_current_yaw) < 0.001:
 		return
 
 	# Cache rest-pose bases for axis conversion
@@ -109,6 +126,13 @@ func _process_modification() -> void:
 			var roll_axis_local := (inv_basis * Vector3.FORWARD).normalized()
 			var roll_q := Quaternion(roll_axis_local, _current_roll * w)
 			anim_rot = anim_rot * roll_q
+
+		# Yaw: rotate around local Y axis (left-right turn)
+		if absf(_current_yaw) > 0.001:
+			var yaw_w := yaw_chain_weights[i] if i < yaw_chain_weights.size() else 0.25
+			var yaw_axis_local := (inv_basis * Vector3.UP).normalized()
+			var yaw_q := Quaternion(yaw_axis_local, _current_yaw * yaw_w)
+			anim_rot = anim_rot * yaw_q
 
 		skel.set_bone_pose_rotation(idx, anim_rot)
 
