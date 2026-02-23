@@ -49,6 +49,7 @@ var _ik_panel: PanelContainer = null
 var _axis_gizmo: Node3D = null
 var _sprint_check: CheckBox = null
 var _speed_label: Label = null
+var _mouse_aim_enabled: bool = true
 
 
 func _ready() -> void:
@@ -66,7 +67,8 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if _tps_controller:
-		_update_mouse_aim()
+		if _mouse_aim_enabled:
+			_update_mouse_aim()
 		_tps_controller.process(delta)
 	if _axis_gizmo and _character:
 		_axis_gizmo.global_position = _character.global_position + Vector3(0, 0.02, 0)
@@ -80,6 +82,13 @@ func _input(event: InputEvent) -> void:
 	if not _tps_controller:
 		return
 	if _is_event_on_panel(event):
+		return
+	# L キーでマウスエイム追従をトグル
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_L:
+		_mouse_aim_enabled = not _mouse_aim_enabled
+		if not _mouse_aim_enabled and _tps_controller:
+			_tps_controller._aim_stick_input = Vector2.ZERO
+		print("Mouse aim: %s" % ("ON" if _mouse_aim_enabled else "OFF"))
 		return
 	# マウスイベントはTPSコントローラーに渡さない（カーソル位置エイムを使用）
 	if event is InputEventMouseButton or event is InputEventMouseMotion:
