@@ -921,6 +921,58 @@ func _setup_animation_loops() -> void:
 			if anim:
 				anim.loop_mode = Animation.LOOP_LINEAR
 
+	# スプリントアニメーションのループ境界修正
+	# ARP exportがフレーム0に重複キーを追加するため、ループ時に速度が不連続になる
+	# 最初の2キーフレーム（重複フラット区間）を削除し、ループ補間を自然にする
+	var sprint_name := _resolve_anim_name("game_sprint")
+	if _anim_player.has_animation(sprint_name):
+		var sprint_anim := anim_lib.get_animation(sprint_name)
+		if sprint_anim:
+			_fix_loop_boundary(sprint_anim)
+
+
+## ARP exportによるループ境界の重複キーフレームを修正
+## k00とk01が同一値（フラット区間=速度0）のトラックで、k01の値を
+## k00とk02の中間に補間し、ループ境界の速度不連続を緩和する
+func _fix_loop_boundary(anim: Animation) -> void:
+	for i in anim.get_track_count():
+		var key_count := anim.track_get_key_count(i)
+		if key_count < 3:
+			continue
+
+		var track_type := anim.track_get_type(i)
+		if track_type != Animation.TYPE_POSITION_3D \
+				and track_type != Animation.TYPE_ROTATION_3D \
+				and track_type != Animation.TYPE_SCALE_3D:
+			continue
+
+		var v0 = anim.track_get_key_value(i, 0)
+		var v1 = anim.track_get_key_value(i, 1)
+
+		var is_duplicate := false
+		if v0 is Vector3:
+			is_duplicate = v0.is_equal_approx(v1)
+		elif v0 is Quaternion:
+			is_duplicate = v0.is_equal_approx(v1)
+		else:
+			continue
+
+		if not is_duplicate:
+			continue
+
+		# k01をk00とk02の中間値に補間（フラット区間を解消）
+		var v2 = anim.track_get_key_value(i, 2)
+		var new_v1
+		if v0 is Vector3:
+			new_v1 = v0.lerp(v2, 0.5)
+		elif v0 is Quaternion:
+			new_v1 = v0.slerp(v2, 0.5)
+
+		var t1 := anim.track_get_key_time(i, 1)
+		var transition := anim.track_get_key_transition(i, 1)
+		anim.track_remove_key(i, 1)
+		anim.track_insert_key(i, t1, new_v1, transition)
+
 
 ## AnimationTree構造（武器非依存・統一ロコモーション）:
 ## output → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
