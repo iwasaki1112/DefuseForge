@@ -16,8 +16,8 @@ enum IKState { READY, GUN_UP, ACTION, DISABLED }
 # ============================================
 const RIFLE_READY_HAND := Vector3(-0.173, 1.614, 0.141)
 const RIFLE_READY_POLE := Vector3(-0.230, 1.600, -0.075)
-const RIFLE_READY_LH_OFFSET := Vector3(-0.023, -0.017, -0.062)
-const RIFLE_READY_LH_POLE := Vector3(-0.03, -0.49, -0.36)
+const RIFLE_READY_LH_OFFSET := Vector3(-0.002, -0.021, 0.018)
+const RIFLE_READY_LH_POLE := Vector3(0.41, -0.43, -0.35)
 const PISTOL_READY_HAND := Vector3(-0.15, 1.36, 0.23)
 const PISTOL_READY_POLE := Vector3(-0.22, 0.99, -0.06)
 const GUN_UP_HAND := Vector3(-0.15, 1.55, 0.03)
@@ -95,10 +95,6 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 	_current_hand_pos = RIFLE_READY_HAND
 	_current_pole_pos = RIFLE_READY_POLE
 	_update_ik_targets_immediate()
-
-	# 左手IKに右手位置取得用Callableを設定
-	if _left_hand_ik:
-		_left_hand_ik.set_rh_position_getter(get_current_hand_pos)
 
 	# LeftHandIK TwoBoneIK3D を RightArmIK の後に配置
 	_fix_modifier_order()
@@ -242,11 +238,6 @@ func set_manual_override(enabled: bool) -> void:
 	_manual_override = enabled
 
 
-## 現在の右手キャラ相対位置を取得（左手IKデルタ計算用）
-func get_current_hand_pos() -> Vector3:
-	return _current_hand_pos
-
-
 ## セットアップ済みかどうか
 func is_setup() -> bool:
 	return _is_setup
@@ -341,16 +332,21 @@ func _update_ik_targets_immediate() -> void:
 
 
 ## SkeletonModifier3Dの処理順序を修正
-## LeftHandIKのTwoBoneIK3DはLeftHandIKModifier.setup()で先に追加されるため、
-## RightArmIKより前に処理されてしまう。RightArmIKの後に再配置する。
+## LeftHandIKのノードはLeftHandIKModifier.setup()で先に追加されるため、
+## RightArmIKより前に処理されてしまう。正しい順序に再配置する。
+## 処理順: RightArmIK → LeftHandTargetSync → LeftHandIK (TwoBoneIK3D)
 func _fix_modifier_order() -> void:
 	if not _skeleton or not _left_hand_ik or not _right_arm_ik:
 		return
 	var left_ik_node := _left_hand_ik.get_ik_node()
 	if not left_ik_node:
 		return
-	# LeftHandIK TwoBoneIK3D を RightArmIK の後に配置
-	_skeleton.move_child(left_ik_node, _right_arm_ik.get_index() + 1)
+	# LeftHandTargetSync を RightArmIK の直後に配置
+	var target_sync := _left_hand_ik.get_target_sync_node()
+	if target_sync:
+		_skeleton.move_child(target_sync, _right_arm_ik.get_index() + 1)
+	# LeftHandIK TwoBoneIK3D を LeftHandTargetSync の後に配置
+	_skeleton.move_child(left_ik_node, (target_sync.get_index() if target_sync else _right_arm_ik.get_index()) + 1)
 
 
 ## IKノードの有効/無効を設定
