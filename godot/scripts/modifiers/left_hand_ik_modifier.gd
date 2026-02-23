@@ -8,7 +8,7 @@ class_name LeftHandIKModifier
 # Constants
 # ============================================
 const DEFAULT_BLEND_SPEED := 15.0  ## デフォルトinfluence遷移速度（高い=素早い追従）
-const POLE_OFFSET := 0.3  ## ポールターゲットのオフセット（肘方向制御）
+const DEFAULT_POLE_OFFSET := 0.3  ## ポールターゲットのデフォルトオフセット（肘方向制御）
 
 # ============================================
 # State
@@ -20,6 +20,9 @@ var _grip_source: Node3D  ## 武器モデル内のLeftHandGripノード
 var _skeleton: Skeleton3D
 var _target_influence := 0.0  ## 目標influence（0.0 or 1.0）
 var _blend_speed := DEFAULT_BLEND_SPEED  ## 現在のブレンド速度
+var _pole_offset := Vector3(DEFAULT_POLE_OFFSET, 0.0, 0.0)  ## 肘方向オフセット（キャラクター空間XYZ）
+var _grip_offset := Vector3.ZERO  ## グリップ位置オフセット（ローカル空間）
+var _use_offset_target := false  ## オフセット使用時はMarker3D経由
 var _is_setup := false
 
 # ============================================
@@ -111,6 +114,43 @@ func has_grip_source() -> bool:
 func is_enabled() -> bool:
 	return _target_influence > 0.5
 
+
+## TwoBoneIK3Dノードを取得（処理順序の修正用）
+func get_ik_node() -> TwoBoneIK3D:
+	return _ik_node
+
+## ポールオフセットを設定（キャラクター空間XYZ）
+func set_pole_offset(offset: Vector3) -> void:
+	_pole_offset = offset
+
+## 現在のポールオフセットを取得
+func get_pole_offset() -> Vector3:
+	return _pole_offset
+
+## グリップ位置オフセットを設定（武器ローカル空間）
+func set_grip_offset(offset: Vector3) -> void:
+	_grip_offset = offset
+	_update_offset_target_mode()
+
+## 現在のグリップオフセットを取得
+func get_grip_offset() -> Vector3:
+	return _grip_offset
+
+## オフセットモードの切替（オフセットあり→Marker3D経由、なし→直接）
+func _update_offset_target_mode() -> void:
+	if not _is_setup or not _ik_node:
+		return
+	var needs_offset := _grip_offset.length_squared() > 0.0001
+	if needs_offset and not _use_offset_target:
+		# オフセット使用開始 → ターゲットをMarker3Dに切替
+		_use_offset_target = true
+		_ik_node.set_target_node(0, _ik_node.get_path_to(_ik_target))
+	elif not needs_offset and _use_offset_target:
+		# オフセット不要 → 直接gripノードに戻す
+		_use_offset_target = false
+		if _grip_source and is_instance_valid(_grip_source):
+			_ik_node.set_target_node(0, _ik_node.get_path_to(_grip_source))
+
 # ============================================
 # Process
 # ============================================
@@ -126,15 +166,20 @@ func _process(delta: float) -> void:
 	elif current != _target_influence:
 		_ik_node.influence = _target_influence
 
-	# ポール位置を更新（肘が外側を向くように → 手が横から握る）
+	# グリップオフセット適用（Marker3D経由モード時）
+	if _use_offset_target and _grip_source and is_instance_valid(_grip_source) and _ik_target:
+		_ik_target.global_transform = _grip_source.global_transform
+		_ik_target.global_position += _grip_source.global_transform.basis * _grip_offset
+
+	# ポール位置を更新（肩と手の中点 + キャラクター空間オフセット）
 	if _grip_source and is_instance_valid(_grip_source) and _ik_pole and _ik_node.influence > 0.001:
 		var grip_pos := _grip_source.global_position
 		var root_bone_idx := _skeleton.find_bone(GameConstants.BONE_LEFT_ARM)
 		if root_bone_idx >= 0:
 			var root_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(root_bone_idx)
 			var mid := (root_global.origin + grip_pos) * 0.5
-			var char_right := _skeleton.global_transform.basis.x.normalized()
-			_ik_pole.global_position = mid + char_right * POLE_OFFSET
+			var char_basis := _skeleton.global_transform.basis
+			_ik_pole.global_position = mid + char_basis * _pole_offset
 
 # ============================================
 # Cleanup

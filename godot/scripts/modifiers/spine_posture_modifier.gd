@@ -11,7 +11,7 @@ class_name SpinePostureModifier
 # Configuration
 # ============================================
 @export var chain_bones: PackedStringArray = ["Hips", "Spine", "Chest", "UpperChest"]
-@export var chain_weights: PackedFloat32Array = [0.1, 0.2, 0.3, 0.4]
+@export var chain_weights: PackedFloat32Array = [0.0, 0.35, 0.35, 0.3]
 @export var smoothing_speed := 10.0
 
 ## Hips の微小な横方向カウンターシフト（重心補正）
@@ -46,6 +46,7 @@ func set_pitch(pitch: float) -> void:
 func set_roll(roll: float) -> void:
 	_target_roll = roll
 
+
 # ============================================
 # Internal
 # ============================================
@@ -79,7 +80,6 @@ func _process_modification() -> void:
 	# Smooth towards target
 	_current_pitch = lerpf(_current_pitch, _target_pitch, 1.0 - exp(-smoothing_speed * dt))
 	_current_roll = lerpf(_current_roll, _target_roll, 1.0 - exp(-smoothing_speed * dt))
-
 	# Skip if negligible
 	if absf(_current_pitch) < 0.001 and absf(_current_roll) < 0.001:
 		return

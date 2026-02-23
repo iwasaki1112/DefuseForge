@@ -149,7 +149,6 @@ func _update_action_frame(
 		return
 	_ubik.set_right_hand_target_position(hand_pos)
 	_ubik.set_right_hand_pole_position(pole_pos)
-	_ubik.set_posture_pitch(spine_pitch)
 	_ubik.set_left_hand_ik_enabled(left_ik_enabled)
 
 

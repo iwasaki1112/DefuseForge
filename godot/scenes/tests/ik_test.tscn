@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://d38fcygpbkm0e"]
 
-[ext_resource type="Script" path="res://scripts/tests/ik_test_controller.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://btg826rkix3xu" path="res://scripts/tests/ik_test_controller.gd" id="1_script"]
 
-[node name="IKTest" type="Node3D"]
+[node name="IKTest" type="Node3D" unique_id=1567010518]
 script = ExtResource("1_script")

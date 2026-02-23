@@ -114,9 +114,6 @@ func _process(delta: float) -> void:
 		if anim_ctrl:
 			# Look towards -Z (facing the camera at front view)
 			anim_ctrl.update_animation(Vector3.ZERO, Vector3.BACK, false, delta)
-		# リーンスライダーの値で手動オーバーライド（update_animation後に上書き）
-		if _upper_body_ik_ref:
-			_upper_body_ik_ref.set_posture_lean(deg_to_rad(lean_angle_spin.value))
 
 func _setup_scene(preset: CharacterPreset) -> void:
 	if not preset:

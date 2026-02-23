@@ -12,7 +12,7 @@ class_name GameConstants
 # ========================================================
 # Weapon Visibility
 # ========================================================
-const WEAPON_VISIBILITY_SCALE: float = 1.3  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
+const WEAPON_VISIBILITY_SCALE: float = 1.1  ## 武器モデルの視認性向上スケール（トップダウンTPS用）
 
 # ========================================================
 # Node Names

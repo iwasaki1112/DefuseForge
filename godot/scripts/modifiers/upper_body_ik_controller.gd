@@ -1,12 +1,10 @@
 extends Node
 class_name UpperBodyIKController
 
-## Upper body IK integrated controller
+## Right Arm IK + Left Hand IK controller
 ##
-## 上半身を完全にIKで制御する統合コントローラー。
-## RightArmIK + LeftHandIK + SpinePosture + HeadLookAt + IKRecoil を一元管理。
-## IKのinfluence=1.0がアニメーションポーズを上書きするため、
-## AnimationTreeへの上半身フィルター設定は不要。
+## 右腕TwoBoneIK3D + 左手TwoBoneIK3Dのシンプルな構成。
+## アニメーションが上半身全体を駆動し、IKは腕チェーンのみ上書きする。
 
 # ============================================
 # Enums
@@ -16,8 +14,10 @@ enum IKState { READY, GUN_UP, ACTION, DISABLED }
 # ============================================
 # IK Position Constants (character origin-relative, +Z forward)
 # ============================================
-const RIFLE_READY_HAND := Vector3(-0.19, 1.39, 0.13)
-const RIFLE_READY_POLE := Vector3(-0.22, 1.13, -0.06)
+const RIFLE_READY_HAND := Vector3(-0.173, 1.614, 0.141)
+const RIFLE_READY_POLE := Vector3(-0.230, 1.600, -0.075)
+const RIFLE_READY_LH_OFFSET := Vector3(-0.011, -0.055, -0.062)
+const RIFLE_READY_LH_POLE := Vector3(0.37, -0.31, -0.18)
 const PISTOL_READY_HAND := Vector3(-0.15, 1.36, 0.23)
 const PISTOL_READY_POLE := Vector3(-0.22, 0.99, -0.06)
 const GUN_UP_HAND := Vector3(-0.15, 1.55, 0.03)
@@ -25,10 +25,6 @@ const GUN_UP_POLE := Vector3(-0.22, 1.25, -0.10)
 
 ## 状態遷移速度
 const STATE_TRANSITION_SPEED := 8.0
-## HeadLookAt追従速度
-const HEAD_LOOK_SPEED := 10.0
-## HeadLookAtターゲット距離（前方に配置）
-const HEAD_LOOK_DISTANCE := 5.0
 
 # ============================================
 # References
@@ -38,9 +34,6 @@ var _model: Node3D  ## CharacterModel
 var _right_arm_ik: TwoBoneIK3D
 var _right_hand_target: Marker3D
 var _right_hand_pole: Marker3D
-var _head_look_at: LookAtModifier3D
-var _head_look_target: Marker3D
-var _spine_posture: SpinePostureModifier
 var _recoil_ctrl: IKRecoilController
 var _left_hand_ik: LeftHandIKModifier
 var _ik_action_player: Node = null  ## IKActionPlayer (set externally)
@@ -53,8 +46,8 @@ var _weapon_type := 0  ## CharacterAnimationController.Weapon value
 var _weapon_ik_offset := Vector3.ZERO  ## WeaponPreset.right_hand_ik_offset
 var _current_hand_pos := RIFLE_READY_HAND
 var _current_pole_pos := RIFLE_READY_POLE
-var _aim_direction := Vector3.FORWARD
 var _is_setup := false
+var _manual_override := false
 
 # ============================================
 # Setup
@@ -70,12 +63,6 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 		push_warning("UpperBodyIKController: Skeleton3D is null")
 		return
 
-	# --- SpinePostureModifier ---
-	_spine_posture = SpinePostureModifier.new()
-	_spine_posture.name = "SpinePostureModifier"
-	_spine_posture.active = true
-	_skeleton.add_child(_spine_posture)
-
 	# --- Right Arm IK (TwoBoneIK3D) ---
 	_right_hand_target = Marker3D.new()
 	_right_hand_target.name = "RightHandIKTarget"
@@ -87,8 +74,8 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 
 	_right_arm_ik = TwoBoneIK3D.new()
 	_right_arm_ik.name = "RightArmIK"
-	_right_arm_ik.influence = 1.0
-	_right_arm_ik.active = true
+	_right_arm_ik.influence = 0.0
+	_right_arm_ik.active = false
 	_skeleton.add_child(_right_arm_ik)
 
 	# IK chain setup (must be done after adding to tree)
@@ -99,21 +86,6 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 	_right_arm_ik.set_target_node(0, _right_arm_ik.get_path_to(_right_hand_target))
 	_right_arm_ik.set_pole_node(0, _right_arm_ik.get_path_to(_right_hand_pole))
 
-	# --- HeadLookAt (LookAtModifier3D) ---
-	_head_look_target = Marker3D.new()
-	_head_look_target.name = "HeadLookTarget"
-	_model.add_child(_head_look_target)
-	# 初期位置を前方に配置
-	_head_look_target.position = Vector3(0, 1.5, HEAD_LOOK_DISTANCE)
-
-	_head_look_at = LookAtModifier3D.new()
-	_head_look_at.name = "HeadLookAt"
-	_head_look_at.active = true
-	_head_look_at.bone_name = GameConstants.BONE_HEAD
-	_skeleton.add_child(_head_look_at)
-	# target_nodeはツリーに追加後に設定（get_path_toにcommon_parentが必要）
-	_head_look_at.target_node = _head_look_at.get_path_to(_head_look_target)
-
 	# --- IKRecoilController ---
 	_recoil_ctrl = IKRecoilController.new()
 	_recoil_ctrl.name = "IKRecoilController"
@@ -123,6 +95,9 @@ func setup(skeleton: Skeleton3D, model: Node3D, left_hand_ik: LeftHandIKModifier
 	_current_hand_pos = RIFLE_READY_HAND
 	_current_pole_pos = RIFLE_READY_POLE
 	_update_ik_targets_immediate()
+
+	# LeftHandIK TwoBoneIK3D を RightArmIK の後に配置
+	_fix_modifier_order()
 
 	_is_setup = true
 
@@ -159,28 +134,10 @@ func set_weapon_ik_offset(offset: Vector3) -> void:
 	_weapon_ik_offset = offset
 
 
-## エイム方向を設定
-func set_aim_direction(direction: Vector3) -> void:
-	if direction.length_squared() > 0.001:
-		_aim_direction = direction.normalized()
-
-
 ## リコイルを発動
 func trigger_recoil(strength: float) -> void:
 	if _recoil_ctrl:
 		_recoil_ctrl.trigger_recoil(strength)
-
-
-## 姿勢リーンを設定（SpinePostureModifierに伝播）
-func set_posture_lean(roll: float) -> void:
-	if _spine_posture:
-		_spine_posture.set_roll(roll)
-
-
-## 姿勢ピッチを設定（エイム前傾用）
-func set_posture_pitch(pitch: float) -> void:
-	if _spine_posture:
-		_spine_posture.set_pitch(pitch)
 
 
 ## 左手グリップソースを設定
@@ -193,6 +150,32 @@ func set_left_hand_grip(grip_node: Node3D) -> void:
 			_left_hand_ik.set_enabled(true)
 	else:
 		_left_hand_ik.clear_grip_source()
+
+
+## 左手グリップ位置オフセットを設定（武器ローカル空間）
+func set_left_hand_grip_offset(offset: Vector3) -> void:
+	if _left_hand_ik:
+		_left_hand_ik.set_grip_offset(offset)
+
+
+## 左手グリップ位置オフセットを取得
+func get_left_hand_grip_offset() -> Vector3:
+	if _left_hand_ik:
+		return _left_hand_ik.get_grip_offset()
+	return Vector3.ZERO
+
+
+## 左肘ポールオフセットを設定（キャラクター空間XYZ）
+func set_left_hand_pole_offset(offset: Vector3) -> void:
+	if _left_hand_ik:
+		_left_hand_ik.set_pole_offset(offset)
+
+
+## 左肘ポールオフセットを取得
+func get_left_hand_pole_offset() -> Vector3:
+	if _left_hand_ik:
+		return _left_hand_ik.get_pole_offset()
+	return Vector3(0.3, 0.0, 0.0)
 
 
 ## 左手IKの有効/無効を直接制御
@@ -250,6 +233,11 @@ func get_left_hand_ik() -> LeftHandIKModifier:
 	return _left_hand_ik
 
 
+## 手動オーバーライドモード（テスト用: update()内のlerp計算をスキップ）
+func set_manual_override(enabled: bool) -> void:
+	_manual_override = enabled
+
+
 ## セットアップ済みかどうか
 func is_setup() -> bool:
 	return _is_setup
@@ -271,29 +259,26 @@ func update(delta: float) -> void:
 	# 通常のターゲット計算をスキップ
 	if _state == IKState.ACTION:
 		_update_ik_targets(delta)
-		_update_head_look_target(delta)
 		return
 
-	# Calculate target hand/pole positions based on state
-	var target_hand := _get_state_hand_position()
-	var target_pole := _get_state_pole_position()
+	if not _manual_override:
+		# Calculate target hand/pole positions based on state
+		var target_hand := _get_state_hand_position()
+		var target_pole := _get_state_pole_position()
 
-	# Add weapon-specific offset
-	target_hand += _weapon_ik_offset
+		# Add weapon-specific offset
+		target_hand += _weapon_ik_offset
 
-	# Add recoil offset
-	if _recoil_ctrl:
-		target_hand += _recoil_ctrl.get_recoil_offset()
+		# Add recoil offset
+		if _recoil_ctrl:
+			target_hand += _recoil_ctrl.get_recoil_offset()
 
-	# Smooth transition
-	_current_hand_pos = _current_hand_pos.lerp(target_hand, 1.0 - exp(-STATE_TRANSITION_SPEED * delta))
-	_current_pole_pos = _current_pole_pos.lerp(target_pole, 1.0 - exp(-STATE_TRANSITION_SPEED * delta))
+		# Smooth transition
+		_current_hand_pos = _current_hand_pos.lerp(target_hand, 1.0 - exp(-STATE_TRANSITION_SPEED * delta))
+		_current_pole_pos = _current_pole_pos.lerp(target_pole, 1.0 - exp(-STATE_TRANSITION_SPEED * delta))
 
-	# Apply to IK targets
+	# Apply to IK targets (manual_override時もここは実行)
 	_update_ik_targets(delta)
-
-	# Update head look target
-	_update_head_look_target(delta)
 
 
 # ============================================
@@ -346,30 +331,22 @@ func _update_ik_targets_immediate() -> void:
 	_right_hand_pole.global_position = char_pos + model_basis * _current_pole_pos
 
 
-## HeadLookAtターゲット位置を更新
-func _update_head_look_target(_delta: float) -> void:
-	if not _model or not _head_look_target:
+## SkeletonModifier3Dの処理順序を修正
+## LeftHandIKのTwoBoneIK3DはLeftHandIKModifier.setup()で先に追加されるため、
+## RightArmIKより前に処理されてしまう。RightArmIKの後に再配置する。
+func _fix_modifier_order() -> void:
+	if not _skeleton or not _left_hand_ik or not _right_arm_ik:
 		return
-
-	# エイム方向にターゲットを配置（モデルのローカル空間で+Z前方）
-	var aim_local := _model.global_transform.basis.inverse() * _aim_direction
-	aim_local.y = 0
-	if aim_local.length_squared() < 0.001:
-		aim_local = Vector3.FORWARD
-	aim_local = aim_local.normalized()
-
-	var target_pos := Vector3(aim_local.x, 1.5, aim_local.z) * HEAD_LOOK_DISTANCE
-	_head_look_target.position = _head_look_target.position.lerp(target_pos, 1.0 - exp(-HEAD_LOOK_SPEED * _delta))
+	var left_ik_node := _left_hand_ik.get_ik_node()
+	if not left_ik_node:
+		return
+	# LeftHandIK TwoBoneIK3D を RightArmIK の後に配置
+	_skeleton.move_child(left_ik_node, _right_arm_ik.get_index() + 1)
 
 
 ## IKノードの有効/無効を設定
-func _set_ik_active(active: bool) -> void:
-	if _right_arm_ik:
-		_right_arm_ik.influence = 1.0 if active else 0.0
-	if _head_look_at:
-		_head_look_at.influence = 1.0 if active else 0.0
-	if _spine_posture:
-		_spine_posture.active = active
+func _set_ik_active(_active: bool) -> void:
+	pass  # 右腕IKは現在無効化中
 
 
 # ============================================
@@ -377,13 +354,8 @@ func _set_ik_active(active: bool) -> void:
 # ============================================
 
 func _exit_tree() -> void:
-	# Marker3Dとmodifierはskeletonの子なので、skeletonが解放されれば自動的に解放される
-	# ここでは参照のクリアのみ
 	_right_arm_ik = null
 	_right_hand_target = null
 	_right_hand_pole = null
-	_head_look_at = null
-	_head_look_target = null
-	_spine_posture = null
 	_recoil_ctrl = null
 	_left_hand_ik = null

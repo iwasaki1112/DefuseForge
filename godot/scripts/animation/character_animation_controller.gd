@@ -1,7 +1,7 @@
 extends Node
 class_name CharacterAnimationController
 ## Character Animation Controller API
-## Upper body: fully IK-controlled (UpperBodyIKController)
+## Upper body: animation-driven + arm IK override (TwoBoneIK3D)
 ## Lower body: 8-direction BlendSpace2D animation via AnimationTree
 ## AnimationTree structure: output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
 
@@ -30,16 +30,6 @@ signal melee_finished()     # 近接攻撃アニメーション完了
 @export var pistol_fire_rate := 0.2
 @export var recoil_recovery := 10.0
 
-@export_group("Lean")
-@export var max_lean_degrees := 10.0
-@export var lean_speed := 10.0
-@export var lean_deadzone := 0.15
-
-@export_group("Turn Lean")
-@export var turn_lean_degrees := 15.0    ## 方向転換時の最大リーン角度（度）
-@export var turn_lean_smoothing := 15.0  ## 角速度のスムージング速度
-@export var turn_lean_angular_ref := 1.5 ## 最大リーンとなる角速度(rad/s)
-
 @export_group("Model Offset")
 @export var model_y_offset := 0.40  ## Hips高さ補正（新アニメーション vs 旧アニメーションの差 + 微調整）
 
@@ -58,16 +48,13 @@ var _is_opening_door := false
 var _is_talking := false
 var _is_meleeing := false  ## 近接攻撃アニメーション再生中
 var _aim_direction := Vector3.FORWARD  # 現在のエイム方向（視界計算用）
-var _lean_amount := 0.0  # ロール角（ラジアン）
-var _prev_aim_for_turn := Vector3.FORWARD  # ターンリーン用: 前フレームのエイム方向
-var _smoothed_angular_vel := 0.0  # スムージング済み角速度(rad/s)
 var _remote_last_fire_state := false  # リモート同期用: 前回のfire状態
 var _is_sprinting := false
 var _is_gun_down := false  ## 前方に壁/味方がいて武器を上げている状態
 
 # Speed constants
 const WALK_SPEED := 2.0
-const SPRINT_SPEED := 6.0
+const SPRINT_SPEED := 4.0
 
 # Per-direction natural walk speeds (m/s) from root motion data
 # 武器非依存（上半身IKにより武器別差分不要）
@@ -169,8 +156,6 @@ func update_animation(
 	if aim_direction.length_squared() > 0.001:
 		_aim_direction = aim_direction.normalized()
 
-	_update_lean(movement_direction, aim_direction, delta)
-
 	# Update model rotation
 	_update_model_rotation(aim_direction, delta)
 
@@ -185,7 +170,6 @@ func update_animation(
 
 	# Update upper body IK
 	if _upper_body_ik:
-		_upper_body_ik.set_aim_direction(_aim_direction)
 		_upper_body_ik.update(delta)
 
 ## Set weapon type
@@ -202,6 +186,7 @@ func set_weapon(weapon: Weapon) -> void:
 func set_left_hand_grip(grip_node: Node3D) -> void:
 	if _upper_body_ik:
 		_upper_body_ik.set_left_hand_grip(grip_node)
+
 
 ## Set gun down state (weapon raised due to nearby wall/friendly)
 func set_gun_down(value: bool) -> void:
@@ -928,7 +913,7 @@ func _setup_animation_loops() -> void:
 ## AnimationTree構造（武器非依存・統一ロコモーション）:
 ## output → TimeScale → SpeedBlend → IdleBlend → WalkBlend(単一BlendSpace2D)
 ##                                     └→ Sprint(単一アニメーション)
-## 上半身はIK(influence=1.0)でアニメーションポーズを上書きするため、フィルター不要
+## アニメーションが全身を駆動、TwoBoneIK3D(influence=1.0)が腕チェーンのみ上書き
 ## 武器切替でロコモーションアニメーションは変化しない（IKのみ変化）
 func _setup_animation_tree() -> void:
 	# Create or get AnimationTree
@@ -1041,47 +1026,6 @@ func _update_model_rotation(aim_direction: Vector3, delta: float) -> void:
 		var current_quat := Quaternion(_model.transform.basis)
 		var new_quat := current_quat.slerp(target_quat, rotation_speed * delta)
 		_model.transform.basis = Basis(new_quat)
-
-func _update_lean(movement_direction: Vector3, aim_direction: Vector3, delta: float) -> void:
-	var target_lean := 0.0
-
-	# --- 移動方向ベースのリーン ---
-	var move_dir := movement_direction
-	move_dir.y = 0
-	if move_dir.length() > 0.1:
-		var look_dir := aim_direction
-		look_dir.y = 0
-		if look_dir.length() > 0.1:
-			var forward := -look_dir.normalized()
-			var right := forward.cross(Vector3.UP).normalized()
-			var side_amount := move_dir.normalized().dot(right)
-			if absf(side_amount) > lean_deadzone:
-				var max_lean := deg_to_rad(max_lean_degrees)
-				target_lean = clampf(side_amount, -1.0, 1.0) * max_lean
-
-	# --- 方向転換ベースのリーン（ターンリーン） ---
-	var aim_dir := aim_direction
-	aim_dir.y = 0
-	if aim_dir.length_squared() > 0.001 and _prev_aim_for_turn.length_squared() > 0.001:
-		var cur := aim_dir.normalized()
-		var prev := _prev_aim_for_turn.normalized()
-		var angle_diff := prev.signed_angle_to(cur, Vector3.UP)
-		var angular_vel := angle_diff / maxf(delta, 0.001)
-		# 角速度のみスムージング（ノイズ除去）
-		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, angular_vel, 1.0 - exp(-turn_lean_smoothing * delta))
-	else:
-		_smoothed_angular_vel = lerpf(_smoothed_angular_vel, 0.0, 1.0 - exp(-turn_lean_smoothing * delta))
-	# 回転方向にリーン、直接target_leanに加算
-	var max_turn := deg_to_rad(turn_lean_degrees)
-	target_lean += clampf(_smoothed_angular_vel / turn_lean_angular_ref, -1.0, 1.0) * max_turn
-
-	if aim_direction.length_squared() > 0.001:
-		_prev_aim_for_turn = aim_direction
-
-	_lean_amount = lerpf(_lean_amount, target_lean, 1.0 - exp(-lean_speed * delta))
-	# SpinePostureModifierにリーンを伝播
-	if _upper_body_ik:
-		_upper_body_ik.set_posture_lean(_lean_amount)
 
 func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	var move_dir := movement_direction
