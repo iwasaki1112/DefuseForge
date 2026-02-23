@@ -32,6 +32,7 @@ const PRESET_FILES := [
 	"res://data/characters/bravo.tres",
 	"res://data/characters/ares.tres",
 	"res://data/characters/dummy_ct.tres",
+	"res://data/characters/dummy2_ct.tres",
 	"res://data/characters/dummy_t.tres",
 	"res://data/characters/hostage_lucas.tres",
 ]

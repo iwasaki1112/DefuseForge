@@ -13,7 +13,7 @@ extends Node3D
 # Constants
 # ============================================
 const GROUND_SIZE := 50.0
-const CHARACTER_PRESET_ID := "dummy_ct"
+const CHARACTER_PRESET_ID := "dummy2_ct"
 const ENEMY_PRESET_ID := "ares"
 const DEFAULT_WEAPON_ID := "ak47"
 const DEFAULT_ENVIRONMENT_PRESET := "res://data/environment/default.tres"
