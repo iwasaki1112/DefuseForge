@@ -50,6 +50,16 @@ var _axis_gizmo: Node3D = null
 var _sprint_check: CheckBox = null
 var _speed_label: Label = null
 var _mouse_aim_enabled: bool = true
+var _posture_modifier: SpinePostureModifier = null
+var _head_modifier: HeadRotationModifier = null
+
+# Posture slider references
+var _posture_pitch_slider: HSlider = null
+var _posture_pitch_spin: SpinBox = null
+var _head_pitch_slider: HSlider = null
+var _head_pitch_spin: SpinBox = null
+var _head_yaw_slider: HSlider = null
+var _head_yaw_spin: SpinBox = null
 
 # Weapon tab references
 var _wp_offset_sliders: Array[HSlider] = []   # attach_offset [X, Y, Z]
@@ -469,6 +479,110 @@ func _setup_ik_panel() -> void:
 	vbox.add_theme_constant_override("separation", 4)
 	margin.add_child(vbox)
 
+	# --- Posture (猫背) ---
+	_add_section_label(vbox, "Posture (Pitch)")
+	var posture_hbox := HBoxContainer.new()
+	posture_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(posture_hbox)
+
+	_posture_pitch_slider = HSlider.new()
+	_posture_pitch_slider.min_value = -0.3
+	_posture_pitch_slider.max_value = 0.5
+	_posture_pitch_slider.step = 0.01
+	_posture_pitch_slider.value = 0.15
+	_posture_pitch_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_posture_pitch_slider.custom_minimum_size.x = 100
+	posture_hbox.add_child(_posture_pitch_slider)
+
+	_posture_pitch_spin = SpinBox.new()
+	_posture_pitch_spin.min_value = -0.3
+	_posture_pitch_spin.max_value = 0.5
+	_posture_pitch_spin.step = 0.01
+	_posture_pitch_spin.value = 0.15
+	_posture_pitch_spin.custom_minimum_size.x = 70
+	_posture_pitch_spin.add_theme_font_size_override("font_size", 11)
+	posture_hbox.add_child(_posture_pitch_spin)
+
+	_connect_slider_spin(_posture_pitch_slider, _posture_pitch_spin, func(v: float) -> void:
+		if _posture_modifier:
+			_posture_modifier.set_pitch(v)
+	)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- Head Rotation (首) ---
+	_add_section_label(vbox, "Head Rotation")
+
+	# Pitch (うなずき)
+	var head_pitch_hbox := HBoxContainer.new()
+	head_pitch_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(head_pitch_hbox)
+
+	var hp_label := Label.new()
+	hp_label.text = "Pitch"
+	hp_label.custom_minimum_size.x = 36
+	hp_label.add_theme_font_size_override("font_size", 12)
+	head_pitch_hbox.add_child(hp_label)
+
+	_head_pitch_slider = HSlider.new()
+	_head_pitch_slider.min_value = -0.5
+	_head_pitch_slider.max_value = 0.5
+	_head_pitch_slider.step = 0.01
+	_head_pitch_slider.value = 0.0
+	_head_pitch_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_head_pitch_slider.custom_minimum_size.x = 80
+	head_pitch_hbox.add_child(_head_pitch_slider)
+
+	_head_pitch_spin = SpinBox.new()
+	_head_pitch_spin.min_value = -0.5
+	_head_pitch_spin.max_value = 0.5
+	_head_pitch_spin.step = 0.01
+	_head_pitch_spin.value = 0.0
+	_head_pitch_spin.custom_minimum_size.x = 70
+	_head_pitch_spin.add_theme_font_size_override("font_size", 11)
+	head_pitch_hbox.add_child(_head_pitch_spin)
+
+	_connect_slider_spin(_head_pitch_slider, _head_pitch_spin, func(v: float) -> void:
+		if _head_modifier:
+			_head_modifier.set_pitch(v)
+	)
+
+	# Yaw (首振り)
+	var head_yaw_hbox := HBoxContainer.new()
+	head_yaw_hbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(head_yaw_hbox)
+
+	var hy_label := Label.new()
+	hy_label.text = "Yaw"
+	hy_label.custom_minimum_size.x = 36
+	hy_label.add_theme_font_size_override("font_size", 12)
+	head_yaw_hbox.add_child(hy_label)
+
+	_head_yaw_slider = HSlider.new()
+	_head_yaw_slider.min_value = -0.8
+	_head_yaw_slider.max_value = 0.8
+	_head_yaw_slider.step = 0.01
+	_head_yaw_slider.value = 0.0
+	_head_yaw_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_head_yaw_slider.custom_minimum_size.x = 80
+	head_yaw_hbox.add_child(_head_yaw_slider)
+
+	_head_yaw_spin = SpinBox.new()
+	_head_yaw_spin.min_value = -0.8
+	_head_yaw_spin.max_value = 0.8
+	_head_yaw_spin.step = 0.01
+	_head_yaw_spin.value = 0.0
+	_head_yaw_spin.custom_minimum_size.x = 70
+	_head_yaw_spin.add_theme_font_size_override("font_size", 11)
+	head_yaw_hbox.add_child(_head_yaw_spin)
+
+	_connect_slider_spin(_head_yaw_slider, _head_yaw_spin, func(v: float) -> void:
+		if _head_modifier:
+			_head_modifier.set_yaw(v)
+	)
+
+	vbox.add_child(HSeparator.new())
+
 	# --- State selector ---
 	_add_section_label(vbox, "State")
 	_state_option = OptionButton.new()
@@ -704,8 +818,15 @@ func _on_copy_values_pressed() -> void:
 		_lh_pole_sliders[2].value if _lh_pole_sliders.size() > 2 else 0.0,
 	)
 
-	var text := "# %s %s\nLH_OFFSET := Vector3(%.3f, %.3f, %.3f)\nLH_POLE := Vector3(%.2f, %.2f, %.2f)" % [
+	var posture_pitch := _posture_pitch_slider.value if _posture_pitch_slider else 0.0
+	var head_pitch := _head_pitch_slider.value if _head_pitch_slider else 0.0
+	var head_yaw := _head_yaw_slider.value if _head_yaw_slider else 0.0
+
+	var text := "# %s %s\nPOSTURE_PITCH := %.2f\nHEAD_PITCH := %.2f\nHEAD_YAW := %.2f\nLH_OFFSET := Vector3(%.3f, %.3f, %.3f)\nLH_POLE := Vector3(%.2f, %.2f, %.2f)" % [
 		weapon_name, state_name,
+		posture_pitch,
+		head_pitch,
+		head_yaw,
 		lh_offset.x, lh_offset.y, lh_offset.z,
 		lh_pole_val.x, lh_pole_val.y, lh_pole_val.z,
 	]
@@ -949,6 +1070,8 @@ func _create_character(preset: Resource, spawn_pos: Vector3) -> GameCharacter:
 		if skel:
 			model.position.y = -skel.position.y
 		model.visible = true
+		# SpinePostureModifierをセットアップ（腕IKより前に処理）
+		_setup_posture_modifier(skel)
 		# 全定数値をスライダーとIKに反映
 		_sync_sliders_to_current_state()
 		_sync_weapon_sliders()
@@ -996,6 +1119,28 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 		if result:
 			return result
 	return null
+
+
+func _setup_posture_modifier(skel: Skeleton3D) -> void:
+	if not skel:
+		return
+	# SpinePostureModifier（背骨前傾）
+	_posture_modifier = SpinePostureModifier.new()
+	_posture_modifier.name = "SpinePostureModifier"
+	skel.add_child(_posture_modifier)
+	skel.move_child(_posture_modifier, 0)
+	var default_pitch := 0.15
+	_posture_modifier.set_pitch(default_pitch)
+	if _posture_pitch_slider:
+		_posture_pitch_slider.set_value_no_signal(default_pitch)
+	if _posture_pitch_spin:
+		_posture_pitch_spin.set_value_no_signal(default_pitch)
+
+	# HeadRotationModifier（首回転）— SpinePostureの直後に配置
+	_head_modifier = HeadRotationModifier.new()
+	_head_modifier.name = "HeadRotationModifier"
+	skel.add_child(_head_modifier)
+	skel.move_child(_head_modifier, 1)
 
 
 func _find_skeleton_in(node: Node) -> Skeleton3D:
