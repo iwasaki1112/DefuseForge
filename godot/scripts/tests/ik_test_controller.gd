@@ -47,7 +47,6 @@ var _weapon_list: Array = []
 var _slider_drag_count: int = 0
 var _ik_panel: PanelContainer = null
 var _axis_gizmo: Node3D = null
-var _sprint_check: CheckBox = null
 var _speed_label: Label = null
 var _mouse_aim_enabled: bool = true
 var _posture_modifier: SpinePostureModifier = null
@@ -417,15 +416,6 @@ func _setup_sprint_controls() -> void:
 	sprint_hbox.position = Vector2(10, 40)
 	sprint_hbox.add_theme_constant_override("separation", 12)
 	_ui_layer.add_child(sprint_hbox)
-
-	_sprint_check = CheckBox.new()
-	_sprint_check.text = "Sprint (Shift)"
-	_sprint_check.add_theme_font_size_override("font_size", 14)
-	sprint_hbox.add_child(_sprint_check)
-	_sprint_check.toggled.connect(func(pressed: bool) -> void:
-		if _tps_controller:
-			_tps_controller.set_sprinting(pressed)
-	)
 
 	_speed_label = Label.new()
 	_speed_label.text = "Speed: 0.0 m/s"
