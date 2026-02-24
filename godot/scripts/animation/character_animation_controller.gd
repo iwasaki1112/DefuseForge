@@ -2,14 +2,13 @@ extends Node
 class_name CharacterAnimationController
 ## Character Animation Controller API
 ## Upper body: animation-driven + arm IK override (TwoBoneIK3D)
-## Lower body: BlendSpace2D animation via AnimationTree
-## Blend modes: 8-direction / 4-direction+SpineYaw / 4-direction+SpineIK(CCDIK3D)
+## Lower body: 4方向BlendSpace2D + SpineIK(CCDIK3D)で8方向ストレイフを再現
 ## AnimationTree structure: output → TimeScale → SpeedBlend → IdleBlend → WalkBlend
 
 # Enums
 enum Weapon { NONE, RIFLE, PISTOL }
 enum HitDirection { FRONT, BACK, LEFT, RIGHT }
-enum BlendMode { EIGHT_DIR, FOUR_DIR_SPINE, FOUR_DIR_IK }
+enum BlendMode { FOUR_DIR_IK }
 
 # Signals
 signal fired()
@@ -58,13 +57,10 @@ var _is_gun_down := false  ## 前方に壁/味方がいて武器を下げてい�
 const WALK_SPEED := 2.0
 const SPRINT_SPEED := 4.0
 
-# Per-direction natural walk speeds (m/s) from root motion data
-# 武器非依存（上半身IKにより武器別差分不要）
+# Per-direction natural walk speeds (m/s) — 4方向
 const ANIM_SPEEDS := {
 	"fwd": 2.016, "bwd": 1.845,
 	"left": 1.663, "right": 2.142,
-	"fwd_left": 1.724, "fwd_right": 2.016,
-	"bwd_left": 1.663, "bwd_right": 1.724,
 	"sprint": 4.299,
 }
 
@@ -103,9 +99,7 @@ const MELEE_ANIM := GameConstants.ANIM_RIFLE_MELEE
 const MELEE_IMPACT_TIME := 0.4  # インパクトタイミング（秒）
 const MELEE_IK_RESUME_TIME := 0.8  # IKブレンドイン開始
 
-# Blend mode
-var _blend_mode := BlendMode.EIGHT_DIR
-var _spine_posture: SpinePostureModifier = null
+# Spine IK
 var _spine_ik: SpineIKController = null
 
 # Blend values
@@ -115,17 +109,9 @@ var _speed_blend := 0.0     # 0=walk, 1=sprint
 var _fire_cooldown := 0.0
 var _quantized_angle := 0.0  # 現在の量子化済み角度（ヒステリシス用）
 
-# 4方向モード用速度テーブル
-const ANIM_SPEEDS_4DIR := {
-	"fwd": 2.016, "bwd": 1.845,
-	"left": 1.663, "right": 2.142,
-	"sprint": 4.299,
-}
-
 # Blend smoothing
 const BLEND_SMOOTH := 10.0
-const QUANTIZE_HYSTERESIS := deg_to_rad(10.0)  # 量子化切替の不感帯（±10度）
-const QUANTIZE_HYSTERESIS_4DIR := deg_to_rad(10.0)  # 4方向モードの90度量子化不感帯
+const QUANTIZE_HYSTERESIS := deg_to_rad(3.0)  # 90度量子化切替の不感帯（大きすぎると間違った方向に固着する）
 
 
 #region Public API
@@ -265,29 +251,11 @@ func set_left_hand_pole_offset(offset: Vector3) -> void:
 	if _upper_body_ik:
 		_upper_body_ik.set_left_hand_pole_offset(offset)
 
-## ブレンドモードを設定（8方向 / 4方向+SpineYaw / 4方向+SpineIK）
-func set_blend_mode(mode: BlendMode) -> void:
-	if _blend_mode == mode:
-		return
-	_blend_mode = mode
-	_rebuild_walk_blend_space()
-	# モード切替時にスパインyawをリセット
-	if _spine_posture:
-		_spine_posture.set_yaw(0.0)
-	if _spine_ik:
-		_spine_ik.set_yaw(0.0)
-		_spine_ik.set_enabled(mode == BlendMode.FOUR_DIR_IK)
-	_quantized_angle = 0.0
-
-
-## SpinePostureModifierを登録（4方向+SpineYawモードで使用）
-func set_spine_posture_modifier(modifier: SpinePostureModifier) -> void:
-	_spine_posture = modifier
-
-
-## SpineIKControllerを登録（4方向+SpineIKモードで使用）
+## SpineIKControllerを登録して有効化
 func set_spine_ik_controller(controller: SpineIKController) -> void:
 	_spine_ik = controller
+	if _spine_ik:
+		_spine_ik.set_enabled(true)
 
 
 ## Get current movement speed based on state and direction
@@ -885,45 +853,10 @@ func _resolve_anim_name(anim_name: String) -> String:
 		return fallback
 	return anim_name
 
-## ブレンド位置から方向別アニメーション速度を計算（重み付き補間）
+## ブレンド位置から方向別アニメーション速度を計算（4方向）
 func _get_blended_anim_speed(blend_pos: Vector2) -> float:
 	var dir := blend_pos.normalized() if blend_pos.length() > 0.01 else Vector2.ZERO
-	if _blend_mode == BlendMode.FOUR_DIR_SPINE or _blend_mode == BlendMode.FOUR_DIR_IK:
-		return _get_blended_anim_speed_4dir(dir)
-
-	var s := _get_anim_speeds()
-	if dir == Vector2.ZERO:
-		return s["fwd"]
-
-	var directions: Array[Vector2] = [
-		Vector2(0, 1), Vector2(0, -1),
-		Vector2(-1, 0), Vector2(1, 0),
-		Vector2(-0.707, 0.707), Vector2(0.707, 0.707),
-		Vector2(-0.707, -0.707), Vector2(0.707, -0.707),
-	]
-	var speeds: Array[float] = [
-		s["fwd"], s["bwd"],
-		s["left"], s["right"],
-		s["fwd_left"], s["fwd_right"],
-		s["bwd_left"], s["bwd_right"],
-	]
-
-	var total_weight := 0.0
-	var blended_speed := 0.0
-	for i in range(directions.size()):
-		var w := maxf(0.0, dir.dot(directions[i].normalized()))
-		w = w * w
-		total_weight += w
-		blended_speed += w * speeds[i]
-
-	if total_weight > 0.001:
-		return blended_speed / total_weight
-	return s["fwd"]
-
-
-## 4方向モード用の速度補間
-func _get_blended_anim_speed_4dir(dir: Vector2) -> float:
-	var s := ANIM_SPEEDS_4DIR
+	var s := ANIM_SPEEDS
 	if dir == Vector2.ZERO:
 		return s["fwd"]
 
@@ -1073,8 +1006,8 @@ func _setup_animation_tree() -> void:
 
 	var blend_tree := AnimationNodeBlendTree.new()
 
-	# --- Walk BlendSpace2D (武器非依存、統一ロコモーション) ---
-	var walk_blend_space := _create_walk_blend_space()
+	# --- Walk BlendSpace2D (4方向: F/R/B/L) ---
+	var walk_blend_space := _create_walk_blend_space_4dir()
 
 	# --- Idle animation ---
 	var idle_anim := AnimationNodeAnimation.new()
@@ -1149,40 +1082,6 @@ func _setup_animation_tree() -> void:
 	_anim_tree.active = true
 
 
-## WalkBlend用BlendSpace2D作成（武器非依存・統一ロコモーション）
-## Forward=(0,1), Backward=(0,-1) (animation_testの座標系)
-func _create_walk_blend_space() -> AnimationNodeBlendSpace2D:
-	var blend_space := AnimationNodeBlendSpace2D.new()
-	blend_space.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
-	blend_space.auto_triangles = true
-	blend_space.min_space = Vector2(-1, -1)
-	blend_space.max_space = Vector2(1, 1)
-	blend_space.sync = true
-
-	# 8方向: position → animation name
-	# Forward=(0,1), FwdRight=(0.707,0.707), Right=(1,0), BwdRight=(0.707,-0.707)
-	# Backward=(0,-1), BwdLeft=(-0.707,-0.707), Left=(-1,0), FwdLeft=(-0.707,0.707)
-	var walk_points := {
-		Vector2(0, 1): _resolve_anim_name("game_walk_forward"),
-		Vector2(0.707, 0.707): _resolve_anim_name("game_strafe_right_45"),
-		Vector2(1, 0): _resolve_anim_name("game_strafe_right"),
-		Vector2(0.707, -0.707): _resolve_anim_name("game_strafe_right_135"),
-		Vector2(0, -1): _resolve_anim_name("game_walk_backward"),
-		Vector2(-0.707, -0.707): _resolve_anim_name("game_strafe_left_135"),
-		Vector2(-1, 0): _resolve_anim_name("game_strafe_left"),
-		Vector2(-0.707, 0.707): _resolve_anim_name("game_strafe_left_45"),
-	}
-
-	for pos in walk_points:
-		var anim_name: String = walk_points[pos]
-		if _anim_player.has_animation(anim_name):
-			var anim_node := AnimationNodeAnimation.new()
-			anim_node.animation = anim_name
-			blend_space.add_blend_point(anim_node, pos)
-
-	return blend_space
-
-
 ## 4方向WalkBlend用BlendSpace2D作成
 ## F=(0,1), R=(1,0), B=(0,-1), L=(-1,0) の4点のみ
 func _create_walk_blend_space_4dir() -> AnimationNodeBlendSpace2D:
@@ -1210,7 +1109,7 @@ func _create_walk_blend_space_4dir() -> AnimationNodeBlendSpace2D:
 	return blend_space
 
 
-## ランタイムでWalkBlendノードを差し替え（BlendMode切替時）
+## ランタイムでWalkBlendノードを4方向で再構築
 func _rebuild_walk_blend_space() -> void:
 	if not _anim_tree or not _anim_tree.tree_root:
 		return
@@ -1218,18 +1117,11 @@ func _rebuild_walk_blend_space() -> void:
 	if not blend_tree:
 		return
 
-	# 既存WalkBlendを削除
 	if blend_tree.has_node("WalkBlend"):
 		blend_tree.disconnect_node("IdleBlend", 1)
 		blend_tree.remove_node("WalkBlend")
 
-	# 新しいBlendSpaceを作成して接続
-	var new_blend_space: AnimationNodeBlendSpace2D
-	if _blend_mode == BlendMode.FOUR_DIR_SPINE or _blend_mode == BlendMode.FOUR_DIR_IK:
-		new_blend_space = _create_walk_blend_space_4dir()
-	else:
-		new_blend_space = _create_walk_blend_space()
-
+	var new_blend_space := _create_walk_blend_space_4dir()
 	blend_tree.add_node("WalkBlend", new_blend_space, Vector2(-400, 300))
 	blend_tree.connect_node("IdleBlend", 1, "WalkBlend")
 	_anim_tree.clear_caches()
@@ -1255,17 +1147,16 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 	move_dir.y = 0
 
 	if move_dir.length() > 0.1:
-		# ターゲットのエイム方向を使用（SLERP途中のモデル回転ではなく）
-		var char_forward := _aim_direction
+		# モデルの実際の現在の向きを使用（SLERP途中の値）
+		# ターゲット方向ではなく実際の回転を参照しないと、足と体の向きがズレる
+		var char_forward := _model.global_transform.basis.z if _model else _aim_direction
 		char_forward.y = 0
 		if char_forward.length_squared() < 0.001:
-			char_forward = _model.global_transform.basis.z
+			char_forward = _aim_direction
 		var raw_angle := char_forward.signed_angle_to(move_dir.normalized(), Vector3.UP)
 
-		if _blend_mode == BlendMode.EIGHT_DIR:
-			_update_strafe_blend_8dir(raw_angle, delta)
-		else:
-			_update_strafe_blend_4dir(raw_angle, delta)
+		# 常に4方向ブレンドを使用（8方向は無効化）
+		_update_strafe_blend_4dir(raw_angle, delta)
 
 		_movement_blend = lerpf(_movement_blend, 1.0, 1.0 - exp(-10.0 * delta))
 	else:
@@ -1275,57 +1166,43 @@ func _update_strafe_blend(movement_direction: Vector3, delta: float) -> void:
 			_input_dir = Vector2.ZERO
 			_quantized_angle = 0.0
 		# 停止時: スパインyawを戻す
-		if _blend_mode != BlendMode.EIGHT_DIR:
-			if _spine_posture:
-				_spine_posture.set_yaw(0.0)
-			if _spine_ik:
-				_spine_ik.set_yaw(0.0)
+		if _spine_ik:
+			_spine_ik.set_yaw(0.0)
 
 
-## 8方向ブレンド（従来方式）
-func _update_strafe_blend_8dir(raw_angle: float, delta: float) -> void:
-	# 45度量子化 + ヒステリシス（境界付近でのチャタリング防止）
-	var nearest: float = round(raw_angle / (PI / 4.0)) * (PI / 4.0)
+
+## 角度を90°単位に量子化。境界（±45°,±135°）では FORWARD > LATERAL > BACKWARD の優先順位。
+## round()は±135°でBACKWARDを選ぶため、twin-stickで不自然な後方歩行が発生する問題を解消。
+func _quantize_nearest(angle: float) -> float:
+	var candidates: Array[float] = [0.0, PI / 2.0, -PI / 2.0, PI]  # F, L, R, B 優先順
+	var best := candidates[0]
+	var best_dist := absf(angle_difference(angle, best))
+	for i in range(1, candidates.size()):
+		var dist := absf(angle_difference(angle, candidates[i]))
+		if dist < best_dist - 0.01:  # 同距離なら先の候補（高優先）を維持
+			best = candidates[i]
+			best_dist = dist
+	return best
+
+## 4方向ブレンド + SpineIKで残差角度を補償
+func _update_strafe_blend_4dir(raw_angle: float, _delta: float) -> void:
+	# 90度量子化（優先: FORWARD > LATERAL > BACKWARD）+ ヒステリシス
+	var nearest := _quantize_nearest(raw_angle)
 	var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
-	if diff_from_current > (PI / 8.0) + QUANTIZE_HYSTERESIS:
-		# 現在の量子化角度から十分離れた場合のみ切替
-		_quantized_angle = nearest
-	var angle := _quantized_angle
-
-	# Forward=(0,1) 座標系（signed_angle_toはatan2と符号が逆のためX反転）
-	var target_blend := Vector2(-sin(angle), cos(angle))
-
-	# 常にスムーズ補間で遷移（即時スナップなし）
-	var blend_speed := 12.0
-	_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
-
-
-## 4方向ブレンド+スパイン回転（SpinePostureModifier or SpineIKController）
-func _update_strafe_blend_4dir(raw_angle: float, delta: float) -> void:
-	# 90度量子化 + ヒステリシス
-	var nearest: float = round(raw_angle / (PI / 2.0)) * (PI / 2.0)
-	var diff_from_current := absf(angle_difference(raw_angle, _quantized_angle))
-	if diff_from_current > (PI / 4.0) + QUANTIZE_HYSTERESIS_4DIR:
+	if diff_from_current > (PI / 4.0) + QUANTIZE_HYSTERESIS:
 		_quantized_angle = nearest
 
-	# 残差角度（±45°以内）でスパインを駆動
+	# 残差角度（±45°以内）でスパインIKを駆動
 	var residual := angle_difference(_quantized_angle, raw_angle)
-	# スプリント中はresidualを0にする（前方のみ）
 	if _is_sprinting:
 		residual = 0.0
 
-	# モードに応じたスパインドライバーに残差を送る
-	if _blend_mode == BlendMode.FOUR_DIR_IK and _spine_ik:
+	if _spine_ik:
 		_spine_ik.set_yaw(residual)
-	elif _spine_posture:
-		_spine_posture.set_yaw(residual)
 
-	# Forward=(0,1) 座標系
+	# Forward=(0,1) 座標系 — 4方向はスナップ（IKが滑らかさを担保）
 	var angle := _quantized_angle
-	var target_blend := Vector2(-sin(angle), cos(angle))
-
-	var blend_speed := 12.0
-	_input_dir = _input_dir.lerp(target_blend, 1.0 - exp(-blend_speed * delta))
+	_input_dir = Vector2(-sin(angle), cos(angle))
 
 var _gun_down_blend := 0.0  ## GunDownBlendの現在値（0=通常, 1=gun_down）
 const GUN_DOWN_BLEND_SPEED := 6.0  ## GunDownブレンド遷移速度
@@ -1380,7 +1257,7 @@ func _update_time_scale() -> void:
 			time_scale = actual_speed / blended_natural
 	else:
 		# Sprint mode: スプリント速度で同期
-		var sprint_speed: float = _get_anim_speeds()["sprint"]
+		var sprint_speed: float = ANIM_SPEEDS["sprint"]
 		if sprint_speed > 0.01:
 			time_scale = actual_speed / sprint_speed
 
